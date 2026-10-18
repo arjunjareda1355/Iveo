@@ -1,8 +1,16 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Check } from 'lucide-react';
 import { Button } from './ui/Button';
-import { sanitizeUsername, validateUsernameSync } from '../lib/username';
+import { useIvioSession } from '../auth/useIvioSession';
+import {
+  normalizeUsername,
+  validateUsername,
+  USERNAME_MIN,
+  USERNAME_MAX,
+  SIMULATED_TAKEN_USERNAMES_SET,
+} from '../lib/username-rules';
+import { copy } from '../content/copy';
 import { cn } from '../lib/cn';
 
 interface ClaimFormProps {
@@ -24,6 +32,9 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const statusId = useId();
 
+  const session = useIvioSession();
+  const { isLoaded, isSignedIn, username, onboardingComplete } = session;
+
   const [rawInput, setRawInput] = useState<string>(initialValue);
   const [isChecking, setIsChecking] = useState<boolean>(false);
   const [statusState, setStatusState] = useState<
@@ -35,14 +46,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
 
   // Debounced availability check
   useEffect(() => {
-    if (!rawInput) {
-      setIsChecking(false);
-      setStatusState('initial');
-      setAvailableUsername('');
-      return;
-    }
-
-    if (rawInput.length < 3) {
+    if (!rawInput || rawInput.length < USERNAME_MIN) {
       setIsChecking(false);
       setStatusState('initial');
       setAvailableUsername('');
@@ -53,11 +57,13 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     setStatusState('checking');
 
     const timer = setTimeout(() => {
-      const res = validateUsernameSync(rawInput);
+      const clean = normalizeUsername(rawInput);
+      const rule = validateUsername(clean);
       setIsChecking(false);
-      if (res.status === 'available') {
+
+      if (rule.ok && !SIMULATED_TAKEN_USERNAMES_SET.has(clean)) {
         setStatusState('available');
-        setAvailableUsername(res.username);
+        setAvailableUsername(clean);
       } else {
         setStatusState('unavailable');
         setAvailableUsername('');
@@ -68,7 +74,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
   }, [rawInput]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const clean = sanitizeUsername(e.target.value);
+    const clean = normalizeUsername(e.target.value);
     setRawInput(clean);
   };
 
@@ -81,15 +87,57 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       return;
     }
 
-    const res = validateUsernameSync(rawInput);
-    if (res.status === 'available') {
-      navigate(`/signup?u=${res.username}`);
+    const clean = normalizeUsername(rawInput);
+    const rule = validateUsername(clean);
+
+    if (rule.ok && !SIMULATED_TAKEN_USERNAMES_SET.has(clean)) {
+      navigate(`/signup?u=${clean}`);
     } else {
       setStatusState('unavailable');
       inputRef.current?.focus();
     }
   };
 
+  // Signed in state: compact pill + button
+  if (isLoaded && isSignedIn) {
+    const targetUrl = onboardingComplete ? '/dashboard' : '/onboarding';
+    const buttonText = onboardingComplete
+      ? copy.hero.goToDashboard
+      : copy.hero.continueSetup;
+
+    return (
+      <div
+        className={cn(
+          'w-full max-w-[480px] flex flex-col sm:flex-row items-stretch sm:items-center gap-3',
+          centerStatus && 'justify-center',
+          className
+        )}
+      >
+        <div
+          className={cn(
+            'h-12 px-4 rounded-[10px] flex items-center justify-center font-mono text-[15px] select-none border',
+            isDark
+              ? 'bg-[#141414] text-[#FAFAFA] border-[#262626]'
+              : 'bg-surface text-ink border-border-strong'
+          )}
+        >
+          ivio.site/{username || 'you'}
+        </div>
+
+        <Button
+          as={Link}
+          to={targetUrl}
+          variant={isDark ? 'inverse' : 'primary'}
+          size="lg"
+          iconRight={<ArrowRight size={16} strokeWidth={1.5} />}
+        >
+          {buttonText}
+        </Button>
+      </div>
+    );
+  }
+
+  // Signed out (or while Clerk is loading, to avoid layout jump)
   const renderStatus = () => {
     if (statusState === 'empty_submit') {
       return (
@@ -152,7 +200,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           isDark ? 'text-inverse-muted' : 'text-muted'
         )}
       >
-        Use 3 to 24 letters, numbers or underscores.
+        Use {USERNAME_MIN} to {USERNAME_MAX} letters, numbers or underscores.
       </span>
     );
   };
@@ -188,10 +236,10 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
             inputMode="text"
             value={rawInput}
             onChange={handleChange}
-            placeholder="yourname"
+            placeholder={copy.hero.claimPlaceholder}
             aria-label="Choose your ivio username"
             aria-describedby={statusId}
-            maxLength={24}
+            maxLength={USERNAME_MAX}
             className={cn(
               'flex-1 min-w-0 bg-transparent text-[16px] outline-none font-sans px-1 placeholder:text-subtle',
               isDark ? 'text-inverse-text' : 'text-ink'
@@ -205,12 +253,12 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               size="md"
               iconRight={<ArrowRight size={16} strokeWidth={1.5} />}
             >
-              Claim
+              {copy.hero.claimButton}
             </Button>
           </div>
         </div>
 
-        {/* Mobile stacked button below 400px / 640px */}
+        {/* Mobile stacked button */}
         <div className="block sm:hidden mt-3 w-full">
           <Button
             type="submit"
@@ -219,12 +267,12 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
             fullWidth
             iconRight={<ArrowRight size={16} strokeWidth={1.5} />}
           >
-            Claim
+            {copy.hero.claimButton}
           </Button>
         </div>
       </form>
 
-      {/* Status line: strictly reserved min-height 20px so layout never shifts */}
+      {/* Status line */}
       <div
         id={statusId}
         role="status"

@@ -11,16 +11,16 @@ export const NotFound: React.FC = () => {
         <Logo tone="light" size="lg" />
 
         <h1 className="mt-6 text-[24px] font-semibold text-ink leading-tight">
-          {copy.placeholders.notFoundHeading}
+          {copy.errors.notFoundHeading}
         </h1>
 
         <p className="mt-4 text-[15px] text-muted">
-          {copy.placeholders.notFoundBody}
+          {copy.errors.notFoundBody}
         </p>
 
         <div className="mt-8 w-full">
           <Button as={Link} to="/" variant="secondary" size="md" fullWidth>
-            {copy.placeholders.backHome}
+            {copy.errors.backHome}
           </Button>
         </div>
       </div>

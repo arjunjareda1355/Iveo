@@ -4,8 +4,10 @@ import { Mail } from 'lucide-react';
 import { Container } from '../ui/Container';
 import { Logo } from '../ui/Logo';
 import { copy } from '../../content/copy';
+import { useIvioSession } from '../../auth/useIvioSession';
 
 export const Footer: React.FC = () => {
+  const { isSignedIn } = useIvioSession();
   return (
     <footer
       aria-label="Site Footer"
@@ -92,22 +94,45 @@ export const Footer: React.FC = () => {
                   Email us
                 </a>
               </li>
-              <li>
-                <Link
-                  to="/login"
-                  className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
-                >
-                  Log in
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/signup"
-                  className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
-                >
-                  Sign up
-                </Link>
-              </li>
+              {isSignedIn ? (
+                <>
+                  <li>
+                    <Link
+                      to="/dashboard"
+                      className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
+                    >
+                      Dashboard
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/account"
+                      className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
+                    >
+                      Account
+                    </Link>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    <Link
+                      to="/login"
+                      className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
+                    >
+                      Log in
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/signup"
+                      className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
+                    >
+                      Sign up
+                    </Link>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 

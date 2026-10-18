@@ -1,11 +1,21 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { Landing } from './pages/Landing';
+import {
+  RequireOnboarded,
+  RequireNotOnboarded,
+} from './auth/guards';
 
-// Lazy-load routes other than the landing page
-const Signup = lazy(() => import('./pages/Signup'));
-const Login = lazy(() => import('./pages/Login'));
+// Lazy-load every route except the landing page
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SignupPage = lazy(() => import('./pages/SignupPage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const AccountPage = lazy(() => import('./pages/AccountPage'));
 const Legal = lazy(() => import('./pages/Legal'));
+const PublicProfilePlaceholder = lazy(
+  () => import('./pages/PublicProfilePlaceholder')
+);
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Scroll to top on route change
@@ -19,7 +29,7 @@ function ScrollToTop() {
   return null;
 }
 
-// Minimal fallback: empty ink-colored 2px progress line at top of viewport, no spinner
+// 2px ink progress line fallback during route lazy loading
 function LoadingBar() {
   return (
     <div
@@ -31,18 +41,67 @@ function LoadingBar() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <>
       <ScrollToTop />
       <Suspense fallback={<LoadingBar />}>
         <Routes>
+          {/* 1. Public Landing */}
           <Route path="/" element={<Landing />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/login" element={<Login />} />
+
+          {/* 2. Guests Only Auth Routes */}
+          <Route path="/login/*" element={<LoginPage />} />
+          <Route path="/signup/*" element={<SignupPage />} />
+
+          {/* 3. Onboarding (Signed in, not completed) */}
+          <Route
+            path="/onboarding"
+            element={
+              <RequireNotOnboarded>
+                <OnboardingPage />
+              </RequireNotOnboarded>
+            }
+          />
+
+          {/* 4. Dashboard (Signed in + onboarding completed) */}
+          <Route
+            path="/dashboard"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
+            path="/dashboard/appearance"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
+            path="/dashboard/settings"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+
+          {/* 5. Account (Signed in) */}
+          <Route path="/account/*" element={<AccountPage />} />
+
+          {/* 6. Legal Pages */}
           <Route path="/privacy" element={<Legal />} />
           <Route path="/terms" element={<Legal />} />
+
+          {/* 7. Public Profile Placeholder (after all static routes) */}
+          <Route path="/:username" element={<PublicProfilePlaceholder />} />
+
+          {/* 8. Fallback 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
-    </BrowserRouter>
+    </>
   );
 }

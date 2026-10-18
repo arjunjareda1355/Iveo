@@ -20,8 +20,10 @@ export interface Persona {
   links: readonly string[];
 }
 
+export type VibeId = 'clean' | 'midnight' | 'paper' | 'sage' | 'clay' | 'mono';
+
 export interface Vibe {
-  id: 'clean' | 'midnight' | 'paper' | 'sage' | 'clay' | 'mono';
+  id: VibeId;
   name: string;
   description: string;
   fontFamily: string;

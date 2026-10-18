@@ -3,8 +3,18 @@ import { Link2, ShoppingBag, Globe, Mail, Calendar } from 'lucide-react';
 import { Vibe } from '../../lib/vibes';
 import { InstagramIcon, PlayIcon, MusicIcon, MailIcon } from './SocialIcons';
 
+export interface PhoneProfile {
+  name: string;
+  handle: string;
+  bio?: string;
+  avatarUrl?: string | null;
+  initials?: string;
+  links?: readonly string[];
+}
+
 interface PhonePageProps {
   vibe: Vibe;
+  profile?: PhoneProfile;
   buttonRadiusOverride?: number;
   scale?: number; // relative to 300px base
 }
@@ -12,10 +22,19 @@ interface PhonePageProps {
 const BUTTON_ICONS = [Link2, ShoppingBag, Globe, Mail, Calendar];
 
 export const PhonePage: React.FC<PhonePageProps> = React.memo(
-  ({ vibe, buttonRadiusOverride, scale = 1 }) => {
+  ({ vibe, profile, buttonRadiusOverride, scale = 1 }) => {
     const { tokens, persona } = vibe;
     const effectiveRadius =
       buttonRadiusOverride !== undefined ? buttonRadiusOverride : tokens.buttonRadius;
+
+    // Use profile override or persona
+    const displayName = profile?.name ?? persona.name;
+    const displayHandle = profile?.handle ?? persona.handle;
+    const displayBio = profile ? (profile.bio || 'Your bio goes here.') : persona.bio;
+    const displayLinks = profile?.links ?? persona.links;
+    const displayInitials =
+      profile?.initials ??
+      (profile ? (profile.name.slice(0, 2).toUpperCase() || 'IV') : persona.initials);
 
     return (
       <div
@@ -30,7 +49,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
       >
         {/* Avatar */}
         <div
-          className="rounded-full flex items-center justify-center shrink-0 font-semibold shadow-xs"
+          className="rounded-full flex items-center justify-center shrink-0 font-semibold shadow-xs overflow-hidden"
           style={{
             width: `${Math.round(72 * scale)}px`,
             height: `${Math.round(72 * scale)}px`,
@@ -41,7 +60,15 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
             fontFamily: "'Geist', sans-serif",
           }}
         >
-          {persona.initials}
+          {profile?.avatarUrl ? (
+            <img
+              src={profile.avatarUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            displayInitials
+          )}
         </div>
 
         {/* Name */}
@@ -52,7 +79,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
             marginTop: `${Math.round(14 * scale)}px`,
           }}
         >
-          {persona.name}
+          {displayName}
         </div>
 
         {/* Handle */}
@@ -64,7 +91,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
             marginTop: `${Math.round(2 * scale)}px`,
           }}
         >
-          @{persona.handle}
+          @{displayHandle}
         </div>
 
         {/* Bio */}
@@ -77,7 +104,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
             marginTop: `${Math.round(10 * scale)}px`,
           }}
         >
-          {persona.bio}
+          {displayBio}
         </p>
 
         {/* Links */}
@@ -88,7 +115,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
             gap: `${Math.round(10 * scale)}px`,
           }}
         >
-          {persona.links.map((linkTitle, idx) => {
+          {displayLinks.map((linkTitle, idx) => {
             const Icon = BUTTON_ICONS[idx % BUTTON_ICONS.length];
             return (
               <div

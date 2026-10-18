@@ -8,11 +8,13 @@ import { SegmentedControl } from '../ui/SegmentedControl';
 import { PRICING_PLANS } from '../../content/pricing';
 import { copy } from '../../content/copy';
 import { useReveal } from '../../hooks/useReveal';
+import { useIvioSession } from '../../auth/useIvioSession';
 import { cn } from '../../lib/cn';
 
 type BillingCycle = 'Monthly' | 'Yearly';
 
 export const Pricing: React.FC = () => {
+  const { isSignedIn } = useIvioSession();
   const [billing, setBilling] = useState<BillingCycle>('Yearly');
   const { ref: headerRef, style: headerStyle } = useReveal();
   const { ref: cardsRef, style: cardsStyle } = useReveal({ staggerIndex: 1 });
@@ -89,12 +91,12 @@ export const Pricing: React.FC = () => {
               <div className="mt-6">
                 <Button
                   as={Link}
-                  to={freePlan.buttonHref}
+                  to={isSignedIn ? '/dashboard' : freePlan.buttonHref}
                   variant="secondary"
                   size="lg"
                   fullWidth
                 >
-                  {freePlan.buttonLabel}
+                  {isSignedIn ? 'Go to dashboard' : freePlan.buttonLabel}
                 </Button>
               </div>
 
@@ -151,7 +153,7 @@ export const Pricing: React.FC = () => {
               <div className="mt-6">
                 <Button
                   as={Link}
-                  to={proPlan.buttonHref}
+                  to={isSignedIn ? '/dashboard' : proPlan.buttonHref}
                   variant="inverse"
                   size="lg"
                   fullWidth

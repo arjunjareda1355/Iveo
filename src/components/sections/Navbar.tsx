@@ -4,6 +4,8 @@ import { Menu, X } from 'lucide-react';
 import { Logo } from '../ui/Logo';
 import { Button } from '../ui/Button';
 import { Container } from '../ui/Container';
+import { IvioUserButton } from '../../auth/IvioUserButton';
+import { useIvioSession } from '../../auth/useIvioSession';
 import { copy } from '../../content/copy';
 import { useScrollSpy } from '../../hooks/useScrollSpy';
 import { cn } from '../../lib/cn';
@@ -15,6 +17,8 @@ export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeId = useScrollSpy(SECTION_IDS, 120);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const { isLoaded, isSignedIn } = useIvioSession();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -86,20 +90,46 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Right: Desktop Actions */}
-        <div className="hidden md:flex items-center gap-2">
-          <Button as={Link} to="/login" variant="ghost" size="md">
-            {copy.nav.logIn}
-          </Button>
-          <Button as={Link} to="/signup" variant="primary" size="md">
-            {copy.nav.getStarted}
-          </Button>
+        <div className="hidden md:flex items-center">
+          {!isLoaded ? (
+            // Reserved width placeholder while Clerk loads to avoid any layout shift
+            <div className="w-[190px] h-10" aria-hidden="true" />
+          ) : isSignedIn ? (
+            <div className="flex items-center gap-3">
+              <Button as={Link} to="/dashboard" variant="primary" size="md">
+                {copy.nav.dashboard}
+              </Button>
+              <IvioUserButton />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button as={Link} to="/login" variant="ghost" size="md">
+                {copy.nav.logIn}
+              </Button>
+              <Button as={Link} to="/signup" variant="primary" size="md">
+                {copy.nav.getStarted}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Right: Mobile Trigger + CTA (below 768px) */}
         <div className="flex md:hidden items-center gap-2">
-          <Button as={Link} to="/signup" variant="primary" size="md">
-            {copy.nav.getStarted}
-          </Button>
+          {!isLoaded ? (
+            <div className="w-[120px] h-10" aria-hidden="true" />
+          ) : isSignedIn ? (
+            <div className="flex items-center gap-2">
+              <Button as={Link} to="/dashboard" variant="primary" size="md">
+                {copy.nav.dashboard}
+              </Button>
+              <IvioUserButton />
+            </div>
+          ) : (
+            <Button as={Link} to="/signup" variant="primary" size="md">
+              {copy.nav.getStarted}
+            </Button>
+          )}
+
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -140,26 +170,53 @@ export const Navbar: React.FC = () => {
             </nav>
 
             <div className="mt-6 flex flex-col gap-3">
-              <Button
-                as={Link}
-                to="/login"
-                variant="secondary"
-                size="lg"
-                fullWidth
-                onClick={closeMenu}
-              >
-                {copy.nav.logIn}
-              </Button>
-              <Button
-                as={Link}
-                to="/signup"
-                variant="primary"
-                size="lg"
-                fullWidth
-                onClick={closeMenu}
-              >
-                {copy.nav.getStarted}
-              </Button>
+              {isSignedIn ? (
+                <>
+                  <Button
+                    as={Link}
+                    to="/dashboard"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onClick={closeMenu}
+                  >
+                    {copy.nav.dashboard}
+                  </Button>
+                  <Button
+                    as={Link}
+                    to="/account"
+                    variant="secondary"
+                    size="lg"
+                    fullWidth
+                    onClick={closeMenu}
+                  >
+                    {copy.nav.manageAccount}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    as={Link}
+                    to="/login"
+                    variant="secondary"
+                    size="lg"
+                    fullWidth
+                    onClick={closeMenu}
+                  >
+                    {copy.nav.logIn}
+                  </Button>
+                  <Button
+                    as={Link}
+                    to="/signup"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onClick={closeMenu}
+                  >
+                    {copy.nav.getStarted}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

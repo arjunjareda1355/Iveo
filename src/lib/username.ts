@@ -1,49 +1,21 @@
 // Availability is mocked on the client. Replace with a real lookup when Firestore is added.
 
-export const RESERVED_USERNAMES = new Set([
-  'admin',
-  'api',
-  'app',
-  'help',
-  'login',
-  'signup',
-  'privacy',
-  'terms',
-  'pricing',
-  'about',
-  'support',
-  'settings',
-  'dashboard',
-  'ivio',
-  'www',
-  'mail',
-  'blog',
-  'status',
-]);
+import {
+  USERNAME_MIN,
+  USERNAME_MAX,
+  RESERVED_USERNAMES_SET,
+  SIMULATED_TAKEN_USERNAMES_SET,
+  normalizeUsername,
+  validateUsername as validateUsernameRule,
+} from './username-rules.ts';
 
-export const SIMULATED_TAKEN_USERNAMES = new Set([
-  'alex',
-  'sam',
-  'maya',
-  'studio',
-  'music',
-  'art',
-  'design',
-  'travel',
-  'food',
-  'news',
-]);
-
-/**
- * Lowercase everything as the user types.
- * Silently strip every character that is not a-z, 0-9 or underscore. Max length 24.
- */
-export function sanitizeUsername(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '')
-    .slice(0, 24);
-}
+export {
+  USERNAME_MIN,
+  USERNAME_MAX,
+  RESERVED_USERNAMES_SET as RESERVED_USERNAMES,
+  SIMULATED_TAKEN_USERNAMES_SET as SIMULATED_TAKEN_USERNAMES,
+  normalizeUsername as sanitizeUsername,
+};
 
 export type UsernameValidationResult =
   | { status: 'empty'; message: string }
@@ -52,23 +24,31 @@ export type UsernameValidationResult =
   | { status: 'available'; message: string; username: string };
 
 export function validateUsernameSync(raw: string): UsernameValidationResult {
-  const sanitized = sanitizeUsername(raw);
+  const lower = (raw || '').toLowerCase();
 
-  if (sanitized.length === 0) {
+  if (lower.length === 0) {
     return {
       status: 'empty',
-      message: 'Use 3 to 24 letters, numbers or underscores.',
+      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or underscores.`,
     };
   }
 
-  if (sanitized.length < 3) {
+  const sanitized = normalizeUsername(raw);
+
+  if (sanitized.length < USERNAME_MIN) {
     return {
       status: 'too_short',
-      message: 'Use 3 to 24 letters, numbers or underscores.',
+      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or underscores.`,
     };
   }
 
-  if (RESERVED_USERNAMES.has(sanitized) || SIMULATED_TAKEN_USERNAMES.has(sanitized)) {
+  const ruleResult = validateUsernameRule(lower);
+  if (
+    !ruleResult.ok ||
+    SIMULATED_TAKEN_USERNAMES_SET.has(sanitized) ||
+    RESERVED_USERNAMES_SET.has(sanitized) ||
+    RESERVED_USERNAMES_SET.has(lower)
+  ) {
     return {
       status: 'unavailable',
       message: "That name isn't available. Try another.",
@@ -85,12 +65,15 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
 /**
  * Async check with simulated network delay.
  */
-export async function checkUsernameAvailability(raw: string, delayMs: number = 350): Promise<UsernameValidationResult> {
-  const sanitized = sanitizeUsername(raw);
-  if (sanitized.length < 3) {
-    return validateUsernameSync(sanitized);
+export async function checkUsernameAvailability(
+  raw: string,
+  delayMs: number = 350
+): Promise<UsernameValidationResult> {
+  const sanitized = normalizeUsername(raw);
+  if (sanitized.length < USERNAME_MIN) {
+    return validateUsernameSync(raw);
   }
 
   await new Promise((resolve) => setTimeout(resolve, delayMs));
-  return validateUsernameSync(sanitized);
+  return validateUsernameSync(raw);
 }

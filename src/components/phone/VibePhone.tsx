@@ -1,10 +1,11 @@
 import React from 'react';
 import { Vibe, VIBES } from '../../lib/vibes';
 import { PhoneFrame } from './PhoneFrame';
-import { PhonePage } from './PhonePage';
+import { PhonePage, PhoneProfile } from './PhonePage';
 
 interface VibePhoneProps {
   currentVibe: Vibe;
+  profile?: PhoneProfile;
   width?: number;
   buttonRadiusOverride?: number;
   className?: string;
@@ -12,7 +13,14 @@ interface VibePhoneProps {
 }
 
 export const VibePhone: React.FC<VibePhoneProps> = React.memo(
-  ({ currentVibe, width = 300, buttonRadiusOverride, className, ariaLabel }) => {
+  ({
+    currentVibe,
+    profile,
+    width = 300,
+    buttonRadiusOverride,
+    className,
+    ariaLabel,
+  }) => {
     const scale = width / 300;
 
     return (
@@ -37,6 +45,7 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
               >
                 <PhonePage
                   vibe={vibe}
+                  profile={profile}
                   buttonRadiusOverride={isActive ? buttonRadiusOverride : undefined}
                   scale={scale}
                 />
