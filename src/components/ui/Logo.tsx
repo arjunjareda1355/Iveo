@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import wordmarkImg from '../../assets/wordmark.png';
 import { cn } from '../../lib/cn';
 
 interface LogoProps {
@@ -16,51 +17,20 @@ export const Logo: React.FC<LogoProps> = ({
   isLink = true,
 }) => {
   const isDark = tone === 'dark';
-  const markSize = size === 'sm' ? 20 : size === 'lg' ? 28 : 24;
-  const textSize = size === 'sm' ? 'text-lg' : size === 'lg' ? 'text-2xl' : 'text-[20px]';
+  // 1280x427 aspect ratio (3:1)
+  const heightClass = size === 'sm' ? 'h-5' : size === 'lg' ? 'h-8' : 'h-6';
 
   const content = (
     <span className={cn('inline-flex items-center select-none', className)}>
-      <svg
-        width={markSize}
-        height={markSize}
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-        className="shrink-0"
-      >
-        <rect
-          width="24"
-          height="24"
-          rx="7"
-          fill={isDark ? '#FAFAFA' : '#0A0A0A'}
-        />
-        <circle
-          cx="12"
-          cy="7.25"
-          r="1.75"
-          fill={isDark ? '#0A0A0A' : '#FFFFFF'}
-        />
-        <rect
-          x="10.5"
-          y="10.5"
-          width="3"
-          height="8"
-          rx="1.5"
-          fill={isDark ? '#0A0A0A' : '#FFFFFF'}
-        />
-      </svg>
-      <span
-        style={{ letterSpacing: '-0.04em' }}
+      <img
+        src={wordmarkImg}
+        alt="ivio"
         className={cn(
-          'ml-2 font-semibold font-sans leading-none',
-          textSize,
-          isDark ? 'text-inverse-text' : 'text-ink'
+          'w-auto object-contain transition-all duration-120',
+          heightClass,
+          isDark && 'brightness-0 invert'
         )}
-      >
-        ivio
-      </span>
+      />
     </span>
   );
 

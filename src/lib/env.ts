@@ -1,5 +1,5 @@
 // If your environment has no way to set variables, paste your Clerk PUBLISHABLE key (pk_test_...) here. Never paste a secret key (sk_...).
-const CLERK_PUBLISHABLE_KEY_FALLBACK = '';
+const CLERK_PUBLISHABLE_KEY_FALLBACK = 'pk_live_Y2xlcmsuaXZlby5zaXRlJA';
 
 const rawKey = (
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
