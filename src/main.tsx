@@ -10,13 +10,13 @@ import './index.css';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <ClerkRoot>
-        <ToastProvider>
-          <ErrorBoundaryPage>
+      <ErrorBoundaryPage>
+        <ClerkRoot>
+          <ToastProvider>
             <App />
-          </ErrorBoundaryPage>
-        </ToastProvider>
-      </ClerkRoot>
+          </ToastProvider>
+        </ClerkRoot>
+      </ErrorBoundaryPage>
     </BrowserRouter>
   </StrictMode>
 );
