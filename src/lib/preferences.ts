@@ -1,4 +1,4 @@
-import { VibeId } from './vibes';
+import type { VibeId } from './vibes.ts';
 
 export type ButtonShape = 'square' | 'rounded' | 'pill';
 

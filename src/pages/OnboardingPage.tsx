@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from '@clerk/react';
 import { Eye, X, Copy } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
@@ -22,7 +21,6 @@ import { copy } from '../content/copy';
 
 export const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useUser();
   const { showToast } = useToast();
   const session = useIvioSession();
 
@@ -116,14 +114,9 @@ export const OnboardingPage: React.FC = () => {
       return;
     }
 
-    if (!user) {
-      setCurrentStep(2);
-      return;
-    }
-
     setIsSavingUsername(true);
     try {
-      await user.update({ username: clean });
+      await session.updateUsername(clean);
       setCurrentStep(2);
     } catch (err: unknown) {
       const errObj = err as { errors?: Array<{ message?: string; longMessage?: string }> };

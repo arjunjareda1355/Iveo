@@ -19,6 +19,7 @@ export interface IvioSession {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   onboardingComplete: boolean;
+  updateUsername: (newUsername: string) => Promise<void>;
   updatePreferences: (patch: Partial<IvioPreferences>) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -33,6 +34,7 @@ const FALLBACK_SESSION: IvioSession = {
   vibeId: DEFAULT_PREFERENCES.vibeId,
   buttonShape: DEFAULT_PREFERENCES.buttonShape,
   onboardingComplete: false,
+  updateUsername: async () => {},
   updatePreferences: async () => {},
   signOut: async () => {},
 };
@@ -55,6 +57,7 @@ function useClerkSession(): IvioSession {
       vibeId: DEFAULT_PREFERENCES.vibeId,
       buttonShape: DEFAULT_PREFERENCES.buttonShape,
       onboardingComplete: false,
+      updateUsername: async () => {},
       updatePreferences: async () => {},
       signOut: async () => {
         await signOut();
@@ -73,6 +76,10 @@ function useClerkSession(): IvioSession {
 
   const isUsernameValid = username ? validateUsername(username).ok : false;
   const onboardingComplete = preferences.onboardingComplete === true && isUsernameValid;
+
+  const updateUsername = async (newUsername: string): Promise<void> => {
+    await user.update({ username: newUsername });
+  };
 
   const updatePreferences = async (patch: Partial<IvioPreferences>): Promise<void> => {
     // unsafeMetadata is client-writable. It holds non-sensitive preferences only. Move this to the database in the next step.
@@ -98,6 +105,7 @@ function useClerkSession(): IvioSession {
     vibeId: preferences.vibeId,
     buttonShape: preferences.buttonShape,
     onboardingComplete,
+    updateUsername,
     updatePreferences,
     signOut: async () => {
       await signOut();
