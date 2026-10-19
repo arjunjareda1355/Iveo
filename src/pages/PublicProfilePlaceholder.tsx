@@ -1,7 +1,8 @@
 import React from 'react';
-import { useParams, Link, Navigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
+import { NotFound } from './NotFound';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { copy } from '../content/copy';
 
@@ -9,13 +10,15 @@ import { copy } from '../content/copy';
 
 export const PublicProfilePlaceholder: React.FC = () => {
   const { username } = useParams<{ username: string }>();
-  const clean = normalizeUsername(username || '');
-  const validation = validateUsername(clean);
+  const rawUsername = username || '';
+  const validation = validateUsername(rawUsername);
 
-  // If reserved or invalid username format, treat as not found
+  // If reserved or invalid username format, render NotFound component directly
   if (!validation.ok) {
-    return <Navigate to="/404" replace />;
+    return <NotFound />;
   }
+
+  const clean = normalizeUsername(rawUsername);
 
   return (
     <div className="min-h-screen bg-bg flex flex-col items-center justify-center p-6 text-center">
