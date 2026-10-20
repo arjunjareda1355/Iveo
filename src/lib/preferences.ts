@@ -7,6 +7,8 @@ export interface IvioPreferences {
   buttonShape: ButtonShape | null;
   onboardingComplete: boolean;
   onboardedAt: string | null;
+  plan: 'free' | 'pro';
+  hideIvioFooter: boolean;
 }
 
 export const DEFAULT_PREFERENCES: IvioPreferences = {
@@ -14,6 +16,8 @@ export const DEFAULT_PREFERENCES: IvioPreferences = {
   buttonShape: null,
   onboardingComplete: false,
   onboardedAt: null,
+  plan: 'free',
+  hideIvioFooter: false,
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -28,7 +32,7 @@ const VALID_VIBE_IDS = new Set<VibeId>([
 const VALID_BUTTON_SHAPES = new Set<ButtonShape>(['square', 'rounded', 'pill']);
 
 /**
- * Defensively parses client-writable unsafeMetadata.
+ * Defensively parses client metadata/database preferences.
  * Unknown or malformed values fall back to defaults.
  */
 export function parsePreferences(raw: unknown): IvioPreferences {
@@ -56,10 +60,15 @@ export function parsePreferences(raw: unknown): IvioPreferences {
       ? record.onboardedAt
       : null;
 
+  const plan = record.plan === 'pro' ? 'pro' : 'free';
+  const hideIvioFooter = record.hideIvioFooter === true || record.hide_ivio_footer === true;
+
   return {
     vibeId,
     buttonShape,
     onboardingComplete,
     onboardedAt,
+    plan,
+    hideIvioFooter,
   };
 }

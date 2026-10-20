@@ -1,6 +1,7 @@
 import React from 'react';
 import { Copy } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { pageUrl } from '../../lib/site';
 import { copy } from '../../content/copy';
 
 interface AddressPillProps {
@@ -12,7 +13,7 @@ export const AddressPill: React.FC<AddressPillProps> = ({ username }) => {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(`https://ivio.site/${username}`);
+      await navigator.clipboard.writeText(pageUrl(username));
       showToast(copy.toasts.linkCopied);
     } catch {
       // fallback

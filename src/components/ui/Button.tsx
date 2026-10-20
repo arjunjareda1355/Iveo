@@ -4,13 +4,15 @@ import { cn } from '../../lib/cn';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'inverse';
-  size?: 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   disabled?: boolean;
   iconRight?: React.ReactNode;
   as?: 'button' | 'a' | typeof Link;
   href?: string;
   to?: string;
+  target?: string;
+  rel?: string;
   fullWidth?: boolean;
   className?: string;
   children: React.ReactNode;
@@ -27,6 +29,8 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
       as: Component = 'button',
       href,
       to,
+      target,
+      rel,
       fullWidth = false,
       className,
       children,
@@ -43,9 +47,11 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
       'group inline-flex items-center justify-center font-medium font-sans select-none transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-offset-2';
 
     const sizeStyles =
-      size === 'md'
-        ? 'h-10 px-4 text-[14px] rounded-[10px] gap-2 leading-none'
-        : 'h-12 px-5 text-[15px] rounded-[10px] gap-2 leading-none';
+      size === 'sm'
+        ? 'h-8 px-3 text-[13px] rounded-[8px] gap-1.5 leading-none'
+        : size === 'md'
+          ? 'h-10 px-4 text-[14px] rounded-[10px] gap-2 leading-none'
+          : 'h-12 px-5 text-[15px] rounded-[10px] gap-2 leading-none';
 
     const variantStyles = cn(
       isPrimary && [
@@ -127,6 +133,8 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
       return (
         <Link
           to={to}
+          target={target}
+          rel={rel}
           ref={ref as React.Ref<HTMLAnchorElement>}
           className={combinedClassName}
           aria-disabled={disabled}
@@ -142,6 +150,8 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
       return (
         <a
           href={href}
+          target={target}
+          rel={rel}
           ref={ref as React.Ref<HTMLAnchorElement>}
           className={combinedClassName}
           aria-disabled={disabled}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Eye, X } from 'lucide-react';
+import { Eye, X, Share2 } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 import { Container } from '../components/ui/Container';
+import { Button } from '../components/ui/Button';
 import { AddressPill } from '../components/dashboard/AddressPill';
 import { IvioUserButton } from '../auth/IvioUserButton';
 import { LinksTab } from '../components/dashboard/LinksTab';
@@ -10,9 +11,12 @@ import { AppearanceTab } from '../components/dashboard/AppearanceTab';
 import { SettingsTab } from '../components/dashboard/SettingsTab';
 import { VibePhone } from '../components/phone/VibePhone';
 import { PhoneProfile } from '../components/phone/PhonePage';
+import { ShareDialog } from '../components/share/ShareDialog';
+import { BlocksProvider, useBlocks } from '../data/BlocksContext';
 import { useIvioSession } from '../auth/useIvioSession';
 import { VIBES, VibeId } from '../lib/vibes';
 import { ButtonShape } from '../lib/preferences';
+import { useNow, isBlockVisibleNow } from '../lib/time';
 import { copy } from '../content/copy';
 
 const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
@@ -21,13 +25,16 @@ const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
   pill: 999,
 };
 
-export const DashboardPage: React.FC = () => {
+const DashboardContent: React.FC = () => {
   const session = useIvioSession();
   const location = useLocation();
+  const { blocks } = useBlocks();
+  const now = useNow(30000);
 
   const [previewVibeId, setPreviewVibeId] = useState<VibeId>(session.vibeId);
   const [previewShape, setPreviewShape] = useState<ButtonShape | null>(session.buttonShape);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   // Sync state with session
   useEffect(() => {
@@ -74,10 +81,16 @@ export const DashboardPage: React.FC = () => {
     handle: session.username || 'yourname',
     avatarUrl: session.imageUrl,
     bio: 'Your bio goes here.',
-    links: ['Your first link', 'Your second link', 'Your third link'],
   };
 
   const buttonRadiusOverride = previewShape ? BUTTON_RADIUS_MAP[previewShape] : undefined;
+
+  // Filter blocks visible right now for preview
+  const visiblePreviewBlocks = blocks.filter((b) =>
+    isBlockVisibleNow(b, session.plan, now)
+  );
+
+  const hideFooterMark = session.isPro && session.hideIvioFooter;
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
@@ -89,7 +102,27 @@ export const DashboardPage: React.FC = () => {
             {session.username && <AddressPill username={session.username} />}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* Share button: full on md+, icon-only below md */}
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setIsShareOpen(true)}
+              className="hidden sm:inline-flex"
+            >
+              <Share2 size={16} strokeWidth={1.5} />
+              <span>Share</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setIsShareOpen(true)}
+              className="sm:hidden w-10 h-10 p-0"
+              aria-label="Share your page"
+            >
+              <Share2 size={16} strokeWidth={1.5} />
+            </Button>
+
             <IvioUserButton />
           </div>
         </Container>
@@ -189,6 +222,9 @@ export const DashboardPage: React.FC = () => {
               <VibePhone
                 currentVibe={activeVibe}
                 profile={profileData}
+                blocks={visiblePreviewBlocks}
+                hideFooterMark={hideFooterMark}
+                embedMode="placeholder"
                 buttonRadiusOverride={buttonRadiusOverride}
                 width={300}
               />
@@ -233,6 +269,9 @@ export const DashboardPage: React.FC = () => {
               <VibePhone
                 currentVibe={activeVibe}
                 profile={profileData}
+                blocks={visiblePreviewBlocks}
+                hideFooterMark={hideFooterMark}
+                embedMode="placeholder"
                 buttonRadiusOverride={buttonRadiusOverride}
                 width={280}
               />
@@ -240,7 +279,29 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Top Bar Share Sheet */}
+      {session.username && (
+        <ShareDialog
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
+          username={session.username}
+          displayName={session.displayName}
+          isPublished={true}
+        />
+      )}
     </div>
+  );
+};
+
+export const DashboardPage: React.FC = () => {
+  const session = useIvioSession();
+  const userId = session.username || 'owner';
+
+  return (
+    <BlocksProvider userId={userId}>
+      <DashboardContent />
+    </BlocksProvider>
   );
 };
 

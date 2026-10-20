@@ -4,6 +4,7 @@ import { cn } from '../../lib/cn';
 export interface SegmentedControlOption<T extends string> {
   value: T;
   label: string;
+  disabled?: boolean;
 }
 
 export interface SegmentedControlProps<T extends string> {
@@ -34,13 +35,17 @@ export function SegmentedControl<T extends string>({
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();
       const nextIndex = (index + 1) % normalizedOptions.length;
-      onChange(normalizedOptions[nextIndex].value);
-      buttonRefs.current[nextIndex]?.focus();
+      if (!normalizedOptions[nextIndex].disabled) {
+        onChange(normalizedOptions[nextIndex].value);
+        buttonRefs.current[nextIndex]?.focus();
+      }
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
       const prevIndex = (index - 1 + normalizedOptions.length) % normalizedOptions.length;
-      onChange(normalizedOptions[prevIndex].value);
-      buttonRefs.current[prevIndex]?.focus();
+      if (!normalizedOptions[prevIndex].disabled) {
+        onChange(normalizedOptions[prevIndex].value);
+        buttonRefs.current[prevIndex]?.focus();
+      }
     }
   };
 
@@ -68,6 +73,8 @@ export function SegmentedControl<T extends string>({
 
       {normalizedOptions.map((option, index) => {
         const isSelected = option.value === value;
+        const isDisabled = option.disabled === true;
+
         return (
           <button
             key={option.value}
@@ -77,12 +84,19 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={isSelected}
+            aria-disabled={isDisabled}
+            disabled={isDisabled}
             tabIndex={isSelected ? 0 : -1}
-            onClick={() => onChange(option.value)}
+            onClick={() => {
+              if (!isDisabled) onChange(option.value);
+            }}
             onKeyDown={(e) => handleKeyDown(e, index)}
             className={cn(
-              'relative z-10 flex-1 h-full flex items-center justify-center text-[13px] font-medium leading-none px-3 cursor-pointer',
+              'relative z-10 flex-1 h-full flex items-center justify-center text-[13px] font-medium leading-none px-3',
               'transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-ink rounded-[8px]',
+              isDisabled
+                ? 'opacity-40 cursor-not-allowed text-muted'
+                : 'cursor-pointer',
               isSelected ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
             )}
           >

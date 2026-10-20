@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
+import { PageRenderer } from '../components/page/PageRenderer';
 import { NotFound } from './NotFound';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
+import { fetchPublicPage } from '../data/publicPageApi';
+import { PublicPageData } from '../data/types';
+import { VIBES } from '../lib/vibes';
+import { pageUrl } from '../lib/site';
 import { copy } from '../content/copy';
-
-// Replace with the real public profile once links are stored in the database.
 
 export const PublicProfilePlaceholder: React.FC = () => {
   const { username } = useParams<{ username: string }>();
@@ -19,7 +22,110 @@ export const PublicProfilePlaceholder: React.FC = () => {
   }
 
   const clean = normalizeUsername(rawUsername);
+  const [pageData, setPageData] = useState<PublicPageData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
+  const loadData = useCallback(async () => {
+    try {
+      const data = await fetchPublicPage(clean);
+      setPageData(data);
+    } catch {
+      // Keep existing data on error
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clean]);
+
+  useEffect(() => {
+    loadData();
+
+    // Refetch interval 60s while tab is visible (Section 5.5 & 13)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      loadData();
+    }, 60000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        loadData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [loadData]);
+
+  // Set document title and canonical tag
+  useEffect(() => {
+    if (pageData?.profile) {
+      document.title = `${pageData.profile.displayName} (@${clean}) | ivio`;
+    } else {
+      document.title = `ivio.site/${clean}`;
+    }
+
+    // Canonical link tag
+    let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
+    }
+    canonical.href = pageUrl(clean);
+  }, [pageData, clean]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center p-6">
+        <div className="w-8 h-8 rounded-full border-2 border-ink border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  // If page exists, render PageRenderer in live mode
+  if (pageData && pageData.profile) {
+    const vibe =
+      VIBES.find((v) => v.id === pageData.profile?.vibeId) || VIBES[0];
+
+    const BUTTON_RADIUS_MAP: Record<string, number> = {
+      square: 0,
+      rounded: 12,
+      pill: 999,
+    };
+
+    const buttonRadiusOverride = pageData.profile.buttonShape
+      ? BUTTON_RADIUS_MAP[pageData.profile.buttonShape]
+      : undefined;
+
+    return (
+      <div
+        className="min-h-screen w-full flex justify-center"
+        style={{ backgroundColor: vibe.tokens.bg }}
+      >
+        <div className="w-full max-w-[580px] min-h-screen flex flex-col">
+          <PageRenderer
+            vibe={vibe}
+            profile={{
+              name: pageData.profile.displayName,
+              handle: pageData.profile.username,
+              bio: pageData.profile.bio,
+              avatarUrl: pageData.profile.avatarUrl,
+            }}
+            blocks={pageData.links}
+            buttonRadiusOverride={buttonRadiusOverride}
+            hideFooterMark={pageData.profile.hideFooter}
+            embedMode="live"
+            isPublicPage={true}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Otherwise, render placeholder/unclaimed page
   return (
     <div className="min-h-screen bg-bg flex flex-col items-center justify-center p-6 text-center">
       <div className="w-full max-w-md bg-surface border border-border rounded-[14px] p-8 shadow-[0_1px_2px_rgba(10,10,10,0.04)] flex flex-col items-center">
@@ -37,9 +143,12 @@ export const PublicProfilePlaceholder: React.FC = () => {
           {copy.publicPlaceholder.body}
         </p>
 
-        <div className="mt-8 w-full">
+        <div className="mt-8 w-full flex flex-col gap-2">
           <Button as={Link} to="/" variant="secondary" size="md" fullWidth>
             {copy.publicPlaceholder.button}
+          </Button>
+          <Button as={Link} to={`/signup?u=${clean}`} variant="primary" size="md" fullWidth>
+            Claim this address
           </Button>
         </div>
       </div>

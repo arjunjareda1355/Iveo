@@ -17,6 +17,7 @@ import {
   USERNAME_MIN,
   USERNAME_MAX,
 } from '../lib/username-rules';
+import { pageUrl } from '../lib/site';
 import { copy } from '../content/copy';
 
 export const OnboardingPage: React.FC = () => {
@@ -167,7 +168,7 @@ export const OnboardingPage: React.FC = () => {
   };
 
   const copyAddress = async () => {
-    const fullUrl = `https://ivio.site/${session.username || usernameInput}`;
+    const fullUrl = pageUrl(session.username || usernameInput);
     try {
       await navigator.clipboard.writeText(fullUrl);
       showToast(copy.toasts.linkCopied);

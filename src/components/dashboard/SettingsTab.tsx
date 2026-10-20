@@ -1,27 +1,48 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, ExternalLink } from 'lucide-react';
+import { Copy, ExternalLink, Share2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { ProBadge } from '../plan/ProBadge';
+import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
+import { ShareDialog } from '../share/ShareDialog';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
-import { copy } from '../../content/copy';
+import { pageUrl } from '../../lib/site';
 
 export const SettingsTab: React.FC = () => {
   const session = useIvioSession();
   const { showToast } = useToast();
+  const { openUpgrade } = useUpgradeDialog();
+  const [isShareOpen, setIsShareOpen] = useState(false);
+
+  const fullUrl = session.username ? pageUrl(session.username) : '';
 
   const handleCopyLink = async () => {
+    if (!fullUrl) return;
     try {
-      await navigator.clipboard.writeText(`https://ivio.site/${session.username}`);
-      showToast(copy.toasts.linkCopied);
-    } catch {
-      // fallback
-    }
+      await navigator.clipboard.writeText(fullUrl);
+      showToast('Link copied');
+    } catch {}
   };
 
   const handleSignOut = async () => {
     await session.signOut();
+  };
+
+  const handleFooterMarkToggle = async () => {
+    if (!session.isPro) {
+      openUpgrade('hide_footer');
+      return;
+    }
+
+    const nextVal = !session.hideIvioFooter;
+    try {
+      await session.updatePreferences({ hideIvioFooter: nextVal });
+      showToast(nextVal ? 'Footer mark hidden.' : 'Footer mark shown.');
+    } catch {
+      openUpgrade('hide_footer');
+    }
   };
 
   return (
@@ -29,28 +50,61 @@ export const SettingsTab: React.FC = () => {
       {/* 1. Account Card */}
       <Card className="flex flex-col gap-4">
         <h3 className="text-[20px] font-semibold text-ink leading-tight">
-          {copy.dashboard.settingsTab.accountHeading}
+          Account
         </h3>
 
         <div className="divide-y divide-border">
+          {/* Email row */}
           <div className="h-14 flex items-center justify-between text-[14px]">
-            <span className="text-muted">{copy.dashboard.settingsTab.emailLabel}</span>
+            <span className="text-muted">Email</span>
             <span className="text-[15px] font-medium text-ink">
               {session.primaryEmail || 'Not set'}
             </span>
           </div>
 
+          {/* Username row */}
           <div className="h-14 flex items-center justify-between text-[14px]">
-            <span className="text-muted">{copy.dashboard.settingsTab.usernameLabel}</span>
+            <span className="text-muted">Username</span>
             <span className="text-[15px] font-mono font-medium text-ink">
               @{session.username}
             </span>
+          </div>
+
+          {/* Plan row */}
+          <div className="py-3 flex flex-col justify-center gap-1">
+            <div className="flex items-center justify-between text-[14px]">
+              <span className="text-muted">Plan</span>
+              <div className="flex items-center gap-2">
+                {session.isPro ? (
+                  <div className="flex items-center gap-1.5">
+                    <ProBadge />
+                    <span className="text-[15px] font-medium text-ink">Pro</span>
+                  </div>
+                ) : (
+                  <span className="text-[15px] font-medium text-ink">Free</span>
+                )}
+              </div>
+            </div>
+
+            {!session.isPro && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[13px] text-muted">
+                  Pro isn't open for purchase yet.
+                </span>
+                <a
+                  href="/#pricing"
+                  className="text-[13px] text-ink font-medium underline underline-offset-2 hover:text-ink-2"
+                >
+                  See Pro features
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="mt-2">
           <Button as={Link} to="/account" variant="secondary" size="md">
-            {copy.dashboard.settingsTab.manageAccountButton}
+            Manage account
           </Button>
         </div>
       </Card>
@@ -58,33 +112,75 @@ export const SettingsTab: React.FC = () => {
       {/* 2. Your Page Card */}
       <Card className="flex flex-col gap-4">
         <h3 className="text-[20px] font-semibold text-ink leading-tight">
-          {copy.dashboard.settingsTab.yourPageHeading}
+          Your page
         </h3>
 
         <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-2 border border-border">
           <span className="font-mono text-[14px] text-ink select-all truncate flex-1">
-            https://ivio.site/{session.username}
+            {fullUrl || 'https://ivio.site'}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 mt-1">
+        <div className="flex flex-wrap items-center gap-2.5 mt-1">
           <Button
             variant="secondary"
             size="md"
             onClick={handleCopyLink}
             iconRight={<Copy size={14} />}
           >
-            {copy.dashboard.settingsTab.copyLinkButton}
+            Copy link
           </Button>
           <Button
             variant="secondary"
             size="md"
-            disabled
-            title={copy.dashboard.settingsTab.viewPageTooltip}
+            as="a"
+            href={session.username ? `/${session.username}` : '#'}
+            target="_blank"
+            rel="noopener noreferrer"
             iconRight={<ExternalLink size={14} />}
           >
-            {copy.dashboard.settingsTab.viewPageButton}
+            View page
           </Button>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setIsShareOpen(true)}
+            iconRight={<Share2 size={14} />}
+          >
+            Share
+          </Button>
+        </div>
+
+        {/* Remove the ivio mark switch */}
+        <div className="pt-4 mt-2 border-t border-border flex items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-medium text-ink">
+                Remove the ivio mark
+              </span>
+              <ProBadge />
+            </div>
+            <p className="text-[13px] text-muted max-w-[42ch]">
+              Hide the 'Create your own page' link from your page. The report link always stays.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={session.isPro ? session.hideIvioFooter : false}
+            aria-disabled={!session.isPro}
+            onClick={handleFooterMarkToggle}
+            className={`w-11 h-6 rounded-full flex items-center p-0.5 transition-colors duration-120 shrink-0 focus-visible:outline-2 focus-visible:outline-ink ${
+              session.isPro && session.hideIvioFooter ? 'bg-ink' : 'bg-border'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-120 ${
+                session.isPro && session.hideIvioFooter ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
         </div>
       </Card>
 
@@ -92,17 +188,28 @@ export const SettingsTab: React.FC = () => {
       <Card className="flex flex-col items-start gap-4">
         <div>
           <h3 className="text-[20px] font-semibold text-ink leading-tight">
-            {copy.dashboard.settingsTab.sessionHeading}
+            Session
           </h3>
           <p className="mt-1 text-[14px] text-muted">
-            {copy.dashboard.settingsTab.sessionLine}
+            Signed in on this device.
           </p>
         </div>
 
         <Button variant="secondary" size="md" onClick={handleSignOut}>
-          {copy.dashboard.settingsTab.signOutButton}
+          Sign out
         </Button>
       </Card>
+
+      {/* Share Dialog */}
+      {session.username && (
+        <ShareDialog
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
+          username={session.username}
+          displayName={session.displayName}
+          isPublished={true}
+        />
+      )}
     </div>
   );
 };

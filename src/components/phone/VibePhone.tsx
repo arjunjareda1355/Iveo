@@ -2,10 +2,14 @@ import React from 'react';
 import { Vibe, VIBES } from '../../lib/vibes';
 import { PhoneFrame } from './PhoneFrame';
 import { PhonePage, PhoneProfile } from './PhonePage';
+import { PageBlock } from '../../data/types';
 
 interface VibePhoneProps {
   currentVibe: Vibe;
   profile?: PhoneProfile;
+  blocks?: PageBlock[];
+  hideFooterMark?: boolean;
+  embedMode?: 'placeholder' | 'live';
   width?: number;
   buttonRadiusOverride?: number;
   className?: string;
@@ -16,6 +20,9 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
   ({
     currentVibe,
     profile,
+    blocks,
+    hideFooterMark = false,
+    embedMode = 'placeholder',
     width = 300,
     buttonRadiusOverride,
     className,
@@ -46,6 +53,9 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
                 <PhonePage
                   vibe={vibe}
                   profile={profile}
+                  blocks={blocks}
+                  hideFooterMark={hideFooterMark}
+                  embedMode={embedMode}
                   buttonRadiusOverride={isActive ? buttonRadiusOverride : undefined}
                   scale={scale}
                 />

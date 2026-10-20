@@ -19,8 +19,11 @@ export interface IvioSession {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   onboardingComplete: boolean;
+  plan: 'free' | 'pro';
+  isPro: boolean;
+  hideIvioFooter: boolean;
   updateUsername: (newUsername: string) => Promise<void>;
-  updatePreferences: (patch: Partial<IvioPreferences>) => Promise<void>;
+  updatePreferences: (patch: Partial<Omit<IvioPreferences, 'plan'>>) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -34,6 +37,9 @@ const FALLBACK_SESSION: IvioSession = {
   vibeId: DEFAULT_PREFERENCES.vibeId,
   buttonShape: DEFAULT_PREFERENCES.buttonShape,
   onboardingComplete: false,
+  plan: 'free',
+  isPro: false,
+  hideIvioFooter: false,
   updateUsername: async () => {},
   updatePreferences: async () => {},
   signOut: async () => {},
@@ -57,6 +63,9 @@ function useClerkSession(): IvioSession {
       vibeId: DEFAULT_PREFERENCES.vibeId,
       buttonShape: DEFAULT_PREFERENCES.buttonShape,
       onboardingComplete: false,
+      plan: 'free',
+      isPro: false,
+      hideIvioFooter: false,
       updateUsername: async () => {},
       updatePreferences: async () => {},
       signOut: async () => {
@@ -77,20 +86,27 @@ function useClerkSession(): IvioSession {
   const isUsernameValid = username ? validateUsername(username).ok : false;
   const onboardingComplete = preferences.onboardingComplete === true && isUsernameValid;
 
+  const plan = preferences.plan;
+  const isPro = plan === 'pro';
+  const hideIvioFooter = preferences.hideIvioFooter;
+
   const updateUsername = async (newUsername: string): Promise<void> => {
     await user.update({ username: newUsername });
   };
 
-  const updatePreferences = async (patch: Partial<IvioPreferences>): Promise<void> => {
-    // unsafeMetadata is client-writable. It holds non-sensitive preferences only. Move this to the database in the next step.
+  const updatePreferences = async (patch: Partial<Omit<IvioPreferences, 'plan'>>): Promise<void> => {
+    // unsafeMetadata holds client-writable preferences. Never write plan here (server/database authoritative).
     const currentMeta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
       ? user.unsafeMetadata
       : {}) as Record<string, unknown>;
 
+    // Ensure plan is not included in client update payloads
+    const { plan: _ignoredPlan, ...safePatch } = patch as any;
+
     await user.update({
       unsafeMetadata: {
         ...currentMeta,
-        ...patch,
+        ...safePatch,
       },
     });
   };
@@ -105,6 +121,9 @@ function useClerkSession(): IvioSession {
     vibeId: preferences.vibeId,
     buttonShape: preferences.buttonShape,
     onboardingComplete,
+    plan,
+    isPro,
+    hideIvioFooter,
     updateUsername,
     updatePreferences,
     signOut: async () => {
