@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
-import { KEY_ERROR_IS_SECRET, KEY_ERROR_IS_PRODUCTION_ON_DEV } from '../lib/env';
+import { KEY_ERROR_IS_SECRET } from '../lib/env';
 
 export const SetupMissingKey: React.FC = () => {
   return (
@@ -23,26 +23,12 @@ export const SetupMissingKey: React.FC = () => {
       <main className="w-full max-w-[440px] mx-auto my-auto py-8">
         <div className="bg-surface border border-border rounded-[14px] p-6 sm:p-8 shadow-[0_1px_2px_rgba(10,10,10,0.04)]">
           <h1 className="text-[24px] font-medium text-ink leading-tight tracking-[-0.02em]">
-            {KEY_ERROR_IS_PRODUCTION_ON_DEV
-              ? 'Use Development Key'
-              : 'Add your Clerk key'}
+            Add your Clerk key
           </h1>
 
           {KEY_ERROR_IS_SECRET && (
             <div className="mt-4 p-3 rounded-[10px] bg-red-50 border border-red-200 text-error text-[14px]">
-              A secret key (sk_...) was entered. Never paste secret keys into the frontend. Use the Publishable key (pk_test_...).
-            </div>
-          )}
-
-          {KEY_ERROR_IS_PRODUCTION_ON_DEV && (
-            <div className="mt-4 p-3.5 rounded-[10px] bg-[#F7F7F7] border border-border text-ink text-[14px] leading-relaxed">
-              <p className="font-medium text-ink">Production key detected:</p>
-              <p className="mt-1 text-muted">
-                Your key starts with <code className="text-ink font-mono text-[12px] bg-white px-1.5 py-0.5 rounded border border-border">pk_live_</code> which Clerk restricts strictly to your production domain (<code className="text-ink font-mono text-[12px]">iveo.site</code>).
-              </p>
-              <p className="mt-2 text-muted">
-                For testing in preview environments and local dev, use the <strong>Development instance</strong> publishable key (<code className="text-ink font-mono text-[12px] bg-white px-1.5 py-0.5 rounded border border-border">pk_test_...</code>).
-              </p>
+              A secret key (sk_...) was entered. Never paste secret keys into the frontend. Use the Publishable key (pk_test_... or pk_live_...).
             </div>
           )}
 
@@ -60,10 +46,7 @@ export const SetupMissingKey: React.FC = () => {
               for application <code className="text-ink font-mono text-[12px]">app_3KiygJnkoVqPjp00NAhi1XjtR8u</code>.
             </li>
             <li>
-              Switch to your <strong>Development</strong> instance (top-left dropdown).
-            </li>
-            <li>
-              Go to <strong>API keys</strong> and copy the <strong>Publishable key</strong> (starts with <code className="text-ink font-mono text-[12px]">pk_test_</code>).
+              Go to <strong>API keys</strong> and copy your <strong>Publishable key</strong> (starts with <code className="text-ink font-mono text-[12px]">pk_test_</code> or <code className="text-ink font-mono text-[12px]">pk_live_</code>).
             </li>
             <li>
               Set it as <code className="text-ink font-mono text-[12px]">VITE_CLERK_PUBLISHABLE_KEY</code> or paste into <code className="text-ink font-mono text-[12px]">src/lib/env.ts</code>.

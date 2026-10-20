@@ -1,0 +1,859 @@
+IVIO STEP 4A: LINK EXTRAS, QR CODE, SHARE SHEET AND PLAN FOUNDATION: MASTER BUILD PROMPT
+Version 1.0 | Builds on Step 1 (landing), Step 2 (Clerk auth), Step 3 (database, links, public pages)
+
+This file has three parts:
+  PART 1 (for you, the human): a short setup checklist and a test script. Do this BEFORE pasting anything.
+  PART 2 (for you, the human): a SQL script you run once in Supabase. Do not paste it into the AI.
+  PART 3 (for the AI): the build prompt. Paste everything from the line "BEGIN PROMPT" to the line "END PROMPT".
+
+#####################################################################
+PART 1: WHAT THIS STEP IS, AND WHAT YOU DO FIRST (NOT PART OF THE PROMPT)
+#####################################################################
+
+1. WHY STEP 4 IS SPLIT INTO PARTS
+You asked for four big things: QR code and share previews, link extras (scheduling, embeds, thumbnails), analytics, and Pro billing. Building all of them in one prompt makes the result buggy, so Step 4 is split. Each part works on its own and builds on the last:
+
+  4A (this file)  Link extras (thumbnails, featured layout, scheduling, embeds), QR code and share sheet, and the "plan" foundation that decides what is Free and what is Pro.
+  4B              Analytics: page views and link clicks (basic for Free, deeper charts for Pro).
+  4C              Share previews (the card shown when your link is pasted in WhatsApp, X, iMessage) plus hosting hardening: account-deletion cleanup and username sync. This one depends on where you host the site.
+  4D              Pro billing (Clerk Billing), which switches the plan automatically when someone pays.
+  Later           The two remaining Pro items listed on your pricing section: password-protected links, and email/phone collection with CSV export.
+
+Billing comes last on purpose: the paid features have to exist before there is anything to sell, and 4A builds the lock that billing will later open.
+
+2. WHAT 4A ADDS
+- Link thumbnails (small image on a link) and a "Featured" layout (large image card). Free.
+- Scheduling: show a link from a date and hide it after a date. Pro.
+- Embeds: YouTube, Spotify and SoundCloud players on your page. Pro. Nothing from those services loads until a visitor presses play.
+- A Share button with the page link, native phone sharing, and a downloadable QR code (PNG and SVG). Free.
+- A "plan" for each account (Free or Pro) enforced by the database itself, plus a "remove the ivio mark" option on your public page. Pro.
+Until Step 4D, nobody can buy Pro. You will switch your own account to Pro by hand for testing (see below).
+
+3. SETUP CHECKLIST
+A. Run the SQL script in Part 2 of this file: Supabase Dashboard > SQL Editor > New query > paste > Run. It only adds things (new columns, rules, one storage bucket); it does not delete your data. If you see an error, send me the exact text.
+B. No new keys or environment variables are needed for 4A.
+C. Make your own account Pro for testing. In the SQL Editor run (replace the name):
+     update public.profiles set plan = 'pro' where username = 'YOUR_USERNAME';
+   To go back to Free:
+     update public.profiles set plan = 'free' where username = 'YOUR_USERNAME';
+   The app cannot change the plan itself. Only you (through the SQL Editor) can, until billing arrives.
+D. QR codes point to https://ivio.site/<username>. Until your ivio.site domain really points at your deployed app, scanning a QR code will not work. For testing before that, add an environment variable VITE_SITE_ORIGIN set to your deployed app's address (for example https://your-app.example.app, no trailing slash). Do not print or share QR codes until the real domain works.
+E. If your hosting adds a Content-Security-Policy, allow these: frame-src https://www.youtube-nocookie.com https://open.spotify.com https://w.soundcloud.com, and img-src https://YOUR-PROJECT.supabase.co. Most hosting setups do not need any change.
+
+4. YOUR TEST SCRIPT AFTER THE BUILD (use a standalone browser tab, not the preview pane)
+  Thumbnails and layouts
+  [ ] Open a link's Edit panel and add an image (try a large phone photo). It uploads, shows a preview and appears on the live preview and your public page. In Supabase Storage > link-images you see one file inside a folder named after your user id.
+  [ ] Switch the layout to Featured: the link becomes a large image card. Remove the image: the layout returns to Classic.
+  [ ] Try a PDF or an SVG file: it is refused with a clear message.
+  Scheduling (as Pro)
+  [ ] Set a link to show 2 minutes from now. It disappears from the live preview now and appears on the public page (incognito) after the time passes (the public page refreshes about once a minute).
+  [ ] Set "Hide after" to a time 2 minutes away; it disappears after that time. The row shows "Until ..." then "Ended".
+  Embeds (as Pro)
+  [ ] Add a YouTube link, a Spotify track link and a SoundCloud track link. Each shows a placeholder card. On the public page, the card shows "Play"; pressing it loads the player. Before pressing it, the browser's Network tab shows no requests to YouTube, Spotify or SoundCloud.
+  [ ] Paste a Vimeo or random link into the embed box: it is refused with a clear message.
+  Plan lock (switch yourself to Free with the SQL above)
+  [ ] "Add embed" shows a Pro badge and opens the "Pro is coming soon" dialog. The Schedule section is locked. The existing embed and scheduled links stay in your dashboard but no longer appear on your public page. Switch back to Pro: they return.
+  [ ] Optional database check: as a Free account, try to turn on "Remove the ivio mark". The app refuses it.
+  Share and QR
+  [ ] Press Share in the top bar: you see your link, Copy link, (on a phone) the native Share button, a QR code, and Download PNG and Download SVG.
+  [ ] Scan the QR code with a phone camera (use VITE_SITE_ORIGIN if the real domain is not live yet): it opens your public page.
+  Quality
+  [ ] Public page, incognito, 375 px wide: thumbnails, featured cards and embed cards all fit with no horizontal scrolling.
+  [ ] Keyboard: you can reach and use every new control (image upload, layout, schedule fields, embed play button, share sheet, download buttons) and close the share sheet with Escape.
+
+5. KNOWN LIMITS OF 4A (PLAN FOR THEM)
+- No click or view counts yet (4B).
+- Share previews on WhatsApp, X and similar are still generic (4C).
+- Nobody can buy Pro yet (4D). Your pricing section already promises two Pro items that are not built: password-protected links and email/phone collection. Either build them in a later step or edit the pricing list before launch.
+- If an uploaded image is replaced or a link is deleted and the cleanup fails (for example the person was offline), a small orphan file can stay in storage. It is harmless and can be cleaned later.
+- Public pages refresh scheduled links about once a minute while open, not to the exact second.
+
+#####################################################################
+PART 2: THE SQL SCRIPT (RUN ONCE IN SUPABASE SQL EDITOR; NOT PART OF THE PROMPT)
+#####################################################################
+
+-- ===================================================================
+-- ivio schema v2 (Step 4A): plans, thumbnails, layouts, scheduling, embeds
+-- Run AFTER the v1 script. Safe to run more than once.
+-- ===================================================================
+
+-- 1. PROFILES: plan and footer option ---------------------------------
+alter table public.profiles
+  add column if not exists plan text not null default 'free',
+  add column if not exists hide_ivio_footer boolean not null default false;
+
+alter table public.profiles drop constraint if exists profiles_plan_valid;
+alter table public.profiles
+  add constraint profiles_plan_valid check (plan in ('free', 'pro'));
+
+-- People can read their plan but never write it. Column-level permissions
+-- replace the broad insert/update permissions from v1.
+revoke insert, update on public.profiles from authenticated;
+grant insert (
+  user_id, username, display_name, bio, avatar_url, vibe_id, button_shape,
+  socials, is_published, hide_from_search, onboarding_complete, hide_ivio_footer
+) on public.profiles to authenticated;
+grant update (
+  username, display_name, bio, avatar_url, vibe_id, button_shape,
+  socials, is_published, hide_from_search, onboarding_complete, hide_ivio_footer
+) on public.profiles to authenticated;
+
+-- 2. PLAN CHECK (the single place that decides who is Pro) ---------------
+-- Step 4D replaces the body of this function so billing decides the plan.
+create or replace function public.has_pro(p_user_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(
+    (select p.plan = 'pro' from public.profiles p where p.user_id = p_user_id),
+    false
+  );
+$$;
+
+revoke all on function public.has_pro(text) from public, anon, authenticated;
+
+-- 3. LINKS: new columns -------------------------------------------------
+alter table public.links
+  add column if not exists thumbnail_path text,
+  add column if not exists layout text not null default 'classic',
+  add column if not exists embed_provider text,
+  add column if not exists start_at timestamptz,
+  add column if not exists end_at timestamptz;
+
+-- 4. LINKS: replace the shape rules and add the new ones ------------------
+alter table public.links drop constraint if exists links_kind_valid;
+alter table public.links drop constraint if exists links_shape_by_kind;
+alter table public.links drop constraint if exists links_layout_valid;
+alter table public.links drop constraint if exists links_embed_provider_valid;
+alter table public.links drop constraint if exists links_schedule_order;
+alter table public.links drop constraint if exists links_schedule_kinds;
+alter table public.links drop constraint if exists links_thumbnail_path_ok;
+alter table public.links drop constraint if exists links_thumbnail_only_links;
+alter table public.links drop constraint if exists links_featured_needs_image;
+
+alter table public.links
+  add constraint links_kind_valid check (kind in ('link', 'header', 'divider', 'embed'));
+
+alter table public.links
+  add constraint links_layout_valid check (layout in ('classic', 'featured'));
+
+alter table public.links
+  add constraint links_embed_provider_valid
+  check (embed_provider is null or embed_provider in ('youtube', 'spotify', 'soundcloud'));
+
+alter table public.links
+  add constraint links_schedule_order
+  check (start_at is null or end_at is null or end_at > start_at);
+
+alter table public.links
+  add constraint links_schedule_kinds
+  check ((start_at is null and end_at is null) or kind in ('link', 'embed'));
+
+alter table public.links
+  add constraint links_thumbnail_path_ok check (
+    thumbnail_path is null or (
+      char_length(thumbnail_path) <= 200
+      and thumbnail_path ~ '^[A-Za-z0-9_]+/[0-9a-f-]{36}\.(webp|jpg)$'
+      and split_part(thumbnail_path, '/', 1) = user_id
+    )
+  );
+
+alter table public.links
+  add constraint links_thumbnail_only_links
+  check (thumbnail_path is null or kind = 'link');
+
+alter table public.links
+  add constraint links_featured_needs_image
+  check (layout = 'classic' or (layout = 'featured' and kind = 'link' and thumbnail_path is not null));
+
+alter table public.links
+  add constraint links_shape_by_kind check (
+       (kind = 'link'    and url is not null and char_length(title) between 1 and 60 and embed_provider is null)
+    or (kind = 'header'  and url is null     and char_length(title) between 1 and 40 and embed_provider is null)
+    or (kind = 'divider' and url is null     and title = ''                          and embed_provider is null)
+    or (kind = 'embed'   and url is not null and char_length(title) <= 60 and embed_provider is not null
+         and (
+              (embed_provider = 'youtube'    and url ~* '^https://(www\.|m\.)?(youtube\.com|youtu\.be)/')
+           or (embed_provider = 'spotify'    and url ~* '^https://open\.spotify\.com/')
+           or (embed_provider = 'soundcloud' and url ~* '^https://soundcloud\.com/')
+         ))
+  );
+
+-- 5. PRO ENFORCEMENT TRIGGERS ---------------------------------------------
+-- Writing a schedule or an embed requires Pro. Clearing a schedule, moving,
+-- hiding, archiving and deleting are always allowed (so downgraded accounts
+-- can still tidy up).
+create or replace function public.enforce_pro_links()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  wants_pro boolean;
+begin
+  if tg_op = 'INSERT' then
+    wants_pro := new.kind = 'embed' or new.start_at is not null or new.end_at is not null;
+  else
+    wants_pro :=
+      (new.kind = 'embed' and (
+         new.url is distinct from old.url or new.embed_provider is distinct from old.embed_provider))
+      or (new.start_at is not null and new.start_at is distinct from old.start_at)
+      or (new.end_at is not null and new.end_at is distinct from old.end_at);
+  end if;
+
+  if wants_pro and not public.has_pro(new.user_id) then
+    raise exception 'pro_required';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists links_pro_check on public.links;
+create trigger links_pro_check
+  before insert or update on public.links
+  for each row execute function public.enforce_pro_links();
+
+create or replace function public.enforce_pro_profiles()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.hide_ivio_footer = true
+     and (tg_op = 'INSERT' or new.hide_ivio_footer is distinct from old.hide_ivio_footer)
+     and not public.has_pro(new.user_id) then
+    raise exception 'pro_required';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_pro_check on public.profiles;
+create trigger profiles_pro_check
+  before insert or update on public.profiles
+  for each row execute function public.enforce_pro_profiles();
+
+-- 6. PUBLIC PAGE FUNCTION (replaces the v1 version; same name and inputs) ---
+create or replace function public.get_public_page(p_username text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'profile', jsonb_build_object(
+      'username', p.username,
+      'display_name', p.display_name,
+      'bio', p.bio,
+      'avatar_url', p.avatar_url,
+      'vibe_id', p.vibe_id,
+      'button_shape', p.button_shape,
+      'socials', p.socials,
+      'hide_from_search', p.hide_from_search,
+      'hide_footer', (p.hide_ivio_footer and public.has_pro(p.user_id))
+    ),
+    'links', coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', l.id,
+            'kind', l.kind,
+            'title', l.title,
+            'url', l.url,
+            'icon', l.icon,
+            'thumbnail_path', l.thumbnail_path,
+            'layout', l.layout,
+            'embed_provider', l.embed_provider
+          )
+          order by l.position, l.created_at
+        )
+        from public.links l
+        where l.user_id = p.user_id
+          and l.is_active
+          and not l.is_archived
+          and (l.start_at is null or l.start_at <= now())
+          and (l.end_at is null or l.end_at > now())
+          and (l.kind <> 'embed' or public.has_pro(p.user_id))
+          and ((l.start_at is null and l.end_at is null) or public.has_pro(p.user_id))
+      ),
+      '[]'::jsonb
+    )
+  )
+  from public.profiles p
+  where p.username = lower(p_username)
+    and p.is_published
+    and p.onboarding_complete;
+$$;
+
+revoke all on function public.get_public_page(text) from public;
+grant execute on function public.get_public_page(text) to anon, authenticated;
+
+-- 7. STORAGE: public bucket for link images ---------------------------------
+-- Anyone can view an image by its address. Only the owner can add, replace
+-- or delete files inside the folder named after their own user id.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('link-images', 'link-images', true, 524288, array['image/webp', 'image/jpeg'])
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists link_images_select_own on storage.objects;
+create policy link_images_select_own on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'link-images'
+    and (storage.foldername(name))[1] = (select auth.jwt() ->> 'sub')
+  );
+
+drop policy if exists link_images_insert_own on storage.objects;
+create policy link_images_insert_own on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'link-images'
+    and (storage.foldername(name))[1] = (select auth.jwt() ->> 'sub')
+  );
+
+drop policy if exists link_images_update_own on storage.objects;
+create policy link_images_update_own on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'link-images'
+    and (storage.foldername(name))[1] = (select auth.jwt() ->> 'sub')
+  )
+  with check (
+    bucket_id = 'link-images'
+    and (storage.foldername(name))[1] = (select auth.jwt() ->> 'sub')
+  );
+
+drop policy if exists link_images_delete_own on storage.objects;
+create policy link_images_delete_own on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'link-images'
+    and (storage.foldername(name))[1] = (select auth.jwt() ->> 'sub')
+  );
+
+-- ===================================================================
+-- Quick checks (optional): run these one at a time afterwards.
+--   select column_name from information_schema.columns
+--     where table_schema = 'public' and table_name = 'links' order by ordinal_position;
+--   select id, public, file_size_limit from storage.buckets where id = 'link-images';
+--   select policyname from pg_policies where tablename = 'objects' and policyname like 'link_images%';
+-- ===================================================================
+
+#####################################################################
+PART 3: THE PROMPT
+#####################################################################
+
+BEGIN PROMPT
+=====================================================================
+0. CONTEXT AND HOW TO READ THIS
+=====================================================================
+You are extending an existing project: "ivio", a link-in-bio web app (Linktree-style). Step 1 built the landing page. Step 2 added Clerk authentication, onboarding, the dashboard shell, the account page and the bridge hook useIvioSession. Step 3 added a Supabase database, link management (links, headers, dividers, drag and keyboard reordering, archive, delete), profile and social icons, real public pages at /:username, a shared PageRenderer, a data layer (src/data) with TanStack Query, and real username availability. Inspect the current code first. Reuse its design tokens, components, hooks, copy file, data layer and folder structure. Do not restyle or restructure anything that exists except where this document says to.
+
+This task adds, in order of importance:
+1. A plan foundation: every account is "free" or "pro", enforced by the database; the UI mirrors it with badges, locks and an upgrade dialog.
+2. Link thumbnails (images) and a "Featured" link layout. Free.
+3. Link scheduling (show from, hide after). Pro.
+4. Embeds for YouTube, Spotify and SoundCloud with a click-to-load player. Pro.
+5. A Share sheet with the page link, native sharing and a downloadable QR code (PNG and SVG). Free.
+6. A "Remove the ivio mark" option for the public page. Pro.
+
+The database changes (new columns, rules, one storage bucket, a plan check) have already been applied by the owner with a SQL script. Section 3 describes the result. Never change the database from the app.
+
+Every exact value in this document (hex colors, sizes, strings, names, error codes) is intentional. Use them exactly. Where only a principle is given, use judgment inside it. Do not ask clarifying questions. Build now, then reply in the format of Section 23.
+
+If two instructions conflict, resolve them in this order: Section 1 (scope and hard rules), Section 15 (security), Section 3 (database contract), then everything else.
+
+=====================================================================
+1. SCOPE AND HARD RULES
+=====================================================================
+In scope: everything in Section 0.
+
+Out of scope (do not build, and do not leave dead UI for them beyond what is described):
+- Analytics, click or view counting, referrers, device or country data (Step 4B).
+- Share previews (Open Graph cards for chat apps), server rendering, edge functions (Step 4C).
+- Billing, checkout, any way to buy Pro, any call that changes the plan (Step 4D). The app can only READ the plan.
+- Password-protected links, email or phone collection, CSV export, custom avatar upload, carousel layout, custom themes, custom domains.
+- Any database or storage schema change, migration or policy. Never call the Supabase Management API.
+- Realtime subscriptions.
+
+Hard rules:
+- Add only one dependency: "qrcode" (and its types "@types/qrcode" as a dev dependency if the project uses TypeScript types for packages). Nothing else. Image processing uses the browser Canvas API; embeds use plain iframes; scheduling uses native date inputs and Intl.
+- Keep every Step 1 to 3 rule: only the publishable Supabase key; no supabase.auth.* calls; visitors read data only through get_public_page and is_username_available; never log user data, tokens or raw errors; only the Clerk-token client for owner data; neutral black and white page chrome; Geist; 1px hairlines; only --shadow-sm and --shadow-lg; no gradients on chrome; no emoji; no exclamation marks; none of the banned hype words (revolutionize, supercharge, unleash, seamless, game-changer, elevate, next-level, cutting-edge, all-in-one, powerful, effortless, empower, journey, leverage, ecosystem, unlock).
+- Support email wherever help is mentioned: help@ivio.site, always a mailto link.
+- TypeScript strict. No "any". No unused code. Every new string goes into src/content/copy.ts, not into JSX.
+- No layout shift on any new screen. Reserve space for images, embeds, dialogs and loading states.
+- Do NOT set a page-wide referrer policy that suppresses the Referer header (no <meta name="referrer" content="no-referrer"> and no Referrer-Policy: no-referrer or same-origin). YouTube players refuse to start without a Referer. Individual <img> tags keep referrerPolicy "no-referrer" as in Step 3; embed iframes use "strict-origin-when-cross-origin" (Section 9).
+
+=====================================================================
+2. DEPENDENCY AND CONFIGURATION NOTES
+=====================================================================
+- QR codes: import QRCode from "qrcode". Use QRCode.toString(text, { type: "svg", errorCorrectionLevel: "M", margin: 4, color: { dark: "#0A0A0A", light: "#FFFFFF" } }) for the SVG and QRCode.toDataURL(text, { type: "image/png", width: 1024, errorCorrectionLevel: "M", margin: 4, color: { dark: "#0A0A0A", light: "#FFFFFF" } }) for the PNG. If the installed version's option names differ, adapt and mention it in your final reply.
+- Site origin (src/lib/site.ts): export SITE_ORIGIN, read from import.meta.env.VITE_SITE_ORIGIN when it is a valid https origin (new URL(value).origin equals the trimmed value without a trailing slash), otherwise "https://ivio.site". Export pageUrl(username): `${SITE_ORIGIN}/${username}`. Replace EVERY hard-coded "https://ivio.site" used to build a page address (copy link buttons, dashboard address pill, onboarding "Copy link", Settings "Your page" row, the public page canonical URL, the "Report this page" subject) with pageUrl or SITE_ORIGIN. Display text such as "ivio.site/<username>" (without https://) stays as is for the brand, but links and copied values use pageUrl. Add the comment: "Set VITE_SITE_ORIGIN to the deployed address until ivio.site points at the app."
+- Image upload and public image URLs use the existing Supabase URL from src/lib/env.ts. Public image address: `${SUPABASE_URL}/storage/v1/object/public/link-images/${path}`. Put this in a single function storagePublicUrl(path) in src/data/storageApi.ts.
+- Clerk, TanStack Query, dnd-kit and Supabase client rules from Steps 2 and 3 are unchanged.
+
+=====================================================================
+3. DATABASE CONTRACT v2 (ALREADY APPLIED; DO NOT CHANGE)
+=====================================================================
+Additions to table profiles:
+  plan text                "free" or "pro". Default "free". READ-ONLY for the app: it is not in the allowed insert or update columns. Never send it in any insert, update or upsert (doing so fails with a permission error).
+  hide_ivio_footer boolean Default false. Setting it to true requires Pro (the database raises "pro_required" otherwise).
+  Allowed columns for insert: user_id, username, display_name, bio, avatar_url, vibe_id, button_shape, socials, is_published, hide_from_search, onboarding_complete, hide_ivio_footer. Allowed for update: the same list without user_id. Keep sending only these.
+
+Additions to table links:
+  thumbnail_path text      null, or "<clerk user id>/<uuid>.webp" or ".jpg" (the first folder MUST equal the person's own user id). Only for kind "link".
+  layout text              "classic" (default) or "featured". "featured" requires kind "link" AND a thumbnail_path.
+  embed_provider text      null, or "youtube", "spotify" or "soundcloud". Required for kind "embed"; must be null for every other kind.
+  start_at timestamptz     null, or when the item becomes visible. Pro.
+  end_at timestamptz       null, or when the item stops being visible. Must be after start_at when both are set. Pro.
+  kind now also allows "embed". An embed has: url (https only and a host matching its provider: youtube.com, www.youtube.com, m.youtube.com or youtu.be; open.spotify.com; soundcloud.com), title used as an OPTIONAL caption (0 to 60 characters, may be the empty string), embed_provider set, icon null, thumbnail null.
+  start_at and end_at are only allowed for kinds "link" and "embed".
+  Pro rule enforced by the database on write: creating or changing an embed's url or provider, or setting or changing start_at or end_at to a non-null value, requires Pro and otherwise fails with error.message "pro_required". Clearing a schedule (setting it to null), reordering, hiding, archiving and deleting are always allowed.
+
+Function get_public_page(p_username) now returns, in addition to the Step 3 fields:
+  profile.hide_footer (boolean; true only when the person is Pro AND chose to hide the footer mark)
+  links[].thumbnail_path, links[].layout, links[].embed_provider
+  It already filters out: inactive, archived, not-yet-started and already-ended items, and (for accounts that are not Pro) every embed and every scheduled item. The app must not re-implement these filters for the public page.
+
+Storage: public bucket "link-images" (images of at most 512 KB, MIME types image/webp and image/jpeg only). Anyone can view an object by its public address. Only the owner can upload, replace, list and delete objects in the folder named after their own user id. Path format: `<userId>/<uuid>.<webp|jpg>`.
+
+New error signal: error.message "pro_required" (map to the error code "pro_required", see Section 5).
+Existing signals from Step 3 are unchanged (username_taken, username_reserved, link_limit_reached, invalid_input, not_authenticated, network, unknown).
+
+=====================================================================
+4. PLANS AND PRO GATING FOUNDATION
+=====================================================================
+4.1 Reading the plan
+- Extend the Profile type and the mappers with plan: "free" | "pro" (default "free" if missing or unknown) and hideIvioFooter: boolean.
+- Extend useIvioSession with plan: "free" | "pro" and isPro: boolean. While the profile is loading, isPro is false but the UI must not flash locked states: components that depend on the plan render their neutral/loading variant until profileStatus is "ready".
+- The plan comes ONLY from the database row. Never infer it from anything on the client and never store it in localStorage.
+
+4.2 The rule for gating
+The database is the authority. The UI mirrors it so people never hit errors by surprise, but every Pro action must ALSO handle a "pro_required" error gracefully (open the upgrade dialog, roll back optimistic changes, no raw error text).
+
+4.3 Pro features in this step
+  Pro:  embeds, scheduling (show from, hide after), "Remove the ivio mark".
+  Free: thumbnails, Featured layout, Share sheet, QR code.
+Keep this list in one constant, PRO_FEATURES, in src/lib/plan.ts with the keys "embeds", "scheduling", "hide_footer".
+
+4.4 Components (src/components/plan/)
+- ProBadge: the existing Badge "Pro" variant (ink background, white text, 11px uppercase) as a small inline component.
+- UpgradeDialog: a dialog (role="dialog", aria-modal="true", focus trap, Escape closes, backdrop click closes; desktop centered, max-width 420px, radius 20px, 1px border, --shadow-lg, padding 24px; below 640px it is a bottom sheet with 20px top radius and safe-area padding). Content: ProBadge, h2 "Pro is coming soon", 15px muted "Pro features are not open for purchase yet. Email help@ivio.site to ask about early access.", primary md "Email us" (mailto:help@ivio.site?subject=ivio%20Pro%20early%20access) and ghost md "Close". It takes an optional "feature" prop to show a first line in 14px ink-2: "<Feature name> is a Pro feature." using these names: embeds "Embeds", scheduling "Scheduling", hide_footer "Removing the ivio mark".
+- useUpgradeDialog (a small context and hook): openUpgrade(feature) from anywhere.
+- ProLockNotice: an inline notice for locked sections: a 14px muted line "<Feature name> is a Pro feature." with a ghost sm "Learn more" button that calls openUpgrade(feature). Background surface-2, 1px border, radius 10px, padding 12px.
+When billing arrives (Step 4D) only UpgradeDialog's content and the plan source change; keep that seam clean.
+
+=====================================================================
+5. DATA LAYER CHANGES (src/data/)
+=====================================================================
+5.1 Types and mappers (types.ts)
+Extend the owner-side Block:
+  Block = {
+    id: string; kind: "link" | "header" | "divider" | "embed"; title: string; url: string | null; icon: string | null;
+    thumbnailPath: string | null; thumbnailUrl: string | null (computed with storagePublicUrl, null when no path);
+    layout: "classic" | "featured"; embedProvider: "youtube" | "spotify" | "soundcloud" | null;
+    startAt: string | null; endAt: string | null (ISO timestamps);
+    isActive: boolean; isArchived: boolean; position: number
+  }
+Extend the public block type PublicBlock the same way WITHOUT isActive, isArchived, position, startAt or endAt. The mappers must validate unknown or malformed values and fall back safely (unknown layout becomes "classic", unknown provider becomes null and the embed is skipped, unknown kind skips the block). Never crash on bad data.
+
+5.2 linksApi.ts
+- listMyBlocks selects the new columns.
+- createBlock and updateBlock accept the new fields and send ONLY allowed columns (no user-controlled user_id other than the Clerk id on create). Convert camelCase to snake_case at the boundary.
+- A new function setBlockImage(blockId, { thumbnailPath, layout }) performs a single update of thumbnail_path and layout together (required because "featured" needs an image and removing an image must reset the layout in the same statement).
+
+5.3 errors.ts
+Add the code "pro_required" (error.message "pro_required"). Callers that can hit it must open UpgradeDialog with the right feature and roll back optimistic changes.
+
+5.4 storageApi.ts (new)
+- storagePublicUrl(path: string): string.
+- uploadLinkImage(client, userId, blob): uploads to `${userId}/${crypto.randomUUID()}.${ext}` where ext is "webp" for image/webp and "jpg" for image/jpeg, with { contentType: blob.type, cacheControl: "31536000", upsert: false }. Returns the path. Errors map to: "too_large" (HTTP 413 or a size message), "unsupported" (MIME rejection), "not_authenticated", "network", "unknown".
+- removeLinkImage(client, path): removes one object; best effort, never throws to the caller (swallow errors, return a boolean).
+- All storage calls use the Clerk-token client. Never use the public client for uploads.
+
+5.5 Query behavior
+- Blocks keep the key ["blocks", userId]. Optimistic update pattern from Step 3 applies to every mutation here.
+- usePublicPage gets refetchInterval 60000 and refetchIntervalInBackground false so scheduled items appear and disappear on open pages within about a minute. Keep staleTime 60 seconds.
+
+5.6 Time helpers (src/lib/time.ts)
+- useNow(intervalMs): a hook returning a Date that updates on the interval (pausing while the document is hidden).
+- getScheduleState(block, now): returns "none" | "upcoming" | "live" | "ended". "none" when neither startAt nor endAt is set; "upcoming" when startAt is in the future; "ended" when endAt is in the past; "live" otherwise (when at least one of the two is set).
+- isBlockVisibleNow(block, plan, now): true only when block.isActive and not block.isArchived and (plan is "pro" or the block has no schedule and is not an embed) and getScheduleState is not "upcoming" and not "ended". The dashboard live preview uses this so it matches exactly what visitors will see.
+- formatScheduleTime(iso): Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).
+
+=====================================================================
+6. PAGERENDERER CHANGES (src/components/page/PageRenderer.tsx)
+=====================================================================
+The preview phones and the public page keep using the same component. The landing page personas must look identical after these changes (their blocks have no images or embeds).
+
+New and changed props:
+  blocks: PageBlock[]               where PageBlock covers link, header, divider and embed blocks (Block for the owner side and PublicBlock for visitors are both assignable to it through a small shared interface with kind, title, url, icon, thumbnailUrl, layout, embedProvider and id)
+  hideFooterMark?: boolean          hides the "Create your own page" link (the "Report this page" link always stays)
+  embedMode: "placeholder" | "live" (placeholder inside phone mockups; live on the public page)
+
+Rendering rules by block:
+- link, layout "classic", no thumbnail: unchanged from Step 3.
+- link, layout "classic", with thumbnail: inside the same button, a square image at the left (phone size 32px, page size 40px), object-fit cover, radius min(8px, the vibe button radius), 8px inset from the button's left edge and vertically centered, replacing the icon. The label stays centered in the button: reserve an equal amount of space on the right (padding-right equal to the left image slot) so it does not shift off-center.
+- link, layout "featured" (always has a thumbnail): a card using the vibe's button tokens and the button shape override, overflow hidden. Image on top, aspect-ratio 16 / 9, object-fit cover, full width. Below it a label row (min-height 48px phone, 56px page) with the title centered (same typography as buttons; two lines max). The whole card is the anchor when interactive. Hover and focus follow the button rules.
+- Thumbnail <img>: alt "" (the title next to it carries the meaning), referrerPolicy "no-referrer", loading "lazy" (except the first 2 images on the page: "eager"), decoding "async", explicit width and height attributes matching the displayed size to avoid layout shift. If an image fails to load, hide it and fall back to the icon (classic) or collapse the image area while keeping the label row (featured). Never show a broken-image icon.
+- header and divider: unchanged.
+- embed: see Section 9.5 (placeholder mode and live mode).
+Sizing note: the featured card and embed cards have deterministic heights from their aspect ratios or fixed pixel heights so nothing shifts when media loads.
+Footer: when showFooter is true on page size the footer shows the ivio mark with "Create your own page" unless hideFooterMark is true, and always shows "Report this page" (Step 3). On phone size the tiny mark and "ivio" text stay unless hideFooterMark is true.
+
+=====================================================================
+7. THUMBNAILS AND LAYOUTS (FREE)
+=====================================================================
+7.1 Where
+Only links (kind "link") can have an image. It is managed in the link's Edit panel (Section 12.3). The composer stays title and URL only.
+
+7.2 Image section in the Edit panel
+- Empty state: a box (bg surface-2, 1px border-strong, radius 10px, 96px tall, padding 12px): an ImagePlus icon (20px, subtle), the text "Add an image" (14px/500) and "PNG, JPG or WebP. Up to 8 MB." (13px muted), and a secondary md button "Choose image" (an <input type="file" accept="image/png,image/jpeg,image/webp"> triggered by the button; the input itself is visually hidden but accessible through the button). The box also accepts a dropped file on desktop (highlight with a 1px ink border while dragging over).
+- With an image: an 80px square preview (object-fit cover, radius 10px, 1px border) beside two buttons: secondary md "Replace" and ghost md "Remove".
+- Busy state while processing or uploading: the button shows a spinner and the text "Uploading..." and is disabled; the section has aria-busy="true"; a status line announces "Uploading image" then "Image added" (role="status").
+- Errors appear under the box in 13px error color with role="alert": "Choose a PNG, JPG or WebP image." (wrong type), "Choose an image under 8 MB." (too big before processing), "Choose an image at least 64 pixels wide." (too small), "This image is too large. Try a smaller one." (still over the limit after processing), "We couldn't upload that. Try again." (anything else).
+
+7.3 Layout control
+Below the image section: a segmented control "Layout" with "Classic" and "Featured". "Featured" is disabled (aria-disabled, with the helper "Add an image to use Featured." in 13px muted) until the link has an image. Changing the layout saves with the same Save button as the rest of the panel (not instantly). If the image is removed while Featured is selected, the layout resets to Classic in the same update (setBlockImage).
+When an image is set, the Icon picker in the panel is hidden and replaced by the helper "The icon is hidden while an image is set."
+
+7.4 Image processing (src/lib/image-processing.ts)
+processImage(file): Promise<{ blob: Blob; type: "image/webp" | "image/jpeg"; width: number; height: number }>
+1. Reject if file.type is not exactly image/png, image/jpeg or image/webp ("unsupported"). Reject if file.size is over 8 MB ("too_large_input"). GIF, SVG, HEIC and everything else are rejected (SVG can carry scripts).
+2. Decode with createImageBitmap(file, { imageOrientation: "from-image" }) (fall back to an Image element when unavailable). Reject below 64 pixels on the shorter side ("too_small").
+3. Scale down so the longest side is at most 1280 pixels (never upscale). Draw on a canvas.
+4. Encode as image/webp at quality 0.82. If the browser returns a different type (no webp support), fill the canvas white first and encode as image/jpeg at quality 0.85.
+5. If the blob is larger than 500,000 bytes, lower the quality in steps of 0.1 down to 0.5; if it is still too large, scale the canvas by 0.8 and retry (at most 3 rounds); then fail with "too_large_output".
+6. Re-encoding strips all metadata (location, camera data). Say nothing about it in the UI.
+The function never touches the network and never throws untyped errors: it throws or returns typed codes that the UI maps to the messages in 7.2.
+
+7.5 Upload, replace and remove flows
+- Choose or drop a file: processImage, then uploadLinkImage, then setBlockImage(blockId, { thumbnailPath: newPath, layout: currentLayoutOrClassic }) with optimistic update. On success, remove the previous object with removeLinkImage (best effort). If setBlockImage fails after a successful upload, remove the new object (best effort) and show the error.
+- Remove: setBlockImage(blockId, { thumbnailPath: null, layout: "classic" }) optimistically; on success removeLinkImage(oldPath) (best effort).
+- Delete a link that has an image: after the delete succeeds, removeLinkImage(oldPath) (best effort).
+- The image is saved immediately (it is not part of the Save button), while Title, URL, Layout, Icon and Schedule are saved with Save. Say so with a 13px muted helper under the Image section: "Images save right away."
+
+7.6 Dashboard row and preview
+- Dashboard row icon tile (36px): when the link has an image, show the image in the tile (object-fit cover, radius 10px) instead of the icon.
+- Live preview: PageRenderer shows the thumbnail or featured card exactly as visitors see it.
+
+=====================================================================
+8. SCHEDULING (PRO)
+=====================================================================
+8.1 Where
+Links and embeds only (not headers or dividers). In the Edit panel after the Icon section (Section 12.3).
+
+8.2 Schedule section (Pro)
+- A switch row "Schedule" (role="switch") with the description "Show this item from a date and hide it after a date." ON when startAt or endAt is set.
+- When ON, two fields appear: "Show from" and "Hide after", each an <input type="datetime-local"> (step 60) with a ghost sm "Clear" button next to it. Either can be empty (an empty "Show from" means visible now; an empty "Hide after" means never hidden).
+- Helper under the fields in 13px muted: "Times use your time zone (<IANA zone from Intl.DateTimeFormat().resolvedOptions().timeZone>)."
+- Turning the switch OFF clears both fields (applied on Save).
+- Conversion: the input value (local, no zone) becomes new Date(value).toISOString() on save; existing ISO values are shown by converting to the local datetime-local format.
+- Validation on Save, errors in 13px error color with role="alert": "Hide time must be after the show time." and "Choose a time in the future." (for "Hide after" in the past). A past "Show from" is allowed (it simply means visible now).
+- Saved together with the rest of the panel (Save button). A "pro_required" error opens UpgradeDialog (feature "scheduling") and rolls back.
+
+8.3 Locked state for free accounts
+- When the account is not Pro, the Schedule section shows the switch disabled and a ProLockNotice (feature "scheduling") instead of fields. If an existing item already has a schedule (for example after a downgrade), show its values read-only in 14px muted ("Show from <time>", "Hide after <time>") plus a ghost sm "Clear schedule" button (allowed for everyone; it saves immediately with optimistic update).
+
+8.4 Row status chips (dashboard)
+A small Badge (default variant, 12px, a Clock icon 12px) after the title, driven by getScheduleState with useNow(30000):
+  upcoming: "Starts <formatScheduleTime(startAt)>"
+  live and endAt set: "Until <formatScheduleTime(endAt)>"
+  live and only startAt set: no chip
+  ended: "Ended" (and the title is muted)
+If is_active is false the "Hidden" badge from Step 3 shows INSTEAD of any schedule chip. If the account is not Pro and the item is scheduled or an embed, show a ProBadge and the muted 13px line under the title "Not shown on your page" (this mirrors what the public page does).
+
+8.5 Preview and public page
+- The live preview uses isBlockVisibleNow with useNow(30000) so it matches visitors.
+- The public page needs no extra logic: the database already filters by time and plan, and the page refetches about once a minute (Section 5.5).
+
+=====================================================================
+9. EMBEDS (PRO)
+=====================================================================
+9.1 Supported sources
+YouTube (videos), Spotify (track, episode, album, playlist, show, artist) and SoundCloud (a track or a set). Nothing else. Unsupported links are refused with a message (9.3).
+
+9.2 URL parsing (src/lib/embeds.ts)
+parseEmbedUrl(input: string): ParsedEmbed | null, where ParsedEmbed = { provider: "youtube" | "spotify" | "soundcloud"; canonicalUrl: string; embedSrc: string; label: string (for example "YouTube video", "Spotify track", "SoundCloud set"); height: number | null; aspect: string | null }.
+General rules: trim; the string must parse with new URL(); the protocol must be https: (a link without a scheme gets "https://" prepended first); the hostname is compared exactly (after lowercasing) against the allowed hosts below; the embed address is BUILT from the extracted id, never copied from the pasted link. Anything else returns null.
+
+YouTube
+- Hosts: youtube.com, www.youtube.com, m.youtube.com, youtu.be.
+- Video id sources: youtu.be/<id>; /watch?v=<id>; /shorts/<id>; /embed/<id>; /live/<id>. The id must match ^[A-Za-z0-9_-]{11}$.
+- Optional start time from the t or start query parameter when it is plain seconds (digits only, at most 86400); otherwise ignore it.
+- canonicalUrl: https://www.youtube.com/watch?v=<id> (add &t=<n>s when a start time exists).
+- embedSrc: https://www.youtube-nocookie.com/embed/<id>?rel=0&playsinline=1 (add &start=<n> when a start time exists). Never add autoplay.
+- aspect "16 / 9", height null. label "YouTube video".
+- Playlist-only links and channel links return null.
+
+Spotify
+- Host: open.spotify.com (an optional locale prefix such as /intl-de/ before the type is allowed and ignored).
+- Path: /<type>/<id> with type one of track, episode, album, playlist, show, artist and id matching ^[A-Za-z0-9]{22}$. Query strings are ignored.
+- canonicalUrl: https://open.spotify.com/<type>/<id>.
+- embedSrc: https://open.spotify.com/embed/<type>/<id>?utm_source=generator.
+- height 152 for track and episode, 352 for album, playlist, show and artist. aspect null. label "Spotify <type>".
+- spotify:track:... URIs and spotify.link short links return null.
+
+SoundCloud
+- Host: soundcloud.com (not on.soundcloud.com, not m.soundcloud.com).
+- Path: /<user>/<track> (two segments) or /<user>/sets/<set> (three segments with the middle one "sets"). Each segment matches ^[A-Za-z0-9_-]+$. Query strings are ignored. Profile-only links return null.
+- canonicalUrl: https://soundcloud.com/<path>.
+- embedSrc: https://w.soundcloud.com/player/?url=<encodeURIComponent(canonicalUrl)>&color=%230a0a0a&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false.
+- height 166 for a track, 300 for a set. aspect null. label "SoundCloud track" or "SoundCloud set".
+The function is pure. It must be unit-testable with plain strings. Include a short block of example inputs and expected outputs as comments at the top of the file (three valid and three invalid per provider).
+
+9.3 Add embed (dashboard)
+- A new toolbar button in the Links card: secondary md "Add embed" with a ProBadge after the label. For Free accounts, clicking it opens UpgradeDialog (feature "embeds") instead of the composer.
+- Embed composer (same card style as the link composer): field "Link" (placeholder "Paste a YouTube, Spotify or SoundCloud link", inputMode "url", autoCapitalize "none", spellCheck false) and an optional field "Caption" (placeholder "Optional", max 60). As the person types or pastes, run parseEmbedUrl (debounced 200ms) and show a status line (role="status") under the Link field: when recognized, a Check icon and the label (for example "YouTube video"); when not, nothing until blur or submit, then the error below.
+- Buttons: primary md "Add embed" and ghost md "Cancel". Enter submits. Escape cancels and returns focus to the trigger.
+- Errors (13px error color, role="alert"): empty: "Paste a link."; unsupported: "Use a YouTube, Spotify or SoundCloud link."; YouTube playlist or channel: "Paste a link to a single video."; Spotify URI or short link, or SoundCloud short or profile link: "Paste the full link to a track, album or set."
+- Create flow: createBlock with kind "embed", title = caption (trimmed, may be empty), url = canonicalUrl, embedProvider = provider, icon null, thumbnailPath null, layout "classic", position = top (same rule as links), is_active true. Optimistic insert; toast "Embed added". A "pro_required" error opens UpgradeDialog and rolls back.
+- Edit panel for embeds: "Link" (re-parsed with the same rules and errors; saving changes url and provider together), "Caption", and the Schedule section (8.2). No icon picker, no image section, no layout control.
+
+9.4 Embed rows (dashboard)
+Icon tile with the provider glyph (use Play for YouTube, Music for Spotify, Headphones for SoundCloud, from lucide), title line: the caption or, when empty, the label from parseEmbedUrl(url) (fall back to "Embed"), sub line: the host, plus the usual switch and menu ("Edit", "Move up", "Move down", "Archive", "Delete"). Embeds are drag-sortable like links.
+
+9.5 Rendering embeds in PageRenderer
+Placeholder mode (inside phone mockups; nothing loads from third parties):
+- A card using the vibe's button tokens, full width, with the SAME height the live player would have (YouTube: width times 9 / 16; Spotify and SoundCloud: their fixed heights from parseEmbedUrl scaled by the phone size factor), containing the provider glyph (24px) centered with the label below it (13px) and the caption (if any) in the vibe's text color.
+Live mode (public page), a click-to-load player:
+- Initial state ("facade"): the same card as the placeholder, plus a visible button "Play" (a real <button>; for Spotify and SoundCloud the label is "Load player") styled as a small solid button (height 40px, radius per vibe button shape, vibe text and background inverted: background = vibe text color, text = vibe bg color), and a 12px line at 0.75 opacity: "Content loads from <Provider> when you press play." (Provider is YouTube, Spotify or SoundCloud). No network request to any provider is made in this state (no iframe, no thumbnail from the provider).
+- After the button is pressed: replace the card content with an <iframe> of exactly the same height or aspect, and move keyboard focus to the iframe. Attributes: src = embedSrc from a FRESH parseEmbedUrl(block.url) call (never trust stored strings blindly), title = the caption or the label, loading "eager" (the person just asked for it), allow "encrypted-media; fullscreen; picture-in-picture" (add allowFullScreen for YouTube only), referrerPolicy "strict-origin-when-cross-origin", sandbox "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation", width 100%, border 0, border-radius equal to the card radius, display block. If a provider fails to play with this sandbox, relax only the minimal token and mention it in your final reply.
+- If parseEmbedUrl returns null or its provider differs from block.embedProvider, render a normal link-style button (only when isSafeHref(url)) with the label "Open on <Provider>" instead of any iframe.
+- Only one player is active at a time: pressing Play on another embed returns the first to its facade state.
+- Never autoplay. Never preload.
+- The embed keeps the vibe's radius and background so it feels like part of the page.
+
+=====================================================================
+10. SHARE SHEET AND QR CODE (FREE)
+=====================================================================
+10.1 Entry points
+- Dashboard top bar: a secondary md "Share" button with a Share2 icon, placed left of the user menu (icon-only 40px square with aria-label "Share your page" below 768px).
+- Settings tab, "Your page" card: a secondary md "Share" button next to "Copy link" and "View page".
+Both open the same ShareDialog (src/components/share/ShareDialog.tsx).
+
+10.2 ShareDialog layout
+Same dialog behavior as UpgradeDialog (role="dialog", aria-modal, focus trap, Escape closes, backdrop closes, focus returns to the trigger; centered max-width 440px on desktop; bottom sheet below 640px with safe-area padding and a 5px by 36px drag-indicator bar that is purely visual). Title h2 "Share your page". Contents in this order, 20px apart:
+1. Link row: the address pageUrl(username) shown as text without the scheme (Geist Mono 15px, ellipsis, in a surface-2 pill with 1px border, 44px tall) and a primary md "Copy link" button (toast "Link copied", and the button label briefly changes to "Copied" for 1.5 seconds).
+2. If navigator.share exists: a secondary md "Share..." button with the Share2 icon. It calls navigator.share({ title: <display name or @username>, text: "My page on ivio", url: pageUrl(username) }); ignore AbortError silently; other errors toast "Couldn't share. Try again."
+3. QR code block: a white tile (bg #FFFFFF, 1px border, radius 14px, padding 16px, centered) containing the QR image at 224px by 224px. Below it, two secondary md buttons side by side: "Download PNG" and "Download SVG". Under them a 13px muted line: "Scans to ivio.site/<username>. Print it at least 2 cm (0.8 in) wide."
+4. If the page is hidden (is_published false): a notice (surface-2, 1px border, radius 10px, padding 12px, 14px): "Your page is hidden, so visitors will see an unavailable message." with a ghost sm "Open settings" button to /dashboard/settings.
+
+10.3 QR generation (src/lib/qr.ts)
+- makeQrSvg(url): Promise<string> and makeQrPngDataUrl(url): Promise<string> using the options from Section 2 (error correction "M", margin 4 modules, dark #0A0A0A on light #FFFFFF). The QR always encodes pageUrl(username), never window.location.
+- Render the SVG preview as <img src={"data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg)} alt="QR code that opens <address>" width=224 height=224>. Never inject the SVG string with dangerouslySetInnerHTML.
+- Download PNG: create an <a download="ivio-<username>-qr.png" href=<png data URL>> and click it programmatically. Download SVG: create a Blob (image/svg+xml), an object URL, an <a download="ivio-<username>-qr.svg">, click it, then URL.revokeObjectURL on the next tick.
+- Generate lazily when the dialog opens (not at page load). While generating, reserve the 224px square (surface-2 block, no spinner). If generation fails, show "We couldn't create the QR code. Try again." in the tile with a ghost sm "Try again" button.
+- Memoize by URL so reopening is instant.
+
+=====================================================================
+11. SETTINGS TAB CHANGES (/dashboard/settings)
+=====================================================================
+- "Account" card: add a row "Plan" (56px, same row style): label "Plan", value "Free" in 15px ink, or for Pro the ProBadge followed by "Pro". For Free, under the row a 13px muted line "Pro isn't open for purchase yet." and a ghost sm "See Pro features" link (href "/#pricing").
+- "Your page" card: add the "Share" button (Section 10.1) and a new switch row after "Hide from search engines": label "Remove the ivio mark" followed by a ProBadge, description "Hide the 'Create your own page' link from your page. The report link always stays."
+  - Pro: a working switch bound to hide_ivio_footer (optimistic, toast "Footer mark hidden." or "Footer mark shown.").
+  - Free: the switch is rendered off with aria-disabled="true" (still focusable); activating it (click, Enter or Space) opens UpgradeDialog with feature "hide_footer". Never send the update.
+  - If the database returns "pro_required" anyway, roll back and open UpgradeDialog.
+- Everything else on the tab is unchanged.
+
+=====================================================================
+12. DASHBOARD LINKS TAB CHANGES
+=====================================================================
+12.1 Toolbar order (Links card)
+Primary md "Add link", secondary md "Add embed" (with a ProBadge after the label), secondary md "Add header", secondary md "Add divider". Wraps on mobile with 8px gaps. Only one composer is open at a time. Opening any composer closes the others and any open edit panel (and vice versa).
+
+12.2 Row changes (summary)
+- Link rows with an image show it in the 36px tile.
+- Embed rows follow Section 9.4.
+- Chips and locked states follow Section 8.4.
+- Row menu items are unchanged for every kind ("Edit" is available for links, headers and embeds).
+- Delete confirmation text for embeds: "Delete this embed?" with the same muted line as links.
+- Archive and restore toasts for embeds: "Embed archived", "Embed restored"; delete toast: "Embed deleted".
+
+12.3 Edit panel order
+Link: Title, URL, Image (7.2), Layout (7.3), Icon (hidden while an image is set, 7.3), Schedule (8.2 and 8.3), buttons Save and Cancel.
+Embed: Link, Caption, Schedule, buttons.
+Header: Heading, buttons (unchanged).
+Save sends one updateBlock with only the changed fields among: title, url, layout, icon, startAt, endAt (Image changes are saved immediately by setBlockImage, Section 7.5). Validation errors keep the panel open with the messages already defined. "pro_required" opens UpgradeDialog and rolls back. Only one row is in edit mode at a time.
+The Edit panel on mobile scrolls inside the page (no nested scroll areas); the Image and Schedule sections stack vertically with 16px gaps.
+
+12.4 Live preview
+- Blocks passed to PageRenderer: those where isBlockVisibleNow(block, plan, now) is true, in order (useNow(30000)).
+- embedMode "placeholder". hideFooterMark = isPro and profile.hideIvioFooter.
+- The preview updates instantly for optimistic changes, including images and layout changes.
+
+12.5 Drag and drop and reordering
+Unchanged from Step 3. Embeds and image links participate like any other block. Featured cards and embeds are never rendered large inside the dashboard list (rows stay 72px); only the preview shows them at full size.
+
+=====================================================================
+13. PUBLIC PAGE CHANGES (/:username)
+=====================================================================
+- Read profile.hideFooter and pass hideFooterMark to PageRenderer. Pass embedMode "live".
+- Map the new fields with the validating mappers (Section 5.1). Skip blocks that fail validation instead of failing the page.
+- Images: the first two images on the page load eagerly, the rest lazily (Section 6).
+- Embed players: click-to-load (Section 9.5). No third-party request happens before a visitor presses Play.
+- usePublicPage refetches every 60 seconds while the tab is visible (Section 5.5), so scheduled items appear and disappear without a reload. Refetching must not reset an open embed player or cause scroll jumps: keep React keys stable (block id) and update data in place.
+- Canonical URL and every copied or shared address use pageUrl (Section 2).
+- Everything else (claimable and unavailable states, metadata, footer links) is unchanged.
+- Do not add any <meta name="referrer"> tag and do not set a restrictive Referrer-Policy (Section 1).
+
+=====================================================================
+14. ERROR, LOADING AND EDGE STATES
+=====================================================================
+- Image upload errors: messages in Section 7.2. Never show raw error text.
+- Upload while offline or interrupted: show "We couldn't upload that. Try again." and leave the previous image untouched.
+- Large images: processing runs off the visible thread as far as the Canvas API allows; show the busy state immediately; never freeze typing in other fields.
+- "pro_required" anywhere: open UpgradeDialog with the matching feature, roll back, no toast.
+- Downgraded accounts: existing embeds and scheduled items remain in the dashboard (locked and labeled, Section 8.4), are not shown to visitors, and can be edited for non-Pro fields, reordered, hidden, archived and deleted. Their schedules can be cleared.
+- Past schedules: an item whose end time has passed shows "Ended" in the dashboard and is not shown on the page. It can be rescheduled (Pro) or archived.
+- Missing or deleted images: if an image URL fails to load on the dashboard or the page, fall back to the icon or collapse the image area (Section 6).
+- Offline banner, DataLoadError and session-expiry behavior from Step 3 apply to every new request.
+- Share sheet when the username is missing (should not happen): disable the buttons and show the DataLoadError variant.
+- QR download blocked by the browser: nothing else breaks; the QR image remains visible so it can be saved with a long press.
+
+=====================================================================
+15. SECURITY REQUIREMENTS (NON-NEGOTIABLE)
+=====================================================================
+1. All Step 3 rules still apply (publishable key only; no supabase.auth.*; visitors only use the two public RPCs; owner data only through the Clerk-token client; no logging of user data, tokens or raw errors; isSafeHref for every stored URL; no dangerouslySetInnerHTML; external links with rel="noopener noreferrer nofollow").
+2. The app never writes the plan. Never include "plan" in any insert, update or upsert payload.
+3. Uploads: only after processImage re-encodes the file; the original file is never uploaded. SVG, GIF, HEIC and anything not PNG, JPEG or WebP is rejected before processing. The storage path always starts with the Clerk user id and never uses the original file name.
+4. Embed addresses: the iframe src is ALWAYS built by parseEmbedUrl from validated ids on the allowed hosts. Never put a stored or pasted URL directly into an iframe src. Never render an iframe for a provider or host that is not on the allow-list. Iframes use the sandbox and referrerPolicy from Section 9.5.
+5. The QR image is rendered through an <img> with a data URL, never as inline SVG markup.
+6. Image <img> elements keep referrerPolicy "no-referrer". Only embed iframes use "strict-origin-when-cross-origin".
+7. No third-party scripts, SDKs or trackers are added for embeds or QR codes. Embeds load nothing until the visitor presses Play.
+8. Dates are parsed with new Date() and validated (isNaN checks) before use; invalid values are treated as empty.
+9. Never expose plan, user ids, emails or storage paths of other people in the UI.
+10. Do not build client-side workarounds for Pro enforcement. The database decides; the UI mirrors it.
+
+=====================================================================
+16. ACCESSIBILITY AND RESPONSIVE REQUIREMENTS
+=====================================================================
+- Dialogs (UpgradeDialog, ShareDialog): role="dialog", aria-modal, aria-labelledby the title, focus moves to the dialog heading or first control on open, focus is trapped, Escape closes, focus returns to the trigger. Body scroll is locked while open.
+- Switches use role="switch" with aria-checked. A Free-locked switch uses aria-disabled="true" and remains focusable so keyboard users can open the upgrade dialog.
+- File input: reachable and operable by keyboard through the visible "Choose image" button; the drop zone is an enhancement only.
+- Status messages (uploading, added, parse results) use role="status" with aria-live="polite"; blocking errors use role="alert".
+- Datetime fields have visible labels; helper text is associated with aria-describedby; the time zone text is part of that description.
+- Embed facade buttons are real <button> elements with an accessible name such as "Play YouTube video" (or "Load Spotify player", "Load SoundCloud player") that includes the caption when present. After activation, focus moves to the iframe, which has a title.
+- Featured cards and classic-with-image buttons are single anchors with one accessible name (the title); images are decorative (alt "").
+- Contrast AA everywhere. Chips and badges use the existing neutral styles.
+- Motion: only 200ms fades and the existing expand animation; none for the dialogs under prefers-reduced-motion.
+- Targets 44px on mobile; inputs 16px font minimum.
+- Test widths: 320, 375, 390, 768, 1024, 1280. No horizontal scroll. Share sheet and upgrade dialog are usable at 320px. Featured cards and embed cards fit the 320px phone and page layouts.
+
+=====================================================================
+17. COPY ADDITIONS (FINAL STRINGS; ADD TO src/content/copy.ts)
+=====================================================================
+Plan and upgrade: "Pro"; "Pro is coming soon"; "Pro features are not open for purchase yet. Email help@ivio.site to ask about early access."; "Embeds is a Pro feature." style lines built as "<Feature name> is a Pro feature." with names "Embeds", "Scheduling", "Removing the ivio mark"; buttons "Email us", "Close", "Learn more"; "Plan"; "Free"; "Pro isn't open for purchase yet."; "See Pro features".
+Image section: "Image"; "Add an image"; "PNG, JPG or WebP. Up to 8 MB."; "Choose image"; "Replace"; "Remove"; "Uploading..."; "Uploading image"; "Image added"; "Images save right away."; errors "Choose a PNG, JPG or WebP image.", "Choose an image under 8 MB.", "Choose an image at least 64 pixels wide.", "This image is too large. Try a smaller one.", "We couldn't upload that. Try again."
+Layout: "Layout"; "Classic"; "Featured"; "Add an image to use Featured."; "The icon is hidden while an image is set."
+Schedule: "Schedule"; "Show this item from a date and hide it after a date."; "Show from"; "Hide after"; "Clear"; "Clear schedule"; "Times use your time zone (<zone>)."; "Hide time must be after the show time."; "Choose a time in the future."; chips "Starts <time>", "Until <time>", "Ended"; "Not shown on your page".
+Embeds: "Add embed"; "Link"; "Caption"; "Paste a YouTube, Spotify or SoundCloud link"; "Optional"; "Paste a link."; "Use a YouTube, Spotify or SoundCloud link."; "Paste a link to a single video."; "Paste the full link to a track, album or set."; "Embed added"; "Embed archived"; "Embed restored"; "Embed deleted"; "Delete this embed?"; "Play"; "Load player"; "Content loads from <Provider> when you press play."; "Open on <Provider>"; accessible names "Play YouTube video", "Load Spotify player", "Load SoundCloud player"; labels "YouTube video", "Spotify <type>", "SoundCloud track", "SoundCloud set"; fallback "Embed".
+Share: "Share"; "Share your page"; "Share your page" (aria-label); "Copy link"; "Copied"; "Share..."; "My page on ivio"; "Download PNG"; "Download SVG"; "Scans to ivio.site/<username>. Print it at least 2 cm (0.8 in) wide."; "Your page is hidden, so visitors will see an unavailable message."; "Open settings"; "We couldn't create the QR code. Try again."; "Couldn't share. Try again."; QR alt "QR code that opens <address>".
+Settings: "Remove the ivio mark"; "Hide the 'Create your own page' link from your page. The report link always stays."; toasts "Footer mark hidden.", "Footer mark shown.".
+Voice rules still apply: calm, professional, sentence case, no exclamation marks, no hype words.
+
+=====================================================================
+18. FILE STRUCTURE ADDITIONS
+=====================================================================
+src/
+  lib/
+    site.ts                 (SITE_ORIGIN, pageUrl)
+    plan.ts                 (PRO_FEATURES, feature names)
+    time.ts                 (useNow, getScheduleState, isBlockVisibleNow, formatScheduleTime)
+    embeds.ts               (parseEmbedUrl, ParsedEmbed, examples in comments)
+    image-processing.ts     (processImage and its typed errors)
+    qr.ts                   (makeQrSvg, makeQrPngDataUrl, download helpers)
+  data/
+    storageApi.ts           (storagePublicUrl, uploadLinkImage, removeLinkImage)
+    hooks/useSetBlockImage.ts
+  components/
+    plan/ (ProBadge.tsx, UpgradeDialog.tsx, UpgradeDialogProvider.tsx, ProLockNotice.tsx)
+    share/ (ShareDialog.tsx, QrTile.tsx)
+    links/ (EmbedComposer.tsx, ImageSection.tsx, LayoutControl.tsx, ScheduleSection.tsx, ScheduleChip.tsx)
+    page/ (EmbedBlock.tsx, FeaturedLink.tsx, LinkThumb.tsx)
+    ui/ (Dialog.tsx if no shared dialog exists yet)
+Rules: functional components, typed props, no magic numbers, comments only for decisions and the notes already specified.
+
+=====================================================================
+19. BUILD ORDER
+=====================================================================
+1. site.ts (and replacing hard-coded addresses), plan.ts, time.ts.
+2. Types, mappers, linksApi, errors ("pro_required"), storageApi, useIvioSession plan fields.
+3. Dialog primitive, UpgradeDialog, ProBadge, ProLockNotice.
+4. image-processing.ts, ImageSection, LayoutControl, setBlockImage flow.
+5. PageRenderer: thumbnails, featured, hideFooterMark, embed placeholders. Verify the landing page personas are unchanged.
+6. embeds.ts with examples, EmbedComposer, embed rows, edit panel for embeds.
+7. ScheduleSection, chips, locked states, isBlockVisibleNow in the preview.
+8. EmbedBlock live mode (facade then iframe) on the public page.
+9. qr.ts, ShareDialog, top bar and Settings entry points.
+10. Settings: plan row and "Remove the ivio mark".
+11. Error states and polish against Sections 20 and 21.
+
+=====================================================================
+20. ACCEPTANCE CHECKLIST (VERIFY BEFORE REPLYING)
+=====================================================================
+Plan and security
+[ ] Only "qrcode" (and its types) was added as a dependency.
+[ ] No payload ever contains "plan". The app has no way to change the plan.
+[ ] Free accounts: Add embed and the Remove-the-mark switch open the upgrade dialog; Schedule is locked; thumbnails, Featured, Share and QR work.
+[ ] A "pro_required" error from the database opens the dialog and rolls back every optimistic change.
+[ ] Every iframe src comes from parseEmbedUrl; sandbox and referrerPolicy are set; no embed loads before Play.
+[ ] Uploads are re-encoded; SVG, GIF and HEIC are refused; paths start with the user id.
+[ ] No hard-coded "https://ivio.site" remains in link, copy, QR or canonical code (pageUrl is used). No restrictive referrer meta or header was added.
+
+Features
+[ ] Image: upload, replace, remove, drag a file on desktop; preview, dashboard tile and public page show it; Featured card works and resets when the image is removed; cleanup of old objects is best effort.
+[ ] Schedule: show from, hide after, clear, validation messages, chips (Starts, Until, Ended), preview matches visitors, public page updates within about a minute.
+[ ] Embeds: YouTube, Spotify and SoundCloud accepted with correct canonical URLs and sizes; unsupported links refused with the right message; placeholder in phones; facade then player on the public page; only one player active at a time.
+[ ] Share: copy link, native share (when available), QR preview, PNG and SVG downloads, hidden-page notice; works from the top bar and Settings.
+[ ] Settings: Plan row; footer-mark switch (Pro) hides only the "Create your own page" link while "Report this page" stays.
+[ ] Downgrade: embeds and scheduled items stay in the dashboard, locked and labeled, hidden from visitors, and return after upgrading.
+
+Quality
+[ ] The landing page personas look identical to before.
+[ ] No layout shift from images, featured cards, embeds, dialogs or the QR block.
+[ ] No horizontal scroll at 320, 375, 390, 768, 1024 or 1280 pixels.
+[ ] Every new control is keyboard operable with visible focus; dialogs trap and restore focus; announcements work.
+[ ] No console errors or warnings. TypeScript strict passes. No unused code.
+[ ] Banned words and exclamation marks are absent from all new copy.
+
+=====================================================================
+21. COMMON FAILURE MODES (SELF-CHECK)
+=====================================================================
+1. Sending "plan" (or any column outside the allowed list) in a profile payload.
+2. Putting a pasted URL straight into an iframe src, or loading players before Play.
+3. Forgetting referrerPolicy "strict-origin-when-cross-origin" on embed iframes (YouTube then refuses to play), or adding a page-wide no-referrer policy.
+4. Uploading the original file instead of the re-encoded blob, or trusting the file extension.
+5. Letting "Featured" be saved without an image (the database rejects it) or leaving a stale layout after removing the image.
+6. Dashboard preview that disagrees with the public page about schedules or embeds (use isBlockVisibleNow).
+7. Hiding the "Report this page" link when the footer mark is hidden.
+8. Using window.location.origin for QR codes and copied links.
+9. Injecting QR SVG markup into the DOM instead of using an <img> data URL.
+10. Layout shift when images, embeds or the QR code load.
+11. Blocking downgraded users from deleting, archiving or clearing schedules.
+12. Adding scope: analytics, share-preview metadata, billing, password links, contact collection.
+
+=====================================================================
+22. SEAMS THE NEXT STEPS WILL USE (KEEP THEM CLEAN)
+=====================================================================
+- has_pro in the database, plan in useIvioSession, UpgradeDialog and PRO_FEATURES (Step 4D replaces the plan source and the dialog content).
+- trackLinkClick and the public page (Step 4B adds view and click tracking; embed Play presses can be tracked through the same seam).
+- usePageMeta and pageUrl (Step 4C adds share-preview metadata and server-rendered pages).
+- PageRenderer block types (later: password-protected links, signup blocks).
+- storageApi (later: custom avatar and background images).
+
+=====================================================================
+23. FINAL REPLY FORMAT
+=====================================================================
+When the build is finished, reply in no more than 10 lines: what you built, any API or version differences you found (qrcode, Clerk, Supabase, dnd-kit, TanStack Query, browser APIs) and how you adapted, and anything from this document you could not implement and why. Do not restate this specification. Do not ask questions. Do not include any key or URL value in your reply.
+
+END PROMPT

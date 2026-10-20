@@ -1,28 +1,32 @@
-// If your environment has no way to set variables, paste your Clerk PUBLISHABLE key (pk_test_...) here. Never paste a secret key (sk_...).
-const CLERK_PUBLISHABLE_KEY_FALLBACK = 'pk_live_Y2xlcmsuaXZlby5zaXRlJA';
+// Clerk Keys:
+// Production key for custom domain (iveo.site):
+export const CLERK_PROD_KEY = 'pk_live_Y2xlcmsuaXZlby5zaXRlJA';
 
-const rawKey = (
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
-  CLERK_PUBLISHABLE_KEY_FALLBACK ||
-  ''
-).trim();
+// Development key for preview and local dev (*.run.app, localhost) generated via Clerk CLI:
+export const CLERK_DEV_KEY =
+  'pk_test_Y29zbWljLWFudGVhdGVyLTExNDMuY2xlcmsuYWNjb3VudHMuZGV2JA';
 
-export const KEY_ERROR_IS_SECRET = rawKey.startsWith('sk_');
+const envKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
 
-// Check if running on the production domain or if it's a dev/preview environment
+export const KEY_ERROR_IS_SECRET = envKey.startsWith('sk_');
+
+// Check if running on the production domain (iveo.site / ivio.site)
 const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-const isProductionDomain =
+export const isProductionDomain =
   hostname === 'iveo.site' ||
   hostname.endsWith('.iveo.site') ||
   hostname === 'ivio.site' ||
   hostname.endsWith('.ivio.site');
 
-export const KEY_ERROR_IS_PRODUCTION_ON_DEV =
-  rawKey.startsWith('pk_live_') && !isProductionDomain;
+// Resolve the appropriate publishable key
+export const CLERK_PUBLISHABLE_KEY =
+  envKey && !KEY_ERROR_IS_SECRET
+    ? envKey
+    : isProductionDomain
+      ? CLERK_PROD_KEY
+      : CLERK_DEV_KEY;
 
 export const HAS_CLERK_KEY =
   !KEY_ERROR_IS_SECRET &&
-  !KEY_ERROR_IS_PRODUCTION_ON_DEV &&
-  (rawKey.startsWith('pk_test_') || rawKey.startsWith('pk_live_'));
-
-export const CLERK_PUBLISHABLE_KEY = HAS_CLERK_KEY ? rawKey : '';
+  (CLERK_PUBLISHABLE_KEY.startsWith('pk_test_') ||
+    CLERK_PUBLISHABLE_KEY.startsWith('pk_live_'));
