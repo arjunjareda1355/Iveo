@@ -56,8 +56,8 @@ export const SetupMissingKey: React.FC = () => {
                 className="text-ink underline underline-offset-[3px] font-medium"
               >
                 Clerk Dashboard
-              </a>
-              .
+              </a>{' '}
+              for application <code className="text-ink font-mono text-[12px]">app_3KiygJnkoVqPjp00NAhi1XjtR8u</code>.
             </li>
             <li>
               Switch to your <strong>Development</strong> instance (top-left dropdown).
