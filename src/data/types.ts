@@ -63,6 +63,7 @@ export interface Profile {
   hideFromSearch: boolean;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
+  hideIveoFooter: boolean;
   hideIvioFooter: boolean;
 }
 

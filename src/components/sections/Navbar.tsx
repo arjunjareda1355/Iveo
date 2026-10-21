@@ -4,8 +4,8 @@ import { Menu, X } from 'lucide-react';
 import { Logo } from '../ui/Logo';
 import { Button } from '../ui/Button';
 import { Container } from '../ui/Container';
-import { IvioUserButton } from '../../auth/IvioUserButton';
-import { useIvioSession } from '../../auth/useIvioSession';
+import { IveoUserButton } from '../../auth/IvioUserButton';
+import { useIveoSession } from '../../auth/useIvioSession';
 import { copy } from '../../content/copy';
 import { useScrollSpy } from '../../hooks/useScrollSpy';
 import { cn } from '../../lib/cn';
@@ -18,7 +18,7 @@ export const Navbar: React.FC = () => {
   const activeId = useScrollSpy(SECTION_IDS, 120);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const { isLoaded, isSignedIn } = useIvioSession();
+  const { isLoaded, isSignedIn } = useIveoSession();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -99,7 +99,7 @@ export const Navbar: React.FC = () => {
               <Button as={Link} to="/dashboard" variant="primary" size="md">
                 {copy.nav.dashboard}
               </Button>
-              <IvioUserButton />
+              <IveoUserButton />
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export const Navbar: React.FC = () => {
               <Button as={Link} to="/dashboard" variant="primary" size="md">
                 {copy.nav.dashboard}
               </Button>
-              <IvioUserButton />
+              <IveoUserButton />
             </div>
           ) : (
             <Button as={Link} to="/signup" variant="primary" size="md">

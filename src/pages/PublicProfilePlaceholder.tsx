@@ -62,9 +62,9 @@ export const PublicProfilePlaceholder: React.FC = () => {
   // Set document title and canonical tag
   useEffect(() => {
     if (pageData?.profile) {
-      document.title = `${pageData.profile.displayName} (@${clean}) | ivio`;
+      document.title = `${pageData.profile.displayName} (@${clean}) | iveo`;
     } else {
-      document.title = `ivio.site/${clean}`;
+      document.title = `iveo.site/${clean}`;
     }
 
     // Canonical link tag
@@ -132,7 +132,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
         <Logo tone="light" size="lg" />
 
         <div className="mt-5 font-mono text-[20px] font-medium text-ink">
-          ivio.site/{clean}
+          iveo.site/{clean}
         </div>
 
         <h1 className="mt-3 text-[24px] font-medium text-ink leading-tight tracking-[-0.02em]">

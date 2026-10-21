@@ -121,7 +121,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               : 'bg-surface text-ink border-border-strong'
           )}
         >
-          ivio.site/{username || 'you'}
+          iveo.site/{username || 'you'}
         </div>
 
         <Button
@@ -187,7 +187,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           )}
         >
           <Check size={16} strokeWidth={2} className="shrink-0" />
-          <span>ivio.site/{availableUsername} is available</span>
+          <span>iveo.site/{availableUsername} is available</span>
         </span>
       );
     }
@@ -228,7 +228,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               isDark ? 'text-inverse-muted' : 'text-muted'
             )}
           >
-            ivio.site/
+            iveo.site/
           </span>
           <input
             ref={inputRef}
@@ -237,7 +237,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
             value={rawInput}
             onChange={handleChange}
             placeholder={copy.hero.claimPlaceholder}
-            aria-label="Choose your ivio username"
+            aria-label="Choose your iveo username"
             aria-describedby={statusId}
             maxLength={USERNAME_MAX}
             className={cn(

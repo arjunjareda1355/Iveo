@@ -1,10 +1,10 @@
 import React from 'react';
 import { UserButton } from '@clerk/react';
 import { LayoutDashboard } from 'lucide-react';
-import { useIvioSession } from './useIvioSession';
+import { useIveoSession } from './useIvioSession';
 
-export const IvioUserButton: React.FC = () => {
-  const { isLoaded, isSignedIn } = useIvioSession();
+export const IveoUserButton: React.FC = () => {
+  const { isLoaded, isSignedIn } = useIveoSession();
 
   if (!isLoaded || !isSignedIn) {
     return <div className="w-8 h-8 rounded-full bg-surface-2 shrink-0" aria-hidden="true" />;
@@ -34,3 +34,6 @@ export const IvioUserButton: React.FC = () => {
     </div>
   );
 };
+
+// Backward-compatible alias
+export const IvioUserButton = IveoUserButton;

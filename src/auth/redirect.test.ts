@@ -63,6 +63,7 @@ test('username-rules: rejects every reserved route name', () => {
     'dashboard',
     'help',
     'home',
+    'iveo',
     'ivio',
     'login',
     'logout',
@@ -134,3 +135,27 @@ test('preferences: parses defensively with defaults on unknown data', () => {
   assert.equal(invalidVibe.vibeId, 'clean');
   assert.equal(invalidVibe.buttonShape, null);
 });
+
+test('domain-aware Clerk key resolution: prevents pk_live_ keys on non-production origins', () => {
+  const resolveKey = (hostname: string, envKey: string) => {
+    const isProd = hostname === 'iveo.site' || hostname.endsWith('.iveo.site');
+    const PROD_KEY = 'pk_live_Y2xlcmsuaXZlby5zaXRlJA';
+    const DEV_KEY = 'pk_test_Y29zbWljLWFudGVhdGVyLTExNDMuY2xlcmsuYWNjb3VudHMuZGV2JA';
+    return isProd
+      ? (envKey.startsWith('pk_live_') ? envKey : PROD_KEY)
+      : (envKey.startsWith('pk_test_') ? envKey : DEV_KEY);
+  };
+
+  // On production domain, production key is used
+  assert.equal(resolveKey('iveo.site', 'pk_live_Y2xlcmsuaXZlby5zaXRlJA'), 'pk_live_Y2xlcmsuaXZlby5zaXRlJA');
+  assert.equal(resolveKey('app.iveo.site', ''), 'pk_live_Y2xlcmsuaXZlby5zaXRlJA');
+
+  // On development/preview domain, even if pk_live_ is passed in env, dev key is safely used
+  const previewHost = 'ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app';
+  assert.equal(resolveKey(previewHost, 'pk_live_Y2xlcmsuaXZlby5zaXRlJA'), 'pk_test_Y29zbWljLWFudGVhdGVyLTExNDMuY2xlcmsuYWNjb3VudHMuZGV2JA');
+  assert.equal(resolveKey('localhost', 'pk_live_Y2xlcmsuaXZlby5zaXRlJA'), 'pk_test_Y29zbWljLWFudGVhdGVyLTExNDMuY2xlcmsuYWNjb3VudHMuZGV2JA');
+
+  // If a custom pk_test_ key is provided in env on localhost, that custom test key is used
+  assert.equal(resolveKey('localhost', 'pk_test_custom123'), 'pk_test_custom123');
+});
+

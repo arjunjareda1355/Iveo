@@ -39,10 +39,10 @@ export class ErrorBoundaryPage extends React.Component<Props, State> {
             <p className="mt-3 text-[15px] text-muted leading-relaxed">
               Reload the page to continue. If it keeps happening, email{' '}
               <a
-                href="mailto:help@ivio.site"
+                href="mailto:help@iveo.site"
                 className="text-ink underline underline-offset-[3px] font-medium"
               >
-                help@ivio.site
+                help@iveo.site
               </a>
               .
             </p>

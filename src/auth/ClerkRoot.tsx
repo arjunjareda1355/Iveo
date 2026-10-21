@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/react';
 import { CLERK_PUBLISHABLE_KEY, HAS_CLERK_KEY } from '../lib/env';
-import { ivioAppearance } from './appearance';
+import { iveoAppearance } from './appearance';
 
 interface ClerkRootProps {
   children: React.ReactNode;
@@ -23,11 +23,11 @@ export const ClerkRoot: React.FC<ClerkRootProps> = ({ children }) => {
       signUpUrl="/signup"
       signInFallbackRedirectUrl="/dashboard"
       signUpForceRedirectUrl="/onboarding"
-      supportEmail="help@ivio.site"
+      supportEmail="help@iveo.site"
       routerPush={(to) => navigate(to)}
       routerReplace={(to) => navigate(to, { replace: true })}
       allowedRedirectOrigins={[window.location.origin]}
-      appearance={ivioAppearance}
+      appearance={iveoAppearance}
     >
       {children}
     </ClerkProvider>

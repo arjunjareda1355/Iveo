@@ -53,7 +53,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
       'Advanced analytics',
       'Email and phone collection with CSV export',
       'YouTube, Spotify and SoundCloud embeds',
-      'Remove the ivio footer mark',
+      'Remove the iveo footer mark',
       'Priority support by email',
     ],
   },

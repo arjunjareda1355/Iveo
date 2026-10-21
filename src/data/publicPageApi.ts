@@ -80,13 +80,17 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
 
   // Local fallback for development / test accounts
   try {
-    const rawBlocks = localStorage.getItem(`ivio_blocks_${clean}`);
+    const rawBlocks =
+      localStorage.getItem(`iveo_blocks_${clean}`) ||
+      localStorage.getItem(`ivio_blocks_${clean}`);
     if (rawBlocks) {
       const allBlocks = JSON.parse(rawBlocks);
       const now = new Date();
 
       // Check if user has pro in localStorage or default
-      const userMeta = localStorage.getItem(`ivio_profile_${clean}`);
+      const userMeta =
+        localStorage.getItem(`iveo_profile_${clean}`) ||
+        localStorage.getItem(`ivio_profile_${clean}`);
       const parsedMeta = userMeta ? JSON.parse(userMeta) : {};
       const isPro = parsedMeta.plan === 'pro';
 
@@ -120,7 +124,10 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           buttonShape: parsedMeta.buttonShape || null,
           socials: parsedMeta.socials || {},
           hideFromSearch: false,
-          hideFooter: isPro && parsedMeta.hideIvioFooter === true,
+          hideFooter:
+            isPro &&
+            (parsedMeta.hideIveoFooter === true ||
+              parsedMeta.hideIvioFooter === true),
         },
         links: filteredLinks,
       };
@@ -146,7 +153,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
         id: `persona-${i}`,
         kind: 'link',
         title: l,
-        url: 'https://ivio.site',
+        url: 'https://iveo.site',
         icon: null,
         thumbnailPath: null,
         thumbnailUrl: null,

@@ -108,13 +108,13 @@ export const UpgradeDialog: React.FC<UpgradeDialogProps> = ({
         </h2>
 
         <p className="mt-2 text-[15px] leading-relaxed text-muted">
-          Pro features are not open for purchase yet. Email help@ivio.site to ask about early access.
+          Pro features are not open for purchase yet. Email help@iveo.site to ask about early access.
         </p>
 
         <div className="mt-6 flex flex-col sm:flex-row gap-2.5">
           <Button
             as="a"
-            href="mailto:help@ivio.site?subject=ivio%20Pro%20early%20access"
+            href="mailto:help@iveo.site?subject=iveo%20Pro%20early%20access"
             variant="primary"
             size="md"
             fullWidth

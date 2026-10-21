@@ -74,10 +74,10 @@ export const SetupMissingKey: React.FC = () => {
           <p>
             Need help? Email{' '}
             <a
-              href="mailto:help@ivio.site"
+              href="mailto:help@iveo.site"
               className="text-ink underline underline-offset-[3px]"
             >
-              help@ivio.site
+              help@iveo.site
             </a>
           </p>
         </div>

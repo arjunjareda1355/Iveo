@@ -42,7 +42,7 @@ export async function makeQrPngDataUrl(url: string): Promise<string> {
 
 export function downloadPng(pngDataUrl: string, username: string): void {
   const link = document.createElement('a');
-  link.download = `ivio-${username}-qr.png`;
+  link.download = `iveo-${username}-qr.png`;
   link.href = pngDataUrl;
   document.body.appendChild(link);
   link.click();
@@ -53,7 +53,7 @@ export function downloadSvg(svgString: string, username: string): void {
   const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.download = `ivio-${username}-qr.svg`;
+  link.download = `iveo-${username}-qr.svg`;
   link.href = objectUrl;
   document.body.appendChild(link);
   link.click();

@@ -46,7 +46,7 @@ export const HowItWorks: React.FC = () => {
               <div className="bg-surface-2 border border-border rounded-[10px] h-[168px] p-4 flex flex-col items-center justify-center overflow-hidden">
                 <div className="w-full max-w-[210px] h-10 rounded-[10px] bg-white border border-border-strong px-3 flex items-center justify-between shadow-xs">
                   <span className="font-mono text-[14px] text-ink truncate">
-                    ivio.site/maya
+                    iveo.site/maya
                   </span>
                   <Check size={16} strokeWidth={2} className="text-ink shrink-0 ml-1.5" />
                 </div>

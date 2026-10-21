@@ -36,7 +36,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
 
   const label =
     ariaLabel ||
-    `Example ivio page in the ${vibe.name} vibe, for ${vibe.persona.name}`;
+    `Example iveo page in the ${vibe.name} vibe, for ${vibe.persona.name}`;
 
   return (
     <div

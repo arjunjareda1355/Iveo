@@ -70,10 +70,10 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
           <p>
             {copy.auth.helpLinePrefix}{' '}
             <a
-              href="mailto:help@ivio.site"
+              href="mailto:help@iveo.site"
               className="text-ink underline underline-offset-[3px]"
             >
-              help@ivio.site
+              help@iveo.site
             </a>
           </p>
         </div>

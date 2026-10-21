@@ -38,6 +38,6 @@ test('validateUsernameSync: accepts valid available usernames', () => {
   assert.equal(res.status, 'available');
   if (res.status === 'available') {
     assert.equal(res.username, 'new_creator_99');
-    assert.equal(res.message, 'ivio.site/new_creator_99 is available');
+    assert.equal(res.message, 'iveo.site/new_creator_99 is available');
   }
 });

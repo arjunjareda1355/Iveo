@@ -3,13 +3,13 @@ import { HAS_CLERK_KEY } from '../lib/env';
 import { VibeId } from '../lib/vibes';
 import {
   ButtonShape,
-  IvioPreferences,
+  IveoPreferences,
   parsePreferences,
   DEFAULT_PREFERENCES,
 } from '../lib/preferences';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 
-export interface IvioSession {
+export interface IveoSession {
   isLoaded: boolean;
   isSignedIn: boolean;
   username: string | null;
@@ -21,13 +21,16 @@ export interface IvioSession {
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
+  hideIveoFooter: boolean;
   hideIvioFooter: boolean;
   updateUsername: (newUsername: string) => Promise<void>;
-  updatePreferences: (patch: Partial<Omit<IvioPreferences, 'plan'>>) => Promise<void>;
+  updatePreferences: (patch: Partial<Omit<IveoPreferences, 'plan'>>) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
-const FALLBACK_SESSION: IvioSession = {
+export type IvioSession = IveoSession;
+
+const FALLBACK_SESSION: IveoSession = {
   isLoaded: true,
   isSignedIn: false,
   username: null,
@@ -39,13 +42,14 @@ const FALLBACK_SESSION: IvioSession = {
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
+  hideIveoFooter: false,
   hideIvioFooter: false,
   updateUsername: async () => {},
   updatePreferences: async () => {},
   signOut: async () => {},
 };
 
-function useClerkSession(): IvioSession {
+function useClerkSession(): IveoSession {
   const { isLoaded: authLoaded, isSignedIn } = useAuth();
   const { isLoaded: userLoaded, user } = useUser();
   const { signOut } = useClerk();
@@ -65,6 +69,7 @@ function useClerkSession(): IvioSession {
       onboardingComplete: false,
       plan: 'free',
       isPro: false,
+      hideIveoFooter: false,
       hideIvioFooter: false,
       updateUsername: async () => {},
       updatePreferences: async () => {},
@@ -88,13 +93,13 @@ function useClerkSession(): IvioSession {
 
   const plan = preferences.plan;
   const isPro = plan === 'pro';
-  const hideIvioFooter = preferences.hideIvioFooter;
+  const hideFooter = preferences.hideIveoFooter || preferences.hideIvioFooter || false;
 
   const updateUsername = async (newUsername: string): Promise<void> => {
     await user.update({ username: newUsername });
   };
 
-  const updatePreferences = async (patch: Partial<Omit<IvioPreferences, 'plan'>>): Promise<void> => {
+  const updatePreferences = async (patch: Partial<Omit<IveoPreferences, 'plan'>>): Promise<void> => {
     // unsafeMetadata holds client-writable preferences. Never write plan here (server/database authoritative).
     const currentMeta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
       ? user.unsafeMetadata
@@ -123,7 +128,8 @@ function useClerkSession(): IvioSession {
     onboardingComplete,
     plan,
     isPro,
-    hideIvioFooter,
+    hideIveoFooter: hideFooter,
+    hideIvioFooter: hideFooter,
     updateUsername,
     updatePreferences,
     signOut: async () => {
@@ -132,7 +138,7 @@ function useClerkSession(): IvioSession {
   };
 }
 
-export function useIvioSession(): IvioSession {
+export function useIveoSession(): IveoSession {
   if (!HAS_CLERK_KEY) {
     return FALLBACK_SESSION;
   }
@@ -140,3 +146,6 @@ export function useIvioSession(): IvioSession {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   return useClerkSession();
 }
+
+// Backward-compatible alias
+export const useIvioSession = useIveoSession;

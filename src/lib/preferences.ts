@@ -2,21 +2,25 @@ import type { VibeId } from './vibes.ts';
 
 export type ButtonShape = 'square' | 'rounded' | 'pill';
 
-export interface IvioPreferences {
+export interface IveoPreferences {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   onboardingComplete: boolean;
   onboardedAt: string | null;
   plan: 'free' | 'pro';
-  hideIvioFooter: boolean;
+  hideIveoFooter: boolean;
+  hideIvioFooter?: boolean;
 }
 
-export const DEFAULT_PREFERENCES: IvioPreferences = {
+export type IvioPreferences = IveoPreferences;
+
+export const DEFAULT_PREFERENCES: IveoPreferences = {
   vibeId: 'clean',
   buttonShape: null,
   onboardingComplete: false,
   onboardedAt: null,
   plan: 'free',
+  hideIveoFooter: false,
   hideIvioFooter: false,
 };
 
@@ -35,7 +39,7 @@ const VALID_BUTTON_SHAPES = new Set<ButtonShape>(['square', 'rounded', 'pill']);
  * Defensively parses client metadata/database preferences.
  * Unknown or malformed values fall back to defaults.
  */
-export function parsePreferences(raw: unknown): IvioPreferences {
+export function parsePreferences(raw: unknown): IveoPreferences {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_PREFERENCES };
   }
@@ -61,7 +65,11 @@ export function parsePreferences(raw: unknown): IvioPreferences {
       : null;
 
   const plan = record.plan === 'pro' ? 'pro' : 'free';
-  const hideIvioFooter = record.hideIvioFooter === true || record.hide_ivio_footer === true;
+  const hideFooter =
+    record.hideIveoFooter === true ||
+    record.hideIvioFooter === true ||
+    record.hide_iveo_footer === true ||
+    record.hide_ivio_footer === true;
 
   return {
     vibeId,
@@ -69,6 +77,7 @@ export function parsePreferences(raw: unknown): IvioPreferences {
     onboardingComplete,
     onboardedAt,
     plan,
-    hideIvioFooter,
+    hideIveoFooter: hideFooter,
+    hideIvioFooter: hideFooter,
   };
 }

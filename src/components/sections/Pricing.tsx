@@ -182,10 +182,10 @@ export const Pricing: React.FC = () => {
         <div className="mt-8 text-[14px] text-muted">
           <span>{copy.pricing.teamNotePrefix} </span>
           <a
-            href="mailto:help@ivio.site?subject=ivio%20team%20plan"
+            href="mailto:help@iveo.site?subject=iveo%20team%20plan"
             className="text-ink underline underline-offset-[3px] hover:text-ink-2 font-medium"
           >
-            help@ivio.site
+            help@iveo.site
           </a>
         </div>
       </Container>

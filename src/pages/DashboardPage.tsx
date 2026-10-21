@@ -90,7 +90,8 @@ const DashboardContent: React.FC = () => {
     isBlockVisibleNow(b, session.plan, now)
   );
 
-  const hideFooterMark = session.isPro && session.hideIvioFooter;
+  const hideFooterMark =
+    session.isPro && (session.hideIveoFooter || session.hideIvioFooter);
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">

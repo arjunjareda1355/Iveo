@@ -57,7 +57,7 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
 
   return {
     status: 'available',
-    message: `ivio.site/${sanitized} is available`,
+    message: `iveo.site/${sanitized} is available`,
     username: sanitized,
   };
 }

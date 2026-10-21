@@ -24,7 +24,7 @@ export const AddressPill: React.FC<AddressPillProps> = ({ username }) => {
     <div className="flex items-center gap-1.5 select-none">
       {/* Desktop pill */}
       <div className="hidden sm:flex h-9 items-center rounded-full bg-surface border border-border px-3 text-[13px] font-mono text-ink shadow-xs">
-        ivio.site/{username}
+        iveo.site/{username}
       </div>
 
       {/* Copy icon button (both desktop and mobile) */}

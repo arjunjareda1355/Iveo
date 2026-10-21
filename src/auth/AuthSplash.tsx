@@ -9,8 +9,8 @@ export const AuthSplash: React.FC = () => {
         aria-hidden="true"
       />
 
-      {/* Centered ivio mark (32px) */}
-      <div className="select-none" aria-label="Loading ivio">
+      {/* Centered iveo mark (32px) */}
+      <div className="select-none" aria-label="Loading iveo">
         <svg
           width="32"
           height="32"

@@ -1,4 +1,4 @@
-// Set VITE_SITE_ORIGIN to the deployed address until ivio.site points at the app.
+// Set VITE_SITE_ORIGIN to the deployed address until iveo.site points at the app.
 
 function resolveSiteOrigin(): string {
   const envVal =
@@ -19,7 +19,7 @@ function resolveSiteOrigin(): string {
       // Fallback below
     }
   }
-  return 'https://ivio.site';
+  return 'https://iveo.site';
 }
 
 export const SITE_ORIGIN = resolveSiteOrigin();

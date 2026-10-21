@@ -5,23 +5,23 @@ import { ArrowLeft } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 import { Container } from '../components/ui/Container';
 import { AddressPill } from '../components/dashboard/AddressPill';
-import { IvioUserButton } from '../auth/IvioUserButton';
+import { IveoUserButton } from '../auth/IvioUserButton';
 import { RequireAuth } from '../auth/guards';
-import { ivioAppearance } from '../auth/appearance';
-import { useIvioSession } from '../auth/useIvioSession';
+import { iveoAppearance } from '../auth/appearance';
+import { useIveoSession } from '../auth/useIvioSession';
 import { copy } from '../content/copy';
 
 export const AccountPage: React.FC = () => {
-  const session = useIvioSession();
+  const session = useIveoSession();
 
   useEffect(() => {
     document.title = copy.dashboard.titles.account;
   }, []);
 
   const accountAppearance = {
-    ...ivioAppearance,
+    ...iveoAppearance,
     elements: {
-      ...ivioAppearance.elements,
+      ...iveoAppearance.elements,
       rootBox: {
         width: '100%',
       },
@@ -53,7 +53,7 @@ export const AccountPage: React.FC = () => {
                 <ArrowLeft size={16} strokeWidth={1.5} />
                 <span>Back to dashboard</span>
               </Link>
-              <IvioUserButton />
+              <IveoUserButton />
             </div>
           </Container>
         </header>

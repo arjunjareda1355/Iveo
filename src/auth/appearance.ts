@@ -1,8 +1,11 @@
-// Static data URI of the ivio mark SVG
-export const IVIO_LOGO_DATA_URI =
+// Static data URI of the iveo mark SVG
+export const IVEO_LOGO_DATA_URI =
   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Crect width="24" height="24" rx="7" fill="%230A0A0A"/%3E%3Ccircle cx="12" cy="7.25" r="1.75" fill="%23FFFFFF"/%3E%3Crect x="10.5" y="10.5" width="3" height="8" rx="1.5" fill="%23FFFFFF"/%3E%3C/svg%3E';
 
-export const ivioAppearance = {
+// Backward-compatible alias
+export const IVIO_LOGO_DATA_URI = IVEO_LOGO_DATA_URI;
+
+export const iveoAppearance = {
   variables: {
     colorPrimary: '#0A0A0A',
     colorPrimaryForeground: '#FFFFFF',
@@ -25,14 +28,14 @@ export const ivioAppearance = {
     fontSize: '0.9375rem',
   },
   layout: {
-    logoImageUrl: IVIO_LOGO_DATA_URI,
+    logoImageUrl: IVEO_LOGO_DATA_URI,
     logoPlacement: 'inside' as const,
     logoLinkUrl: '/',
     socialButtonsPlacement: 'top' as const,
     socialButtonsVariant: 'blockButton' as const,
     termsPageUrl: '/terms',
     privacyPageUrl: '/privacy',
-    helpPageUrl: 'mailto:help@ivio.site',
+    helpPageUrl: 'mailto:help@iveo.site',
     showOptionalFields: false,
   },
   elements: {
@@ -63,3 +66,6 @@ export const ivioAppearance = {
     },
   },
 };
+
+// Backward-compatible alias
+export const ivioAppearance = iveoAppearance;

@@ -11,10 +11,10 @@ export const LoadError: React.FC = () => {
       <p className="mt-4 text-[15px] leading-relaxed text-muted">
         Check your connection and try again. If it keeps happening, email{' '}
         <a
-          href="mailto:help@ivio.site"
+          href="mailto:help@iveo.site"
           className="text-ink underline underline-offset-[3px] font-medium"
         >
-          help@ivio.site
+          help@iveo.site
         </a>
         .
       </p>

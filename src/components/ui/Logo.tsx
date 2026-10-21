@@ -24,7 +24,7 @@ export const Logo: React.FC<LogoProps> = ({
     <span className={cn('inline-flex items-center select-none', className)}>
       <img
         src={wordmarkImg}
-        alt="ivio"
+        alt="iveo"
         className={cn(
           'w-auto object-contain transition-all duration-120',
           heightClass,
@@ -36,7 +36,7 @@ export const Logo: React.FC<LogoProps> = ({
 
   if (isLink) {
     return (
-      <Link to="/" aria-label="ivio home" className="inline-flex items-center">
+      <Link to="/" aria-label="iveo home" className="inline-flex items-center">
         {content}
       </Link>
     );

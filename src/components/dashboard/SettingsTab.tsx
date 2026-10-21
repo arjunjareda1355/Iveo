@@ -36,9 +36,12 @@ export const SettingsTab: React.FC = () => {
       return;
     }
 
-    const nextVal = !session.hideIvioFooter;
+    const nextVal = !(session.hideIveoFooter || session.hideIvioFooter);
     try {
-      await session.updatePreferences({ hideIvioFooter: nextVal });
+      await session.updatePreferences({
+        hideIveoFooter: nextVal,
+        hideIvioFooter: nextVal,
+      });
       showToast(nextVal ? 'Footer mark hidden.' : 'Footer mark shown.');
     } catch {
       openUpgrade('hide_footer');
@@ -117,7 +120,7 @@ export const SettingsTab: React.FC = () => {
 
         <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-2 border border-border">
           <span className="font-mono text-[14px] text-ink select-all truncate flex-1">
-            {fullUrl || 'https://ivio.site'}
+            {fullUrl || 'https://iveo.site'}
           </span>
         </div>
 
@@ -151,12 +154,12 @@ export const SettingsTab: React.FC = () => {
           </Button>
         </div>
 
-        {/* Remove the ivio mark switch */}
+        {/* Remove the iveo mark switch */}
         <div className="pt-4 mt-2 border-t border-border flex items-center justify-between gap-4">
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="text-[14px] font-medium text-ink">
-                Remove the ivio mark
+                Remove the iveo mark
               </span>
               <ProBadge />
             </div>
@@ -168,16 +171,26 @@ export const SettingsTab: React.FC = () => {
           <button
             type="button"
             role="switch"
-            aria-checked={session.isPro ? session.hideIvioFooter : false}
+            aria-checked={
+              session.isPro
+                ? session.hideIveoFooter || session.hideIvioFooter
+                : false
+            }
             aria-disabled={!session.isPro}
             onClick={handleFooterMarkToggle}
             className={`w-11 h-6 rounded-full flex items-center p-0.5 transition-colors duration-120 shrink-0 focus-visible:outline-2 focus-visible:outline-ink ${
-              session.isPro && session.hideIvioFooter ? 'bg-ink' : 'bg-border'
+              session.isPro &&
+              (session.hideIveoFooter || session.hideIvioFooter)
+                ? 'bg-ink'
+                : 'bg-border'
             }`}
           >
             <div
               className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-120 ${
-                session.isPro && session.hideIvioFooter ? 'translate-x-5' : 'translate-x-0'
+                session.isPro &&
+                (session.hideIveoFooter || session.hideIvioFooter)
+                  ? 'translate-x-5'
+                  : 'translate-x-0'
               }`}
             />
           </button>

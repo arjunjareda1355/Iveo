@@ -62,7 +62,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         id: `persona-${idx}`,
         kind: 'link',
         title: linkTitle,
-        url: 'https://ivio.site',
+        url: 'https://iveo.site',
         layout: 'classic',
         isActive: true,
         isArchived: false,
@@ -330,10 +330,10 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           gap: `${Math.round(6 * scale)}px`,
         }}
       >
-        {/* ivio mark and "Create your own page" link */}
+        {/* iveo mark and "Create your own page" link */}
         {!hideFooterMark && (
           <a
-            href="https://ivio.site"
+            href="https://iveo.site"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity"
@@ -355,7 +355,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               className="font-medium tracking-tight"
               style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px` }}
             >
-              ivio
+              iveo
             </span>
           </a>
         )}
@@ -363,7 +363,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         {/* "Report this page" (always visible on public page) */}
         {isPublicPage && displayHandle && (
           <a
-            href={`mailto:help@ivio.site?subject=Report%20page%20ivio.site/${displayHandle}`}
+            href={`mailto:help@iveo.site?subject=Report%20page%20iveo.site/${displayHandle}`}
             className="text-[12px] opacity-50 hover:opacity-90 underline underline-offset-2 transition-opacity"
             style={{ color: tokens.muted }}
           >

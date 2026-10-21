@@ -9,20 +9,20 @@ export const Faq: React.FC = () => {
   const { ref: headerRef, style: headerStyle } = useReveal();
   const { ref: accordionRef, style: accordionStyle } = useReveal({ staggerIndex: 1 });
 
-  // Map FAQ items and render mailto links for help@ivio.site
+  // Map FAQ items and render mailto links for help@iveo.site
   const faqItems: AccordionItem[] = copy.faq.items.map((item) => {
-    if (item.answer.includes('help@ivio.site')) {
-      const parts = item.answer.split('help@ivio.site');
+    if (item.answer.includes('help@iveo.site')) {
+      const parts = item.answer.split('help@iveo.site');
       return {
         question: item.question,
         answer: (
           <span>
             {parts[0]}
             <a
-              href="mailto:help@ivio.site"
+              href="mailto:help@iveo.site"
               className="text-ink underline underline-offset-[3px] hover:text-ink-2 font-medium"
             >
-              help@ivio.site
+              help@iveo.site
             </a>
             {parts[1]}
           </span>
@@ -57,10 +57,10 @@ export const Faq: React.FC = () => {
             <p className="mt-4 text-[15px] leading-relaxed text-muted max-w-[36ch]">
               {copy.faq.leadPrefix}{' '}
               <a
-                href="mailto:help@ivio.site"
+                href="mailto:help@iveo.site"
                 className="text-ink underline underline-offset-[3px] hover:text-ink-2 font-medium"
               >
-                help@ivio.site
+                help@iveo.site
               </a>{' '}
               {copy.faq.leadSuffix}
             </p>

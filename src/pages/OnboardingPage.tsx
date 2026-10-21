@@ -37,7 +37,9 @@ export const OnboardingPage: React.FC = () => {
   const [usernameInput, setUsernameInput] = useState<string>(() => {
     if (session.username) return session.username;
     try {
-      const stored = sessionStorage.getItem('ivio.claim');
+      const stored =
+        sessionStorage.getItem('iveo.claim') ||
+        sessionStorage.getItem('ivio.claim');
       if (stored) return normalizeUsername(stored);
     } catch {
       // ignore
@@ -156,6 +158,7 @@ export const OnboardingPage: React.FC = () => {
         onboardedAt: new Date().toISOString(),
       });
       try {
+        sessionStorage.removeItem('iveo.claim');
         sessionStorage.removeItem('ivio.claim');
       } catch {
         // ignore
@@ -220,7 +223,7 @@ export const OnboardingPage: React.FC = () => {
                   <form onSubmit={handleUsernameSubmit} className="mt-6">
                     <div className="relative flex h-14 w-full items-center rounded-[14px] px-2 pl-4 bg-surface border border-border-strong hover:border-[#A3A3A3] focus-within:border-ink focus-within:shadow-[0_0_0_3px_rgba(10,10,10,0.08)] transition-all duration-120">
                       <span className="font-mono text-[16px] text-muted select-none pointer-events-none shrink-0">
-                        ivio.site/
+                        iveo.site/
                       </span>
                       <input
                         type="text"
@@ -336,7 +339,7 @@ export const OnboardingPage: React.FC = () => {
                     <Card className="flex flex-col gap-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <span className="font-mono text-[18px] font-medium text-ink">
-                          ivio.site/{session.username || usernameInput}
+                          iveo.site/{session.username || usernameInput}
                         </span>
                         <Button
                           variant="secondary"

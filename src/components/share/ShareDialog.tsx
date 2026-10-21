@@ -138,7 +138,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     try {
       await navigator.share({
         title: displayName || `@${username}`,
-        text: 'My page on ivio',
+        text: 'My page on iveo',
         url: fullUrl,
       });
     } catch (err: unknown) {
@@ -296,7 +296,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </div>
 
             <p className="mt-2.5 text-center text-[13px] text-muted leading-relaxed">
-              Scans to ivio.site/{username}. Print it at least 2 cm (0.8 in) wide.
+              Scans to iveo.site/{username}. Print it at least 2 cm (0.8 in) wide.
             </p>
           </div>
 

@@ -5,7 +5,7 @@ export type ProFeature = (typeof PRO_FEATURES)[number];
 export const PRO_FEATURE_NAMES: Record<ProFeature, string> = {
   embeds: 'Embeds',
   scheduling: 'Scheduling',
-  hide_footer: 'Removing the ivio mark',
+  hide_footer: 'Removing the iveo mark',
 };
 
 export function getProFeatureName(feature: ProFeature): string {

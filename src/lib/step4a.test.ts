@@ -186,5 +186,5 @@ test('plan: defines all pro features and labels', () => {
   assert.deepEqual(PRO_FEATURES, ['embeds', 'scheduling', 'hide_footer']);
   assert.equal(getProFeatureName('embeds'), 'Embeds');
   assert.equal(getProFeatureName('scheduling'), 'Scheduling');
-  assert.equal(getProFeatureName('hide_footer'), 'Removing the ivio mark');
+  assert.equal(getProFeatureName('hide_footer'), 'Removing the iveo mark');
 });

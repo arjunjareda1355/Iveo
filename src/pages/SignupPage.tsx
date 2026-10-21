@@ -20,6 +20,7 @@ export const SignupPage: React.FC = () => {
       if (validateUsername(normalized).ok) {
         effectiveClaim = normalized;
         try {
+          sessionStorage.setItem('iveo.claim', normalized);
           sessionStorage.setItem('ivio.claim', normalized);
         } catch {
           // ignore storage error
@@ -29,7 +30,9 @@ export const SignupPage: React.FC = () => {
 
     if (!effectiveClaim) {
       try {
-        const stored = sessionStorage.getItem('ivio.claim');
+        const stored =
+          sessionStorage.getItem('iveo.claim') ||
+          sessionStorage.getItem('ivio.claim');
         if (stored) {
           const normalized = normalizeUsername(stored);
           if (validateUsername(normalized).ok) {
@@ -49,7 +52,7 @@ export const SignupPage: React.FC = () => {
       <div className="inline-flex h-9 items-center gap-2 rounded-full bg-surface border border-border px-3.5 text-[14px] shadow-xs">
         <LinkIcon size={14} strokeWidth={1.5} className="text-subtle" />
         <span className="text-muted">{copy.auth.claimPillPrefix}</span>
-        <span className="font-mono font-medium text-ink">ivio.site/{claim}</span>
+        <span className="font-mono font-medium text-ink">iveo.site/{claim}</span>
       </div>
       <span className="text-[13px] text-muted text-center">
         {copy.auth.claimPillHelper}

@@ -35,7 +35,9 @@ export interface UpdateBlockInput {
 // Memory / LocalStorage store fallback for when Supabase credentials are not connected
 function getLocalBlocks(userId: string): Block[] {
   try {
-    const raw = localStorage.getItem(`ivio_blocks_${userId}`);
+    const raw =
+      localStorage.getItem(`iveo_blocks_${userId}`) ||
+      localStorage.getItem(`ivio_blocks_${userId}`);
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
@@ -43,7 +45,7 @@ function getLocalBlocks(userId: string): Block[] {
 
 function saveLocalBlocks(userId: string, blocks: Block[]) {
   try {
-    localStorage.setItem(`ivio_blocks_${userId}`, JSON.stringify(blocks));
+    localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocks));
   } catch {}
 }
 

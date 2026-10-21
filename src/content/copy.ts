@@ -1,10 +1,10 @@
 export const copy = {
   brand: {
-    name: 'ivio',
-    domain: 'ivio.site',
+    name: 'iveo',
+    domain: 'iveo.site',
     tagline: 'One calm home for your links.',
-    supportEmail: 'help@ivio.site',
-    copyright: '© 2026 ivio. All rights reserved.',
+    supportEmail: 'help@iveo.site',
+    copyright: '© 2026 iveo. All rights reserved.',
   },
   nav: {
     links: [
@@ -25,7 +25,7 @@ export const copy = {
     headingPart1: 'One link for',
     headingPart2: 'everything',
     headingAccent: 'you make.',
-    lead: 'ivio gives you one calm, customizable page for your links, your work and your contact details. Choose a vibe, add your links and share it anywhere.',
+    lead: 'iveo gives you one calm, customizable page for your links, your work and your contact details. Choose a vibe, add your links and share it anywhere.',
     assurances: [
       'Free plan, no card needed',
       'Ready in about two minutes',
@@ -35,7 +35,7 @@ export const copy = {
     claimButton: 'Claim',
     goToDashboard: 'Go to dashboard',
     continueSetup: 'Continue setup',
-    floatingChipTop: 'ivio.site/maya',
+    floatingChipTop: 'iveo.site/maya',
     floatingChipBottom: 'Updated just now',
   },
   madeFor: {
@@ -165,7 +165,7 @@ export const copy = {
     leadSuffix: 'and a person will reply.',
     items: [
       {
-        question: 'Is ivio free?',
+        question: 'Is iveo free?',
         answer: 'Yes. The free plan includes one page, unlimited links and all six vibes. Pro adds link scheduling, password-protected links, advanced analytics and contact collection.',
       },
       {
@@ -174,11 +174,11 @@ export const copy = {
       },
       {
         question: 'Can I use my own domain?',
-        answer: 'Custom domains are on our roadmap. For now, every page lives at ivio.site/yourname.',
+        answer: 'Custom domains are on our roadmap. For now, every page lives at iveo.site/yourname.',
       },
       {
-        question: 'Do I need a website to use ivio?',
-        answer: 'No. ivio works on its own. Many people use it as their only page, and others link to it from social profiles, email signatures and printed materials.',
+        question: 'Do I need a website to use iveo?',
+        answer: 'No. iveo works on its own. Many people use it as their only page, and others link to it from social profiles, email signatures and printed materials.',
       },
       {
         question: 'What does analytics show?',
@@ -194,7 +194,7 @@ export const copy = {
       },
       {
         question: 'How do I get help?',
-        answer: 'Email help@ivio.site. We read every message and aim to reply within one to two business days.',
+        answer: 'Email help@iveo.site. We read every message and aim to reply within one to two business days.',
       },
     ],
   },
@@ -211,8 +211,8 @@ export const copy = {
     },
   },
   auth: {
-    loginTitle: 'Log in | ivio',
-    signupTitle: 'Create your account | ivio',
+    loginTitle: 'Log in | iveo',
+    signupTitle: 'Create your account | iveo',
     backLink: 'Back to home',
     legalLine: 'By continuing, you agree to our Terms and Privacy Policy.',
     helpLinePrefix: 'Need help? Email',
@@ -225,7 +225,7 @@ export const copy = {
   },
   loadError: {
     title: "We couldn't reach the sign-in service",
-    body: 'Check your connection and try again. If it keeps happening, email help@ivio.site.',
+    body: 'Check your connection and try again. If it keeps happening, email help@iveo.site.',
     tryAgain: 'Try again',
     backHome: 'Back to home',
   },
@@ -263,10 +263,10 @@ export const copy = {
       settings: 'Settings',
     },
     titles: {
-      links: 'Links | ivio',
-      appearance: 'Appearance | ivio',
-      settings: 'Settings | ivio',
-      account: 'Account | ivio',
+      links: 'Links | iveo',
+      appearance: 'Appearance | iveo',
+      settings: 'Settings | iveo',
+      account: 'Account | iveo',
     },
     linksTab: {
       emptyTitle: 'Your links will live here',
@@ -311,14 +311,14 @@ export const copy = {
     notFoundHeading: 'Page not found',
     notFoundBody: "The page you are looking for doesn't exist.",
     boundaryHeading: 'Something went wrong',
-    boundaryBody: 'Reload the page to continue. If it keeps happening, email help@ivio.site.',
+    boundaryBody: 'Reload the page to continue. If it keeps happening, email help@iveo.site.',
     reload: 'Reload',
     backHome: 'Back to home',
   },
   placeholders: {
     accountSetup: 'Account setup arrives in the next step.',
     backHome: 'Back to home',
-    reservingPrefix: 'Reserving ivio.site/',
+    reservingPrefix: 'Reserving iveo.site/',
     proPlanSelected: 'Pro plan selected',
     legalPlaceholder: 'This page will be published before launch.',
     questionsPrefix: 'Questions? Email',
@@ -327,7 +327,7 @@ export const copy = {
     badge: 'Pro',
     comingSoonHeading: 'Pro is coming soon',
     comingSoonBody:
-      'Pro features are not open for purchase yet. Email help@ivio.site to ask about early access.',
+      'Pro features are not open for purchase yet. Email help@iveo.site to ask about early access.',
     featureNoticeSuffix: 'is a Pro feature.',
     emailUsButton: 'Email us',
     closeButton: 'Close',
@@ -404,17 +404,17 @@ export const copy = {
       copyLink: 'Copy link',
       copied: 'Copied',
       nativeShare: 'Share...',
-      shareSubject: 'My page on ivio',
+      shareSubject: 'My page on iveo',
       downloadPng: 'Download PNG',
       downloadSvg: 'Download SVG',
-      qrPrintHelper: 'Scans to ivio.site/<username>. Print it at least 2 cm (0.8 in) wide.',
+      qrPrintHelper: 'Scans to iveo.site/<username>. Print it at least 2 cm (0.8 in) wide.',
       hiddenNotice: 'Your page is hidden, so visitors will see an unavailable message.',
       openSettings: 'Open settings',
       qrError: "We couldn't create the QR code. Try again.",
       shareError: "Couldn't share. Try again.",
     },
     settings: {
-      removeMarkLabel: 'Remove the ivio mark',
+      removeMarkLabel: 'Remove the iveo mark',
       removeMarkDesc:
         "Hide the 'Create your own page' link from your page. The report link always stays.",
       toasts: {
