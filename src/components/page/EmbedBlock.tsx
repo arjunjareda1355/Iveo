@@ -12,6 +12,7 @@ interface EmbedBlockProps {
   activeEmbedId: string | null;
   onActivate: (id: string) => void;
   scale?: number;
+  onLinkClick?: (block: PageBlock) => void;
 }
 
 export const EmbedBlock: React.FC<EmbedBlockProps> = ({
@@ -22,6 +23,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   activeEmbedId,
   onActivate,
   scale = 1,
+  onLinkClick,
 }) => {
   const { tokens } = vibe;
   const parsed = parseEmbedUrl(block.url || '');
@@ -165,7 +167,10 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
       <button
         type="button"
         aria-label={accessibleName}
-        onClick={() => onActivate(block.id)}
+        onClick={() => {
+          onActivate(block.id);
+          onLinkClick?.(block);
+        }}
         className="h-10 px-6 rounded-full font-semibold text-[14px] flex items-center justify-center gap-2 transition-transform duration-120 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{
           backgroundColor: tokens.text,

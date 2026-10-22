@@ -1,0 +1,760 @@
+IVEO STEP 4B: ANALYTICS (VIEWS, CLICKS, SOURCES, DEVICES): MASTER BUILD PROMPT
+Version 1.0 | Builds on Step 1 (landing), Step 2 (Clerk auth), Step 3 (database, links, public pages), Step 4A (link extras, QR, plans). Brand name: iveo.
+
+This file has three parts:
+  PART 1 (for you, the human): a short setup checklist, a test script and a privacy note. Do this BEFORE pasting anything.
+  PART 2 (for you, the human): a SQL script you run once in Supabase. Do not paste it into the AI.
+  PART 3 (for the AI): the build prompt. Paste everything from the line "BEGIN PROMPT" to the line "END PROMPT".
+
+#####################################################################
+PART 1: WHAT THIS STEP IS, AND WHAT YOU DO FIRST (NOT PART OF THE PROMPT)
+#####################################################################
+
+1. WHERE THIS FITS IN STEP 4
+  4A (done)       Link extras, QR code and share sheet, Free/Pro plan lock.
+  4B (this file)  Analytics: page views and link clicks, with an Analytics tab.
+  4C              Share previews (the card shown when your link is pasted in WhatsApp or X) and hosting hardening (account-deletion cleanup, username sync).
+  4D              Pro billing (Clerk Billing).
+  Later           Password-protected links, email/phone collection with CSV export.
+
+2. WHAT 4B ADDS
+- Every public page load counts as a view. Every click on a link or press of an embed's Play button counts as a click.
+- An Analytics tab in the dashboard with: Views, Clicks and click-through rate, a chart over time, your top links.
+- Free: the last 7 or 30 days, totals and clicks per link.
+- Pro: also 90 days and 12 months, plus "Where visitors come from" (Google, Instagram, QR code, and so on) and "Devices" (mobile, tablet, desktop).
+- Trackable links: you can copy a version of your link for Instagram, TikTok, email and so on (for example iveo.site/yourname?src=instagram), so you can see which place sends visitors. The QR code is tracked automatically as "QR code".
+- A small click count next to each link in the Links tab (last 30 days).
+Everything works with the database you already have. No servers, no new services, no new keys.
+
+3. HOW PRIVACY WORKS (SO YOU CAN EXPLAIN IT TO YOUR USERS)
+- No cookies, no visitor IDs and no tracking of individual people. iveo stores only daily COUNTS (for example "12 views from Instagram on mobile on Oct 21"), never a list of visits.
+- iveo does not store IP addresses or full referrer addresses in its analytics data. Referrers are grouped into a fixed list of sources (Google, Instagram, and so on) on the visitor's device before anything is sent.
+- Visitors who send a Do Not Track or Global Privacy Control signal are not counted. The page owner's own visits are not counted. Obvious bots are not counted.
+- No "unique visitors" number is shown, because counting uniques would need a visitor ID. Views mean page loads.
+- Be accurate in public: your hosting and database providers still receive each request like any website does and may keep their own technical logs. Say "iveo doesn't store IP addresses, cookies or visitor IDs in its analytics data", not "we collect nothing".
+- Please add a short paragraph to your Privacy page before launch. A starting point (not legal advice; have it reviewed for your country):
+    "iveo counts page views and link clicks on public pages to show page owners simple statistics. This data is stored as daily totals grouped by source and device type. It does not include cookies, visitor identifiers or IP addresses, and it is not used to track individual people. Visitors who send a Do Not Track or Global Privacy Control signal are not counted."
+
+4. SETUP CHECKLIST
+A. Run the SQL script in Part 2: Supabase Dashboard > SQL Editor > New query > paste > Run. It only adds a table and two functions; it does not touch your existing data. If you see an error, send me the exact text.
+B. No new keys, variables or packages are needed.
+C. For testing Free versus Pro, use the same SQL as in Step 4A (replace the name):
+     update public.profiles set plan = 'pro' where username = 'YOUR_USERNAME';
+     update public.profiles set plan = 'free' where username = 'YOUR_USERNAME';
+D. Your own visits are not counted. To test the counters, open your public page in a private (incognito) window while signed out, or ask a friend to visit.
+E. Reminder: QR codes and shared links only work once your real domain points at the deployed app (or while VITE_SITE_ORIGIN is set for testing).
+
+5. YOUR TEST SCRIPT AFTER THE BUILD (use a standalone browser tab, not the preview pane)
+  Counting
+  [ ] Open your public page in an incognito window (signed out). Wait a few seconds, then open Dashboard > Analytics. Views shows 1 (press Refresh if needed).
+  [ ] Reload the incognito page twice: views goes up by 2 (each page load counts as a view).
+  [ ] Click one of your links in the incognito window. Clicks shows 1 and that link appears under Top links. In the Links tab that link shows "1 click".
+  [ ] Open the incognito page with ?src=instagram on the end (iveo.site/yourname?src=instagram, or your test address). As a Pro account, "Where visitors come from" shows Instagram.
+  [ ] Visit your own page while signed in as the owner: the counts do NOT change.
+  [ ] In your browser settings (or an extension), turn on Do Not Track or Global Privacy Control and visit the incognito page again: the counts do NOT change.
+  [ ] Visit the page on a phone: as Pro, Devices shows Mobile.
+  [ ] Press Play on an embed (Pro): it counts as a click on that embed.
+  [ ] Hidden or archived links, and pages you switched off ("Your page is live" off), record nothing.
+  Plan lock
+  [ ] As Free: you can pick 7 days and 30 days; 90 days and 12 months show a Pro badge and open the "Pro is coming soon" dialog. "Where visitors come from" and "Devices" show a lock notice instead of data.
+  [ ] As Pro: all four ranges work and both cards show data.
+  Share
+  [ ] In Share, the new "Track where visitors come from" section copies a link ending in ?src=<source>. Scanning the downloaded QR code (after the real domain works) is counted as "QR code".
+  Quality
+  [ ] Analytics tab at 375 px wide: the chart, cards and lists fit with no horizontal scrolling.
+  [ ] Keyboard: you can reach the range selector, the chart (arrow keys move between days and the day's numbers are announced), the table view and the Refresh button.
+  [ ] Optional security check: in the browser console run (replace both values)
+        fetch("YOUR_SUPABASE_URL/rest/v1/analytics_daily?select=*", { headers: { apikey: "YOUR_PUBLISHABLE_KEY" } }).then(r => r.status)
+      Expected: an error status such as 401 or 403, not 200 with data.
+
+6. KNOWN LIMITS OF 4B (PLAN FOR THEM)
+- Counts are indicative, not audited. Anyone technical could send fake events for a public page; the database bounds how much damage that does (it only inflates numbers).
+- Page loads, not people: no unique visitors. No country or city data (that would need a server-side step).
+- In-app browsers (Instagram, TikTok) often hide where a visit came from. Use the tracked links (?src=...) for accurate sources.
+- Days follow UTC time, so a day's boundary may not match your local midnight.
+- Clicks on social icons are not tracked (only links and embeds).
+- Long-press "open in new tab" menus and copied links cannot be counted as clicks.
+- If you delete a link, its past clicks stay in your totals and show as "Deleted link" in Top links.
+- Daily totals are kept indefinitely (they are tiny). Pruning old data is a later chore.
+
+#####################################################################
+PART 2: THE SQL SCRIPT (RUN ONCE IN SUPABASE SQL EDITOR; NOT PART OF THE PROMPT)
+#####################################################################
+
+-- ===================================================================
+-- iveo schema v3 (Step 4B): analytics
+-- Run AFTER the v1 and v2 scripts. Safe to run more than once.
+-- ===================================================================
+
+-- 1. DAILY COUNTS TABLE --------------------------------------------------
+-- One row per person, day, event type, link, source and device, holding a
+-- counter. No visitor identifiers, no IP addresses, no raw referrers.
+-- link_id uses an all-zero id for page views (which have no link).
+create table if not exists public.analytics_daily (
+  user_id text not null references public.profiles (user_id) on delete cascade,
+  day date not null,
+  event text not null,
+  link_id uuid not null default '00000000-0000-0000-0000-000000000000',
+  source text not null default '',
+  device text not null default 'other',
+  hits bigint not null default 0,
+  constraint analytics_daily_pkey primary key (user_id, day, event, link_id, source, device),
+  constraint analytics_event_valid check (event in ('view', 'click')),
+  constraint analytics_device_valid check (device in ('mobile', 'tablet', 'desktop', 'other')),
+  constraint analytics_source_valid check (source in (
+    '', 'qr', 'google', 'bing', 'duckduckgo', 'instagram', 'facebook', 'x', 'tiktok',
+    'youtube', 'linkedin', 'pinterest', 'reddit', 'whatsapp', 'telegram', 'snapchat',
+    'threads', 'github', 'discord', 'email', 'other'
+  )),
+  constraint analytics_link_by_event check (
+       (event = 'view'  and link_id = '00000000-0000-0000-0000-000000000000')
+    or (event = 'click' and link_id <> '00000000-0000-0000-0000-000000000000')
+  ),
+  constraint analytics_hits_nonneg check (hits >= 0)
+);
+
+-- Nobody can read or write this table directly. Only the two functions
+-- below can touch it.
+alter table public.analytics_daily enable row level security;
+revoke all on public.analytics_daily from anon, authenticated;
+
+-- 2. RECORD AN EVENT (called by visitors; returns nothing; never errors on bad input) ----
+create or replace function public.record_page_event(
+  p_username text,
+  p_event text,
+  p_link_id uuid default null,
+  p_source text default '',
+  p_device text default 'other'
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id text;
+  v_source text := coalesce(p_source, '');
+  v_device text := coalesce(p_device, 'other');
+  v_link uuid := '00000000-0000-0000-0000-000000000000'::uuid;
+begin
+  if p_event is null or p_event not in ('view', 'click') then
+    return;
+  end if;
+
+  if v_source not in (
+    '', 'qr', 'google', 'bing', 'duckduckgo', 'instagram', 'facebook', 'x', 'tiktok',
+    'youtube', 'linkedin', 'pinterest', 'reddit', 'whatsapp', 'telegram', 'snapchat',
+    'threads', 'github', 'discord', 'email', 'other'
+  ) then
+    v_source := 'other';
+  end if;
+
+  if v_device not in ('mobile', 'tablet', 'desktop', 'other') then
+    v_device := 'other';
+  end if;
+
+  select p.user_id
+    into v_user_id
+  from public.profiles p
+  where p.username = lower(p_username)
+    and p.is_published
+    and p.onboarding_complete;
+
+  if v_user_id is null then
+    return;
+  end if;
+
+  if p_event = 'click' then
+    if p_link_id is null then
+      return;
+    end if;
+    if not exists (
+      select 1
+      from public.links l
+      where l.id = p_link_id
+        and l.user_id = v_user_id
+        and l.kind in ('link', 'embed')
+        and l.is_active
+        and not l.is_archived
+    ) then
+      return;
+    end if;
+    v_link := p_link_id;
+  end if;
+
+  insert into public.analytics_daily as a (user_id, day, event, link_id, source, device, hits)
+  values (v_user_id, (now() at time zone 'utc')::date, p_event, v_link, v_source, v_device, 1)
+  on conflict (user_id, day, event, link_id, source, device)
+  do update set hits = a.hits + 1;
+end;
+$$;
+
+revoke all on function public.record_page_event(text, text, uuid, text, text) from public;
+grant execute on function public.record_page_event(text, text, uuid, text, text) to anon, authenticated;
+
+-- 3. READ YOUR ANALYTICS (signed-in owners only; Free and Pro limits enforced here) --------
+-- Free: at most the last 30 days, and no sources or devices.
+-- Pro: up to 365 days, with sources and devices.
+create or replace function public.get_analytics(p_from date, p_to date)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_sub text := auth.jwt() ->> 'sub';
+  v_pro boolean;
+  v_today date := (now() at time zone 'utc')::date;
+  v_max_days integer;
+  v_to date;
+  v_from date;
+  v_result jsonb;
+begin
+  if v_sub is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  v_pro := public.has_pro(v_sub);
+  v_max_days := case when v_pro then 365 else 30 end;
+
+  v_to := least(coalesce(p_to, v_today), v_today);
+  v_from := greatest(coalesce(p_from, v_to - 29), v_to - (v_max_days - 1));
+  if v_from > v_to then
+    v_from := v_to;
+  end if;
+
+  select jsonb_build_object(
+    'range', jsonb_build_object(
+      'from', v_from,
+      'to', v_to,
+      'max_days', v_max_days,
+      'is_pro', v_pro
+    ),
+    'totals', (
+      select jsonb_build_object(
+        'views', coalesce(sum(a.hits) filter (where a.event = 'view'), 0),
+        'clicks', coalesce(sum(a.hits) filter (where a.event = 'click'), 0)
+      )
+      from public.analytics_daily a
+      where a.user_id = v_sub
+        and a.day between v_from and v_to
+    ),
+    'daily', (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('day', d.day, 'views', d.views, 'clicks', d.clicks)
+          order by d.day
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select gs.d::date as day,
+               coalesce(sum(a.hits) filter (where a.event = 'view'), 0) as views,
+               coalesce(sum(a.hits) filter (where a.event = 'click'), 0) as clicks
+        from generate_series(v_from::timestamp, v_to::timestamp, interval '1 day') as gs(d)
+        left join public.analytics_daily a
+          on a.user_id = v_sub and a.day = gs.d::date
+        group by gs.d
+      ) d
+    ),
+    'links', (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('link_id', t.link_id, 'clicks', t.clicks)
+          order by t.clicks desc
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select a.link_id, sum(a.hits) as clicks
+        from public.analytics_daily a
+        where a.user_id = v_sub
+          and a.event = 'click'
+          and a.day between v_from and v_to
+        group by a.link_id
+      ) t
+    ),
+    'sources', case when v_pro then (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('source', s.source, 'views', s.views, 'clicks', s.clicks)
+          order by s.views desc, s.clicks desc
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select a.source,
+               coalesce(sum(a.hits) filter (where a.event = 'view'), 0) as views,
+               coalesce(sum(a.hits) filter (where a.event = 'click'), 0) as clicks
+        from public.analytics_daily a
+        where a.user_id = v_sub
+          and a.day between v_from and v_to
+        group by a.source
+      ) s
+    ) else null end,
+    'devices', case when v_pro then (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('device', x.device, 'views', x.views, 'clicks', x.clicks)
+          order by x.views desc, x.clicks desc
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select a.device,
+               coalesce(sum(a.hits) filter (where a.event = 'view'), 0) as views,
+               coalesce(sum(a.hits) filter (where a.event = 'click'), 0) as clicks
+        from public.analytics_daily a
+        where a.user_id = v_sub
+          and a.day between v_from and v_to
+        group by a.device
+      ) x
+    ) else null end
+  )
+  into v_result;
+
+  return v_result;
+end;
+$$;
+
+revoke all on function public.get_analytics(date, date) from public, anon;
+grant execute on function public.get_analytics(date, date) to authenticated;
+
+-- ===================================================================
+-- Quick checks (optional): run these one at a time afterwards.
+--   select tablename, rowsecurity from pg_tables where tablename = 'analytics_daily';
+--   select public.record_page_event('YOUR_USERNAME', 'view', null, 'google', 'desktop');
+--   select * from public.analytics_daily;      -- one row with hits = 1 (run as the SQL Editor owner)
+--   delete from public.analytics_daily;        -- clean up the test row
+-- ===================================================================
+
+#####################################################################
+PART 3: THE PROMPT
+#####################################################################
+
+BEGIN PROMPT
+=====================================================================
+0. CONTEXT AND HOW TO READ THIS
+=====================================================================
+You are extending an existing project: "iveo", a link-in-bio web app (Linktree-style). The brand name is "iveo", always lowercase. Steps 1 to 4A already exist: the landing page; Clerk authentication, onboarding, dashboard shell and account page; a Supabase database with link management, profile and socials, real public pages at /:username, a shared PageRenderer, a data layer (src/data) with TanStack Query; and link extras (thumbnails, featured layout, scheduling, embeds), the Share dialog with a QR code, and a Free/Pro plan lock (has_pro in the database, plan and isPro in the session hook, UpgradeDialog, ProBadge, ProLockNotice, PRO_FEATURES). Inspect the current code first. Reuse its design tokens, components, hooks, copy file, data layer and folder structure. Do not restyle or restructure anything that exists except where this document says to.
+
+Naming note: the project was renamed from "ivio" to "iveo". Use whatever names currently exist in the code (for example the session hook, the user menu component and the site helpers); do not rename existing identifiers, and never introduce the old spelling "ivio" anywhere. Do not hard-code the website domain or the support email: build addresses from the existing SITE_ORIGIN and pageUrl helpers (src/lib/site.ts), and reuse the support email address already used in the footer for every mailto link (read it from the code; if it is not yet a shared constant, create SUPPORT_EMAIL in src/lib/site.ts from that same value and use it for new strings only).
+
+This task adds, in order of importance:
+1. Privacy-first tracking of public page views and link clicks (daily counters only).
+2. An Analytics tab in the dashboard: totals, click-through rate, a chart over time, top links, and for Pro accounts also sources and devices and longer ranges.
+3. Tracked links (?src=...) in the Share dialog, and automatic "QR code" tracking.
+4. A small per-link click count in the Links tab.
+
+The database changes (one table, two functions) have already been applied by the owner with a SQL script. Section 3 describes the result. Never change the database from the app.
+
+Every exact value in this document (hex colors, sizes, strings, names, error codes, source lists) is intentional. Use them exactly. Where only a principle is given, use judgment inside it. Do not ask clarifying questions. Build now, then reply in the format of Section 21.
+
+If two instructions conflict, resolve them in this order: Section 1 (scope and hard rules), Section 13 (security and privacy), Section 3 (database contract), then everything else.
+
+=====================================================================
+1. SCOPE AND HARD RULES
+=====================================================================
+In scope: everything in Section 0.
+
+Out of scope (do not build, and do not leave dead UI for them):
+- Unique visitors, visitor IDs, fingerprinting, cookies or any storage used for counting (no localStorage, no sessionStorage, no cookies, no IndexedDB for analytics).
+- Country, region or city data, IP addresses, full referrer URLs or page paths from other sites, user-agent strings sent to the server.
+- Heatmaps, session recordings, A/B tests, funnels, goals, conversion tracking, email reports, CSV export, date pickers for custom ranges, comparisons with previous periods.
+- Tracking social icon clicks (only links and embeds are tracked).
+- Share previews, server rendering, edge functions (Step 4C). Billing (Step 4D). Any database or storage change, migration or policy. Never call the Supabase Management API.
+- Any third-party analytics script, SDK, pixel or service.
+
+Hard rules:
+- Add NO new dependencies. Charts are hand-built inline SVG. Date and number formatting uses Intl.
+- Keep every earlier rule: only the publishable Supabase key; no supabase.auth.* calls; visitors only call public RPCs (now get_public_page, is_username_available and record_page_event); owner data only through the Clerk-token client; never log user data, tokens, query results or raw errors; neutral black and white page chrome; Geist; 1px hairlines; only --shadow-sm and --shadow-lg; no gradients on chrome; no emoji; no exclamation marks; none of the banned hype words (revolutionize, supercharge, unleash, seamless, game-changer, elevate, next-level, cutting-edge, all-in-one, powerful, effortless, empower, journey, leverage, ecosystem, unlock).
+- TypeScript strict. No "any". No unused code. Every new string goes into src/content/copy.ts, not into JSX.
+- Tracking must NEVER affect the visitor experience: it is fire-and-forget, never throws, never blocks rendering or navigation, never shows an error, never retries, never queues, never logs.
+- No layout shift on any new screen. Reserve space for the chart, cards and lists while loading.
+- The page owner's own visits, Do Not Track or Global Privacy Control visitors and detected bots are never counted (Section 4).
+- Color on the new screens stays neutral: chart bars fill #EDEDED with a 1px #8F8F8F outline, the active bar fills #D4D4D4 with a #0A0A0A outline, the clicks line is #0A0A0A and gridlines are #E5E5E5. No new hues.
+
+=====================================================================
+2. DEPENDENCY AND CONFIGURATION NOTES
+=====================================================================
+- No new packages. Use the existing Supabase client setup, TanStack Query and routing.
+- A third client for tracking only (src/data/trackingClient.ts): createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: (input, init) => fetch(input, { ...init, keepalive: true }) } }). The keepalive flag lets a request finish even if the visitor navigates away right after clicking. It never uses a Clerk token and never waits for Clerk. It is created lazily on first use. If Supabase is not configured, tracking is silently disabled.
+- All dates in analytics are UTC calendar days in the format YYYY-MM-DD. Helper functions live in src/lib/analytics/dates.ts: todayUtc(), addDaysUtc(dateString, n), formatDayLabel(dateString) (Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" })), formatMonthLabel(dateString) ({ month: "short", year: "numeric", timeZone: "UTC" }). Parse day strings as new Date(`${day}T00:00:00Z`).
+- Numbers: formatCount(n) uses Intl.NumberFormat(undefined) (compact notation, one decimal at most, only when n is 100000 or more).
+- The existing helpers pageUrl(username) and SITE_ORIGIN from Step 4A stay the only way to build page addresses. Extend pageUrl with an optional second argument { src?: TrackSource } that appends ?src=<source> (see Section 8).
+
+=====================================================================
+3. DATABASE CONTRACT v3 (ALREADY APPLIED; DO NOT CHANGE)
+=====================================================================
+Table analytics_daily: not accessible from the app. Never query or write it. (Counters only: user, day, event, link, source, device, hits.)
+
+Function record_page_event(p_username text, p_event text, p_link_id uuid default null, p_source text default '', p_device text default 'other') returns void
+  Executable by everyone (visitors, including signed-out ones). Call it through the tracking client with supabase.rpc("record_page_event", { p_username, p_event, p_link_id, p_source, p_device }).
+  - p_event: "view" or "click" (anything else is ignored).
+  - p_link_id: required for "click" (must be an active, non-archived link or embed of that page, otherwise ignored); send null for "view".
+  - p_source: one of the TrackSource values below ("" means direct). Unknown values are stored as "other".
+  - p_device: "mobile", "tablet", "desktop" or "other".
+  - It silently ignores unknown pages, unpublished pages and invalid input and never returns an error for them.
+TrackSource values (the ONLY allowed sources; put them in one constant TRACK_SOURCES in src/lib/analytics/sources.ts):
+  "" (direct), "qr", "google", "bing", "duckduckgo", "instagram", "facebook", "x", "tiktok", "youtube", "linkedin", "pinterest", "reddit", "whatsapp", "telegram", "snapchat", "threads", "github", "discord", "email", "other"
+
+Function get_analytics(p_from date, p_to date) returns jsonb
+  Authenticated owners only (call with the Clerk-token client: supabase.rpc("get_analytics", { p_from, p_to })). It reads only the caller's own data. Dates are UTC days as "YYYY-MM-DD" strings. The database enforces the plan: Free accounts are limited to the most recent 30 days and receive null for sources and devices; Pro accounts can ask for up to 365 days.
+  Response shape:
+  {
+    "range":   { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "max_days": 30 | 365, "is_pro": boolean },
+    "totals":  { "views": number, "clicks": number },
+    "daily":   [ { "day": "YYYY-MM-DD", "views": number, "clicks": number } ],     (every day in the range, zeros included, ascending)
+    "links":   [ { "link_id": "uuid", "clicks": number } ],                          (sorted by clicks descending; only links with clicks)
+    "sources": [ { "source": TrackSource, "views": number, "clicks": number } ] | null,   (null when not Pro)
+    "devices": [ { "device": "mobile" | "tablet" | "desktop" | "other", "views": number, "clicks": number } ] | null
+  }
+  If the requested range is longer than allowed, the database silently clamps it: always read range.from and range.to from the response, never assume they equal the request.
+  A signed-out or invalid token raises an error with error.message "not_authenticated" (map it to the existing "not_authenticated" error code in src/data/errors.ts).
+
+Pro gating: analytics detail (sources, devices, ranges beyond 30 days) is a Pro feature, enforced by the database. The UI mirrors it and must ALSO handle the case where the response has sources or devices equal to null.
+
+=====================================================================
+4. PRIVACY DESIGN (WHAT IS AND IS NOT COLLECTED)
+=====================================================================
+Collected (and only this): for a public page, one counter increment per view or per click, with the page, the UTC day, the link (for clicks), a source from the fixed list, and a device type from the fixed list.
+Never collected or sent: IP address, user-agent string, full referrer URL or hostname, language, screen size, time of day, any identifier, anything from the visitor's storage.
+
+Rules enforced in the client BEFORE any request is made (src/lib/analytics/shouldTrack.ts). shouldTrack() returns false when ANY of these is true:
+1. Do Not Track is on: navigator.doNotTrack === "1" or window.doNotTrack === "1" or navigator.msDoNotTrack === "1".
+2. Global Privacy Control is on: (navigator as unknown as { globalPrivacyControl?: boolean }).globalPrivacyControl === true (use a typed guard, never "any").
+3. The visitor looks automated: navigator.webdriver === true, or the user-agent string matches /bot|crawl|spider|headless|lighthouse|pagespeed|prerender|phantomjs|puppeteer|playwright/i. (Read the user agent locally only; never send it.)
+4. The page owner is viewing their own page (Section 5.4).
+5. Tracking has been disabled by analyticsState.enabled being false (for example while the Supabase configuration is missing).
+Views are additionally sent only while the document is visible: if document.visibilityState is not "visible" when the page is ready, wait for the first visibilitychange to "visible" (this skips prefetching and background tabs). Send each view at most once per page mount (use a ref; safe under React StrictMode double invocation).
+
+=====================================================================
+5. TRACKING CLIENT (src/lib/analytics/)
+=====================================================================
+5.1 sources.ts
+- TRACK_SOURCES (Section 3) and the type TrackSource.
+- SOURCE_LABELS for display: "" Direct, qr "QR code", google "Google", bing "Bing", duckduckgo "DuckDuckGo", instagram "Instagram", facebook "Facebook", x "X", tiktok "TikTok", youtube "YouTube", linkedin "LinkedIn", pinterest "Pinterest", reddit "Reddit", whatsapp "WhatsApp", telegram "Telegram", snapchat "Snapchat", threads "Threads", github "GitHub", discord "Discord", email "Email", other "Other".
+- parseSourceParam(search: string): TrackSource | null reads, in this priority, the query parameters "src", "utm_source" and "ref"; lowercases and trims the value; returns it only if it is in TRACK_SOURCES and not "" (otherwise null). Unknown values are ignored (never stored).
+- classifyReferrer(referrer: string, ownHost: string): TrackSource. Rules:
+  - Empty or unparsable referrer: "".
+  - android-app:// referrers map by package: com.instagram.android instagram; com.facebook.katana and com.facebook.orca facebook; com.twitter.android x; com.zhiliaoapp.musically and com.ss.android.ugc.trill tiktok; com.google.android.youtube youtube; com.linkedin.android linkedin; com.reddit.frontpage reddit; com.whatsapp whatsapp; org.telegram.messenger telegram; com.snapchat.android snapchat; com.google.android.gm email; com.discord discord; com.pinterest pinterest; com.google.android.googlequicksearchbox google; anything else "other".
+  - Otherwise take the hostname (lowercase, without a leading "www."). If it equals ownHost or ends with "." plus ownHost, return "" (our own site is direct).
+  - Hostname mapping (exact host or subdomain of): google: any host matching /(^|\.)google\.[a-z.]+$/ except mail.google.com (email); bing.com bing; duckduckgo.com duckduckgo; instagram.com and l.instagram.com instagram; facebook.com, l.facebook.com, lm.facebook.com, m.facebook.com, fb.com, fb.me facebook; x.com, twitter.com, t.co x; tiktok.com tiktok; youtube.com, m.youtube.com, youtu.be youtube; linkedin.com, lnkd.in linkedin; pinterest.com, pin.it, and any pinterest.* host pinterest; reddit.com, out.reddit.com reddit; whatsapp.com, web.whatsapp.com, wa.me whatsapp; telegram.org, web.telegram.org, t.me telegram; snapchat.com snapchat; threads.net and threads.com threads; github.com github; discord.com, discord.gg discord; mail.google.com, outlook.live.com, outlook.office.com, outlook.office365.com email; any other host "other".
+- resolveSource(): the source for the current visit: parseSourceParam(location.search) if not null, otherwise classifyReferrer(document.referrer, location.hostname). Compute once per page mount and reuse for the view and every click on that page.
+- Put short example inputs and expected outputs as comments at the top of the file (at least ten, including a malformed one).
+
+5.2 device.ts
+detectDevice(userAgent: string): "mobile" | "tablet" | "desktop" | "other". Order: tablet when /iPad|Tablet|PlayStation|Kindle|Silk/i matches, or when /Android/i matches and /Mobile/i does not; mobile when /Mobi|iPhone|iPod|Android.*Mobile|Windows Phone/i matches; desktop when /Windows|Macintosh|Mac OS X|Linux|CrOS|X11/i matches; otherwise "other". An iPad that reports a Macintosh user agent is treated as desktop (do not try to detect it). Computed locally; the string itself is never sent.
+
+5.3 track.ts
+- analyticsState: a module-level object { enabled: boolean; username: string | null; source: TrackSource | null } with setters setAnalyticsContext({ username, source, enabled }) used by the public page. Default enabled true, username null.
+- trackView(username, source): if shouldTrack() is false return. Otherwise schedule the call with requestIdleCallback (fallback setTimeout 0) and send recordPageEvent({ username, event: "view", linkId: null, source, device }). Fire and forget: wrap in try/catch, ignore the result, never await in the render path, never log.
+- trackClick(username, linkId, source): the same, with event "click".
+- Both validate arguments (username passes validateUsername, linkId is a uuid-shaped string) and do nothing otherwise.
+
+5.4 Excluding the owner
+The public page must not wait for Clerk. Rule: if Clerk finishes loading within 1200 ms of the page being ready and the signed-in person's username equals the page username, tracking is disabled for this page mount (setAnalyticsContext enabled false); otherwise tracking proceeds. Implementation: in PublicProfilePage, read Clerk's loaded state and username through the existing session hook; start a 1200 ms timer when the page is found; send the view when Clerk reports loaded (after the owner check) or when the timer fires, whichever comes first, and only once. Clicks use the same flag (a click before the decision is treated as tracked unless the owner flag has already been set). If Clerk or Supabase is not configured, skip the owner check.
+
+5.5 The click seam
+Implement trackLinkClick(block) in src/lib/analytics-seam.ts (the Step 3 no-op) so it calls trackClick(analyticsState.username, block.id, analyticsState.source) for blocks of kind "link" or "embed". Remove the "plugs in here" comment and replace it with a one-line description. It must stay safe to call from any click handler and must never throw.
+
+=====================================================================
+6. DATA LAYER (src/data/)
+=====================================================================
+6.1 Files
+  trackingClient.ts          the lazy tracking-only client (Section 2)
+  analyticsApi.ts            recordPageEvent (tracking client) and getAnalytics (Clerk-token client)
+  hooks/useAnalytics.ts      the owner's analytics query
+  hooks/useClickCounts.ts    a Map<linkId, clicks> derived from the 30-day analytics query (Section 10)
+and in src/lib/analytics/: ranges.ts, buckets.ts, chart.ts, dates.ts, sources.ts, device.ts, shouldTrack.ts, track.ts.
+
+6.2 Types (types.ts or analytics/types.ts)
+  RangeKey = "7d" | "30d" | "90d" | "12m"
+  AnalyticsDay = { day: string; views: number; clicks: number }
+  AnalyticsResult = { range: { from: string; to: string; maxDays: number; isPro: boolean }; totals: { views: number; clicks: number }; daily: AnalyticsDay[]; links: { linkId: string; clicks: number }[]; sources: { source: TrackSource; views: number; clicks: number }[] | null; devices: { device: DeviceType; views: number; clicks: number }[] | null }
+Add a validating mapper analyticsFromJson(json): AnalyticsResult | null: unknown shapes, non-numeric values and unknown sources or devices are replaced by safe defaults or dropped (unknown sources become "other"); it never throws.
+
+6.3 Ranges (ranges.ts)
+  RANGES = { "7d": { days: 7, bucket: "day", pro: false, label: "7 days" }, "30d": { days: 30, bucket: "day", pro: false, label: "30 days" }, "90d": { days: 90, bucket: "week", pro: true, label: "90 days" }, "12m": { days: 365, bucket: "month", pro: true, label: "12 months" } }
+  rangeToDates(key): { from, to } where to = todayUtc() and from = addDaysUtc(to, -(days - 1)).
+Default range: "30d".
+
+6.4 The query (useAnalytics(rangeKey))
+- Key: ["analytics", userId, from, to] (userId from the session hook). Enabled only when signed in, the profile row exists and Supabase is configured.
+- Calls getAnalytics with the dates from rangeToDates. Result mapped with analyticsFromJson (null becomes an error state).
+- staleTime 60 seconds, refetchOnWindowFocus true, retry once (not for not_authenticated). Keep previous data while a new range loads (placeholderData: keepPreviousData behavior) so the chart does not flash empty.
+- If a Free account requests a Pro-only range, never send the request: the UI intercepts it (Section 9.3). If it still happens, the database clamps it and the UI renders what it receives.
+- On sign-out the existing query-cache clear applies.
+
+6.5 Bucketing (buckets.ts)
+buildBuckets(daily, bucket): Bucket[] where Bucket = { key: string; startDay: string; label: string; views: number; clicks: number }.
+- "day": one bucket per day; label formatDayLabel.
+- "week": group days into weeks starting on Monday (UTC); the first and last buckets may be partial; label formatDayLabel(startDay).
+- "month": group by UTC calendar month; label formatMonthLabel(startDay).
+Sums are exact (no rounding). Buckets are ascending and contiguous.
+
+6.6 Chart math (chart.ts)
+niceMax(value): returns 4 when value is 4 or less; otherwise rounds up to 1, 2 or 5 times a power of ten (for example 7 becomes 10, 13 becomes 20, 48 becomes 50, 130 becomes 200). yTicks(max): [0, max / 2, max]. Provide a few example values as comments.
+formatCtr(clicks, views): "–" when views is 0; otherwise the percentage with one decimal and a trailing "%", capped at "100%" (clicks can exceed views when some views are not counted).
+
+=====================================================================
+7. PUBLIC PAGE AND PAGERENDERER INTEGRATION
+=====================================================================
+- PublicProfilePage (found state only): on mount call setAnalyticsContext({ username, source: resolveSource(), enabled: true }); apply the owner rule from Section 5.4; call trackView exactly once per mount (and only after the visibility rule). On unmount reset the context (enabled true, username null).
+- Claimable and unavailable states, loading and error states: never track.
+- PageRenderer (interactive mode only) already exposes onLinkClick. Wire it on the public page to trackLinkClick for every link anchor (link-style and featured) with onClick AND onAuxClick (middle button). Do not call preventDefault and do not delay navigation. For embeds, call onLinkClick once when the visitor presses Play (not on later interactions inside the player). Social icons call nothing.
+- Dashboard previews (interactive false) never track.
+- Refetching the public page every 60 seconds (Step 4A) must NOT trigger another view.
+- Do not add any visible UI for tracking on the public page.
+
+=====================================================================
+8. SHARE DIALOG AND QR UPDATES
+=====================================================================
+8.1 pageUrl with a source
+pageUrl(username, options?: { src?: TrackSource }): when src is given and not "", append "?src=" + src. Everything else about pageUrl is unchanged. Default copy buttons and the address text stay plain (no parameter).
+
+8.2 QR code
+The QR code (preview, PNG and SVG) now encodes pageUrl(username, { src: "qr" }), so scans count as "QR code". The address text shown in the dialog and the helper line stay plain. Keep the memoization keyed by the full URL.
+
+8.3 "Track where visitors come from" section (in ShareDialog, after the QR block)
+- A bordered group (1px border, radius 14px, padding 16px, 12px gaps): a 14px/500 label "Track where visitors come from" and a 13px muted helper "Use a different link in each place you share, and Analytics shows which one works."
+- A native select "Source" (styled like Input, 48px) listing these options in this order: Instagram, TikTok, X, YouTube, LinkedIn, Facebook, WhatsApp, Telegram, Snapchat, Threads, Pinterest, Reddit, Discord, GitHub, Email, Other (values instagram, tiktok, x, youtube, linkedin, facebook, whatsapp, telegram, snapchat, threads, pinterest, reddit, discord, github, email, other). Default: Instagram.
+- Under it the resulting address in Geist Mono 13px (without the scheme, ellipsis), and a secondary md button "Copy tracked link" (copies pageUrl(username, { src }), toast "Tracked link copied").
+- This section is available to everyone (Free and Pro). Seeing the sources in Analytics is the Pro part.
+
+=====================================================================
+9. THE ANALYTICS TAB (/dashboard/analytics)
+=====================================================================
+9.1 Page structure
+Route: /dashboard/analytics, guarded exactly like the other dashboard tabs. Document title "Analytics | iveo" (follow the existing title pattern). The content spans the full container width (no live-preview column and no floating Preview button on this tab). Vertical order, 24px apart:
+1. Header row
+2. Range selector
+3. Stats row (three cards)
+4. Chart card
+5. Top links card
+6. Sources card and Devices card (side by side from 1024px, stacked below)
+7. Privacy footnote
+Use the existing Card component (padding 24px; 20px below 640px). Card titles are h3.
+
+9.2 Header row
+- Left: h2 "Analytics" (24px/500, letter-spacing -0.02em).
+- Right: a 13px muted status "Updated <time>" (Intl time, short, from the query's dataUpdatedAt) and a ghost md "Refresh" button with a RefreshCw icon (16px; while refetching the icon spins 700ms linear, stopped under reduced motion; aria-label "Refresh analytics"). A failed manual refresh shows the toast "Couldn't refresh. Try again."
+
+9.3 Range selector
+- A segmented control (radiogroup, aria-label "Date range") with the four options from RANGES: "7 days", "30 days", "90 days", "12 months". Default "30 days". The selection lives in the URL as ?range=7d, 30d, 90d or 12m (validate; invalid values fall back to 30d) so it survives reloads and can be shared.
+- Free accounts: "90 days" and "12 months" are rendered with a ProBadge after the label and aria-disabled="true" (still focusable). Activating one (click, Enter, Space) opens UpgradeDialog with feature "analytics_detail" and does NOT change the selection or send a request.
+- If the response says range.isPro is false but the URL asks for a Pro range (for example after a downgrade), replace the URL parameter with 30d.
+- If data.range.maxDays is lower than the requested number of days, show a 13px muted notice above the stats: "Showing the last 30 days. Longer ranges are a Pro feature."
+
+9.4 Stats row
+Three cards in a row from 640px (equal width, 16px gap); below 640px they stack and each card is a single horizontal row (label left, value right). Each card: label 13px muted, value 32px/500 tabular-nums (28px below 640px) using formatCount, helper 13px muted.
+  Views: helper "Page loads"
+  Clicks: helper "Links and embeds"
+  Click-through rate: value formatCtr(clicks, views), helper "Clicks per view"
+Loading state: the value area shows a bar (80px by 28px, radius 6px, #EDEDED, no animation); the labels and helpers are visible.
+
+9.5 Chart card
+- Title h3 "Views and clicks". At the right of the title a legend: a 12px square swatch in the bar style and "Views", then a 16px line with a 6px dot in ink and "Clicks" (13px muted).
+- The chart is hand-built inline SVG (src/components/analytics/ViewsClicksChart.tsx). Measure the container width with a ResizeObserver hook (useElementWidth) and render in pixels so text stays crisp; height 240px (200px below 640px); never let the SVG overflow its card.
+- Data: buildBuckets(data.daily, RANGES[rangeKey].bucket). Shared y scale: max = niceMax(max over buckets of views and clicks); ticks yTicks(max).
+- Layout constants: margins { top 16, right 8, bottom 28, left 44 }. Band width = plot width / bucket count. Bar width = min(band * 0.64, 28) centered in its band.
+- Gridlines: horizontal 1px #E5E5E5 at each tick, baseline 1px #D4D4D4. Y labels 12px, color #666666, tabular-nums, formatCount, right-aligned at 8px left of the plot. X labels 12px #666666 centered under their buckets: show about six labels evenly spaced (every ceil(n / 6)th bucket, always including the first).
+- Views bars: fill #EDEDED with a 1px #8F8F8F outline (the outline gives the 3:1 contrast needed for graphics), top corners radius 3px (use a path or rect with rx 3). The active bar: fill #D4D4D4 with a 1px #0A0A0A outline.
+- Clicks: a polyline through bucket centers, 1.5px #0A0A0A, round joins and caps, with 3px-radius #0A0A0A dots at each point.
+- Interaction: pointer move over the plot sets the active bucket by x position; leaving clears it. Tapping sets it on touch screens and a tap outside clears it. A tooltip (white, 1px border, radius 10px, --shadow-lg, padding 8px 12px, 13px) appears above the active column, clamped inside the card, showing the bucket label (500 weight) and two lines "Views <n>" and "Clicks <n>" (tabular-nums). The tooltip never receives focus and never uses innerHTML.
+- Keyboard: the chart container has tabIndex 0, role="group", aria-label "Views and clicks over time. Use the left and right arrow keys to move between periods." ArrowLeft and ArrowRight move the active bucket (the first arrow press selects the last bucket), Home and End jump, Escape clears. A visually hidden aria-live="polite" element announces "<label>: <n> views, <n> clicks" whenever the active bucket changes.
+- Empty state (totals views and clicks both 0): draw the axes with ticks 0 to 4 and no bars or line, disable interaction, and show a centered 13px muted message "No data in this range yet." over the plot.
+- Under the chart, a 13px muted line "Days use UTC."
+- Table alternative: a <details> element titled with a ghost sm summary "View as table" containing a table (caption visually hidden: "Views and clicks by period") with columns "Date", "Views", "Clicks", numbers right-aligned, tabular-nums, max-height 320px with its own vertical scroll, header row sticky inside that scroll area. The table uses the same buckets as the chart.
+- Loading state: a #F5F5F5 block of the exact chart height (no animation) with the legend visible. Keep previous data visible (dimmed to 60% opacity is NOT allowed; show it normally) while a new range loads, and only show the loading block when no data exists yet.
+
+9.6 Top links card
+- Title h3 "Top links". Rows for links with clicks, sorted by clicks (the database already sorts), at most 10 shown; if more exist a ghost sm "Show all (n)" expands to all (up to 50).
+- Each row (56px): a 36px tile (same as dashboard rows: thumbnail image when present, otherwise the link's icon or automatic icon; embeds use their provider glyph), the title (15px/500, ellipsis; the caption or label for embeds), a 13px muted line "<n> clicks · <pct>% of clicks" ("1 click" singular; pct is the share of total clicks, "<1%" when under 1%), and under the text a 4px-tall bar (radius 2px, ink fill on a #E5E5E5 track) whose width is clicks divided by the largest link's clicks.
+- Titles and icons come from the cached blocks (useMyBlocks). A link_id with no matching block shows a Minus icon tile and the title "Deleted link" in muted color.
+- Empty state: 14px muted "No link clicks yet." with a 13px muted line "Clicks appear here after visitors open your links."
+
+9.7 Sources card (Pro) and Devices card (Pro)
+- Titles: "Where visitors come from" and "Devices" (h3).
+- Rows (48px): label, a 13px muted line "<n> views · <m> clicks" and the same 4px bar scaled to the largest views value, plus the percent of total views at the right (14px, tabular-nums; "<1%" under 1%). Sources: labels from SOURCE_LABELS ("" shows "Direct"); show the top 8, with a ghost sm "Show all (n)" for the rest. Devices labels: "Mobile", "Tablet", "Desktop", "Other" (hide "Other" when it has no views or clicks).
+- Pro with no data: 14px muted "No data in this range yet."
+- Free (sources or devices are null): the card shows a ProBadge next to the title, three static skeleton rows (aria-hidden: 36px label bar, 4px bar track, widths 80%, 55% and 30% in #EDEDED; no real data, no blur), and below them a ProLockNotice (feature "analytics_detail"). Never request or render real values for Free accounts.
+
+9.8 Privacy footnote
+A 13px muted paragraph, max-width 64ch, 32px above: "iveo counts page views and link clicks without cookies, IP addresses or visitor IDs. Visits are grouped by source and device type. Days use UTC."
+
+9.9 Whole-page states
+- Loading (no data yet): skeletons as described in each section; the range selector and Refresh stay usable.
+- Error: the shared DataLoadError inside the tab (title, body, "Try again" refetches). The range selector stays visible.
+- Brand-new account (profile exists, everything zero): charts and lists show their empty states; additionally show a notice card at the top (surface-2, 1px border, radius 14px, padding 16px) with the text "No views yet. Share your page to start seeing visits." and a secondary md "Share your page" that opens ShareDialog. Hide the notice as soon as totals are above zero.
+
+=====================================================================
+10. LINKS TAB: PER-LINK CLICK COUNTS
+=====================================================================
+- useClickCounts() reads the same cached 30-day query as the Analytics tab default (key built from rangeToDates("30d")) and returns a Map<linkId, clicks>. Mount it in the Links tab so the data is fetched when the tab opens; it must never block, delay or break the Links tab: while loading or on error it simply returns an empty Map and nothing is shown.
+- In each link or embed row, append to the muted URL line: " · <n> clicks" ("1 click" singular) when n is above 0. Add the title attribute "Clicks in the last 30 days" to that text. Headers and dividers never show counts. Counts update when the query refetches (window focus, Refresh on the Analytics tab).
+- Truncation rules stay the same: the line has one row with an ellipsis; the click count must remain visible by truncating the URL part first (put the URL in its own shrinking span and keep the count in a non-shrinking span).
+
+=====================================================================
+11. DASHBOARD SHELL CHANGES
+=====================================================================
+- Tabs, in order: "Links", "Appearance", "Analytics", "Settings" (NavLinks to /dashboard, /dashboard/appearance, /dashboard/analytics, /dashboard/settings; same style, aria-current="page" on the active one).
+- On /dashboard/analytics the two-column layout becomes one column and the sticky preview and the mobile Preview button are not rendered.
+- Add the key "analytics_detail" to PRO_FEATURES in src/lib/plan.ts with the display name "Advanced analytics", and to UpgradeDialog's feature-name mapping, so the dialog line reads "Advanced analytics is a Pro feature."
+- The session hook, route guards and query client need no other changes. Add ["analytics", ...] keys to the existing "clear everything on sign-out" behavior if it is not already generic.
+
+=====================================================================
+12. ERROR, LOADING AND EDGE STATES
+=====================================================================
+- Tracking failures (offline, blocked by an ad blocker, database error, missing Supabase configuration) are completely silent for visitors. No console output, no retries, no UI.
+- An ad blocker that blocks the tracking request must not break the page or the click navigation.
+- Analytics tab: offline banner and DataLoadError from Step 3 apply; "not_authenticated" refreshes the token once and retries once, then the guards handle expiry.
+- Clock differences: if the visitor's or owner's device date differs from the server's, the database clamps the range; always render from the response (Section 3).
+- Very large numbers use formatCount; very long link titles truncate with an ellipsis; chart labels never overlap (reduce the number of x labels if the container is narrow).
+- A Pro account that downgrades keeps its history. Free accounts see only the most recent 30 days; older data is not deleted and returns after upgrading.
+- Deleted links keep their historical clicks in totals and appear as "Deleted link" in Top links.
+- A page that is switched off (is_published false) records nothing; counts resume when it is switched back on.
+- Visitors on pages with an invalid or unavailable username are never tracked.
+
+=====================================================================
+13. SECURITY AND PRIVACY REQUIREMENTS (NON-NEGOTIABLE)
+=====================================================================
+1. All earlier rules still apply (publishable key only; no supabase.auth.*; visitors only call public RPCs; owner data only through the Clerk-token client; no logging of user data, tokens or raw errors; isSafeHref for every stored URL; no dangerouslySetInnerHTML).
+2. The tracking request contains exactly: username, event, link id (clicks only), source, device. Nothing else. Never add timestamps, user agent, language, screen data, referrer text, identifiers or random tokens.
+3. The raw referrer and the user-agent string are read locally, reduced to an allow-listed category, and discarded. Never send, store or log them.
+4. Unknown values from the URL (src, utm_source, ref) are ignored. Never write them into the page, storage, logs or requests.
+5. No cookies, no localStorage, no sessionStorage, no IndexedDB, no fingerprinting for analytics. The only state is in memory for the current page mount.
+6. Respect Do Not Track and Global Privacy Control. Never count the owner's own visits or detected bots.
+7. get_analytics is called only with the Clerk-token client and never with a user id from the URL or input.
+8. Analytics values and labels render as React text nodes. Chart tooltips and tables never use innerHTML. SVG is generated by your components, never from strings.
+9. No third-party analytics scripts, pixels, beacons or hidden iframes. No public counters on public pages: view and click numbers are visible to the owner only.
+10. Do not build client-side rate limiting or "fraud protection" that gives a false sense of security. The counters are indicative, and the database bounds their size.
+11. Do not claim "no data is collected". Wording in the product is limited to the exact strings in Section 15.
+
+=====================================================================
+14. ACCESSIBILITY AND RESPONSIVE REQUIREMENTS
+=====================================================================
+- Chart: keyboard operable (Section 9.5), announced through a live region, and duplicated by a real table. The chart never relies on color alone (bars versus a line with dots, plus the legend and the table). Graphic elements meet 3:1 contrast (outlined bars, ink line).
+- Range selector: a radiogroup with roving tabindex and arrow-key navigation; locked options stay focusable (aria-disabled) so keyboard users can open the upgrade dialog.
+- Refresh status: "Updated <time>" is in a role="status" aria-live="polite" region.
+- Lists: Top links, Sources and Devices are real lists (ul and li) with each bar marked aria-hidden and the numbers present as text.
+- Cards, labels and helpers meet AA contrast. --subtle is never used for informative text.
+- Motion: the only animation is the 700ms refresh spinner; it stops under prefers-reduced-motion. The chart has no entrance animation.
+- Targets 44px on mobile. The tooltip never traps pointer or focus.
+- Test widths: 320, 375, 390, 768, 1024, 1280. No horizontal scroll. The chart, stats row, tables and lists fit at 320px (the table scrolls inside its own container).
+
+=====================================================================
+15. COPY ADDITIONS (FINAL STRINGS; ADD TO src/content/copy.ts)
+=====================================================================
+Tab and header: "Analytics"; "Updated <time>"; "Refresh"; aria-label "Refresh analytics"; toast "Couldn't refresh. Try again."
+Range: aria-label "Date range"; "7 days"; "30 days"; "90 days"; "12 months"; notice "Showing the last 30 days. Longer ranges are a Pro feature."
+Stats: "Views"; "Clicks"; "Click-through rate"; helpers "Page loads", "Links and embeds", "Clicks per view".
+Chart: "Views and clicks"; legend "Views", "Clicks"; group label "Views and clicks over time. Use the left and right arrow keys to move between periods."; announcement "<label>: <n> views, <n> clicks"; tooltip lines "Views <n>", "Clicks <n>"; "No data in this range yet."; "Days use UTC."; "View as table"; caption "Views and clicks by period"; headers "Date", "Views", "Clicks".
+Top links: "Top links"; "<n> clicks · <pct>% of clicks" (singular "1 click"); "Deleted link"; "Show all (n)"; "No link clicks yet."; "Clicks appear here after visitors open your links."
+Sources and devices: "Where visitors come from"; "Devices"; "<n> views · <m> clicks"; "Direct"; source labels exactly as in Section 5.1; "Mobile"; "Tablet"; "Desktop"; "Other"; "No data in this range yet."
+Plan: the feature name "Advanced analytics" and the dialog line "Advanced analytics is a Pro feature."
+First-run notice: "No views yet. Share your page to start seeing visits."; button "Share your page".
+Footnote: "iveo counts page views and link clicks without cookies, IP addresses or visitor IDs. Visits are grouped by source and device type. Days use UTC."
+Share dialog: "Track where visitors come from"; "Use a different link in each place you share, and Analytics shows which one works."; "Source"; "Copy tracked link"; toast "Tracked link copied"; option labels (Instagram, TikTok, X, YouTube, LinkedIn, Facebook, WhatsApp, Telegram, Snapchat, Threads, Pinterest, Reddit, Discord, GitHub, Email, Other).
+Links tab: "<n> clicks" ("1 click"); title attribute "Clicks in the last 30 days".
+Voice rules still apply: calm, professional, sentence case, no exclamation marks, no hype words. The brand name is always "iveo" in lowercase.
+
+=====================================================================
+16. FILE STRUCTURE ADDITIONS
+=====================================================================
+src/
+  lib/analytics/
+    sources.ts, device.ts, shouldTrack.ts, track.ts, dates.ts, ranges.ts, buckets.ts, chart.ts
+  lib/analytics-seam.ts          (now implements trackLinkClick)
+  data/
+    trackingClient.ts, analyticsApi.ts
+    hooks/ (useAnalytics.ts, useClickCounts.ts)
+  hooks/ (useElementWidth.ts)
+  components/analytics/
+    AnalyticsHeader.tsx, RangeSelector.tsx, StatCards.tsx, ViewsClicksChart.tsx, ChartTable.tsx,
+    TopLinksCard.tsx, BreakdownCard.tsx (shared by Sources and Devices), BarRow.tsx, FirstRunNotice.tsx
+  pages/AnalyticsTab.tsx
+  components/share/ (TrackedLinkSection.tsx added to ShareDialog)
+Rules: functional components, typed props, no magic numbers, comments only for decisions and the notes already specified.
+
+=====================================================================
+17. BUILD ORDER
+=====================================================================
+1. dates.ts, sources.ts (with examples), device.ts, shouldTrack.ts.
+2. trackingClient.ts, analyticsApi.ts, track.ts, analytics-seam.ts, and the owner-exclusion and visibility rules.
+3. Public page and PageRenderer wiring (view once per mount, link clicks, embed Play). Verify nothing changes visually.
+4. pageUrl with src, the QR source parameter, and the tracked-link section in ShareDialog.
+5. types, mappers, ranges, buckets, chart math, useAnalytics, useClickCounts.
+6. AnalyticsTab: header, range selector (with the Pro locks), stats, chart, table, lists, empty and loading states.
+7. Links tab click counts. Dashboard tab and route changes. PRO_FEATURES entry.
+8. Error states, accessibility pass, and polish against Sections 18 and 19.
+
+=====================================================================
+18. ACCEPTANCE CHECKLIST (VERIFY BEFORE REPLYING)
+=====================================================================
+Privacy and security
+[ ] No new dependencies. No cookies or browser storage used for analytics. No third-party scripts.
+[ ] The tracking request sends only username, event, link id (clicks), source and device. No referrer text, no user agent, no identifiers.
+[ ] Do Not Track, Global Privacy Control, bots, the owner's own visits and hidden tabs are not counted.
+[ ] Unknown ?src values are ignored and never stored or shown. Only TRACK_SOURCES values are ever sent.
+[ ] The analytics table is never queried from the app. get_analytics is called only with the Clerk-token client.
+[ ] Free accounts never receive or render real sources or devices, and cannot request ranges beyond 30 days from the UI.
+[ ] All tracking failures are silent. Nothing is logged.
+
+Counting
+[ ] A public page load counts one view (never two under StrictMode); the 60-second refetch does not count again.
+[ ] Link, featured and middle-click clicks count once per click; embed Play counts once; social icons count nothing.
+[ ] Dashboard previews and unavailable or claimable states count nothing.
+[ ] ?src=<source> and the QR code (?src=qr) produce the right source; referrers classify correctly; unknown referrers become "other"; empty referrers become Direct.
+
+Analytics tab
+[ ] Ranges 7 days and 30 days work for Free; 90 days and 12 months open the upgrade dialog for Free and work for Pro (weekly and monthly buckets).
+[ ] Stats, click-through rate (with the 100% cap and the dash for zero views), chart, tooltip, keyboard navigation, live announcements and the table view all work.
+[ ] Top links shows tiles, titles, counts, percentages and bars; deleted links show "Deleted link".
+[ ] Sources and Devices show data for Pro and locked placeholders for Free.
+[ ] Empty, loading and error states exist; the first-run notice appears only when there is no data.
+[ ] The URL range parameter works and invalid values fall back to 30 days.
+
+Links tab and Share
+[ ] Link and embed rows show "<n> clicks" for the last 30 days without ever blocking the tab.
+[ ] The Share dialog has the tracked-link section; the copied link carries ?src=<source>; the QR encodes ?src=qr; plain copy buttons stay plain.
+
+Quality
+[ ] The public page and phone previews look exactly as before. No layout shift anywhere.
+[ ] No horizontal scroll at 320, 375, 390, 768, 1024 or 1280 pixels.
+[ ] Every control is keyboard operable with a visible focus ring. Chart colors meet the contrast rules in Section 14.
+[ ] No console errors or warnings. TypeScript strict passes. No unused code.
+[ ] The old spelling "ivio" appears nowhere. No domain or email is hard-coded.
+[ ] Banned words and exclamation marks are absent from all new copy.
+
+=====================================================================
+19. COMMON FAILURE MODES (SELF-CHECK)
+=====================================================================
+1. Sending the raw referrer or user agent to the database, or logging either.
+2. Using cookies, localStorage or sessionStorage "just to avoid double counting".
+3. Counting views twice (StrictMode double effect, or the 60-second refetch) or counting the owner's own visits.
+4. Letting tracking block rendering or navigation, throw errors, or show a message when blocked.
+5. Making Free-account gating a UI-only trick (the database already returns null sources and clamps ranges; render what you receive).
+6. Charts that overflow at 320px, labels that overlap, or text that blurs because the SVG was scaled.
+7. A chart that relies on color alone, or that cannot be used by keyboard.
+8. Bars with too little contrast (use the outlined style from Section 9.5).
+9. Reflecting unknown query parameters into the page.
+10. Hard-coding the domain or the support email, or reintroducing the name "ivio".
+11. Showing click counts in the Links tab by adding a blocking request or an error state.
+12. Adding scope: unique visitors, countries, CSV export, custom date ranges, share-preview metadata, billing.
+
+=====================================================================
+20. SEAMS THE NEXT STEPS WILL USE (KEEP THEM CLEAN)
+=====================================================================
+- The has_pro database function and PRO_FEATURES (Step 4D replaces the plan source; analytics gating follows automatically).
+- pageUrl, usePageMeta and the public page (Step 4C adds share-preview metadata and server-rendered pages).
+- analytics_daily and get_analytics (later: CSV export, country data through a server step, data retention).
+- trackLinkClick and the tracking client (later: signup-block and password-link events).
+
+=====================================================================
+21. FINAL REPLY FORMAT
+=====================================================================
+When the build is finished, reply in no more than 10 lines: what you built, any API or version differences you found (Clerk, Supabase, TanStack Query, browser APIs) and how you adapted, and anything from this document you could not implement and why. Do not restate this specification. Do not ask questions. Do not include any key or URL value in your reply.
+
+END PROMPT

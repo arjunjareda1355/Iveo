@@ -1,4 +1,7 @@
+import type { TrackSource } from './analytics/sources';
+
 // Set VITE_SITE_ORIGIN to the deployed address until iveo.site points at the app.
+export const SUPPORT_EMAIL = 'help@iveo.site';
 
 function resolveSiteOrigin(): string {
   const envVal =
@@ -24,7 +27,11 @@ function resolveSiteOrigin(): string {
 
 export const SITE_ORIGIN = resolveSiteOrigin();
 
-export function pageUrl(username: string): string {
+export function pageUrl(username: string, options?: { src?: TrackSource }): string {
   const clean = username.replace(/^\/+/, '');
-  return `${SITE_ORIGIN}/${clean}`;
+  const base = `${SITE_ORIGIN}/${clean}`;
+  if (options?.src) {
+    return `${base}?src=${encodeURIComponent(options.src)}`;
+  }
+  return base;
 }

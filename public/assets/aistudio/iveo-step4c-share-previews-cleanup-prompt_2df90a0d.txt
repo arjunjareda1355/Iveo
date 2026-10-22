@@ -1,0 +1,613 @@
+IVEO STEP 4C: SHARE PREVIEWS, ACCOUNT CLEANUP AND HOSTING HARDENING: MASTER BUILD PROMPT
+Version 1.0 | Builds on Steps 1 to 4B. Brand name: iveo. Hosting: Vercel.
+
+This file has three parts:
+  PART 1 (for you, the human): setup you do on Vercel, Clerk and Supabase, a test script and the known limits. Do this BEFORE and AROUND pasting the prompt.
+  PART 2 (for you, the human): a SQL script you run once in Supabase. Do not paste it into the AI.
+  PART 3 (for the AI): the build prompt. Paste everything from the line "BEGIN PROMPT" to the line "END PROMPT".
+
+#####################################################################
+PART 1: WHAT THIS STEP IS, AND WHAT YOU DO (NOT PART OF THE PROMPT)
+#####################################################################
+
+1. WHERE THIS FITS
+  4A (done)       Link extras, QR code and share sheet, Free/Pro plan lock.
+  4B (done)       Analytics.
+  4C (this file)  Share previews, account deletion and username sync, hosting hardening.
+  4D              Pro billing (Clerk Billing).
+  4E              Password-protected links, email/phone collection with CSV export.
+You asked for all three of the remaining groups. They are written one at a time because each one changes the database and the hosting setup. After you test 4C, ask for 4D, then 4E.
+
+2. WHAT 4C ADDS
+- Share previews: when someone pastes your page link into WhatsApp, iMessage, X, Slack, LinkedIn or Facebook, they now see a card with your name, bio and a generated image (your photo and name in your vibe's colors), instead of a generic box. Search engines also get proper titles and descriptions.
+- A branded default card for the landing page itself.
+- Account cleanup: a Clerk "webhook" tells your app when someone deletes their account or changes their username or photo. A small server function then removes their data (page, links, images, statistics) or updates their page, so nothing is left behind and addresses are freed.
+- Self-serve account deletion and "Export your data" in Settings.
+- Hosting hardening: security headers, robots.txt, no-index on private pages, a safer avatar rule.
+
+3. IMPORTANT: THIS STEP NEEDS SERVER CODE THAT ONLY RUNS ON VERCEL
+Until now everything ran in the browser. 4C adds a few small server functions in a folder called api/ and a settings file called vercel.json. They run only after the app is deployed on Vercel. They do NOT run inside Google AI Studio's preview, so there you will see the normal app but no share previews, and the "link preview" in the Share dialog will simply not appear. Test on your real Vercel deployment.
+If AI Studio cannot create files outside its src folder, ask it to print the contents of each file in chat, and add them yourself at the root of your project in GitHub (api/..., vercel.json, public/robots.txt), then let Vercel redeploy.
+
+4. SETUP CHECKLIST (IN THIS ORDER)
+A. Make sure your project deploys to Vercel from GitHub and your real domain (the iveo domain) is connected to the Vercel project. The Framework Preset should be Vite (output folder dist).
+B. Run the SQL script in Part 2: Supabase Dashboard > SQL Editor > New query > paste > Run. If you see an error, send me the exact text.
+C. In Vercel > your project > Settings > Environment Variables, add these. Apply them to Production (and Preview if you test on preview links):
+     VITE_SITE_ORIGIN               your real address, for example https://iveo.site (no trailing slash). Needed at build time for share-card links.
+     SUPABASE_URL                   the same value as your existing VITE_SUPABASE_URL
+     SUPABASE_PUBLISHABLE_KEY       the same value as your existing VITE_SUPABASE_PUBLISHABLE_KEY
+     SUPABASE_SECRET_KEY            your Supabase SECRET key (Supabase > Project Settings > API Keys > Secret keys; it starts with sb_secret_)
+     CLERK_WEBHOOK_SIGNING_SECRET   added in step E below
+   VERY IMPORTANT about SUPABASE_SECRET_KEY:
+     - It can read and change ALL data and ignores every security rule. It goes ONLY into Vercel's Environment Variables, which are private to the server.
+     - Never add it to AI Studio, never give it a name starting with VITE_ (that would publish it in the browser), never paste it in chat or in any file in your project.
+     - If it ever leaks, rotate it in Supabase immediately.
+   Environment variable changes only apply to NEW deployments: redeploy after adding them.
+D. Let the AI build the prompt (Part 3). Then deploy to Vercel.
+E. Clerk Dashboard > Webhooks > Add Endpoint:
+     Endpoint URL: https://YOUR-DOMAIN/api/clerk-webhook   (your real address, for example https://iveo.site/api/clerk-webhook)
+     Subscribe to events: user.updated and user.deleted (nothing else).
+     After creating it, copy the Signing Secret (starts with whsec_) into the Vercel variable CLERK_WEBHOOK_SIGNING_SECRET, then redeploy.
+   Clerk keeps separate Development and Production instances. A webhook is set per instance, and each has its own secret. For now do it for the instance your site currently uses. When you move to Production keys, repeat this step for the production instance.
+F. Only AFTER the webhook works (test script below), go to Clerk Dashboard > User & authentication > User model and turn "Allow users to delete their accounts" back ON. (Step 3 asked you to turn it off because nothing cleaned up the data yet. Now something does.)
+G. Optional but recommended: in Vercel > Settings > Deployment Protection, leave protection on for preview deployments (the webhook should point at your production address, which is public).
+
+5. YOUR TEST SCRIPT AFTER THE BUILD (on your real Vercel deployment)
+  Routes still work
+  [ ] Open your public page address directly in a new tab (https://YOUR-DOMAIN/yourusername). It loads. Open /login, /signup, /dashboard (signed out it sends you to login), /privacy. All work.
+  [ ] Open https://YOUR-DOMAIN/api/og?u=yourusername in the browser: you see a 1200 by 630 card with your name, handle, bio and photo in your vibe's colors. Open /api/og (no name): a generic iveo card.
+  Share previews
+  [ ] In your browser use "View page source" on your public page. Near the top you see your name in the title, a description and tags starting with og: and twitter:, with an og:image pointing at /api/og.
+  [ ] Paste your page link into WhatsApp (to yourself), iMessage, Slack or X. After a moment a preview card appears with your name and the generated image. (Apps cache previews. If you see an old or blank card, wait or use the platform's debugger tool, for example Facebook's Sharing Debugger.)
+  [ ] Turn "Hide from search engines" on: page source now says noindex. Turn "Your page is live" off: the page source has a generic title and noindex.
+  [ ] The landing page source has your real address in og:url and og:image (not a placeholder like %VITE_SITE_ORIGIN%).
+  Webhook
+  [ ] Change your username on /account. Without opening the dashboard, wait up to a minute, then check Supabase Table Editor > profiles: your row shows the new username. The old address stops working and the new one works.
+  [ ] Change your profile photo on /account: after a minute the profile row's avatar_url changes.
+  [ ] In Clerk Dashboard > Webhooks > your endpoint > Logs, recent deliveries show a 200 response.
+  Deleting an account (use a throwaway account)
+  [ ] Create a second account, finish onboarding, add a link with an image.
+  [ ] Settings > Delete account: type your username to confirm. You land on the landing page with the message "Your account was deleted."
+  [ ] In Supabase: the profile row, its links and its folder in Storage > link-images are gone. In Clerk Dashboard > Users the account is gone. The old address now shows "This address is available."
+  [ ] Sign up again with the same email: it works as a brand-new account.
+  Export
+  [ ] Settings > Export your data downloads a JSON file with your profile and links.
+  Hardening
+  [ ] Open https://YOUR-DOMAIN/robots.txt: it lists the private paths and allows /api/og.
+  [ ] Browser DevTools > Network > click the page request > Response headers include X-Content-Type-Options: nosniff and X-Frame-Options: DENY.
+  [ ] DevTools > Elements on /dashboard: a meta robots tag says noindex.
+  [ ] YouTube embeds from Step 4A still play (the referrer policy must stay strict-origin-when-cross-origin).
+
+6. KNOWN LIMITS OF 4C (PLAN FOR THEM)
+- Chat apps and social sites cache previews, sometimes for days. The image address changes whenever your name, bio, photo or vibe change, which helps, but some apps ignore that. Their debugger tools force a refresh.
+- The generated image uses the Noto Sans font (included by default). Names written in non-Latin scripts (Arabic, Chinese, Japanese, Hindi and so on) cannot be drawn in it, so the card shows the @username instead of the name. Custom fonts can be added later. Emoji in names may not draw either.
+- Photos come only from Clerk's image host. If a photo cannot be fetched quickly, the card shows initials.
+- The webhook is eventually consistent: renames and deletions can take up to a minute (Clerk retries failed deliveries). The in-app sync from Step 3 stays as a backup.
+- Deleting data is not one atomic transaction. If something fails halfway the webhook retries; in rare cases a stray storage file can remain.
+- There is still no full Content-Security-Policy. It needs careful testing with Clerk, YouTube, Spotify and SoundCloud and is a later task.
+- Your Terms and Privacy pages are still placeholders. Publish real ones before you launch (have them reviewed for your country).
+
+#####################################################################
+PART 2: THE SQL SCRIPT (RUN ONCE IN SUPABASE SQL EDITOR; NOT PART OF THE PROMPT)
+#####################################################################
+
+-- ===================================================================
+-- iveo schema v4 (Step 4C): avatar rule, reserved names
+-- Run AFTER the v1, v2 and v3 scripts. Safe to run more than once.
+-- ===================================================================
+
+-- 1. AVATARS MAY ONLY COME FROM CLERK'S IMAGE HOST -------------------------
+-- (The share-card image function fetches avatars, so the address must be
+-- limited to a trusted host.) Existing values that do not match are cleared;
+-- the app refills them from Clerk on the next visit.
+update public.profiles
+set avatar_url = null
+where avatar_url is not null
+  and avatar_url !~ '^https://(img\.clerk\.com|images\.clerk\.dev)/';
+
+alter table public.profiles drop constraint if exists profiles_avatar_url_ok;
+alter table public.profiles
+  add constraint profiles_avatar_url_ok check (
+    avatar_url is null or (
+      char_length(avatar_url) <= 2048
+      and avatar_url ~ '^https://(img\.clerk\.com|images\.clerk\.dev)/'
+    )
+  );
+
+-- 2. MORE RESERVED USERNAMES ---------------------------------------------------
+insert into public.reserved_usernames (username) values
+  ('iveo'), ('ivio'), ('clerk'), ('webhook'), ('webhooks'), ('vercel'), ('supabase')
+on conflict (username) do nothing;
+
+-- ===================================================================
+-- Quick checks (optional):
+--   select count(*) from public.profiles where avatar_url is not null and avatar_url !~ '^https://(img\.clerk\.com|images\.clerk\.dev)/';  -- 0
+--   select public.is_username_available('iveo');  -- false
+-- ===================================================================
+
+#####################################################################
+PART 3: THE PROMPT
+#####################################################################
+
+BEGIN PROMPT
+=====================================================================
+0. CONTEXT AND HOW TO READ THIS
+=====================================================================
+You are extending an existing project: "iveo", a link-in-bio web app (Linktree-style). The brand name is "iveo", always lowercase. It is a React + TypeScript + Vite single-page app, hosted on Vercel, with Clerk for sign-in and Supabase (Postgres, Storage) for data. Steps 1 to 4B already exist: the landing page; Clerk authentication, onboarding, dashboard and account page; link management, profile and socials, public pages at /:username with a shared PageRenderer; link extras (thumbnails, featured layout, scheduling, embeds), the Share dialog with a QR code, and a Free/Pro plan lock; and privacy-first analytics. Inspect the current code first. Reuse its design tokens, components, hooks, copy file, data layer and folder structure. Do not restyle or restructure anything that exists except where this document says to.
+
+Naming note: the project was renamed from "ivio" to "iveo". Use whatever names currently exist in the code and never introduce the old spelling "ivio" (the single exception: it appears in the reserved-username list in Section 3 so that nobody can claim it). Do not hard-code the website domain or the support email: build addresses from the existing SITE_ORIGIN and pageUrl helpers (src/lib/site.ts), and reuse the support email already used in the footer for every mailto link (reuse SUPPORT_EMAIL if it exists in src/lib/site.ts; otherwise create it from the footer's value).
+
+This task adds, in order of importance:
+1. Share previews: server-rendered page metadata for public pages (title, description, Open Graph and Twitter tags) and a generated 1200 by 630 share image, so links look right in chat apps, social sites and search results.
+2. A Clerk webhook endpoint that keeps the database in step with Clerk: remove everything when an account is deleted, and sync username and photo changes.
+3. Self-serve account deletion and "Export your data" in Settings, and a preview of the share card inside the Share dialog.
+4. Hosting hardening on Vercel: routing, security headers, robots.txt, noindex for private pages, and a tighter avatar rule.
+
+Server code lives in an api/ folder at the PROJECT ROOT (next to package.json, not inside src) and runs only on Vercel. It does not run in AI Studio's preview. Section 2 explains the runtime rules. The database change (an avatar rule and extra reserved names) has already been applied by the owner with a SQL script (Section 3). Never change the database from the app or from the server code.
+
+Every exact value in this document (names, headers, paths, strings, sizes, colors) is intentional. Use them exactly. Where only a principle is given, use judgment inside it. Do not ask clarifying questions. Build now, then reply in the format of Section 23.
+
+If two instructions conflict, resolve them in this order: Section 1 (scope and hard rules), Section 15 (security), Section 3 (database contract), then everything else.
+
+=====================================================================
+1. SCOPE AND HARD RULES
+=====================================================================
+In scope: everything in Section 0.
+
+Out of scope (do not build, and do not leave dead UI for them):
+- Billing, plan changes, Clerk Billing (Step 4D). Password-protected links, email or phone collection, CSV export of contacts (Step 4E).
+- A full Content-Security-Policy, rate limiting services, bot management, WAF rules.
+- Custom fonts in the share image, per-user custom share images or custom SEO title and description fields.
+- Database or storage schema changes, migrations, policies. Never call the Supabase Management API.
+- Any change to how the existing client-side tracking, analytics or plan logic works.
+- Moving the app to another framework or changing the build tool.
+
+Hard rules:
+- Dependencies: add only "@vercel/og" and "@clerk/backend". If "@clerk/backend/webhooks" does not export verifyWebhook in the installed version, add "svix" instead and verify signatures with its Webhook class (and mention it in the final reply). Nothing else.
+- The Supabase SECRET key is allowed ONLY inside server functions under api/, read from process.env.SUPABASE_SECRET_KEY. It must never appear in src/, in any VITE_ variable, in the client bundle, in comments with a real value, in logs, in responses or in the final reply. If the build tool would bundle it into client code, stop and restructure.
+- Never import anything from src/ into api/ (server files must be self-contained) and never import anything from api/ into src/. Where a value must match src/ (reserved usernames, vibe colors), duplicate it in api/_lib with the comment "Keep in sync with src/...".
+- Keep every earlier rule: only the publishable Supabase key in the browser; no supabase.auth.* calls; owner data in the browser only through the Clerk-token client; no logging of user data, tokens or raw errors in the browser; neutral black and white page chrome; Geist; 1px hairlines; only --shadow-sm and --shadow-lg; no gradients on chrome; no emoji; no exclamation marks; none of the banned hype words (revolutionize, supercharge, unleash, seamless, game-changer, elevate, next-level, cutting-edge, all-in-one, powerful, effortless, empower, journey, leverage, ecosystem, unlock).
+- TypeScript strict in src/. In api/ write plain TypeScript with no JSX, no path aliases and no decorators.
+- Every new string in src/ goes into src/content/copy.ts, not into JSX.
+- The page must keep working exactly as before if the server functions are missing (for example in AI Studio's preview): every client feature that calls /api must fail silently and hide itself.
+- Referrer policy stays strict-origin-when-cross-origin (YouTube embeds from Step 4A require a Referer). Never set no-referrer or same-origin as a site-wide policy.
+
+=====================================================================
+2. SERVER OVERVIEW, ENVIRONMENT AND RUNTIME RULES
+=====================================================================
+2.1 Files (all at the project root)
+  api/page.ts                 serves the app shell with server-rendered metadata for public pages and private routes
+  api/og.ts                   generates the share image (PNG)
+  api/clerk-webhook.ts        receives Clerk webhooks
+  api/_lib/                   shared server code (files and folders starting with an underscore are NOT deployed as routes)
+    env.ts, html.ts, usernames.ts, vibes.ts, supabase.ts, publicPage.ts, site.ts
+  vercel.json                 routing, headers and function settings (Section 8)
+  public/robots.txt           (Section 9)
+
+2.2 Handler style
+Use the Web Standard handler style: export async function GET(request: Request): Promise<Response> (and POST for the webhook). Do not use the Node (req, res) style. Every function must return a Response in every code path and must never throw to the platform.
+
+2.3 Module style
+The project's package.json has "type": "module". Therefore RELATIVE IMPORTS INSIDE api/ MUST INCLUDE THE .js EXTENSION even though the files are .ts (for example import { escapeHtml } from "./_lib/html.js"). Omitting the extension causes a runtime "module not found" error on Vercel.
+
+2.4 Environment variables (read ONLY through api/_lib/env.ts)
+  VITE_SITE_ORIGIN               the public origin, for example https://iveo.site (also used by the client build). Must parse as an https origin; otherwise derive "https://" + the request Host header.
+  SUPABASE_URL                   the project URL
+  SUPABASE_PUBLISHABLE_KEY       the publishable key (used for the public functions only)
+  SUPABASE_SECRET_KEY            the secret key (used ONLY by the webhook)
+  CLERK_WEBHOOK_SIGNING_SECRET   the webhook signing secret
+env.ts exports typed getters that return undefined when a value is missing. Functions degrade gracefully: api/page.ts and api/og.ts need only SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (without them they serve the generic shell and the generic card); api/clerk-webhook.ts needs all of SUPABASE_URL, SUPABASE_SECRET_KEY and CLERK_WEBHOOK_SIGNING_SECRET and answers 500 with { "error": "not_configured" } when something is missing. Reject SUPABASE_SECRET_KEY values that do not start with "sb_secret_" unless they are a JWT whose role claim is "service_role"; treat anything else as not configured.
+
+2.5 Logging on the server
+Log only short machine codes: the event type, an HTTP status, an error code, and the Clerk user id on webhook errors. Never log request bodies, names, bios, emails, usernames, URLs from users, keys, tokens or full error objects.
+
+2.6 Timeouts
+Every outbound fetch inside a function (Supabase, avatar, own index.html) uses AbortSignal.timeout(2500). On timeout or failure the function falls back (generic shell, generic card, initials).
+
+=====================================================================
+3. DATABASE CONTRACT v4 (ALREADY APPLIED; DO NOT CHANGE)
+=====================================================================
+All earlier contracts remain (profiles, links, analytics_daily, get_public_page, is_username_available, record_page_event, get_analytics, reorder_links, has_pro, storage bucket "link-images").
+Changes in v4:
+- profiles.avatar_url must be null or an https address on "img.clerk.com" or "images.clerk.dev" (max 2048 characters). Any other value is rejected by the database with a check-constraint error (code 23514). Update EVERY place in src/ that writes avatar_url (the profile sync, onboarding, and any mapper) so it sends the Clerk image URL only when it matches this rule, and otherwise sends null (never a different host).
+- More reserved usernames: iveo, ivio, clerk, webhook, webhooks, vercel, supabase. Mirror them: make src/lib/username-rules.ts RESERVED_USERNAMES (and api/_lib/usernames.ts) include them in addition to the existing list. Keep the comment "Keep in sync with the router and the database."
+Foreign keys already delete dependent data: removing a profiles row also removes its links and its analytics_daily rows (on delete cascade). Storage objects are NOT removed automatically (the code must delete them).
+The public function get_public_page returns { profile: { username, display_name, bio, avatar_url, vibe_id, button_shape, socials, hide_from_search, hide_footer }, links: [...] } or null (see Step 4A); the server functions in this step use it through the PUBLISHABLE key.
+
+=====================================================================
+4. SHARED SERVER HELPERS (api/_lib/)
+=====================================================================
+4.1 env.ts: typed getters (Section 2.4), siteOrigin(request) (validated origin or derived from the Host header), hasPublicSupabase(), hasAdminSupabase().
+
+4.2 usernames.ts: USERNAME_PATTERN = /^[a-z0-9_]{3,24}$/; RESERVED (the full list from Section 3 plus every earlier reserved name; duplicate it with the comment "Keep in sync with src/lib/username-rules.ts"); PRIVATE_ROUTES = ["login", "signup", "dashboard", "onboarding", "account"] and PUBLIC_INFO_ROUTES = ["privacy", "terms", "pricing"]; normalizeUsername(raw) lowercases and returns the string only when it matches USERNAME_PATTERN, otherwise null; classifySegment(segment): "private" | "info" | "reserved" | "username" | "invalid".
+
+4.3 html.ts
+- escapeHtml(value): escapes & < > " ' and strips control characters and line breaks (replace with a space).
+- truncate(text, max): collapses whitespace, trims, cuts at max characters and appends "..." (three dots) when cut.
+- safeJsonLd(object): JSON.stringify then replace every "<" with "\u003c" and every "\u2028" and "\u2029" with their escaped forms so the result can sit inside a script tag safely.
+- injectHead(template, tags): removes from the template, case-insensitively, these elements: <title>...</title>; <meta> tags with name "description", name "robots", property starting "og:", name starting "twitter:", property starting "profile:"; <link rel="canonical">; <script type="application/ld+json">...</script>; then inserts the string tags immediately before the first </head>. If </head> is missing, returns the template unchanged.
+- At the top of the file include comments with at least six small input and output examples (a template with and without existing tags, hostile text like <script>, quotes, emoji).
+
+4.4 vibes.ts (server copy of the vibe colors; "Keep in sync with src/lib/vibes.ts")
+  clean:    bg #FFFFFF text #0A0A0A muted #6B6B6B avatarBg #F0F0F0
+  midnight: bg #0B0B0C text #F5F5F5 muted #9A9A9A avatarBg #1F1F22
+  paper:    bg #F6F1E7 text #2B2A28 muted #7A756B avatarBg #E9E1D0
+  sage:     bg #E8EDE6 text #1F2A22 muted #5E6B61 avatarBg #D3DDD0
+  clay:     bg #EADCCF text #3A2A22 muted #7B6355 avatarBg #D9C5B3
+  mono:     bg #F2F2F2 text #111111 muted #666666 avatarBg #E0E0E0
+Unknown vibe ids fall back to clean.
+
+4.5 supabase.ts
+- publicRpc(name, args): POST `${SUPABASE_URL}/rest/v1/rpc/${name}` with headers apikey: SUPABASE_PUBLISHABLE_KEY and Content-Type application/json (add Authorization: Bearer <key> only when the key is a JWT, i.e. starts with "eyJ"), using AbortSignal.timeout(2500). Returns the parsed JSON or null on any failure (never throws).
+- adminClient(): createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }) from "@supabase/supabase-js" (already a dependency). Created lazily; returns null when not configured.
+
+4.6 publicPage.ts
+- loadPublicPage(username): calls publicRpc("get_public_page", { p_username }) and validates the shape defensively. Returns { displayName: string | null, username, bio: string | null, avatarUrl: string | null (only when it matches the allowed Clerk hosts), vibeId, hideFromSearch: boolean } or null. Never throws.
+- version(page): a short cache-busting hash: the first 8 hex characters of SHA-256 (crypto.subtle) over displayName, bio, avatarUrl and vibeId joined with "|". Never includes anything else.
+
+4.7 site.ts: pageAddress(origin, username) returns `${origin}/${username}`; ogImageAddress(origin, username?, v?) returns `${origin}/api/og` plus ?u=<username>&v=<v> when given (encodeURIComponent).
+
+=====================================================================
+5. api/page.ts: SERVER-RENDERED METADATA
+=====================================================================
+Purpose: every request for a single-segment path like /maya (and for private routes like /dashboard) is answered with the SAME app shell (the built index.html) with the correct <head> tags injected. The browser then loads the normal app, which renders the page. Search engines, chat apps and social sites read the tags.
+
+5.1 Request and routing
+- Export both GET and HEAD handlers; any other method returns 405 with an Allow header.
+- Read the path segment from the query parameter "u" (set by the rewrite in Section 8). Run classifySegment on it.
+- The shell template: first try to read dist/index.html from the filesystem (it is bundled with the function through includeFiles in Section 8; resolve it with path.join(process.cwd(), "dist", "index.html") using node:fs/promises); if that fails, fetch `${origin}/index.html` with the timeout from 2.6; if that also fails, return a minimal HTML document with a <noscript> note and a meta refresh to the origin with status 200 and Cache-Control "no-store".
+
+5.2 Cases
+- "username": call loadPublicPage. If it returns a page: found case (5.3). If it returns null (unknown, unpublished or not set up): generic case with robots "noindex".
+- "private": generic case with robots "noindex, nofollow" and the title "<Route label> | iveo" where the label is Log in, Create your account, Dashboard, Welcome, Account for login, signup, dashboard, onboarding, account.
+- "info" and "reserved" and "invalid": generic case with the default title and robots "index, follow" for info routes, "noindex" for the others.
+Generic case tags: title "iveo: one link for everything you make"; description "iveo gives you one calm, customizable page for all your links. Claim your name, pick a vibe and share it anywhere. Free to start."; canonical = origin + "/" for info routes, none for noindex cases; og:type website; og:site_name iveo; og:title (same as title); og:description; og:url; og:image = ogImageAddress(origin) with width 1200, height 630, type image/png, alt "iveo: one link for everything you make"; twitter:card summary_large_image with twitter:title, twitter:description, twitter:image.
+Use the brand text exactly as in these strings. Keep them in api/_lib so the client copy (src) is not imported.
+
+5.3 Found case tags
+- name = displayName if non-empty, otherwise "@" + username. Title = truncate(name, 60) + " | iveo".
+- description = truncate(bio, 160) when a bio exists, otherwise "Links by @<username> on iveo."
+- canonical = pageAddress(origin, username) (lowercase).
+- robots: "noindex, nofollow" when hideFromSearch, otherwise "index, follow".
+- og:type "profile"; og:site_name "iveo"; og:title (the name); og:description; og:url (canonical); og:image = ogImageAddress(origin, username, version(page)) with og:image:width 1200, og:image:height 630, og:image:type image/png, og:image:alt "<name>'s page on iveo"; profile:username (the username, no "@"); twitter:card summary_large_image, twitter:title, twitter:description, twitter:image (same image).
+- JSON-LD (safeJsonLd): { "@context": "https://schema.org", "@type": "ProfilePage", "mainEntity": { "@type": "Person", "name": <name>, "alternateName": "@<username>", "url": <canonical>, "description": <bio, only when present>, "image": <avatarUrl, only when present> } }.
+- Every dynamic value goes through escapeHtml for attributes and text; JSON-LD through safeJsonLd.
+
+5.4 Response
+- Status 200, Content-Type "text/html; charset=utf-8".
+- Found case: Cache-Control "public, s-maxage=60, stale-while-revalidate=600". Generic cases from a successful shell read: "public, s-maxage=300, stale-while-revalidate=3600". If Supabase failed or the shell fell back: "no-store".
+- Never include user text in headers. Never echo the query string.
+- HEAD returns the same headers without a body.
+
+5.5 Failure behavior
+Every failure falls back to the generic case (never a 500, never a blank page). A Supabase timeout must not delay the response beyond about 3 seconds in total.
+
+=====================================================================
+6. api/og.ts: THE SHARE IMAGE
+=====================================================================
+6.1 Request
+GET /api/og?u=<username>&v=<hash>. "v" is only a cache-busting value and is ignored by the code. Invalid or missing "u", unknown pages and any failure produce the generic card.
+
+6.2 Rendering
+- Use ImageResponse from "@vercel/og" (Node.js runtime; do not set runtime "edge"). Size 1200 by 630, PNG.
+- JSX is NOT available in api/. Build the layout with React-element-like plain objects: { type: "div", props: { style: {...}, children: [...] } }. Every container with more than one child sets display "flex". No external fonts: the default Noto Sans is used (do not pass a fonts option).
+- Text safety: a text value is "renderable" only if it matches /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}\p{Sc}\p{Sm}]+$/u after trimming and removing emoji ranges. Display names and bios that are not renderable are replaced as follows: the name by "@<username>" (usernames are always ASCII), the bio by an empty string (omit the line).
+- Truncate text in code before drawing: name 40 characters, bio 120 characters (use truncate).
+
+6.3 Layout for a found page (colors from api/_lib/vibes.ts)
+- Canvas: background = vibe bg; padding 72px; display flex; flex-direction column; justify-content space-between.
+- Top block (display flex, row, align-items center, gap 48px): the avatar circle 200px by 200px (see 6.4), and a column (display flex, column, gap 12px) with the name (fontSize 68, fontWeight 700, color vibe text, lineHeight 1.1), the handle "@<username>" (fontSize 36, color vibe muted) and, when there is a bio, the bio (fontSize 32, color vibe text, lineHeight 1.35, marginTop 12).
+- Bottom row (display flex, row, justify-content space-between, align-items center): at the left a pill with the address text "<host>/<username>" where host is the hostname of the site origin (fontSize 30, color vibe muted); at the right the word "iveo" (fontSize 44, fontWeight 700, color vibe text, letterSpacing -2).
+- A 1px line is not needed; keep the card quiet and flat. No gradients.
+
+6.4 Avatar
+- Only addresses on img.clerk.com or images.clerk.dev (https) are fetched; anything else is ignored.
+- Fetch it in the function with the 2.6 timeout, require response.ok, require the Content-Type to be image/png or image/jpeg (WebP and others are not supported by the renderer), cap the size at 1,000,000 bytes (check Content-Length when present and the actual byte length), and pass it to the renderer as a data URL (base64). Draw it as an <img> element with width 200, height 200, borderRadius 100, objectFit "cover".
+- If anything fails, draw the monogram instead: the same 200px circle with background = vibe avatarBg, centered text of the first letter of the name (uppercase, fontSize 88, fontWeight 700, color vibe text; use "?" if the name is not renderable).
+
+6.5 Generic card
+Background #FAFAFA; centered column with the word "iveo" (fontSize 168, fontWeight 700, color #0A0A0A, letterSpacing -6) and the line "One link for everything you make." (fontSize 44, color #666666, marginTop 24). No other elements.
+
+6.6 Response headers
+Cache-Control "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800" for a found page and the generic card; "public, max-age=60" if a found page fell back because of a failure. If the library itself throws, return a 200 generic card with Cache-Control "no-store" (build the generic card inside a try/catch) and as a last resort a 500 with an empty body.
+
+=====================================================================
+7. api/clerk-webhook.ts: KEEPING THE DATABASE IN STEP WITH CLERK
+=====================================================================
+7.1 Request handling
+- Only POST is accepted (anything else: 405 with an Allow header).
+- Verify the signature BEFORE reading anything else: first choice verifyWebhook(request, { signingSecret }) imported from "@clerk/backend/webhooks" (signingSecret from env). If that function does not exist in the installed version, use "svix": new Webhook(secret).verify(rawBody, { "svix-id", "svix-timestamp", "svix-signature" headers }). Read the raw body only once.
+- Invalid or missing signature: 400 with { "error": "invalid_signature" }. Missing configuration: 500 with { "error": "not_configured" }.
+- Only two event types are handled: "user.deleted" and "user.updated". Any other verified event: 200 with { "ok": true, "ignored": true }.
+- The Clerk user id is event.data.id and must match /^user_[A-Za-z0-9]+$/; otherwise 200 ignored (log the code "bad_user_id" only).
+- Respond within a few seconds; keep the work small. Return 200 { "ok": true } on success or on harmless conflicts, and 500 { "error": "temporary" } on transient failures (network, 5xx from Supabase) so that Clerk retries.
+
+7.2 user.deleted
+1. Delete the person's images: using adminClient().storage.from("link-images"), list the folder named after the user id (list(userId, { limit: 1000 })), remove the listed paths (userId + "/" + name), and repeat until the list is empty (at most 20 rounds). Failures here return 500 (so the event is retried) unless the folder simply does not exist.
+2. Delete the profile row: adminClient().from("profiles").delete().eq("user_id", userId). This also removes links and analytics rows through cascades. Deleting zero rows is a success (it makes the handler idempotent).
+3. Return 200.
+
+7.3 user.updated
+- Read data.username (string or null) and data.image_url (string or null).
+- Build a patch: username = normalizeUsername(data.username) when valid (it must also not be in RESERVED); avatar_url = data.image_url when it matches the allowed Clerk hosts, otherwise unchanged.
+- If the patch is empty: 200 ignored.
+- Apply it with adminClient().from("profiles").update(patch).eq("user_id", userId) (no insert: if the person has no profile row yet, nothing is updated and that is fine).
+- On a unique violation for username (error code 23505) or a reserved-name error (message "username_reserved"): do NOT retry. Apply only the avatar part if present, return 200, and log the code "username_conflict". The in-app sync from Step 3 will send the person to choose another name the next time they open the dashboard.
+- On other errors return 500.
+
+7.4 Safety
+- No other table is touched. No plan changes. No reads of other people's data. No user text is logged.
+- The function never returns data from the database.
+
+=====================================================================
+8. vercel.json (MERGE WITH ANY EXISTING FILE; NEVER OVERWRITE UNRELATED SETTINGS)
+=====================================================================
+Create or update vercel.json at the project root with these settings:
+
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/page.ts": { "includeFiles": "dist/index.html" }
+  },
+  "rewrites": [
+    { "source": "/:username([A-Za-z0-9_]{3,24})", "destination": "/api/page?u=:username" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    }
+  ]
+}
+
+Notes (follow them):
+- The first rewrite sends one-segment, username-shaped paths (for example /maya, /dashboard, /login) to api/page.ts. Static files (they contain dots, for example /favicon.svg, /robots.txt, /index.html) and multi-segment paths (for example /assets/..., /login/sso-callback) never match it.
+- If Vercel rejects the length pattern in the first rewrite, use "/:username([A-Za-z0-9_]+)" instead and let api/page.ts do the length validation (it already does).
+- The second rewrite is the single-page-app fallback. It EXCLUDES paths starting with api/ so the functions keep working. Do not simplify it to "/(.*)".
+- Keep any existing rewrites, redirects, headers or build settings that are unrelated; merge instead of replacing, and keep this order (specific rewrite first, fallback last).
+- If a Permissions-Policy header already exists, do not add payment restrictions (checkout in Step 4D needs the payment permission).
+- If the project builds to a folder other than dist, change the includeFiles value to match (mention it in the final reply).
+- Add the comment equivalent in your reply (JSON files cannot hold comments): a short note on what each block does.
+
+=====================================================================
+9. index.html, robots.txt AND NOINDEX FOR PRIVATE PAGES
+=====================================================================
+9.1 index.html
+- Replace every hard-coded production origin in index.html (canonical, og:url, og:image, JSON-LD Organization url) with the Vite placeholder %VITE_SITE_ORIGIN% (Vite fills it from the environment at build time), for example <link rel="canonical" href="%VITE_SITE_ORIGIN%/" />, og:url "%VITE_SITE_ORIGIN%/", og:image "%VITE_SITE_ORIGIN%/api/og".
+- Make sure index.html contains: title "iveo: one link for everything you make"; the meta description from Section 5.2; og:type website, og:site_name iveo, og:title, og:description, og:image:width 1200, og:image:height 630, og:image:type image/png, og:image:alt; twitter:card summary_large_image with title, description and image; theme-color #FAFAFA. Remove any reference to a static /og.png file.
+- Add a code comment in vite config or README-style comment block in index.html: "Set VITE_SITE_ORIGIN in Vercel (Production) before building."
+- The client SITE_ORIGIN helper (src/lib/site.ts) already reads VITE_SITE_ORIGIN; keep it.
+
+9.2 public/robots.txt
+User-agent: *
+Allow: /api/og
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /onboarding
+Disallow: /account
+Allow: /
+
+(The Allow for /api/og comes before the broader Disallow so crawlers can fetch share images.)
+
+9.3 Client-side noindex for private routes (backup for the server tags)
+usePageMeta (Step 3) gains an optional robots argument. Private routes (/login, /signup, /onboarding, /dashboard/*, /account/*) set robots "noindex, nofollow" on mount and restore the previous value on unmount. The public page keeps its Step 3 behavior.
+
+=====================================================================
+10. SELF-SERVE ACCOUNT DELETION (SETTINGS TAB)
+=====================================================================
+Replaces the Step 3 "Delete account" card (which only told people to email support).
+
+10.1 The card
+Card titled "Delete account" (h3). Inside: 14px text "Delete your account and everything on it. This can't be undone." and a secondary md button "Delete account" with its label in the error color (#B3261E). Under the button, a 13px muted line "Need help instead? Email <support email>." (mailto link). No red backgrounds, no icons.
+
+10.2 The dialog (src/components/account/DeleteAccountDialog.tsx)
+Use the shared Dialog primitive (focus trap, Escape closes unless a deletion is running, backdrop closes unless running, focus returns to the trigger; bottom sheet below 640px).
+- Title h2 "Delete your account?"
+- Body (15px, ink-2): "This permanently deletes your page, links, images, statistics and your iveo account. Your address <host>/<username> becomes available to others." (<host> comes from new URL(SITE_ORIGIN).host.)
+- Field: a label "Type <username> to confirm" (13px) and an Input (autoComplete "off", autoCapitalize "none", spellCheck false, 48px). The destructive button stays disabled until the trimmed, lowercased input equals the person's username.
+- Buttons: ghost md "Cancel" and secondary md "Delete account" (error-colored label), full width and stacked on mobile. While running, the destructive button shows the spinner state, Cancel and the field are disabled, and the dialog cannot be dismissed.
+- Error line (13px, error color, role="alert") under the field, with the two messages in 10.3.
+
+10.3 The sequence (src/data/hooks/useDeleteAccount.ts)
+Run these steps in order. Each step is idempotent so the whole sequence can be retried safely:
+1. Mark deletion in progress through a small context (AccountDeletionProvider, hook useAccountDeletion): isDeleting true. While isDeleting is true the route guards must NOT redirect (the database row disappears halfway and the guards would otherwise send the person to onboarding). Reset the flag if the sequence fails.
+2. Delete the person's images: with the Clerk-token client list the folder named after the user id in the "link-images" bucket (pages of 100, at most 10 pages) and remove the listed paths. Failures here are ignored (the webhook sweeps leftovers).
+3. Delete the profile row: from("profiles").delete().eq("user_id", userId) with the Clerk-token client (allowed by the owner's delete policy; cascades remove links and statistics). If this fails, STOP, show the first error message and do not touch Clerk.
+4. Delete the Clerk account with user.delete() from the Clerk user object. If it fails, show the second error message (the page data is already gone) and allow retrying (steps 2 and 3 then succeed trivially).
+5. On success: queryClient.clear(), navigate to "/?deleted=1" with replace. The landing page shows the toast "Your account was deleted." when it sees deleted=1 and then removes the parameter with a replace navigation (no reload).
+Messages: first (steps 1 to 3): "We couldn't delete your account. Try again."; second (step 4): "Your page data was deleted, but we couldn't finish deleting your account. Try again, or email <support email>." (the address is a mailto link).
+Requirements: the Clerk Dashboard setting "Allow users to delete their accounts" must be on. If Clerk rejects the deletion for that reason, the second message is shown (never raw error text).
+The server webhook (Section 7) performs the same cleanup again as a safety net; both paths must be harmless when the data is already gone.
+
+=====================================================================
+11. EXPORT YOUR DATA (SETTINGS TAB)
+=====================================================================
+- A new Card "Your data" (h3) placed after "Your page": 14px text "Download a copy of your page data as a JSON file. Statistics are not included." and a secondary md "Export your data" button (Download icon, 16px).
+- Behavior: fetch FRESH data (not only the cache) through the existing data layer (profile and all blocks including archived and hidden ones), build the object below, create a Blob (application/json, 2-space indented), download it as "iveo-data-<username>.json" using a temporary anchor and URL.createObjectURL (revoke on the next tick), and show the toast "Data exported". On failure: toast "Couldn't export your data. Try again."
+- Shape: { "exportedAt": <ISO timestamp>, "version": 1, "profile": { "username", "displayName", "bio", "vibe", "buttonShape", "socials": [ { "platform", "url" } ], "isPublished", "hideFromSearch", "hideIveoFooter" }, "links": [ { "kind", "title", "url", "icon", "layout", "embedProvider", "thumbnailUrl", "startAt", "endAt", "isActive", "isArchived", "position" } ] }.
+- Never include the user id, the email address, the plan or any token.
+
+=====================================================================
+12. LINK PREVIEW INSIDE THE SHARE DIALOG
+=====================================================================
+Add a section to ShareDialog after the "Track where visitors come from" group:
+- Heading 14px/500 "Link preview" and a 13px muted line "How your link looks when shared. Chat apps may keep an older version for a while."
+- A card (1px border, radius 14px, overflow hidden): an <img> of the share image with src "/api/og?u=<username>&v=<version>" (a RELATIVE address, so it works on the real deployment), alt "Preview of your link card", aspect-ratio 1200 / 630, width 100%, background surface-2 while loading, loading "lazy". Below it a text block (padding 12px): the host in 12px Geist Mono muted, the title (the display name or @username followed by " | iveo") 15px/500, and the description (bio or "Links by @<username> on iveo.") 13px muted limited to two lines.
+- version: the first 8 hex characters of SHA-256 over displayName, bio, avatarUrl and vibeId joined with "|" (the same rule as the server's version(page); put it in src/lib/share-image.ts using crypto.subtle). It exists only so that the address changes when the profile changes.
+- If the image fails to load for any reason (including AI Studio's preview where /api does not exist), hide the whole section silently (state: failed). Never show a broken image, an error or a spinner.
+- Reserve the aspect-ratio box so the dialog does not jump while the image loads.
+
+=====================================================================
+13. CLIENT UPDATES FOR THE NEW RULES
+=====================================================================
+13.1 Avatar rule (src/lib/avatar.ts)
+isAllowedAvatarUrl(url): true only for strings of at most 2048 characters that parse as URLs with protocol "https:" and hostname exactly "img.clerk.com" or "images.clerk.dev". Use it in useProfileSync, in the onboarding upsert, in the one-time metadata seed, and in the data mappers (a stored avatar that fails the rule is displayed as "no avatar" and never rewritten by the app except through the sync with a valid Clerk URL). Every place that writes avatar_url sends the Clerk image URL when allowed and null otherwise.
+
+13.2 Reserved usernames
+Update src/lib/username-rules.ts as described in Section 3.
+
+13.3 useProfileSync
+Keep its logic as a backup. Update its code comment to: "Backup for the Clerk webhook (api/clerk-webhook.ts). The webhook is the primary sync."
+
+13.4 Landing page
+Read the "deleted" query parameter (value "1") on mount: show the toast "Your account was deleted.", then remove the parameter with a replace navigation. Do nothing else on the landing page.
+
+13.5 usePageMeta
+Add the optional robots argument and apply it on private routes (Section 9.3).
+
+13.6 Settings copy cleanup
+Remove the old Step 3 strings "To delete your account and page, email ..." and the "Email us" delete button. Keep the support mailto line from 10.1.
+
+=====================================================================
+14. ERROR, LOADING AND EDGE STATES
+=====================================================================
+- All server functions answer every request, in every code path, with a valid Response; unexpected exceptions are caught at the top of each handler and turned into the documented fallbacks (never a platform error page for crawlers).
+- If the server functions are missing (AI Studio preview, local dev without Vercel): the app works exactly as before; the Share dialog hides the link preview; nothing else depends on /api.
+- Share previews for unknown, unpublished or unavailable pages are generic and noindex; they never reveal whether a name is taken beyond what the page already shows.
+- Hostile content: names, bios and avatar addresses may contain markup, quotes, very long strings, emoji or non-Latin text. The HTML injector escapes everything; the image function truncates and substitutes as specified; nothing breaks the layout.
+- Webhook retries: duplicate deliveries are harmless (all operations are idempotent). Out-of-order events converge because user.updated only updates an existing row and user.deleted removes it.
+- Account deletion while offline: the dialog shows the first error message and nothing is deleted (step 3 fails before Clerk is touched).
+- Partially failed deletion (Clerk step fails): the page data is already gone; the second message explains it and retrying is safe. The guards must not trap the person in onboarding while isDeleting is true; after a failed attempt the normal guard behavior resumes.
+- Landing and public pages never wait for the server functions.
+
+=====================================================================
+15. SECURITY REQUIREMENTS (NON-NEGOTIABLE)
+=====================================================================
+1. All earlier rules still apply.
+2. The Supabase secret key exists only in Vercel's server environment, is read only in api/clerk-webhook.ts through api/_lib, and never reaches the browser, logs, responses, comments or the final reply. No VITE_ variable may contain it.
+3. Webhook signatures are verified before any parsing or action. Unsigned or invalid requests receive 400 and cause no database access.
+4. The webhook can only delete one user's data and update their username or avatar, keyed by a validated Clerk user id. It touches no other table and never changes plans.
+5. Every value interpolated into HTML is escaped with escapeHtml (text and attributes) or safeJsonLd (JSON-LD). Never build HTML from unescaped user text. Never reflect request parameters except the validated username.
+6. The avatar fetch is limited to https hosts img.clerk.com and images.clerk.dev, content types image/png and image/jpeg, 1,000,000 bytes and a 2.5 second timeout. No redirects to other hosts are followed (use redirect: "manual" and treat any redirect as a failure, or follow only when the final host is on the allow-list).
+7. Public caching only for responses that contain no private data (public page metadata and images). Error and fallback responses are never cached publicly.
+8. Security headers from Section 8 apply to every response. frame-ancestors 'none' and X-Frame-Options DENY mean iveo pages cannot be embedded in other sites.
+9. The referrer policy stays strict-origin-when-cross-origin.
+10. Account deletion requires typing the username and runs data deletion before account deletion. Never delete the Clerk account when the data deletion step failed.
+11. Export contains only the person's own page data, never identifiers, email or plan.
+12. Do not add a full CSP, third-party scripts or analytics.
+13. Never log request bodies, names, bios, emails, URLs from users, keys or tokens on the server.
+
+=====================================================================
+16. ACCESSIBILITY AND RESPONSIVE REQUIREMENTS
+=====================================================================
+- The delete dialog follows the dialog rules from Step 4A (role="dialog", aria-modal, labelled by its title, focus trap, Escape, focus return). The confirmation field has a visible label; the error line uses role="alert"; the destructive button's disabled state is announced.
+- The link preview is decorative context: the image has a text alternative, the text below it is real text, and hiding it does not shift focus.
+- Export and delete controls are real buttons reachable by keyboard, 44px tall on mobile.
+- Test widths: 320, 375, 390, 768, 1024, 1280. No horizontal scroll. The delete dialog and the preview card fit at 320px.
+- Contrast AA; the error color is used only for the destructive label and the error line.
+- Motion: none beyond existing dialog behavior; respect prefers-reduced-motion.
+
+=====================================================================
+17. COPY ADDITIONS (FINAL STRINGS; ADD TO src/content/copy.ts)
+=====================================================================
+Delete account: card title "Delete account"; "Delete your account and everything on it. This can't be undone."; "Need help instead? Email <support email>."; dialog title "Delete your account?"; "This permanently deletes your page, links, images, statistics and your iveo account. Your address <host>/<username> becomes available to others."; "Type <username> to confirm"; buttons "Cancel", "Delete account"; errors "We couldn't delete your account. Try again." and "Your page data was deleted, but we couldn't finish deleting your account. Try again, or email <support email>."; toast "Your account was deleted."
+Export: card title "Your data"; "Download a copy of your page data as a JSON file. Statistics are not included."; button "Export your data"; toast "Data exported"; error toast "Couldn't export your data. Try again."
+Share preview: "Link preview"; "How your link looks when shared. Chat apps may keep an older version for a while."; image alt "Preview of your link card".
+Server strings (api/_lib, not in copy.ts): the generic title "iveo: one link for everything you make"; the generic description "iveo gives you one calm, customizable page for all your links. Claim your name, pick a vibe and share it anywhere. Free to start."; "<name> | iveo"; "Links by @<username> on iveo."; "<name>'s page on iveo"; the generic card line "One link for everything you make."; route titles "Log in | iveo", "Create your account | iveo", "Dashboard | iveo", "Welcome | iveo", "Account | iveo".
+Voice rules still apply: calm, professional, sentence case, no exclamation marks, no hype words. The brand name is always "iveo" in lowercase.
+
+=====================================================================
+18. FILE STRUCTURE ADDITIONS
+=====================================================================
+(project root)
+  api/
+    page.ts
+    og.ts
+    clerk-webhook.ts
+    _lib/ (env.ts, html.ts, usernames.ts, vibes.ts, supabase.ts, publicPage.ts, site.ts)
+  vercel.json
+  public/robots.txt
+src/
+  lib/ (avatar.ts, share-image.ts)
+  data/hooks/useDeleteAccount.ts
+  components/account/ (DeleteAccountDialog.tsx, AccountDeletionProvider.tsx, DeleteAccountCard.tsx, ExportDataCard.tsx)
+  components/share/ (LinkPreviewSection.tsx)
+Rules: functional components, typed props, no magic numbers, comments only for decisions and the notes already specified.
+
+=====================================================================
+19. BUILD ORDER
+=====================================================================
+1. api/_lib helpers (env, usernames, html with examples, vibes, supabase, publicPage, site).
+2. api/page.ts and vercel.json (rewrites, headers, includeFiles). Verify the fallback rewrite excludes /api.
+3. index.html placeholders and public/robots.txt; usePageMeta robots argument for private routes.
+4. api/og.ts (generic card first, then found-page card, avatar fetch, text safety).
+5. api/clerk-webhook.ts (verification, user.deleted, user.updated).
+6. Client: avatar rule and reserved list, useProfileSync comment, landing "deleted" toast.
+7. Client: Share dialog link preview.
+8. Client: Export card, then the delete card, dialog, provider, hook and guard integration.
+9. Error states and polish against Sections 20 and 21.
+
+=====================================================================
+20. ACCEPTANCE CHECKLIST (VERIFY BEFORE REPLYING)
+=====================================================================
+Server and hosting
+[ ] Only "@vercel/og" and "@clerk/backend" (or "svix" as the documented fallback) were added.
+[ ] All api/ imports use the .js extension. No JSX, no path aliases, nothing imported across src/ and api/.
+[ ] vercel.json merges cleanly: specific rewrite first, SPA fallback excluding api/, headers, includeFiles; unrelated settings kept.
+[ ] /api/page, /api/og and /api/clerk-webhook always return a valid Response and never expose errors or secrets.
+[ ] Direct visits to /yourusername, /login, /dashboard, /privacy and /assets files still work.
+
+Share previews
+[ ] Found pages inject title, description, canonical, robots, Open Graph, Twitter and JSON-LD tags, all escaped; unknown, unpublished and private routes get generic tags with the right robots value.
+[ ] og:image points at /api/og with the version hash; the image is 1200 by 630, uses the vibe colors, shows the avatar or initials, and falls back to @username for non-renderable names.
+[ ] Hostile text (script tags, quotes, emoji, non-Latin scripts, very long values) cannot break the HTML or the image.
+[ ] The landing page source contains the real origin (no leftover %VITE_SITE_ORIGIN% text).
+
+Webhook and deletion
+[ ] The webhook verifies signatures first, handles only user.updated and user.deleted, is idempotent, answers 400, 200 and 500 as specified and never logs personal data.
+[ ] user.deleted removes storage files and the profile row (cascades handle links and statistics).
+[ ] user.updated syncs a valid, non-reserved username and an allowed avatar URL without creating rows; username conflicts do not trigger retries.
+[ ] The self-serve deletion removes images, the profile row and then the Clerk account; guards do not redirect during the process; failures show the right message and are retry-safe.
+[ ] After deletion the landing page shows "Your account was deleted." once.
+
+Client and quality
+[ ] Export downloads the specified JSON with no identifiers, email or plan.
+[ ] The Share dialog link preview appears on Vercel and silently disappears where /api is missing.
+[ ] Avatar writes follow the new database rule everywhere (allowed host or null).
+[ ] Private routes carry noindex; robots.txt allows /api/og and disallows the private paths.
+[ ] The referrer policy remains strict-origin-when-cross-origin; YouTube embeds still work.
+[ ] No horizontal scroll at 320, 375, 390, 768, 1024 or 1280 pixels. Every new control is keyboard operable.
+[ ] No console errors. TypeScript strict passes in src/. No unused code.
+[ ] The old spelling "ivio" appears only in the reserved-name list. No domain or email is hard-coded.
+[ ] Banned words and exclamation marks are absent from all new copy.
+
+=====================================================================
+21. COMMON FAILURE MODES (SELF-CHECK)
+=====================================================================
+1. Relative imports in api/ without ".js", which crash at runtime on Vercel.
+2. A SPA fallback rewrite of "/(.*)" that swallows /api requests.
+3. The secret key in a VITE_ variable, in src/, or in any log or response.
+4. JSX or path aliases inside api/.
+5. Fetching any avatar URL without the host, type, size, redirect and timeout limits (server-side request forgery).
+6. Injecting user text into HTML or JSON-LD without escaping.
+7. Passing a WebP avatar to the image renderer (unsupported; convert to the initials fallback instead).
+8. Non-Latin names rendered as empty boxes in the share image.
+9. Parsing the webhook body before verifying the signature.
+10. Returning 200 for transient failures (no retry) or 500 for harmless conflicts (retry storms).
+11. Deleting the Clerk account before the data, or letting the guards bounce the person to onboarding during deletion.
+12. Caching error or fallback responses publicly.
+13. Changing the referrer policy and breaking YouTube embeds.
+14. Hard-coding the domain, reintroducing "ivio", or leaving "%VITE_SITE_ORIGIN%" literal in the output.
+15. Adding scope: billing, password links, custom share images, a full CSP.
+
+=====================================================================
+22. SEAMS THE NEXT STEPS WILL USE (KEEP THEM CLEAN)
+=====================================================================
+- api/_lib (env, supabase, html, site) and the webhook pattern (Step 4D can add Clerk Billing events and replace the plan source behind has_pro).
+- api/page.ts metadata (Step 4E and later features reuse it; custom SEO title and description fields can feed it).
+- The vercel.json routing and headers (a full Content-Security-Policy is a later task).
+- The Dialog primitive, Settings cards and the data layer.
+
+=====================================================================
+23. FINAL REPLY FORMAT
+=====================================================================
+When the build is finished, reply in no more than 10 lines: what you built, any API or version differences you found (Vercel Functions, @vercel/og, @clerk/backend, Supabase, Vite) and how you adapted, and anything from this document you could not implement and why (for example files that could not be created outside src/ so their contents were printed instead). Do not restate this specification. Do not ask questions. Do not include any key, secret or URL value in your reply.
+
+END PROMPT

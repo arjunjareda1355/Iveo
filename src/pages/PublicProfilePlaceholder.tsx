@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
@@ -10,6 +10,10 @@ import { PublicPageData } from '../data/types';
 import { VIBES } from '../lib/vibes';
 import { pageUrl } from '../lib/site';
 import { copy } from '../content/copy';
+import { useIveoSession } from '../auth/useIvioSession';
+import { setAnalyticsContext, trackView } from '../lib/analytics/track';
+import { resolveSource } from '../lib/analytics/sources';
+import { trackLinkClick } from '../lib/analytics-seam';
 
 export const PublicProfilePlaceholder: React.FC = () => {
   const { username } = useParams<{ username: string }>();
@@ -25,6 +29,10 @@ export const PublicProfilePlaceholder: React.FC = () => {
   const [pageData, setPageData] = useState<PublicPageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const session = useIveoSession();
+  const viewTrackedRef = useRef(false);
+  const ownerExclusionDoneRef = useRef(false);
+
   const loadData = useCallback(async () => {
     try {
       const data = await fetchPublicPage(clean);
@@ -39,7 +47,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
   useEffect(() => {
     loadData();
 
-    // Refetch interval 60s while tab is visible (Section 5.5 & 13)
+    // Refetch interval 60s while tab is visible (does NOT re-trigger tracking)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       loadData();
@@ -67,7 +75,6 @@ export const PublicProfilePlaceholder: React.FC = () => {
       document.title = `iveo.site/${clean}`;
     }
 
-    // Canonical link tag
     let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) {
       canonical = document.createElement('link');
@@ -76,6 +83,68 @@ export const PublicProfilePlaceholder: React.FC = () => {
     }
     canonical.href = pageUrl(clean);
   }, [pageData, clean]);
+
+  // Analytics tracking & owner exclusion logic (Section 5.4 & 7)
+  useEffect(() => {
+    if (!pageData?.profile) return;
+
+    const source = resolveSource();
+    setAnalyticsContext({ username: clean, source, enabled: true });
+
+    const sendViewWhenReady = () => {
+      if (viewTrackedRef.current) return;
+
+      const executeView = () => {
+        if (viewTrackedRef.current) return;
+        viewTrackedRef.current = true;
+        trackView(clean, source);
+      };
+
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        const onVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            executeView();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+      } else {
+        executeView();
+      }
+    };
+
+    const evaluateOwner = () => {
+      if (ownerExclusionDoneRef.current) return;
+      ownerExclusionDoneRef.current = true;
+
+      const isOwner =
+        session.isSignedIn &&
+        session.username?.toLowerCase() === clean.toLowerCase();
+
+      if (isOwner) {
+        setAnalyticsContext({ enabled: false });
+      } else {
+        sendViewWhenReady();
+      }
+    };
+
+    if (session.isLoaded) {
+      evaluateOwner();
+    } else {
+      // 1200ms fallback timer to avoid blocking public view on Clerk
+      const timer = setTimeout(() => {
+        evaluateOwner();
+      }, 1200);
+
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+
+    return () => {
+      setAnalyticsContext({ enabled: true, username: null, source: null });
+    };
+  }, [pageData?.profile, clean, session.isLoaded, session.isSignedIn, session.username]);
 
   if (isLoading) {
     return (
@@ -119,6 +188,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
             hideFooterMark={pageData.profile.hideFooter}
             embedMode="live"
             isPublicPage={true}
+            onLinkClick={trackLinkClick}
           />
         </div>
       </div>

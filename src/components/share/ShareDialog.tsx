@@ -10,6 +10,7 @@ import {
   downloadPng,
   downloadSvg,
 } from '../../lib/qr';
+import { TrackedLinkSection } from './TrackedLinkSection';
 
 interface ShareDialogProps {
   isOpen: boolean;
@@ -37,9 +38,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const fullUrl = pageUrl(username);
+  const qrUrl = pageUrl(username, { src: 'qr' });
   const displayAddress = fullUrl.replace(/^https?:\/\//i, '');
 
-  // Generate QR lazily when opened
+  // Generate QR lazily when opened (using qrUrl for automatic QR tracking)
   useEffect(() => {
     if (!isOpen || !username) return;
 
@@ -47,7 +49,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     setIsGenerating(true);
     setQrError(false);
 
-    Promise.all([makeQrSvg(fullUrl), makeQrPngDataUrl(fullUrl)])
+    Promise.all([makeQrSvg(qrUrl), makeQrPngDataUrl(qrUrl)])
       .then(([svg, png]) => {
         if (!isMounted) return;
         setQrSvg(svg);
@@ -63,7 +65,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, username, fullUrl]);
+  }, [isOpen, username, qrUrl]);
 
   // Trap focus and lock body scroll
   useEffect(() => {
@@ -300,7 +302,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </p>
           </div>
 
-          {/* 4. Notice if page is unpublished/hidden */}
+          {/* 4. Tracked links section */}
+          <TrackedLinkSection username={username} />
+
+          {/* 5. Notice if page is unpublished/hidden */}
           {!isPublished && (
             <div className="flex items-center justify-between gap-3 bg-surface-2 border border-border rounded-[10px] p-3 text-[14px] text-muted">
               <span>Your page is hidden, so visitors will see an unavailable message.</span>

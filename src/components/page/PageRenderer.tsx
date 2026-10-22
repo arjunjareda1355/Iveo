@@ -24,6 +24,7 @@ export interface PageRendererProps {
   embedMode?: 'placeholder' | 'live';
   isPublicPage?: boolean;
   scale?: number;
+  onLinkClick?: (block: PageBlock) => void;
 }
 
 const DEFAULT_BUTTON_ICONS = [Link2, ShoppingBag, Globe, Mail, Calendar];
@@ -37,6 +38,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   embedMode = 'placeholder',
   isPublicPage = false,
   scale = 1,
+  onLinkClick,
 }) => {
   const { tokens, persona } = vibe;
   const effectiveRadius =
@@ -200,6 +202,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 activeEmbedId={activeEmbedId}
                 onActivate={(id) => setActiveEmbedId(id)}
                 scale={scale}
+                onLinkClick={onLinkClick}
               />
             );
           }
@@ -217,6 +220,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 scale={scale}
                 isInteractive={isPublicPage}
                 isEager={isEager}
+                onLinkClick={onLinkClick}
               />
             );
           }
@@ -294,6 +298,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 href={block.url}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
+                onClick={() => onLinkClick?.(block)}
+                onAuxClick={() => onLinkClick?.(block)}
                 className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
                 style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
               >

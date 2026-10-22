@@ -9,6 +9,7 @@ interface FeaturedLinkProps {
   scale?: number;
   isInteractive?: boolean;
   isEager?: boolean;
+  onLinkClick?: (block: PageBlock) => void;
 }
 
 export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
@@ -18,6 +19,7 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
   scale = 1,
   isInteractive = false,
   isEager = false,
+  onLinkClick,
 }) => {
   const { tokens } = vibe;
   const [imageError, setImageError] = useState(false);
@@ -75,6 +77,8 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
         href={block.url}
         target="_blank"
         rel="noopener noreferrer nofollow"
+        onClick={() => onLinkClick?.(block)}
+        onAuxClick={() => onLinkClick?.(block)}
         className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
       >

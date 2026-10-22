@@ -183,8 +183,9 @@ test('site: pageUrl generates clean url without duplicate slashes', () => {
 });
 
 test('plan: defines all pro features and labels', () => {
-  assert.deepEqual(PRO_FEATURES, ['embeds', 'scheduling', 'hide_footer']);
+  assert.deepEqual(PRO_FEATURES, ['embeds', 'scheduling', 'hide_footer', 'analytics_detail']);
   assert.equal(getProFeatureName('embeds'), 'Embeds');
   assert.equal(getProFeatureName('scheduling'), 'Scheduling');
   assert.equal(getProFeatureName('hide_footer'), 'Removing the iveo mark');
+  assert.equal(getProFeatureName('analytics_detail'), 'Advanced analytics');
 });
