@@ -21,7 +21,7 @@ export const LoginPage: React.FC = () => {
     }
   }, [rawRedirectUrl, navigate]);
 
-  const validatedRedirectUrl = safeRedirectPath(rawRedirectUrl) || '/dashboard';
+  const validatedRedirectUrl = safeRedirectPath(rawRedirectUrl) || '/';
 
   return (
     <GuestOnly>
@@ -31,6 +31,7 @@ export const LoginPage: React.FC = () => {
           path="/login"
           signUpUrl="/signup"
           fallbackRedirectUrl={validatedRedirectUrl}
+          signUpFallbackRedirectUrl="/onboarding"
           fallback={<AuthSkeletonCard />}
         />
       </AuthLayout>

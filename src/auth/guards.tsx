@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useIvioSession } from './useIvioSession';
 import { AuthSplash } from './AuthSplash';
 import { LoadError } from './LoadError';
 import { SetupMissingKey } from './SetupMissingKey';
+import { safeRedirectPath } from './redirect';
 import { HAS_CLERK_KEY } from '../lib/env';
 
 interface GuardProps {
@@ -41,12 +42,17 @@ export const AuthLoaderGuard: React.FC<GuardProps> = ({ children }) => {
 
 export const GuestOnly: React.FC<GuardProps> = ({ children }) => {
   const { isSignedIn, onboardingComplete } = useIvioSession();
+  const [searchParams] = useSearchParams();
 
   return (
     <AuthLoaderGuard>
       {isSignedIn ? (
         <Navigate
-          to={onboardingComplete ? '/dashboard' : '/onboarding'}
+          to={
+            !onboardingComplete
+              ? '/onboarding'
+              : safeRedirectPath(searchParams.get('redirect_url')) || '/'
+          }
           replace
         />
       ) : (

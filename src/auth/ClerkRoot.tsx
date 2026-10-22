@@ -21,12 +21,12 @@ export const ClerkRoot: React.FC<ClerkRootProps> = ({ children }) => {
       afterSignOutUrl="/"
       signInUrl="/login"
       signUpUrl="/signup"
-      signInFallbackRedirectUrl="/dashboard"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/onboarding"
       signUpForceRedirectUrl="/onboarding"
       supportEmail="help@iveo.site"
       routerPush={(to) => navigate(to)}
       routerReplace={(to) => navigate(to, { replace: true })}
-      allowedRedirectOrigins={[window.location.origin]}
       appearance={iveoAppearance}
     >
       {children}

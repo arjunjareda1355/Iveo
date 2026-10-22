@@ -14,11 +14,15 @@ import {
 } from '../lib/preferences.ts';
 
 test('safeRedirectPath: accepts valid internal paths', () => {
+  assert.equal(safeRedirectPath('/'), '/');
   assert.equal(safeRedirectPath('/dashboard'), '/dashboard');
   assert.equal(safeRedirectPath('/dashboard?tab=appearance'), '/dashboard?tab=appearance');
   assert.equal(safeRedirectPath('/dashboard/settings'), '/dashboard/settings');
   assert.equal(safeRedirectPath('/onboarding'), '/onboarding');
   assert.equal(safeRedirectPath('/account'), '/account');
+  assert.equal(safeRedirectPath('https://iveo.site/'), '/');
+  assert.equal(safeRedirectPath('https://iveo.site/dashboard'), '/dashboard');
+  assert.equal(safeRedirectPath('http://localhost:3000/'), '/');
 });
 
 test('safeRedirectPath: rejects external URLs, schemes, backslashes and auth routes', () => {
@@ -28,6 +32,7 @@ test('safeRedirectPath: rejects external URLs, schemes, backslashes and auth rou
   assert.equal(safeRedirectPath('/\\evil.com'), null);
   assert.equal(safeRedirectPath('/login'), null);
   assert.equal(safeRedirectPath('/signup'), null);
+  assert.equal(safeRedirectPath('/sso-callback'), null);
   assert.equal(safeRedirectPath('/login/step'), null);
   assert.equal(safeRedirectPath('/signup/continue'), null);
   assert.equal(safeRedirectPath('javascript:alert(1)'), null);

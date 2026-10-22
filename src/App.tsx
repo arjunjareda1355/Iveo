@@ -16,6 +16,7 @@ const Legal = lazy(() => import('./pages/Legal'));
 const PublicProfilePlaceholder = lazy(
   () => import('./pages/PublicProfilePlaceholder')
 );
+const SSOCallbackPage = lazy(() => import('./pages/SSOCallbackPage'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Scroll to top on route change
@@ -48,11 +49,16 @@ export default function App() {
           {/* 1. Public Landing */}
           <Route path="/" element={<Landing />} />
 
-          {/* 2. Guests Only Auth Routes */}
+          {/* 2. SSO Callback Routes for Google, GitHub, Discord */}
+          <Route path="/sso-callback" element={<SSOCallbackPage />} />
+          <Route path="/login/sso-callback" element={<SSOCallbackPage />} />
+          <Route path="/signup/sso-callback" element={<SSOCallbackPage />} />
+
+          {/* 3. Guests Only Auth Routes */}
           <Route path="/login/*" element={<LoginPage />} />
           <Route path="/signup/*" element={<SignupPage />} />
 
-          {/* 3. Onboarding (Signed in, not completed) */}
+          {/* 4. Onboarding (Signed in, not completed) */}
           <Route
             path="/onboarding"
             element={
