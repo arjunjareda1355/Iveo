@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/sections/Navbar';
 import { Hero } from '../components/sections/Hero';
 import { MadeFor } from '../components/sections/MadeFor';
@@ -10,8 +11,20 @@ import { Pricing } from '../components/sections/Pricing';
 import { Faq } from '../components/sections/Faq';
 import { FinalCta } from '../components/sections/FinalCta';
 import { Footer } from '../components/sections/Footer';
+import { useToast } from '../components/ui/Toast';
+import { copy } from '../content/copy';
 
 export const Landing: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    if (searchParams.get('deleted') === '1') {
+      showToast(copy.deleteAccount.deletedToast);
+      navigate('/', { replace: true });
+    }
+  }, [searchParams, navigate, showToast]);
   return (
     <div className="min-h-screen flex flex-col bg-bg text-ink selection:bg-ink selection:text-white">
       {/* Skip to content link */}

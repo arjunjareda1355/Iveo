@@ -4,9 +4,11 @@ import { SignIn } from '@clerk/react';
 import { AuthLayout, AuthSkeletonCard } from '../auth/AuthLayout';
 import { GuestOnly } from '../auth/guards';
 import { safeRedirectPath } from '../auth/redirect';
+import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
 
 export const LoginPage: React.FC = () => {
+  usePageMeta({ robots: 'noindex, nofollow' });
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const rawRedirectUrl = searchParams.get('redirect_url');

@@ -5,9 +5,11 @@ import { Link as LinkIcon } from 'lucide-react';
 import { AuthLayout, AuthSkeletonCard } from '../auth/AuthLayout';
 import { GuestOnly } from '../auth/guards';
 import { normalizeUsername, validateUsername } from '../lib/username-rules';
+import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
 
 export const SignupPage: React.FC = () => {
+  usePageMeta({ robots: 'noindex, nofollow' });
   const [searchParams] = useSearchParams();
   const [claim, setClaim] = useState<string | null>(null);
 

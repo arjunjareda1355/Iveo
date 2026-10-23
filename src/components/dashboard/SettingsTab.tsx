@@ -6,6 +6,8 @@ import { Button } from '../ui/Button';
 import { ProBadge } from '../plan/ProBadge';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { ShareDialog } from '../share/ShareDialog';
+import { ExportDataCard } from '../account/ExportDataCard';
+import { DeleteAccountCard } from '../account/DeleteAccountCard';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { pageUrl } from '../../lib/site';
@@ -197,7 +199,10 @@ export const SettingsTab: React.FC = () => {
         </div>
       </Card>
 
-      {/* 3. Session Card */}
+      {/* 3. Your Data Card */}
+      <ExportDataCard />
+
+      {/* 4. Session Card */}
       <Card className="flex flex-col items-start gap-4">
         <div>
           <h3 className="text-[20px] font-semibold text-ink leading-tight">
@@ -212,6 +217,11 @@ export const SettingsTab: React.FC = () => {
           Sign out
         </Button>
       </Card>
+
+      {/* 5. Delete Account Card */}
+      {session.username && (
+        <DeleteAccountCard username={session.username} />
+      )}
 
       {/* Share Dialog */}
       {session.username && (

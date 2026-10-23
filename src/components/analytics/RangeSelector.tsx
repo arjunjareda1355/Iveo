@@ -78,7 +78,9 @@ export const RangeSelector: React.FC<RangeSelectorProps> = ({
           return (
             <button
               key={key}
-              ref={(el) => (buttonsRef.current[index] = el)}
+              ref={(el) => {
+                buttonsRef.current[index] = el;
+              }}
               type="button"
               role="radio"
               aria-checked={isSelected}

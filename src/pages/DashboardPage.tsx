@@ -9,6 +9,7 @@ import { IvioUserButton } from '../auth/IvioUserButton';
 import { LinksTab } from '../components/dashboard/LinksTab';
 import { AppearanceTab } from '../components/dashboard/AppearanceTab';
 import { SettingsTab } from '../components/dashboard/SettingsTab';
+import { AnalyticsTab } from './AnalyticsTab';
 import { VibePhone } from '../components/phone/VibePhone';
 import { PhoneProfile } from '../components/phone/PhonePage';
 import { ShareDialog } from '../components/share/ShareDialog';
@@ -17,6 +18,7 @@ import { useIvioSession } from '../auth/useIvioSession';
 import { VIBES, VibeId } from '../lib/vibes';
 import { ButtonShape } from '../lib/preferences';
 import { useNow, isBlockVisibleNow } from '../lib/time';
+import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
 
 const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
@@ -26,6 +28,7 @@ const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
 };
 
 const DashboardContent: React.FC = () => {
+  usePageMeta({ robots: 'noindex, nofollow' });
   const session = useIvioSession();
   const location = useLocation();
   const { blocks } = useBlocks();
@@ -44,18 +47,21 @@ const DashboardContent: React.FC = () => {
 
   // Determine active tab & document title
   const isAppearance = location.pathname.includes('/appearance');
+  const isAnalytics = location.pathname.includes('/analytics');
   const isSettings = location.pathname.includes('/settings');
-  const isLinks = !isAppearance && !isSettings;
+  const isLinks = !isAppearance && !isAnalytics && !isSettings;
 
   useEffect(() => {
     if (isAppearance) {
       document.title = copy.dashboard.titles.appearance;
+    } else if (isAnalytics) {
+      document.title = copy.dashboard.titles.analytics;
     } else if (isSettings) {
       document.title = copy.dashboard.titles.settings;
     } else {
       document.title = copy.dashboard.titles.links;
     }
-  }, [isAppearance, isSettings]);
+  }, [isAppearance, isAnalytics, isSettings]);
 
   // Lock scroll on mobile preview sheet open
   useEffect(() => {
@@ -180,6 +186,27 @@ const DashboardContent: React.FC = () => {
           </NavLink>
 
           <NavLink
+            to="/dashboard/analytics"
+            className={({ isActive }) =>
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+                isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span>{copy.dashboard.tabs.analytics}</span>
+                {isActive && (
+                  <span
+                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-ink"
+                    aria-hidden="true"
+                  />
+                )}
+              </>
+            )}
+          </NavLink>
+
+          <NavLink
             to="/dashboard/settings"
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
@@ -205,80 +232,89 @@ const DashboardContent: React.FC = () => {
       {/* Main Content Area */}
       <main id="main" className="flex-1 py-8 sm:py-10">
         <Container>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-            {/* Left Column (7 of 12): Tab Panel */}
-            <div className="lg:col-span-7">
-              {isLinks && <LinksTab />}
-              {isAppearance && (
-                <AppearanceTab
-                  onPreviewVibeChange={(vId) => setPreviewVibeId(vId)}
-                  onPreviewShapeChange={(shape) => setPreviewShape(shape)}
-                />
-              )}
-              {isSettings && <SettingsTab />}
+          {isAnalytics ? (
+            <div className="w-full">
+              <AnalyticsTab />
             </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+              {/* Left Column (7 of 12): Tab Panel */}
+              <div className="lg:col-span-7">
+                {isLinks && <LinksTab />}
+                {isAppearance && (
+                  <AppearanceTab
+                    onPreviewVibeChange={(vId) => setPreviewVibeId(vId)}
+                    onPreviewShapeChange={(shape) => setPreviewShape(shape)}
+                  />
+                )}
+                {isSettings && <SettingsTab />}
+              </div>
 
-            {/* Right Column (5 of 12): Desktop Sticky Live Phone Preview */}
-            <div className="hidden lg:flex col-span-5 flex-col items-center justify-center sticky top-32">
-              <VibePhone
-                currentVibe={activeVibe}
-                profile={profileData}
-                blocks={visiblePreviewBlocks}
-                hideFooterMark={hideFooterMark}
-                embedMode="placeholder"
-                buttonRadiusOverride={buttonRadiusOverride}
-                width={300}
-              />
-              <span className="mt-4 text-[13px] text-muted select-none">
-                Live preview
-              </span>
+              {/* Right Column (5 of 12): Desktop Sticky Live Phone Preview */}
+              <div className="hidden lg:flex col-span-5 flex-col items-center justify-center sticky top-32">
+                <VibePhone
+                  currentVibe={activeVibe}
+                  profile={profileData}
+                  blocks={visiblePreviewBlocks}
+                  hideFooterMark={hideFooterMark}
+                  embedMode="placeholder"
+                  buttonRadiusOverride={buttonRadiusOverride}
+                  width={300}
+                />
+                <span className="mt-4 text-[13px] text-muted select-none">
+                  Live preview
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </Container>
       </main>
 
-      {/* Floating Preview Button on Mobile */}
-      <div className="lg:hidden fixed bottom-6 right-6 z-40">
-        <button
-          type="button"
-          onClick={() => setMobilePreviewOpen(true)}
-          className="inline-flex items-center gap-2 h-11 px-4 rounded-[10px] bg-ink text-white font-medium text-[14px] shadow-[0_24px_48px_-12px_rgba(10,10,10,0.14),0_2px_6px_rgba(10,10,10,0.05)] focus-visible:outline-2 focus-visible:outline-ink cursor-pointer"
-        >
-          <Eye size={16} strokeWidth={1.5} />
-          <span>Preview</span>
-        </button>
-      </div>
-
-      {/* Mobile Bottom Sheet for Preview */}
-      {mobilePreviewOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Phone Preview"
-          className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
-        >
-          <div className="bg-surface rounded-t-[20px] p-6 max-h-[85vh] overflow-y-auto flex flex-col items-center relative border-t border-border">
+      {/* Floating Preview Button and Sheet on Mobile (hidden on Analytics) */}
+      {!isAnalytics && (
+        <>
+          <div className="lg:hidden fixed bottom-6 right-6 z-40">
             <button
               type="button"
-              onClick={() => setMobilePreviewOpen(false)}
-              aria-label="Close preview"
-              className="absolute top-4 right-4 p-2 text-muted hover:text-ink rounded-full focus-visible:outline-2 focus-visible:outline-ink cursor-pointer"
+              onClick={() => setMobilePreviewOpen(true)}
+              className="inline-flex items-center gap-2 h-11 px-4 rounded-[10px] bg-ink text-white font-medium text-[14px] shadow-[0_24px_48px_-12px_rgba(10,10,10,0.14),0_2px_6px_rgba(10,10,10,0.05)] focus-visible:outline-2 focus-visible:outline-ink cursor-pointer"
             >
-              <X size={20} strokeWidth={1.5} />
+              <Eye size={16} strokeWidth={1.5} />
+              <span>Preview</span>
             </button>
-            <div className="my-4">
-              <VibePhone
-                currentVibe={activeVibe}
-                profile={profileData}
-                blocks={visiblePreviewBlocks}
-                hideFooterMark={hideFooterMark}
-                embedMode="placeholder"
-                buttonRadiusOverride={buttonRadiusOverride}
-                width={280}
-              />
-            </div>
           </div>
-        </div>
+
+          {mobilePreviewOpen && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Phone Preview"
+              className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
+            >
+              <div className="bg-surface rounded-t-[20px] p-6 max-h-[85vh] overflow-y-auto flex flex-col items-center relative border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setMobilePreviewOpen(false)}
+                  aria-label="Close preview"
+                  className="absolute top-4 right-4 p-2 text-muted hover:text-ink rounded-full focus-visible:outline-2 focus-visible:outline-ink cursor-pointer"
+                >
+                  <X size={20} strokeWidth={1.5} />
+                </button>
+                <div className="my-4">
+                  <VibePhone
+                    currentVibe={activeVibe}
+                    profile={profileData}
+                    blocks={visiblePreviewBlocks}
+                    hideFooterMark={hideFooterMark}
+                    embedMode="placeholder"
+                    buttonRadiusOverride={buttonRadiusOverride}
+                    width={280}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Top Bar Share Sheet */}

@@ -9,9 +9,11 @@ import { IveoUserButton } from '../auth/IvioUserButton';
 import { RequireAuth } from '../auth/guards';
 import { iveoAppearance } from '../auth/appearance';
 import { useIveoSession } from '../auth/useIvioSession';
+import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
 
 export const AccountPage: React.FC = () => {
+  usePageMeta({ robots: 'noindex, nofollow' });
   const session = useIveoSession();
 
   useEffect(() => {

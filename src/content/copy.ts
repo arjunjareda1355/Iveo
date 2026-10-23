@@ -504,4 +504,32 @@ export const copy = {
       },
     },
   },
+  deleteAccount: {
+    cardTitle: 'Delete account',
+    cardBody: "Delete your account and everything on it. This can't be undone.",
+    helpLinePrefix: 'Need help instead? Email',
+    dialogTitle: 'Delete your account?',
+    dialogBody:
+      "This permanently deletes your page, links, images, statistics and your iveo account. Your address {host}/{username} becomes available to others.",
+    confirmLabel: 'Type {username} to confirm',
+    cancelButton: 'Cancel',
+    deleteButton: 'Delete account',
+    errorFirst: "We couldn't delete your account. Try again.",
+    errorSecondPrefix:
+      "Your page data was deleted, but we couldn't finish deleting your account. Try again, or email",
+    deletedToast: 'Your account was deleted.',
+  },
+  exportData: {
+    cardTitle: 'Your data',
+    cardBody:
+      'Download a copy of your page data as a JSON file. Statistics are not included.',
+    exportButton: 'Export your data',
+    successToast: 'Data exported',
+    errorToast: "Couldn't export your data. Try again.",
+  },
+  sharePreview: {
+    title: 'Link preview',
+    helper: 'How your link looks when shared. Chat apps may keep an older version for a while.',
+    alt: 'Preview of your link card',
+  },
 } as const;

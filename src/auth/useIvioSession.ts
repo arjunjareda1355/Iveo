@@ -8,6 +8,7 @@ import {
   DEFAULT_PREFERENCES,
 } from '../lib/preferences';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
+import { isAllowedAvatarUrl } from '../lib/avatar';
 
 export interface IveoSession {
   isLoaded: boolean;
@@ -83,7 +84,7 @@ function useClerkSession(): IveoSession {
   const normalizedUsername = normalizeUsername(rawUsername);
   const username = normalizedUsername || null;
   const displayName = username || user.fullName || 'Your name';
-  const imageUrl = user.imageUrl || null;
+  const imageUrl = isAllowedAvatarUrl(user.imageUrl) ? user.imageUrl : null;
   const primaryEmail = user.primaryEmailAddress?.emailAddress || null;
 
   const preferences = parsePreferences(user.unsafeMetadata);

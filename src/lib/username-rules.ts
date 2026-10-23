@@ -2,7 +2,7 @@ export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 24;
 export const USERNAME_PATTERN = /^[a-z0-9_]+$/;
 
-// Keep in sync with the router.
+// Keep in sync with the router and the database.
 export const RESERVED_USERNAMES: readonly string[] = [
   'admin',
   'administrator',
@@ -14,6 +14,7 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'auth',
   'billing',
   'blog',
+  'clerk',
   'contact',
   'dashboard',
   'help',
@@ -34,11 +35,15 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'sso-callback',
   'ssocallback',
   'status',
+  'supabase',
   'support',
   'terms',
   'user',
   'users',
+  'vercel',
   'verify',
+  'webhook',
+  'webhooks',
   'www',
   'null',
   'undefined',

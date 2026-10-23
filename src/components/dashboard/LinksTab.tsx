@@ -29,9 +29,11 @@ import { ScheduleChip } from '../links/ScheduleChip';
 import { EmbedComposer } from '../links/EmbedComposer';
 import { Block, BlockLayout } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
+import { useClickCounts } from '../../data/hooks/useClickCounts';
 import { copy } from '../../content/copy';
 
 export const LinksTab: React.FC = () => {
+  const clickCounts = useClickCounts();
   const {
     blocks,
     isLoading,
@@ -467,17 +469,45 @@ export const LinksTab: React.FC = () => {
                           )}
                         </div>
 
-                        {/* Subtitle / Host line */}
-                        {isEmbed && block.url && (
-                          <span className="text-[12px] text-muted truncate">
-                            {new URL(block.url).hostname}
-                          </span>
-                        )}
-                        {isLink && block.url && (
-                          <span className="text-[12px] text-muted truncate">
-                            {block.url}
-                          </span>
-                        )}
+                        {/* Subtitle / Host line with click counts */}
+                        {isEmbed && block.url && (() => {
+                          const clicks = clickCounts.get(block.id) || 0;
+                          const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
+                          return (
+                            <div className="flex items-center text-[12px] text-muted leading-tight overflow-hidden">
+                              <span className="truncate shrink min-w-0">
+                                {new URL(block.url).hostname}
+                              </span>
+                              {clicks > 0 && (
+                                <span
+                                  title={copy.dashboard.analytics.linksTab.titleTooltip}
+                                  className="shrink-0 whitespace-nowrap ml-1"
+                                >
+                                  · {clickText}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {isLink && block.url && (() => {
+                          const clicks = clickCounts.get(block.id) || 0;
+                          const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
+                          return (
+                            <div className="flex items-center text-[12px] text-muted leading-tight overflow-hidden">
+                              <span className="truncate shrink min-w-0">
+                                {block.url}
+                              </span>
+                              {clicks > 0 && (
+                                <span
+                                  title={copy.dashboard.analytics.linksTab.titleTooltip}
+                                  className="shrink-0 whitespace-nowrap ml-1"
+                                >
+                                  · {clickText}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {!isPro && (isEmbed || block.startAt || block.endAt) && (
                           <span className="text-[12px] text-muted">
                             Not shown on your page

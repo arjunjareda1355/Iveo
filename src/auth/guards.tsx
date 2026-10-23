@@ -6,6 +6,7 @@ import { LoadError } from './LoadError';
 import { SetupMissingKey } from './SetupMissingKey';
 import { safeRedirectPath } from './redirect';
 import { HAS_CLERK_KEY } from '../lib/env';
+import { useAccountDeletion } from '../components/account/AccountDeletionProvider';
 
 interface GuardProps {
   children: React.ReactNode;
@@ -42,7 +43,12 @@ export const AuthLoaderGuard: React.FC<GuardProps> = ({ children }) => {
 
 export const GuestOnly: React.FC<GuardProps> = ({ children }) => {
   const { isSignedIn, onboardingComplete } = useIvioSession();
+  const { isDeleting } = useAccountDeletion();
   const [searchParams] = useSearchParams();
+
+  if (isDeleting) {
+    return <>{children}</>;
+  }
 
   return (
     <AuthLoaderGuard>
@@ -64,7 +70,12 @@ export const GuestOnly: React.FC<GuardProps> = ({ children }) => {
 
 export const RequireAuth: React.FC<GuardProps> = ({ children }) => {
   const { isSignedIn } = useIvioSession();
+  const { isDeleting } = useAccountDeletion();
   const location = useLocation();
+
+  if (isDeleting) {
+    return <>{children}</>;
+  }
 
   const currentPath = location.pathname + location.search;
 
@@ -84,6 +95,11 @@ export const RequireAuth: React.FC<GuardProps> = ({ children }) => {
 
 export const RequireOnboarded: React.FC<GuardProps> = ({ children }) => {
   const { onboardingComplete } = useIvioSession();
+  const { isDeleting } = useAccountDeletion();
+
+  if (isDeleting) {
+    return <>{children}</>;
+  }
 
   return (
     <RequireAuth>
@@ -94,6 +110,11 @@ export const RequireOnboarded: React.FC<GuardProps> = ({ children }) => {
 
 export const RequireNotOnboarded: React.FC<GuardProps> = ({ children }) => {
   const { onboardingComplete } = useIvioSession();
+  const { isDeleting } = useAccountDeletion();
+
+  if (isDeleting) {
+    return <>{children}</>;
+  }
 
   return (
     <RequireAuth>

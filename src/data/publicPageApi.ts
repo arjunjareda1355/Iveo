@@ -2,6 +2,7 @@ import { PublicPageData, PublicBlock } from './types';
 import { storagePublicUrl } from './storageApi';
 import { VIBES, VibeId } from '../lib/vibes';
 import { parseEmbedUrl } from '../lib/embeds';
+import { isAllowedAvatarUrl } from '../lib/avatar';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -64,7 +65,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           username: data.profile.username,
           displayName: data.profile.display_name || data.profile.username,
           bio: data.profile.bio || '',
-          avatarUrl: data.profile.avatar_url || null,
+          avatarUrl: isAllowedAvatarUrl(data.profile.avatar_url)
+            ? data.profile.avatar_url
+            : null,
           vibeId: (data.profile.vibe_id as VibeId) || 'clean',
           buttonShape: data.profile.button_shape || null,
           socials: data.profile.socials || {},

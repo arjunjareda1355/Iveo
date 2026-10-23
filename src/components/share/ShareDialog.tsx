@@ -11,12 +11,16 @@ import {
   downloadSvg,
 } from '../../lib/qr';
 import { TrackedLinkSection } from './TrackedLinkSection';
+import { LinkPreviewSection } from './LinkPreviewSection';
 
 interface ShareDialogProps {
   isOpen: boolean;
   onClose: () => void;
   username: string;
   displayName?: string;
+  bio?: string;
+  avatarUrl?: string | null;
+  vibeId?: string;
   isPublished?: boolean;
 }
 
@@ -25,6 +29,9 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   onClose,
   username,
   displayName,
+  bio,
+  avatarUrl,
+  vibeId,
   isPublished = true,
 }) => {
   const { showToast } = useToast();
@@ -305,7 +312,16 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
           {/* 4. Tracked links section */}
           <TrackedLinkSection username={username} />
 
-          {/* 5. Notice if page is unpublished/hidden */}
+          {/* 5. Link preview section */}
+          <LinkPreviewSection
+            username={username}
+            displayName={displayName}
+            bio={bio}
+            avatarUrl={avatarUrl}
+            vibeId={vibeId}
+          />
+
+          {/* 6. Notice if page is unpublished/hidden */}
           {!isPublished && (
             <div className="flex items-center justify-between gap-3 bg-surface-2 border border-border rounded-[10px] p-3 text-[14px] text-muted">
               <span>Your page is hidden, so visitors will see an unavailable message.</span>

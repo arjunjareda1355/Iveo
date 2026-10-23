@@ -5,6 +5,7 @@ import {
   RequireOnboarded,
   RequireNotOnboarded,
 } from './auth/guards';
+import { AccountDeletionProvider } from './components/account/AccountDeletionProvider';
 
 // Lazy-load every route except the landing page
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -42,7 +43,7 @@ function LoadingBar() {
 
 export default function App() {
   return (
-    <>
+    <AccountDeletionProvider>
       <ScrollToTop />
       <Suspense fallback={<LoadingBar />}>
         <Routes>
@@ -86,6 +87,14 @@ export default function App() {
             }
           />
           <Route
+            path="/dashboard/analytics"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
             path="/dashboard/settings"
             element={
               <RequireOnboarded>
@@ -108,6 +117,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
-    </>
+    </AccountDeletionProvider>
   );
 }

@@ -18,9 +18,11 @@ import {
   USERNAME_MAX,
 } from '../lib/username-rules';
 import { pageUrl } from '../lib/site';
+import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
 
 export const OnboardingPage: React.FC = () => {
+  usePageMeta({ robots: 'noindex, nofollow' });
   const navigate = useNavigate();
   const { showToast } = useToast();
   const session = useIvioSession();
