@@ -9,12 +9,14 @@ import { PRICING_PLANS } from '../../content/pricing';
 import { copy } from '../../content/copy';
 import { useReveal } from '../../hooks/useReveal';
 import { useIvioSession } from '../../auth/useIvioSession';
+import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { cn } from '../../lib/cn';
 
 type BillingCycle = 'Monthly' | 'Yearly';
 
 export const Pricing: React.FC = () => {
   const { isSignedIn } = useIvioSession();
+  const { openUpgrade } = useUpgradeDialog();
   const [billing, setBilling] = useState<BillingCycle>('Yearly');
   const { ref: headerRef, style: headerStyle } = useReveal();
   const { ref: cardsRef, style: cardsStyle } = useReveal({ staggerIndex: 1 });
@@ -151,15 +153,26 @@ export const Pricing: React.FC = () => {
 
               {/* Button */}
               <div className="mt-6">
-                <Button
-                  as={Link}
-                  to={isSignedIn ? '/dashboard' : proPlan.buttonHref}
-                  variant="inverse"
-                  size="lg"
-                  fullWidth
-                >
-                  {proPlan.buttonLabel}
-                </Button>
+                {isSignedIn ? (
+                  <Button
+                    variant="inverse"
+                    size="lg"
+                    fullWidth
+                    onClick={() => openUpgrade()}
+                  >
+                    Upgrade to Pro
+                  </Button>
+                ) : (
+                  <Button
+                    as={Link}
+                    to={proPlan.buttonHref}
+                    variant="inverse"
+                    size="lg"
+                    fullWidth
+                  >
+                    {proPlan.buttonLabel}
+                  </Button>
+                )}
               </div>
 
               {/* Divider */}

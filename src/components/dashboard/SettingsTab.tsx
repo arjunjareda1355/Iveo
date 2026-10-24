@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { ProBadge } from '../plan/ProBadge';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { ShareDialog } from '../share/ShareDialog';
+import { SubscriptionCard } from '../plan/SubscriptionCard';
 import { ExportDataCard } from '../account/ExportDataCard';
 import { DeleteAccountCard } from '../account/DeleteAccountCard';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -94,14 +95,15 @@ export const SettingsTab: React.FC = () => {
             {!session.isPro && (
               <div className="flex items-center justify-between pt-1">
                 <span className="text-[13px] text-muted">
-                  Pro isn't open for purchase yet.
+                  Standard features included.
                 </span>
-                <a
-                  href="/#pricing"
-                  className="text-[13px] text-ink font-medium underline underline-offset-2 hover:text-ink-2"
+                <button
+                  type="button"
+                  onClick={() => openUpgrade()}
+                  className="text-[13px] text-ink font-semibold underline underline-offset-2 hover:text-ink-2 cursor-pointer"
                 >
-                  See Pro features
-                </a>
+                  Upgrade to Pro
+                </button>
               </div>
             )}
           </div>
@@ -113,6 +115,9 @@ export const SettingsTab: React.FC = () => {
           </Button>
         </div>
       </Card>
+
+      {/* 2. Subscription & Billing Card */}
+      <SubscriptionCard />
 
       {/* 2. Your Page Card */}
       <Card className="flex flex-col gap-4">

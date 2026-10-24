@@ -73,3 +73,27 @@ export function hasPublicSupabase(): boolean {
 export function hasAdminSupabase(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseSecretKey() && getClerkWebhookSigningSecret());
 }
+
+export function getRazorpayKeyId(): string {
+  return (
+    process.env.RAZORPAY_KEY_ID?.trim() ||
+    process.env.VITE_RAZORPAY_KEY_ID?.trim() ||
+    'rzp_live_Tj2WkYSgUgzyJr'
+  );
+}
+
+export function getRazorpayKeySecret(): string {
+  return (
+    process.env.RAZORPAY_KEY_SECRET?.trim() ||
+    'Veqs5nBUkzIGLOOdFGQW0908'
+  );
+}
+
+export function getRazorpayWebhookSecret(): string | undefined {
+  return (
+    process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ||
+    process.env.RAZORPAY_KEY_SECRET?.trim() ||
+    'Veqs5nBUkzIGLOOdFGQW0908'
+  );
+}
+

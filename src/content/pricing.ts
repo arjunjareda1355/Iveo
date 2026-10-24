@@ -1,5 +1,3 @@
-// Placeholder prices. Replace before launch.
-
 export interface PricingPlan {
   id: 'free' | 'pro';
   name: string;
@@ -7,6 +5,8 @@ export interface PricingPlan {
   description: string;
   monthlyPrice: string;
   yearlyPrice: string;
+  inrMonthlyPrice: string;
+  inrYearlyPrice: string;
   monthlyPeriod: string;
   yearlyPeriod: string;
   buttonLabel: string;
@@ -21,6 +21,8 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     description: 'Everything you need for a clean, professional page.',
     monthlyPrice: '$0',
     yearlyPrice: '$0',
+    inrMonthlyPrice: '₹0',
+    inrYearlyPrice: '₹0',
     monthlyPeriod: 'forever',
     yearlyPeriod: 'forever',
     buttonLabel: 'Claim your name',
@@ -42,18 +44,20 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     description: 'For people who share their work and want to know what is working.',
     monthlyPrice: '$6',
     yearlyPrice: '$5',
+    inrMonthlyPrice: '₹499',
+    inrYearlyPrice: '₹416',
     monthlyPeriod: 'per month',
-    yearlyPeriod: 'per month, billed $60 yearly',
-    buttonLabel: 'Start with Pro',
+    yearlyPeriod: 'per month, billed $60 yearly (or ₹4,999)',
+    buttonLabel: 'Upgrade to Pro',
     buttonHref: '/signup?plan=pro',
     features: [
       'Everything in Free',
-      'Link scheduling',
+      'Link scheduling and expiration dates',
       'Password-protected links',
-      'Advanced analytics',
-      'Email and phone collection with CSV export',
+      'Advanced analytics: sources and devices',
+      'Full 90-day and 12-month analytics ranges',
       'YouTube, Spotify and SoundCloud embeds',
-      'Remove the iveo footer mark',
+      'Option to remove the iveo mark',
       'Priority support by email',
     ],
   },

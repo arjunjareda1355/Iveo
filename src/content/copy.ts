@@ -406,16 +406,22 @@ export const copy = {
   },
   plan: {
     badge: 'Pro',
-    comingSoonHeading: 'Pro is coming soon',
-    comingSoonBody:
-      'Pro features are not open for purchase yet. Email help@iveo.site to ask about early access.',
+    upgradeHeading: 'Upgrade to iveo Pro',
+    upgradeSubheading:
+      'Unlock link scheduling, rich embeds, detailed analytics, and remove the iveo mark.',
     featureNoticeSuffix: 'is a Pro feature.',
     emailUsButton: 'Email us',
     closeButton: 'Close',
     learnMoreButton: 'Learn more',
     planLabel: 'Plan',
     freeLabel: 'Free',
-    proNotOpenLine: "Pro isn't open for purchase yet.",
+    proLabel: 'Pro',
+    upgradeButton: 'Upgrade to Pro',
+    annualDiscount: 'Save 17%',
+    monthlyLabel: 'Monthly',
+    yearlyLabel: 'Yearly',
+    securePaymentNotice: 'Secured with Razorpay. 256-bit encryption. Cancel anytime.',
+    activeSubscription: 'Active Pro subscription',
     seeProFeaturesLink: 'See Pro features',
   },
   extras: {
