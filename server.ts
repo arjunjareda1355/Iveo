@@ -73,11 +73,14 @@ async function startServer() {
   const verifyPaymentModule = await import('./api/razorpay/verify-payment.ts');
   const webhookModule = await import('./api/razorpay/webhook.ts');
   const clerkWebhookModule = await import('./api/clerk-webhook.ts');
+  const checkUsernameModule = await import('./api/check-username.ts');
 
   app.post('/api/razorpay/create-order', adaptWebHandler(createOrderModule.POST));
   app.post('/api/razorpay/verify-payment', adaptWebHandler(verifyPaymentModule.POST));
   app.post('/api/razorpay/webhook', adaptWebHandler(webhookModule.POST));
   app.post('/api/clerk-webhook', adaptWebHandler(clerkWebhookModule.POST));
+  app.get('/api/check-username', adaptWebHandler(checkUsernameModule.GET));
+  app.post('/api/check-username', adaptWebHandler(checkUsernameModule.POST));
 
   // 2. OpenGraph dynamic image (with graceful SVG fallback in Node ESM dev)
   app.get('/api/og', async (req, res) => {

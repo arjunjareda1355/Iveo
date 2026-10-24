@@ -10,6 +10,7 @@ import {
   USERNAME_MAX,
   SIMULATED_TAKEN_USERNAMES_SET,
 } from '../lib/username-rules';
+import { checkUsernameAvailability } from '../lib/username';
 import { copy } from '../content/copy';
 import { cn } from '../lib/cn';
 
@@ -46,6 +47,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
 
   // Debounced availability check
   useEffect(() => {
+    let active = true;
     if (!rawInput || rawInput.length < USERNAME_MIN) {
       setIsChecking(false);
       setStatusState('initial');
@@ -56,21 +58,24 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     setIsChecking(true);
     setStatusState('checking');
 
-    const timer = setTimeout(() => {
-      const clean = normalizeUsername(rawInput);
-      const rule = validateUsername(clean);
+    const timer = setTimeout(async () => {
+      const res = await checkUsernameAvailability(rawInput);
+      if (!active) return;
       setIsChecking(false);
 
-      if (rule.ok && !SIMULATED_TAKEN_USERNAMES_SET.has(clean)) {
+      if (res.status === 'available') {
         setStatusState('available');
-        setAvailableUsername(clean);
+        setAvailableUsername(res.username);
       } else {
         setStatusState('unavailable');
         setAvailableUsername('');
       }
-    }, 400);
+    }, 350);
 
-    return () => clearTimeout(timer);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [rawInput]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,7 +83,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     setRawInput(clean);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!rawInput.trim()) {
@@ -87,11 +92,12 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       return;
     }
 
-    const clean = normalizeUsername(rawInput);
-    const rule = validateUsername(clean);
+    setIsChecking(true);
+    const res = await checkUsernameAvailability(rawInput);
+    setIsChecking(false);
 
-    if (rule.ok && !SIMULATED_TAKEN_USERNAMES_SET.has(clean)) {
-      navigate(`/signup?u=${clean}`);
+    if (res.status === 'available') {
+      navigate(`/signup?u=${res.username}`);
     } else {
       setStatusState('unavailable');
       inputRef.current?.focus();

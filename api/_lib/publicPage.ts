@@ -10,15 +10,22 @@ export interface PublicPageServerData {
 }
 
 export function isAllowedAvatarHost(url: string | null | undefined): boolean {
-  if (!url || typeof url !== 'string' || url.length > 2048) {
+  if (!url || typeof url !== 'string') {
+    return false;
+  }
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed.length < 1500000;
+  }
+  if (trimmed.length > 2048) {
     return false;
   }
   try {
-    const parsed = new URL(url);
-    return (
-      parsed.protocol === 'https:' &&
-      (parsed.hostname === 'img.clerk.com' || parsed.hostname === 'images.clerk.dev')
-    );
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
   } catch {
     return false;
   }

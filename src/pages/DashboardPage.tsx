@@ -110,24 +110,15 @@ const DashboardContent: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Share button: full on md+, icon-only below md */}
+            {/* Single responsive share button */}
             <Button
               variant="secondary"
               size="md"
               onClick={() => setIsShareOpen(true)}
-              className="hidden sm:inline-flex"
-            >
-              <Share2 size={16} strokeWidth={1.5} />
-              <span>Share</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => setIsShareOpen(true)}
-              className="sm:hidden w-10 h-10 p-0"
               aria-label="Share your page"
             >
-              <Share2 size={16} strokeWidth={1.5} />
+              <Share2 size={16} strokeWidth={1.5} className="sm:mr-1.5" />
+              <span className="hidden sm:inline">Share</span>
             </Button>
 
             <IvioUserButton />
