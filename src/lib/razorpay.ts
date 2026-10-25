@@ -1,5 +1,5 @@
-export type { PlanPeriod, PaymentCurrency } from '../../api/_lib/razorpay.js';
-import type { PlanPeriod, PaymentCurrency } from '../../api/_lib/razorpay.js';
+export type { PlanPeriod, PaymentCurrency } from '../../api/_lib/razorpay.ts';
+import type { PlanPeriod, PaymentCurrency } from '../../api/_lib/razorpay.ts';
 
 declare global {
   interface Window {

@@ -1,5 +1,5 @@
-import { normalizeUsername, RESERVED, USERNAME_PATTERN } from './_lib/usernames.js';
-import { adminClient } from './_lib/supabase.js';
+import { normalizeUsername, RESERVED, USERNAME_PATTERN } from './_lib/usernames.ts';
+import { adminClient } from './_lib/supabase.ts';
 
 export const DEMO_TAKEN_USERNAMES = new Set([
   'maya',

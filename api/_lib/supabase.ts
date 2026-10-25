@@ -1,9 +1,9 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   getSupabaseUrl,
   getSupabasePublishableKey,
   getSupabaseSecretKey,
-} from './env.js';
+} from './env.ts';
 
 let cachedAdminClient: SupabaseClient | null = null;
 

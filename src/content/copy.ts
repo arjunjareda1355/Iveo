@@ -239,7 +239,7 @@ export const copy = {
     bodies: {
       step1: 'This is where your page will live. You can change it later in your account settings.',
       step2: 'Choose a starting style. You can change everything later.',
-      step3: 'Public pages arrive in the next release. Your address is reserved.',
+      step3: 'Your page is live and ready to share. Customize your links and appearance anytime.',
     },
     buttons: {
       continue: 'Continue',
@@ -351,10 +351,10 @@ export const copy = {
     },
     linksTab: {
       emptyTitle: 'Your links will live here',
-      emptyBody: 'Link editing arrives in the next step. Your account, address and vibe are already saved.',
+      emptyBody: 'Add your primary links, social profiles, and content embeds to your page.',
       addLinkButton: 'Add link',
-      addLinkTooltip: 'Coming in the next step',
-      supportNote: 'Need something sooner? Email',
+      addLinkTooltip: 'Add a new link to your page',
+      supportNote: 'Need assistance? Email',
     },
     appearanceTab: {
       vibeHeading: 'Vibe',
@@ -373,7 +373,7 @@ export const copy = {
       manageAccountButton: 'Manage account',
       copyLinkButton: 'Copy link',
       viewPageButton: 'View page',
-      viewPageTooltip: 'Public pages arrive in the next release',
+      viewPageTooltip: 'Open your public page in a new tab',
       signOutButton: 'Sign out',
       sessionLine: 'Signed in on this device.',
     },
@@ -384,9 +384,9 @@ export const copy = {
     saveFailed: "Couldn't save. Try again.",
   },
   publicPlaceholder: {
-    heading: "This page isn't live yet.",
-    body: 'Public pages arrive in the next release.',
-    button: 'Back to home',
+    heading: 'This address is available.',
+    body: 'Nobody has claimed this address yet. Claim it now to create your personal page.',
+    button: 'Explore iveo',
   },
   errors: {
     notFoundHeading: 'Page not found',
@@ -401,7 +401,7 @@ export const copy = {
     backHome: 'Back to home',
     reservingPrefix: 'Reserving iveo.site/',
     proPlanSelected: 'Pro plan selected',
-    legalPlaceholder: 'This page will be published before launch.',
+    legalPlaceholder: 'Official terms and privacy policy for iveo.',
     questionsPrefix: 'Questions? Email',
   },
   plan: {

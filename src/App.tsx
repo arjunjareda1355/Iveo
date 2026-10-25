@@ -107,6 +107,7 @@ export default function App() {
           <Route path="/account/*" element={<AccountPage />} />
 
           {/* 6. Legal Pages */}
+          <Route path="/legal" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
           <Route path="/terms" element={<Legal />} />
 

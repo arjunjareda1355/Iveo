@@ -20,6 +20,7 @@ export const RESERVED = new Set([
   'home',
   'iveo',
   'ivio',
+  'legal',
   'login',
   'logout',
   'mail',

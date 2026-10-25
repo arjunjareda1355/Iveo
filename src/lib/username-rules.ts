@@ -21,6 +21,7 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'home',
   'iveo',
   'ivio',
+  'legal',
   'login',
   'logout',
   'mail',

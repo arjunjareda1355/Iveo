@@ -14,6 +14,8 @@ import { InstagramIcon, PlayIcon, MusicIcon, MailIcon } from '../phone/SocialIco
 import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
 import { pageUrl } from '../../lib/site';
+import { formatExternalUrl } from '../../lib/urls';
+import { Logo } from '../ui/Logo';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -84,69 +86,78 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         paddingRight: `${Math.round(20 * scale)}px`,
       }}
     >
-      {/* Avatar */}
-      <div
-        className="rounded-full flex items-center justify-center shrink-0 font-semibold shadow-xs overflow-hidden"
-        style={{
-          width: `${Math.round(72 * scale)}px`,
-          height: `${Math.round(72 * scale)}px`,
-          marginTop: `${Math.round(22 * scale)}px`,
-          backgroundColor: tokens.avatarBg,
-          color: tokens.avatarText,
-          fontSize: `${Math.round(26 * scale)}px`,
-          fontFamily: "'Geist', sans-serif",
-        }}
-      >
-        {profile?.avatarUrl ? (
-          <img
-            src={profile.avatarUrl}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          displayInitials
+      {/* Profile Header Area */}
+      <div className="w-full flex flex-col items-center shrink-0">
+        {/* Avatar */}
+        <div
+          className="rounded-full flex items-center justify-center shrink-0 font-semibold shadow-xs overflow-hidden select-none"
+          style={{
+            width: `${Math.round(72 * scale)}px`,
+            height: `${Math.round(72 * scale)}px`,
+            marginTop: `${Math.round(18 * scale)}px`,
+            backgroundColor: tokens.avatarBg,
+            color: tokens.avatarText,
+            fontSize: `${Math.round(26 * scale)}px`,
+            lineHeight: 1,
+            fontFamily: "'Geist', sans-serif",
+          }}
+        >
+          {profile?.avatarUrl ? (
+            <img
+              src={profile.avatarUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            displayInitials
+          )}
+        </div>
+
+        {/* Name */}
+        <div
+          className="font-semibold text-center w-full px-2 break-words"
+          style={{
+            fontSize: `${Math.round(18 * scale)}px`,
+            lineHeight: `${Math.round(24 * scale)}px`,
+            marginTop: `${Math.round(12 * scale)}px`,
+          }}
+        >
+          {displayName}
+        </div>
+
+        {/* Handle */}
+        {displayHandle && (
+          <div
+            className="text-center font-mono truncate w-full px-2"
+            style={{
+              color: tokens.muted,
+              fontSize: `${Math.round(13 * scale)}px`,
+              lineHeight: `${Math.round(18 * scale)}px`,
+              marginTop: `${Math.round(4 * scale)}px`,
+            }}
+          >
+            @{displayHandle}
+          </div>
+        )}
+
+        {/* Bio */}
+        {displayBio && (
+          <p
+            className="text-center break-words max-w-[270px] px-2 leading-relaxed"
+            style={{
+              color: tokens.text,
+              opacity: 0.85,
+              fontSize: `${Math.round(13 * scale)}px`,
+              lineHeight: `${Math.round(19 * scale)}px`,
+              marginTop: `${Math.round(8 * scale)}px`,
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+            }}
+          >
+            {displayBio}
+          </p>
         )}
       </div>
-
-      {/* Name */}
-      <div
-        className="font-semibold text-center leading-tight truncate w-full"
-        style={{
-          fontSize: `${Math.round(18 * scale)}px`,
-          marginTop: `${Math.round(14 * scale)}px`,
-        }}
-      >
-        {displayName}
-      </div>
-
-      {/* Handle */}
-      {displayHandle && (
-        <div
-          className="text-center font-mono truncate w-full"
-          style={{
-            color: tokens.muted,
-            fontSize: `${Math.round(13 * scale)}px`,
-            marginTop: `${Math.round(2 * scale)}px`,
-          }}
-        >
-          @{displayHandle}
-        </div>
-      )}
-
-      {/* Bio */}
-      {displayBio && (
-        <p
-          className="text-center line-clamp-3 max-w-[280px] leading-snug"
-          style={{
-            color: tokens.text,
-            opacity: 0.85,
-            fontSize: `${Math.round(13 * scale)}px`,
-            marginTop: `${Math.round(10 * scale)}px`,
-          }}
-        >
-          {displayBio}
-        </p>
-      )}
 
       {/* Blocks Container */}
       <div
@@ -295,7 +306,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             return (
               <a
                 key={block.id}
-                href={block.url}
+                href={formatExternalUrl(block.url)}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
                 onClick={() => onLinkClick?.(block)}
@@ -336,33 +347,20 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           gap: `${Math.round(6 * scale)}px`,
         }}
       >
-        {/* iveo mark and "Create your own page" link */}
+        {/* iveo mark and link */}
         {!hideFooterMark && (
           <a
             href="https://iveo.site"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity"
-            style={{ color: tokens.muted }}
+            className="inline-flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity"
+            aria-label="Made with iveo"
           >
-            <svg
-              width={Math.round(14 * scale)}
-              height={Math.round(14 * scale)}
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <rect width="24" height="24" rx="7" fill="currentColor" />
-              <circle cx="12" cy="7.25" r="1.75" fill={tokens.bg} />
-              <rect x="10.5" y="10.5" width="3" height="8" rx="1.5" fill={tokens.bg} />
-            </svg>
-            <span
-              className="font-medium tracking-tight"
-              style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px` }}
-            >
-              iveo
-            </span>
+            <Logo
+              tone={vibe.id === 'midnight' ? 'dark' : 'light'}
+              size="sm"
+              isLink={false}
+            />
           </a>
         )}
 

@@ -86,7 +86,7 @@ const DashboardContent: React.FC = () => {
     name: session.displayName || session.username || 'Your name',
     handle: session.username || 'yourname',
     avatarUrl: session.imageUrl,
-    bio: 'Your bio goes here.',
+    bio: session.bio || 'Your bio goes here.',
   };
 
   const buttonRadiusOverride = previewShape ? BUTTON_RADIUS_MAP[previewShape] : undefined;

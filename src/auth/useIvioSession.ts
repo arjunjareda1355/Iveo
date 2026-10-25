@@ -15,7 +15,9 @@ export interface IveoSession {
   isSignedIn: boolean;
   username: string | null;
   displayName: string;
+  bio: string;
   imageUrl: string | null;
+  category: string | null;
   primaryEmail: string | null;
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
@@ -26,6 +28,12 @@ export interface IveoSession {
   hideIvioFooter: boolean;
   updateUsername: (newUsername: string) => Promise<void>;
   updatePreferences: (patch: Partial<Omit<IveoPreferences, 'plan'>>) => Promise<void>;
+  updateProfile: (profile: {
+    displayName?: string;
+    bio?: string;
+    avatarUrl?: string | null;
+    category?: string | null;
+  }) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -36,7 +44,9 @@ const FALLBACK_SESSION: IveoSession = {
   isSignedIn: false,
   username: null,
   displayName: 'Your name',
+  bio: '',
   imageUrl: null,
+  category: null,
   primaryEmail: null,
   vibeId: DEFAULT_PREFERENCES.vibeId,
   buttonShape: DEFAULT_PREFERENCES.buttonShape,
@@ -47,6 +57,7 @@ const FALLBACK_SESSION: IveoSession = {
   hideIvioFooter: false,
   updateUsername: async () => {},
   updatePreferences: async () => {},
+  updateProfile: async () => {},
   signOut: async () => {},
 };
 
@@ -63,7 +74,9 @@ function useClerkSession(): IveoSession {
       isSignedIn: false,
       username: null,
       displayName: 'Your name',
+      bio: '',
       imageUrl: null,
+      category: null,
       primaryEmail: null,
       vibeId: DEFAULT_PREFERENCES.vibeId,
       buttonShape: DEFAULT_PREFERENCES.buttonShape,
@@ -74,6 +87,7 @@ function useClerkSession(): IveoSession {
       hideIvioFooter: false,
       updateUsername: async () => {},
       updatePreferences: async () => {},
+      updateProfile: async () => {},
       signOut: async () => {
         await signOut();
       },
@@ -83,11 +97,23 @@ function useClerkSession(): IveoSession {
   const rawUsername = user.username || '';
   const normalizedUsername = normalizeUsername(rawUsername);
   const username = normalizedUsername || null;
-  const displayName = username || user.fullName || 'Your name';
-  const imageUrl = isAllowedAvatarUrl(user.imageUrl) ? user.imageUrl : null;
-  const primaryEmail = user.primaryEmailAddress?.emailAddress || null;
 
   const preferences = parsePreferences(user.unsafeMetadata);
+
+  const displayName =
+    preferences.displayName ||
+    user.fullName ||
+    username ||
+    'Your name';
+
+  const bio = preferences.bio || '';
+
+  // Avatar can come from custom uploaded avatarUrl or Clerk image
+  const candidateAvatar = preferences.avatarUrl || user.imageUrl;
+  const imageUrl = isAllowedAvatarUrl(candidateAvatar) ? candidateAvatar : null;
+  const category = preferences.category || null;
+
+  const primaryEmail = user.primaryEmailAddress?.emailAddress || null;
 
   const isUsernameValid = username ? validateUsername(username).ok : false;
   const onboardingComplete = preferences.onboardingComplete === true && isUsernameValid;
@@ -101,19 +127,53 @@ function useClerkSession(): IveoSession {
   };
 
   const updatePreferences = async (patch: Partial<Omit<IveoPreferences, 'plan'>>): Promise<void> => {
-    // unsafeMetadata holds client-writable preferences. Never write plan here (server/database authoritative).
     const currentMeta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
       ? user.unsafeMetadata
       : {}) as Record<string, unknown>;
 
-    // Ensure plan is not included in client update payloads
     const { plan: _ignoredPlan, ...safePatch } = patch as any;
 
+    const merged = {
+      ...currentMeta,
+      ...safePatch,
+    };
+
     await user.update({
-      unsafeMetadata: {
-        ...currentMeta,
-        ...safePatch,
-      },
+      unsafeMetadata: merged,
+    });
+
+    // Mirror to localStorage for offline and public profile fallback
+    if (username) {
+      try {
+        const raw = localStorage.getItem(`iveo_profile_${username}`) || '{}';
+        const parsed = JSON.parse(raw);
+        localStorage.setItem(
+          `iveo_profile_${username}`,
+          JSON.stringify({
+            ...parsed,
+            vibeId: merged.vibeId || parsed.vibeId,
+            buttonShape: merged.buttonShape || parsed.buttonShape,
+            hideFooter: merged.hideIveoFooter || merged.hideIvioFooter || parsed.hideFooter,
+            displayName: merged.displayName !== undefined ? merged.displayName : parsed.displayName,
+            bio: merged.bio !== undefined ? merged.bio : parsed.bio,
+            avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : parsed.avatarUrl,
+          })
+        );
+      } catch {}
+    }
+  };
+
+  const updateProfile = async (profile: {
+    displayName?: string;
+    bio?: string;
+    avatarUrl?: string | null;
+    category?: string | null;
+  }): Promise<void> => {
+    await updatePreferences({
+      displayName: profile.displayName !== undefined ? profile.displayName : preferences.displayName,
+      bio: profile.bio !== undefined ? profile.bio : preferences.bio,
+      avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : preferences.avatarUrl,
+      category: profile.category !== undefined ? profile.category : preferences.category,
     });
   };
 
@@ -122,7 +182,9 @@ function useClerkSession(): IveoSession {
     isSignedIn: true,
     username,
     displayName,
+    bio,
     imageUrl,
+    category,
     primaryEmail,
     vibeId: preferences.vibeId,
     buttonShape: preferences.buttonShape,
@@ -133,6 +195,7 @@ function useClerkSession(): IveoSession {
     hideIvioFooter: hideFooter,
     updateUsername,
     updatePreferences,
+    updateProfile,
     signOut: async () => {
       await signOut();
     },
@@ -148,5 +211,4 @@ export function useIveoSession(): IveoSession {
   return useClerkSession();
 }
 
-// Backward-compatible alias
 export const useIvioSession = useIveoSession;

@@ -1,4 +1,4 @@
-import { publicRpc } from './supabase.js';
+import { publicRpc } from './supabase.ts';
 
 export interface PublicPageServerData {
   displayName: string | null;

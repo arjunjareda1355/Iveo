@@ -1,4 +1,6 @@
-import express, { Request as ExpressReq, Response as ExpressRes } from 'express';
+import express from 'express';
+type ExpressReq = express.Request;
+type ExpressRes = express.Response;
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

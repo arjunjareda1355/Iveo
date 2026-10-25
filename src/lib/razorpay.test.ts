@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import {
   verifyPaymentSignature,
   PRICING_CONFIG,
-} from '../../api/_lib/razorpay.js';
+} from '../../api/_lib/razorpay.ts';
 
 test('razorpay: PRICING_CONFIG defines valid pricing structures', () => {
   assert.equal(PRICING_CONFIG.INR.monthly.amount, 49900);

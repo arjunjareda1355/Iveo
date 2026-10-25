@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getRazorpayKeyId, getRazorpayKeySecret, getRazorpayWebhookSecret } from './env.js';
+import { getRazorpayKeyId, getRazorpayKeySecret, getRazorpayWebhookSecret } from './env.ts';
 
 export type PlanPeriod = 'monthly' | 'yearly';
 export type PaymentCurrency = 'INR' | 'USD';

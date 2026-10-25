@@ -1,8 +1,8 @@
 import { verifyWebhook } from '@clerk/backend/webhooks';
-import { getClerkWebhookSigningSecret, hasAdminSupabase } from './_lib/env.js';
-import { adminClient } from './_lib/supabase.js';
-import { normalizeUsername, RESERVED } from './_lib/usernames.js';
-import { isAllowedAvatarHost } from './_lib/publicPage.js';
+import { getClerkWebhookSigningSecret, hasAdminSupabase } from './_lib/env.ts';
+import { adminClient } from './_lib/supabase.ts';
+import { normalizeUsername, RESERVED } from './_lib/usernames.ts';
+import { isAllowedAvatarHost } from './_lib/publicPage.ts';
 
 interface ClerkWebhookEvent {
   type: string;

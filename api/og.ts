@@ -1,9 +1,9 @@
 import { ImageResponse } from '@vercel/og';
-import { getSiteOrigin } from './_lib/env.js';
-import { normalizeUsername } from './_lib/usernames.js';
-import { loadPublicPage, isAllowedAvatarHost } from './_lib/publicPage.js';
-import { getServerVibe } from './_lib/vibes.js';
-import { truncate } from './_lib/html.js';
+import { getSiteOrigin } from './_lib/env.ts';
+import { normalizeUsername } from './_lib/usernames.ts';
+import { loadPublicPage, isAllowedAvatarHost } from './_lib/publicPage.ts';
+import { getServerVibe } from './_lib/vibes.ts';
+import { truncate } from './_lib/html.ts';
 
 // Strip emojis and check if string contains only Latin script, numbers, punctuation, spaces, math/currency symbols
 function isRenderableLatin(text: string): boolean {

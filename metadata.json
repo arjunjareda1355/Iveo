@@ -1,5 +1,5 @@
 {
-  "name": "ivio",
+  "name": "iveo",
   "description": "One calm home for your links. iveo gives you one calm, customizable page for all your links.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -1,10 +1,10 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { getSiteOrigin } from './_lib/env.js';
-import { classifySegment, normalizeUsername } from './_lib/usernames.js';
-import { escapeHtml, truncate, safeJsonLd, injectHead } from './_lib/html.js';
-import { loadPublicPage, version, PublicPageServerData } from './_lib/publicPage.js';
-import { pageAddress, ogImageAddress } from './_lib/site.js';
+import { getSiteOrigin } from './_lib/env.ts';
+import { classifySegment, normalizeUsername } from './_lib/usernames.ts';
+import { escapeHtml, truncate, safeJsonLd, injectHead } from './_lib/html.ts';
+import { loadPublicPage, version, type PublicPageServerData } from './_lib/publicPage.ts';
+import { pageAddress, ogImageAddress } from './_lib/site.ts';
 
 const GENERIC_TITLE = 'iveo: one link for everything you make';
 const GENERIC_DESCRIPTION =

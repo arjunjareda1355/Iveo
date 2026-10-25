@@ -1,46 +1,58 @@
 import React from 'react';
-import { copy } from '../../content/copy';
 
 interface StepProgressProps {
-  currentStep: 1 | 2 | 3;
+  currentStep: number;
+  totalSteps?: number;
+  labels?: readonly string[];
 }
 
-export const StepProgress: React.FC<StepProgressProps> = ({ currentStep }) => {
-  const labels = copy.onboarding.stepLabels;
+export const StepProgress: React.FC<StepProgressProps> = ({
+  currentStep,
+  totalSteps = 5,
+  labels = ['Address', 'Profile', 'Craft', 'Links', 'Vibe'],
+}) => {
+  const count = labels.length || totalSteps;
 
   return (
     <div
       role="progressbar"
-      aria-label="Onboarding progress"
+      aria-label="Profile setup progress"
       aria-valuenow={currentStep}
       aria-valuemin={1}
-      aria-valuemax={3}
+      aria-valuemax={count}
       className="w-full flex flex-col gap-2 select-none"
     >
-      {/* 3 bars */}
-      <div className="flex items-center gap-2 w-full">
-        {[1, 2, 3].map((step) => {
+      {/* Bars */}
+      <div className="flex items-center gap-1.5 w-full">
+        {Array.from({ length: count }, (_, i) => i + 1).map((step) => {
           const isDoneOrCurrent = step <= currentStep;
           return (
             <div
               key={step}
               className={`h-1 flex-1 rounded-[2px] transition-colors duration-200 ${
-                isDoneOrCurrent ? 'bg-[#0A0A0A]' : 'bg-[#E5E5E5]'
+                isDoneOrCurrent ? 'bg-ink' : 'bg-border'
               }`}
             />
           );
         })}
       </div>
 
-      {/* 3 labels */}
-      <div className="flex items-center justify-between font-mono text-[13px] text-muted">
+      {/* Labels */}
+      <div className="flex items-center justify-between font-mono text-[12px] text-muted">
         {labels.map((label, idx) => {
           const stepNum = idx + 1;
           const isCurrent = stepNum === currentStep;
+          const isPast = stepNum < currentStep;
           return (
             <span
               key={label}
-              className={isCurrent ? 'text-ink font-medium' : 'text-muted'}
+              className={`transition-colors ${
+                isCurrent
+                  ? 'text-ink font-semibold'
+                  : isPast
+                  ? 'text-ink-2 font-medium'
+                  : 'text-subtle'
+              }`}
             >
               {label}
             </span>

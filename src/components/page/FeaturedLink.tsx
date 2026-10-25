@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
+import { formatExternalUrl } from '../../lib/urls';
 
 interface FeaturedLinkProps {
   block: PageBlock;
@@ -74,7 +75,7 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
   if (isInteractive && block.url) {
     return (
       <a
-        href={block.url}
+        href={formatExternalUrl(block.url)}
         target="_blank"
         rel="noopener noreferrer nofollow"
         onClick={() => onLinkClick?.(block)}

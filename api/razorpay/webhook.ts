@@ -1,5 +1,5 @@
-import { verifyWebhookSignature } from '../_lib/razorpay.js';
-import { adminClient } from '../_lib/supabase.js';
+import { verifyWebhookSignature } from '../_lib/razorpay.ts';
+import { adminClient } from '../_lib/supabase.ts';
 
 export async function POST(request: Request): Promise<Response> {
   try {

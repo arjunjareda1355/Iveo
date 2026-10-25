@@ -49,6 +49,32 @@ function saveLocalBlocks(userId: string, blocks: Block[]) {
   } catch {}
 }
 
+export async function seedStarterLinks(
+  userId: string,
+  links: Array<{ title: string; url: string }>
+): Promise<void> {
+  const existing = getLocalBlocks(userId);
+  const newBlocks: Block[] = links
+    .filter((l) => l.title.trim().length > 0)
+    .map((l, i) => ({
+      id: crypto.randomUUID(),
+      kind: 'link',
+      title: l.title.trim(),
+      url: l.url.trim() || 'https://iveo.site',
+      icon: null,
+      thumbnailPath: null,
+      thumbnailUrl: null,
+      layout: 'classic',
+      embedProvider: null,
+      startAt: null,
+      endAt: null,
+      position: existing.length + i,
+      isActive: true,
+      isArchived: false,
+    }));
+  saveLocalBlocks(userId, [...existing, ...newBlocks]);
+}
+
 export async function listMyBlocks(token: string | null, userId: string): Promise<Block[]> {
   if (!rawSupabaseUrl) {
     const local = getLocalBlocks(userId);

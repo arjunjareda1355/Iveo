@@ -1,9 +1,9 @@
 import {
   createRazorpayOrder,
-  PlanPeriod,
-  PaymentCurrency,
-} from '../_lib/razorpay.js';
-import { getRazorpayKeyId } from '../_lib/env.js';
+  type PlanPeriod,
+  type PaymentCurrency,
+} from '../_lib/razorpay.ts';
+import { getRazorpayKeyId } from '../_lib/env.ts';
 
 export async function POST(request: Request): Promise<Response> {
   try {

@@ -10,6 +10,10 @@ export interface IveoPreferences {
   plan: 'free' | 'pro';
   hideIveoFooter: boolean;
   hideIvioFooter?: boolean;
+  displayName?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  category?: string | null;
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -22,6 +26,10 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   plan: 'free',
   hideIveoFooter: false,
   hideIvioFooter: false,
+  displayName: null,
+  bio: null,
+  avatarUrl: null,
+  category: null,
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -71,6 +79,26 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     record.hide_iveo_footer === true ||
     record.hide_ivio_footer === true;
 
+  const displayName =
+    typeof record.displayName === 'string' && record.displayName.trim().length > 0
+      ? record.displayName.trim()
+      : null;
+
+  const bio =
+    typeof record.bio === 'string'
+      ? record.bio.trim()
+      : null;
+
+  const avatarUrl =
+    typeof record.avatarUrl === 'string' && record.avatarUrl.length > 0
+      ? record.avatarUrl
+      : null;
+
+  const category =
+    typeof record.category === 'string' && record.category.length > 0
+      ? record.category
+      : null;
+
   return {
     vibeId,
     buttonShape,
@@ -79,5 +107,9 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     plan,
     hideIveoFooter: hideFooter,
     hideIvioFooter: hideFooter,
+    displayName,
+    bio,
+    avatarUrl,
+    category,
   };
 }
