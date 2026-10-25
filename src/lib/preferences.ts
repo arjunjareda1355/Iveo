@@ -14,6 +14,7 @@ export interface IveoPreferences {
   bio?: string | null;
   avatarUrl?: string | null;
   category?: string | null;
+  socials?: Record<string, string>;
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -30,6 +31,7 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   bio: null,
   avatarUrl: null,
   category: null,
+  socials: {},
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -99,6 +101,11 @@ export function parsePreferences(raw: unknown): IveoPreferences {
       ? record.category
       : null;
 
+  const socials: Record<string, string> =
+    record.socials && typeof record.socials === 'object' && !Array.isArray(record.socials)
+      ? (record.socials as Record<string, string>)
+      : {};
+
   return {
     vibeId,
     buttonShape,
@@ -111,5 +118,6 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     bio,
     avatarUrl,
     category,
+    socials,
   };
 }

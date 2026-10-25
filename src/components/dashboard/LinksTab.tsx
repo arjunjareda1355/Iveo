@@ -31,6 +31,7 @@ import { Block, BlockLayout } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
 import { useClickCounts } from '../../data/hooks/useClickCounts';
 import { copy } from '../../content/copy';
+import { SocialLinksCard } from './SocialLinksCard';
 
 export const LinksTab: React.FC = () => {
   const clickCounts = useClickCounts();
@@ -771,7 +772,10 @@ export const LinksTab: React.FC = () => {
         </div>
       )}
 
-      {/* 5. Delete Confirm Dialog */}
+      {/* 5. Social Media Accounts */}
+      <SocialLinksCard />
+
+      {/* 6. Delete Confirm Dialog */}
       {deletingBlock && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4"

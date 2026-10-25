@@ -182,6 +182,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
               handle: pageData.profile.username,
               bio: pageData.profile.bio,
               avatarUrl: pageData.profile.avatarUrl,
+              socials: pageData.profile.socials,
             }}
             blocks={pageData.links}
             buttonRadiusOverride={buttonRadiusOverride}

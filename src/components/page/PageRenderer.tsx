@@ -10,7 +10,7 @@ import {
 import { Vibe } from '../../lib/vibes';
 import { PageBlock } from '../../data/types';
 import { PhoneProfile } from '../phone/PhonePage';
-import { InstagramIcon, PlayIcon, MusicIcon, MailIcon } from '../phone/SocialIcons';
+import { SocialIcon } from '../phone/SocialIcons';
 import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
 import { pageUrl } from '../../lib/site';
@@ -57,6 +57,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     (profile?.name
       ? profile.name.slice(0, 2).toUpperCase()
       : persona.initials);
+
+  // Social accounts: only render when explicitly provided and non-empty
+  const rawSocials = profile?.socials;
+  const activeSocialEntries = rawSocials
+    ? Object.entries(rawSocials).filter(
+        ([_, url]) => typeof url === 'string' && url.trim().length > 0
+      )
+    : [];
 
   // If custom blocks are provided, use them. Otherwise fall back to persona links
   const hasCustomBlocks = blocks !== undefined;
@@ -323,21 +331,46 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         })}
       </div>
 
-      {/* Social Row */}
-      <div
-        className="flex items-center justify-center shrink-0"
-        style={{
-          marginTop: `${Math.round(20 * scale)}px`,
-          gap: `${Math.round(16 * scale)}px`,
-          color: tokens.text,
-          opacity: 0.75,
-        }}
-      >
-        <InstagramIcon size={Math.round(18 * scale)} />
-        <PlayIcon size={Math.round(18 * scale)} />
-        <MusicIcon size={Math.round(18 * scale)} />
-        <MailIcon size={Math.round(18 * scale)} />
-      </div>
+      {/* Social Row: Rendered ONLY if user added social accounts */}
+      {activeSocialEntries.length > 0 && (
+        <div
+          className="flex items-center justify-center flex-wrap shrink-0"
+          style={{
+            marginTop: `${Math.round(20 * scale)}px`,
+            gap: `${Math.round(14 * scale)}px`,
+            color: tokens.text,
+            opacity: 0.85,
+          }}
+        >
+          {activeSocialEntries.map(([platform, url]) => {
+            const cleanUrl = formatExternalUrl(url);
+            if (isPublicPage) {
+              return (
+                <a
+                  key={platform}
+                  href={cleanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  aria-label={platform}
+                  className="transition-transform duration-120 hover:scale-110 active:scale-95"
+                  style={{ color: tokens.text }}
+                >
+                  <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+                </a>
+              );
+            }
+            return (
+              <span
+                key={platform}
+                title={`${platform}: ${url}`}
+                className="opacity-80 hover:opacity-100 transition-opacity"
+              >
+                <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Footer Area */}
       <div

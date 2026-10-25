@@ -21,6 +21,7 @@ export interface IveoSession {
   primaryEmail: string | null;
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
+  socials: Record<string, string>;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
@@ -34,6 +35,7 @@ export interface IveoSession {
     avatarUrl?: string | null;
     category?: string | null;
   }) => Promise<void>;
+  updateSocials: (socials: Record<string, string>) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -50,6 +52,7 @@ const FALLBACK_SESSION: IveoSession = {
   primaryEmail: null,
   vibeId: DEFAULT_PREFERENCES.vibeId,
   buttonShape: DEFAULT_PREFERENCES.buttonShape,
+  socials: {},
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
@@ -58,6 +61,7 @@ const FALLBACK_SESSION: IveoSession = {
   updateUsername: async () => {},
   updatePreferences: async () => {},
   updateProfile: async () => {},
+  updateSocials: async () => {},
   signOut: async () => {},
 };
 
@@ -80,6 +84,7 @@ function useClerkSession(): IveoSession {
       primaryEmail: null,
       vibeId: DEFAULT_PREFERENCES.vibeId,
       buttonShape: DEFAULT_PREFERENCES.buttonShape,
+      socials: {},
       onboardingComplete: false,
       plan: 'free',
       isPro: false,
@@ -88,13 +93,23 @@ function useClerkSession(): IveoSession {
       updateUsername: async () => {},
       updatePreferences: async () => {},
       updateProfile: async () => {},
+      updateSocials: async () => {},
       signOut: async () => {
         await signOut();
       },
     };
   }
 
-  const rawUsername = user.username || '';
+  // Support reading username from user.username or fallback to unsafeMetadata.username
+  const meta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
+    ? user.unsafeMetadata
+    : {}) as Record<string, unknown>;
+
+  const rawUsername =
+    user.username ||
+    (typeof meta.username === 'string' ? meta.username : '') ||
+    (typeof meta.preferredUsername === 'string' ? meta.preferredUsername : '') ||
+    '';
   const normalizedUsername = normalizeUsername(rawUsername);
   const username = normalizedUsername || null;
 
@@ -112,6 +127,7 @@ function useClerkSession(): IveoSession {
   const candidateAvatar = preferences.avatarUrl || user.imageUrl;
   const imageUrl = isAllowedAvatarUrl(candidateAvatar) ? candidateAvatar : null;
   const category = preferences.category || null;
+  const socials = preferences.socials || {};
 
   const primaryEmail = user.primaryEmailAddress?.emailAddress || null;
 
@@ -123,7 +139,56 @@ function useClerkSession(): IveoSession {
   const hideFooter = preferences.hideIveoFooter || preferences.hideIvioFooter || false;
 
   const updateUsername = async (newUsername: string): Promise<void> => {
-    await user.update({ username: newUsername });
+    const clean = normalizeUsername(newUsername);
+    if (!clean) {
+      throw new Error('Please enter a valid address (3 to 24 letters, numbers or underscores).');
+    }
+
+    const currentMeta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
+      ? user.unsafeMetadata
+      : {}) as Record<string, unknown>;
+
+    // 1. Always write to unsafeMetadata first (universally supported by Clerk)
+    try {
+      await user.update({
+        unsafeMetadata: {
+          ...currentMeta,
+          username: clean,
+        },
+      });
+    } catch (metaErr) {
+      console.warn('Could not save username to unsafeMetadata:', metaErr);
+    }
+
+    // 2. Try updating top-level Clerk username (if enabled in Clerk dashboard settings)
+    try {
+      await user.update({ username: clean });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      // Suppress "username is not a valid parameter for this request" because username is already persisted in metadata
+      if (
+        msg.includes('not a valid parameter') ||
+        msg.includes('username is not a valid parameter')
+      ) {
+        // Silently handled via metadata
+      } else {
+        console.warn('Clerk top-level username update note:', msg);
+      }
+    }
+
+    // 3. Mirror to localStorage
+    try {
+      const raw = localStorage.getItem(`iveo_profile_${clean}`) || '{}';
+      const parsed = JSON.parse(raw);
+      localStorage.setItem(
+        `iveo_profile_${clean}`,
+        JSON.stringify({
+          ...parsed,
+          username: clean,
+        })
+      );
+      localStorage.setItem('iveo_current_username', clean);
+    } catch {}
   };
 
   const updatePreferences = async (patch: Partial<Omit<IveoPreferences, 'plan'>>): Promise<void> => {
@@ -157,6 +222,7 @@ function useClerkSession(): IveoSession {
             displayName: merged.displayName !== undefined ? merged.displayName : parsed.displayName,
             bio: merged.bio !== undefined ? merged.bio : parsed.bio,
             avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : parsed.avatarUrl,
+            socials: merged.socials !== undefined ? merged.socials : parsed.socials,
           })
         );
       } catch {}
@@ -177,6 +243,12 @@ function useClerkSession(): IveoSession {
     });
   };
 
+  const updateSocials = async (newSocials: Record<string, string>): Promise<void> => {
+    await updatePreferences({
+      socials: newSocials,
+    });
+  };
+
   return {
     isLoaded: true,
     isSignedIn: true,
@@ -188,6 +260,7 @@ function useClerkSession(): IveoSession {
     primaryEmail,
     vibeId: preferences.vibeId,
     buttonShape: preferences.buttonShape,
+    socials,
     onboardingComplete,
     plan,
     isPro,
@@ -196,6 +269,7 @@ function useClerkSession(): IveoSession {
     updateUsername,
     updatePreferences,
     updateProfile,
+    updateSocials,
     signOut: async () => {
       await signOut();
     },

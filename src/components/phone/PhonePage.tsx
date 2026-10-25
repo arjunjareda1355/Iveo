@@ -10,6 +10,7 @@ export interface PhoneProfile {
   avatarUrl?: string | null;
   initials?: string;
   links?: readonly string[];
+  socials?: Record<string, string>;
 }
 
 interface PhonePageProps {
