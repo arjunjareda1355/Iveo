@@ -33,6 +33,9 @@ export const AccountPage: React.FC = () => {
         borderRadius: '14px',
         width: '100%',
       },
+      profileSection__username: {
+        display: 'none',
+      },
     },
   };
 

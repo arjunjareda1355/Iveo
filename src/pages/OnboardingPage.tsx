@@ -164,6 +164,7 @@ export const OnboardingPage: React.FC = () => {
     handle: session.username || usernameInput || 'yourname',
     avatarUrl,
     bio: bio.trim() || 'Your bio goes here.',
+    socials: session.socials || {},
   };
 
   const previewBlocks: PageBlock[] = starterLinks

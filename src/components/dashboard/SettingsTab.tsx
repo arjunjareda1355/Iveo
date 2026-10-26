@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, ExternalLink, Share2 } from 'lucide-react';
+import { Copy, ExternalLink, Share2, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { ProBadge } from '../plan/ProBadge';
@@ -12,6 +12,11 @@ import { DeleteAccountCard } from '../account/DeleteAccountCard';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { pageUrl } from '../../lib/site';
+import {
+  sanitizeUsername,
+  validateUsernameSync,
+  checkUsernameAvailability,
+} from '../../lib/username';
 
 export const SettingsTab: React.FC = () => {
   const session = useIvioSession();
@@ -51,6 +56,72 @@ export const SettingsTab: React.FC = () => {
     }
   };
 
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
+
+  const handleStartEditUsername = () => {
+    setUsernameInput(session.username || '');
+    setUsernameError(null);
+    setIsEditingUsername(true);
+  };
+
+  const handleCancelEditUsername = () => {
+    setIsEditingUsername(false);
+    setUsernameInput('');
+    setUsernameError(null);
+  };
+
+  const handleSaveUsername = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = sanitizeUsername(usernameInput);
+    if (!clean) {
+      setUsernameError('Use 3 to 24 letters, numbers or underscores.');
+      return;
+    }
+
+    if (clean === session.username) {
+      setIsEditingUsername(false);
+      return;
+    }
+
+    const syncValidation = validateUsernameSync(clean);
+    if (syncValidation.status !== 'available') {
+      setUsernameError(syncValidation.message);
+      return;
+    }
+
+    setIsCheckingUsername(true);
+    setUsernameError(null);
+
+    try {
+      const avail = await checkUsernameAvailability(clean);
+      if (avail.status !== 'available') {
+        setUsernameError(avail.message || "That name isn't available. Try another.");
+        setIsCheckingUsername(false);
+        return;
+      }
+    } catch {
+      // Continue if network check fails
+    } finally {
+      setIsCheckingUsername(false);
+    }
+
+    setIsSavingUsername(true);
+    try {
+      await session.updateUsername(clean);
+      showToast('Address updated successfully');
+      setIsEditingUsername(false);
+    } catch (err: any) {
+      const msg = err?.message || 'Could not update username. Please try another.';
+      setUsernameError(msg);
+    } finally {
+      setIsSavingUsername(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* 1. Account Card */}
@@ -69,12 +140,85 @@ export const SettingsTab: React.FC = () => {
           </div>
 
           {/* Username row */}
-          <div className="h-14 flex items-center justify-between text-[14px]">
-            <span className="text-muted">Username</span>
-            <span className="text-[15px] font-mono font-medium text-ink">
-              @{session.username}
-            </span>
-          </div>
+          {isEditingUsername ? (
+            <div className="py-3.5 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-[14px]">
+                <span className="text-muted">Username</span>
+                <button
+                  type="button"
+                  onClick={handleCancelEditUsername}
+                  className="text-[13px] text-muted hover:text-ink cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveUsername} className="flex flex-col gap-2">
+                <div className="flex items-center rounded-[8px] border border-border bg-surface px-2.5 h-10 focus-within:border-ink">
+                  <span className="text-[14px] text-muted font-mono select-none">
+                    iveo.site/
+                  </span>
+                  <input
+                    type="text"
+                    value={usernameInput}
+                    onChange={(e) => {
+                      setUsernameInput(sanitizeUsername(e.target.value));
+                      if (usernameError) setUsernameError(null);
+                    }}
+                    placeholder="yourname"
+                    className="flex-1 font-mono text-[14px] text-ink bg-transparent outline-none pl-0.5"
+                    autoFocus
+                  />
+                  {isCheckingUsername && (
+                    <Loader2 size={14} className="animate-spin text-muted" />
+                  )}
+                </div>
+
+                {usernameError && (
+                  <p className="text-[12px] text-red-600 font-medium">
+                    {usernameError}
+                  </p>
+                )}
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCancelEditUsername}
+                    disabled={isSavingUsername}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    disabled={isSavingUsername || isCheckingUsername || !usernameInput.trim()}
+                  >
+                    {isSavingUsername ? 'Saving...' : 'Save address'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="h-14 flex items-center justify-between text-[14px]">
+              <span className="text-muted">Username</span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[15px] font-mono font-medium text-ink">
+                  @{session.username || 'not_set'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleStartEditUsername}
+                  className="inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:text-ink-2 px-2 py-1 rounded-[6px] hover:bg-surface-2 transition-colors cursor-pointer"
+                >
+                  <Pencil size={12} />
+                  <span>Change</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Plan row */}
           <div className="py-3 flex flex-col justify-center gap-1">

@@ -83,17 +83,16 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
 
   // Local fallback for development / test accounts
   try {
+    const userMeta =
+      localStorage.getItem(`iveo_profile_${clean}`) ||
+      localStorage.getItem(`ivio_profile_${clean}`);
     const rawBlocks =
       localStorage.getItem(`iveo_blocks_${clean}`) ||
       localStorage.getItem(`ivio_blocks_${clean}`);
-    if (rawBlocks) {
-      const allBlocks = JSON.parse(rawBlocks);
-      const now = new Date();
 
-      // Check if user has pro in localStorage or default
-      const userMeta =
-        localStorage.getItem(`iveo_profile_${clean}`) ||
-        localStorage.getItem(`ivio_profile_${clean}`);
+    if (rawBlocks || userMeta) {
+      const allBlocks = rawBlocks ? JSON.parse(rawBlocks) : [];
+      const now = new Date();
       const parsedMeta = userMeta ? JSON.parse(userMeta) : {};
       const isPro = parsedMeta.plan === 'pro';
 
