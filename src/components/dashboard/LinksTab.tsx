@@ -15,6 +15,8 @@ import {
   RotateCcw,
   Pencil,
   AlertTriangle,
+  Mail,
+  Lock,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -26,10 +28,13 @@ import { ImageSection } from '../links/ImageSection';
 import { LayoutControl } from '../links/LayoutControl';
 import { ScheduleSection } from '../links/ScheduleSection';
 import { ScheduleChip } from '../links/ScheduleChip';
+import { PasswordSection } from '../links/PasswordSection';
 import { EmbedComposer } from '../links/EmbedComposer';
+import { SignupComposer } from '../links/SignupComposer';
 import { Block, BlockLayout } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
 import { useClickCounts } from '../../data/hooks/useClickCounts';
+import { useProtectedLinkIds } from '../../data/hooks/useProtectedLinkIds';
 import { copy } from '../../content/copy';
 import { SocialLinksCard } from './SocialLinksCard';
 
@@ -40,6 +45,7 @@ export const LinksTab: React.FC = () => {
     isLoading,
     addLink,
     addEmbed,
+    addSignupForm,
     addHeader,
     addDivider,
     updateBlock,
@@ -53,10 +59,11 @@ export const LinksTab: React.FC = () => {
 
   const { isPro, username } = useIvioSession();
   const { openUpgrade } = useUpgradeDialog();
+  const { protectedIds } = useProtectedLinkIds();
 
-  // Active composer: null | 'link' | 'embed' | 'header'
+  // Active composer: null | 'link' | 'embed' | 'signup' | 'header'
   const [activeComposer, setActiveComposer] = useState<
-    'link' | 'embed' | 'header' | null
+    'link' | 'embed' | 'signup' | 'header' | null
   >(null);
 
   // Quick inputs for link/header composers
@@ -87,10 +94,14 @@ export const LinksTab: React.FC = () => {
   const archivedBlocks = blocks.filter((b) => b.isArchived);
 
   // Composer opening handlers
-  const handleOpenComposer = (type: 'link' | 'embed' | 'header') => {
+  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header') => {
     setEditingBlockId(null);
     if (type === 'embed' && !isPro) {
       openUpgrade('embeds');
+      return;
+    }
+    if (type === 'signup' && !isPro) {
+      openUpgrade('contact_forms');
       return;
     }
     setActiveComposer(type);
@@ -269,6 +280,16 @@ export const LinksTab: React.FC = () => {
         <Button
           variant="secondary"
           size="md"
+          onClick={() => handleOpenComposer('signup')}
+        >
+          <Plus size={16} strokeWidth={2} />
+          <span>{copy.signup.dashboard.addButton}</span>
+          {!isPro && <ProBadge className="ml-1" />}
+        </Button>
+
+        <Button
+          variant="secondary"
+          size="md"
           onClick={() => handleOpenComposer('header')}
         >
           <Plus size={16} strokeWidth={2} />
@@ -351,6 +372,17 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
+      {activeComposer === 'signup' && (
+        <SignupComposer
+          ownerName={username || undefined}
+          onSave={async (cfg) => {
+            await addSignupForm(cfg);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
       {activeComposer === 'header' && (
         <Card className="p-4 sm:p-5 border-ink/20 shadow-[0_2px_8px_rgba(10,10,10,0.06)]">
           <form onSubmit={handleCreateHeader} className="flex flex-col gap-3.5">
@@ -411,7 +443,9 @@ export const LinksTab: React.FC = () => {
             const isEmbed = block.kind === 'embed';
             const isHeader = block.kind === 'header';
             const isDivider = block.kind === 'divider';
+            const isSignup = block.kind === 'signup';
             const isLink = block.kind === 'link';
+            const isProtected = isLink && (protectedIds.has(block.id) || block.isProtected === true);
 
             // Provider glyph for embed
             const ProviderGlyph =
@@ -443,6 +477,8 @@ export const LinksTab: React.FC = () => {
                           />
                         ) : isEmbed ? (
                           <ProviderGlyph size={18} className="text-ink" strokeWidth={1.5} />
+                        ) : isSignup ? (
+                          <Mail size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isHeader ? (
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
@@ -462,15 +498,30 @@ export const LinksTab: React.FC = () => {
                           >
                             {isDivider
                               ? 'Divider'
+                              : isSignup
+                              ? block.signup?.heading || block.title || copy.signup.dashboard.defaultHeading
                               : block.title || (isEmbed ? 'Embed' : 'Untitled')}
                           </span>
                           <ScheduleChip block={block} isActive={block.isActive} />
-                          {!isPro && (isEmbed || block.startAt || block.endAt) && (
+                          {isProtected && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-surface-2 text-muted border border-border">
+                              <Lock size={11} className="shrink-0" />
+                              <span>{copy.password.dashboard.chip}</span>
+                            </span>
+                          )}
+                          {!isPro && (isEmbed || isSignup || block.startAt || block.endAt || isProtected) && (
                             <ProBadge />
                           )}
                         </div>
 
                         {/* Subtitle / Host line with click counts */}
+                        {isSignup && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight">
+                            <span>
+                              {copy.signup.dashboard.subtitles[block.signup?.collect || 'email']}
+                            </span>
+                          </div>
+                        )}
                         {isEmbed && block.url && (() => {
                           const clicks = clickCounts.get(block.id) || 0;
                           const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
@@ -613,6 +664,20 @@ export const LinksTab: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                ) : isSignup ? (
+                  <SignupComposer
+                    initialValues={block.signup || undefined}
+                    ownerName={username || undefined}
+                    isEditing
+                    onSave={async (config) => {
+                      await updateBlock(block.id, {
+                        title: config.heading || block.title,
+                        signup: config,
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
                 ) : (
                   // Full Edit Panel (Section 12.3)
                   <div className="flex flex-col gap-4">
@@ -678,6 +743,15 @@ export const LinksTab: React.FC = () => {
                         hasImage={!!block.thumbnailPath}
                         layout={editLayout}
                         onChange={(l) => setEditLayout(l)}
+                      />
+                    )}
+
+                    {/* Password Section (Links only) */}
+                    {isLink && (
+                      <PasswordSection
+                        isPro={isPro}
+                        linkId={block.id}
+                        isProtected={protectedIds.has(block.id) || block.isProtected === true}
                       />
                     )}
 
@@ -788,12 +862,18 @@ export const LinksTab: React.FC = () => {
             className="w-full max-w-sm bg-surface border border-border rounded-[16px] p-6 shadow-xl"
           >
             <h3 className="text-[18px] font-semibold text-ink">
-              {deletingBlock.kind === 'embed'
+              {deletingBlock.kind === 'signup'
+                ? copy.signup.dashboard.deleteDialogTitle
+                : deletingBlock.kind === 'embed'
                 ? 'Delete this embed?'
+                : deletingBlock.kind === 'header'
+                ? 'Delete this header?'
                 : 'Delete this link?'}
             </h3>
             <p className="mt-2 text-[14px] text-muted leading-relaxed">
-              This cannot be undone. You can also archive it if you might need it later.
+              {deletingBlock.kind === 'signup'
+                ? copy.signup.dashboard.deleteDialogBody
+                : 'This cannot be undone. You can also archive it if you might need it later.'}
             </p>
             <div className="mt-6 flex justify-end gap-2.5">
               <Button

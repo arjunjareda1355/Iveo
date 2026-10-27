@@ -5,7 +5,7 @@ import {
   Globe,
   Mail,
   Calendar,
-  ExternalLink,
+  Lock,
 } from 'lucide-react';
 import { Vibe } from '../../lib/vibes';
 import { PageBlock } from '../../data/types';
@@ -13,7 +13,6 @@ import { PhoneProfile } from '../phone/PhonePage';
 import { SocialIcon } from '../phone/SocialIcons';
 import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
-import { pageUrl } from '../../lib/site';
 import { formatExternalUrl } from '../../lib/urls';
 import { Logo } from '../ui/Logo';
 
@@ -27,6 +26,9 @@ export interface PageRendererProps {
   isPublicPage?: boolean;
   scale?: number;
   onLinkClick?: (block: PageBlock) => void;
+  onUnlock?: (block: PageBlock) => void;
+  renderSignupForm?: (block: PageBlock) => React.ReactNode;
+  protectedIds?: ReadonlySet<string>;
 }
 
 const DEFAULT_BUTTON_ICONS = [Link2, ShoppingBag, Globe, Mail, Calendar];
@@ -41,6 +43,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   isPublicPage = false,
   scale = 1,
   onLinkClick,
+  onUnlock,
+  renderSignupForm,
+  protectedIds,
 }) => {
   const { tokens, persona } = vibe;
   const effectiveRadius =
@@ -85,93 +90,87 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
   return (
     <div
-      className="w-full h-full flex flex-col items-center select-none overflow-y-auto overflow-x-hidden min-h-full"
+      className="w-full flex-1 flex flex-col items-center select-none"
       style={{
         backgroundColor: tokens.bg,
         color: tokens.text,
         fontFamily: vibe.fontFamily,
-        paddingLeft: `${Math.round(20 * scale)}px`,
-        paddingRight: `${Math.round(20 * scale)}px`,
+        padding: `${Math.round(32 * scale)}px ${Math.round(20 * scale)}px ${Math.round(24 * scale)}px`,
       }}
     >
-      {/* Profile Header Area */}
-      <div className="w-full flex flex-col items-center shrink-0">
-        {/* Avatar */}
-        <div
-          className="rounded-full flex items-center justify-center shrink-0 font-semibold shadow-xs overflow-hidden select-none"
-          style={{
-            width: `${Math.round(72 * scale)}px`,
-            height: `${Math.round(72 * scale)}px`,
-            marginTop: `${Math.round(18 * scale)}px`,
-            backgroundColor: tokens.avatarBg,
-            color: tokens.avatarText,
-            fontSize: `${Math.round(26 * scale)}px`,
-            lineHeight: 1,
-            fontFamily: "'Geist', sans-serif",
-          }}
-        >
-          {profile?.avatarUrl ? (
-            <img
-              src={profile.avatarUrl}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            displayInitials
-          )}
-        </div>
+      {/* Avatar */}
+      <div
+        className="rounded-full overflow-hidden flex items-center justify-center shrink-0 font-medium"
+        style={{
+          width: `${Math.round(72 * scale)}px`,
+          height: `${Math.round(72 * scale)}px`,
+          backgroundColor: tokens.avatarBg,
+          color: tokens.avatarText,
+          fontSize: `${Math.round(22 * scale)}px`,
+        }}
+      >
+        {profile?.avatarUrl ? (
+          <img
+            src={profile.avatarUrl}
+            alt={displayName}
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover block"
+          />
+        ) : (
+          <span>{displayInitials}</span>
+        )}
+      </div>
 
-        {/* Name */}
-        <div
-          className="font-semibold text-center w-full px-2 break-words"
+      {/* Name & Handle */}
+      <div
+        className="w-full text-center flex flex-col items-center"
+        style={{
+          marginTop: `${Math.round(12 * scale)}px`,
+          gap: `${Math.round(2 * scale)}px`,
+        }}
+      >
+        <h1
+          className="font-medium tracking-tight leading-tight px-2 max-w-full truncate"
           style={{
-            fontSize: `${Math.round(18 * scale)}px`,
-            lineHeight: `${Math.round(24 * scale)}px`,
-            marginTop: `${Math.round(12 * scale)}px`,
+            fontSize: `${Math.max(14, Math.round(17 * scale))}px`,
+            color: tokens.text,
           }}
         >
           {displayName}
+        </h1>
+
+        <div
+          className="font-mono text-center tracking-tight truncate max-w-full px-2"
+          style={{
+            fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+            color: tokens.muted,
+          }}
+        >
+          @{displayHandle}
         </div>
-
-        {/* Handle */}
-        {displayHandle && (
-          <div
-            className="text-center font-mono truncate w-full px-2"
-            style={{
-              color: tokens.muted,
-              fontSize: `${Math.round(13 * scale)}px`,
-              lineHeight: `${Math.round(18 * scale)}px`,
-              marginTop: `${Math.round(4 * scale)}px`,
-            }}
-          >
-            @{displayHandle}
-          </div>
-        )}
-
-        {/* Bio */}
-        {displayBio && (
-          <p
-            className="text-center break-words max-w-[270px] px-2 leading-relaxed"
-            style={{
-              color: tokens.text,
-              opacity: 0.85,
-              fontSize: `${Math.round(13 * scale)}px`,
-              lineHeight: `${Math.round(19 * scale)}px`,
-              marginTop: `${Math.round(8 * scale)}px`,
-              wordBreak: 'break-word',
-              overflowWrap: 'break-word',
-            }}
-          >
-            {displayBio}
-          </p>
-        )}
       </div>
+
+      {/* Bio */}
+      {displayBio && (
+        <p
+          className="text-center font-normal leading-relaxed max-w-[34ch] break-words"
+          style={{
+            marginTop: `${Math.round(8 * scale)}px`,
+            fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+            color: tokens.muted,
+          }}
+        >
+          {displayBio}
+        </p>
+      )}
 
       {/* Blocks Container */}
       <div
         className="w-full flex flex-col"
         style={{
-          marginTop: `${Math.round(20 * scale)}px`,
+          marginTop: `${Math.round(24 * scale)}px`,
           gap: `${Math.round(10 * scale)}px`,
         }}
       >
@@ -226,7 +225,95 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
-          // 4. Featured link
+          // 4. Signup form
+          if (block.kind === 'signup') {
+            if (renderSignupForm && isPublicPage) {
+              return (
+                <div key={block.id} className="w-full">
+                  {renderSignupForm(block)}
+                </div>
+              );
+            }
+
+            // Placeholder card for preview mockups
+            const cfg = block.signup;
+            const collectMode = cfg?.collect || 'email';
+            const buttonText = cfg?.button || 'Subscribe';
+            const desc = cfg?.description;
+            const cardRadius = Math.min(16, effectiveRadius);
+            const numBars = collectMode === 'both' ? 2 : 1;
+
+            return (
+              <div
+                key={block.id}
+                className="w-full flex flex-col items-center text-center select-none"
+                style={{
+                  border: `1px solid ${tokens.buttonBorder || tokens.text}26`,
+                  borderRadius: `${Math.round(cardRadius * scale)}px`,
+                  padding: `${Math.round(14 * scale)}px`,
+                  color: tokens.text,
+                }}
+              >
+                <div
+                  className="flex items-center justify-center opacity-80"
+                  style={{ marginBottom: `${Math.round(6 * scale)}px` }}
+                >
+                  <Mail size={Math.round(20 * scale)} strokeWidth={1.5} />
+                </div>
+                <h3
+                  className="font-semibold leading-tight"
+                  style={{
+                    fontSize: `${Math.max(13, Math.round(15 * scale))}px`,
+                    color: tokens.text,
+                  }}
+                >
+                  {block.title}
+                </h3>
+                {desc && (
+                  <p
+                    className="mt-1 opacity-80"
+                    style={{ fontSize: `${Math.max(11, Math.round(13 * scale))}px` }}
+                  >
+                    {desc}
+                  </p>
+                )}
+                {/* Input-shaped bar(s) */}
+                <div className="w-full flex flex-col gap-2 my-2.5" aria-hidden="true">
+                  {Array.from({ length: numBars }).map((_, barIdx) => (
+                    <div
+                      key={barIdx}
+                      className="w-full"
+                      style={{
+                        height: `${Math.round(38 * scale)}px`,
+                        borderRadius: `${Math.round(10 * scale)}px`,
+                        border: `1px solid ${tokens.text}4D`,
+                      }}
+                    />
+                  ))}
+                </div>
+                {/* Button-shaped bar */}
+                <div
+                  className="w-full flex items-center justify-center font-medium truncate"
+                  style={{
+                    height: `${Math.round(38 * scale)}px`,
+                    borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+                    backgroundColor: tokens.buttonBg,
+                    color: tokens.buttonText,
+                    border: tokens.buttonBorder
+                      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+                      : 'none',
+                    fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+                  }}
+                >
+                  {buttonText}
+                </div>
+              </div>
+            );
+          }
+
+          const isProtected = block.isProtected === true || (protectedIds?.has(block.id) ?? false);
+
+          // 5. Featured link
           if (block.layout === 'featured' && block.thumbnailUrl) {
             imageCounter++;
             const isEager = imageCounter <= 2;
@@ -239,12 +326,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 scale={scale}
                 isInteractive={isPublicPage}
                 isEager={isEager}
+                isProtected={isProtected}
                 onLinkClick={onLinkClick}
+                onUnlock={onUnlock}
               />
             );
           }
 
-          // 5. Classic link (with or without thumbnail)
+          // 6. Classic link (with or without thumbnail, with optional lock)
           const DefaultIcon =
             DEFAULT_BUTTON_ICONS[idx % DEFAULT_BUTTON_ICONS.length];
 
@@ -253,18 +342,22 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           const isEager = hasThumb && imageCounter <= 2;
           const thumbSize = isPublicPage ? 40 : Math.round(32 * scale);
           const thumbRadius = Math.min(8, effectiveRadius);
+          const lockSize = isPublicPage ? 16 : Math.round(14 * scale);
+
+          // Space reservation for centered text with icon/thumb on left and optional lock on right
+          const sidePadding = isProtected
+            ? Math.max(hasThumb ? thumbSize + 16 : Math.round(36 * scale), Math.round(36 * scale))
+            : hasThumb
+            ? thumbSize + 16
+            : Math.round(14 * scale);
 
           const innerButton = (
             <div
               className="w-full relative flex items-center justify-center truncate transition-all duration-150 select-none"
               style={{
                 height: `${Math.round(44 * scale)}px`,
-                paddingLeft: hasThumb
-                  ? `${thumbSize + 16}px`
-                  : `${Math.round(14 * scale)}px`,
-                paddingRight: hasThumb
-                  ? `${thumbSize + 16}px`
-                  : `${Math.round(14 * scale)}px`,
+                paddingLeft: `${sidePadding}px`,
+                paddingRight: `${sidePadding}px`,
                 backgroundColor: tokens.buttonBg,
                 color: tokens.buttonText,
                 borderRadius: `${Math.round(effectiveRadius * scale)}px`,
@@ -307,9 +400,41 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <span className="truncate text-center leading-none px-2">
                 {block.title}
               </span>
+
+              {/* Right Lock icon if protected */}
+              {isProtected && (
+                <span
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0 opacity-80"
+                  style={{ color: tokens.buttonText }}
+                  aria-hidden="true"
+                >
+                  <Lock size={lockSize} strokeWidth={1.5} />
+                </span>
+              )}
             </div>
           );
 
+          // Protected link: NEVER render as <a>! Render as interactive button on public page
+          if (isProtected) {
+            if (isPublicPage) {
+              return (
+                <button
+                  key={block.id}
+                  type="button"
+                  onClick={() => onUnlock?.(block)}
+                  aria-haspopup="dialog"
+                  aria-label={`${block.title}, password protected`}
+                  className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
+                  style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
+                >
+                  {innerButton}
+                </button>
+              );
+            }
+            return <div key={block.id}>{innerButton}</div>;
+          }
+
+          // Normal classic link
           if (isPublicPage && block.url) {
             return (
               <a

@@ -13,3 +13,12 @@ export function formatExternalUrl(raw: string | null | undefined): string {
   }
   return `https://${trimmed}`;
 }
+
+export function isSafeHref(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (/^javascript:/i.test(trimmed) || /^data:/i.test(trimmed) || /^vbscript:/i.test(trimmed)) {
+    return false;
+  }
+  return /^(https?:\/\/|mailto:|tel:)/i.test(trimmed);
+}

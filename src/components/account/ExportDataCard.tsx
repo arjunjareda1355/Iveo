@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import { useIveoSession } from '../../auth/useIvioSession';
 import { listMyBlocks } from '../../data/linksApi';
+import { getProtectedLinkIds } from '../../data/passwordApi';
 import { fetchPublicPage } from '../../data/publicPageApi';
 import { copy } from '../../content/copy';
 
@@ -29,6 +30,8 @@ export const ExportDataCard: React.FC = () => {
 
       // 1. Fetch fresh blocks (all kinds, active, archived, scheduled)
       const blocks = await listMyBlocks(token, session.username);
+      const protectedIds = await getProtectedLinkIds(token).catch(() => []);
+      const protectedSet = new Set(protectedIds);
 
       // 2. Fetch fresh public profile to get socials, is_published, hide_from_search
       const publicData = await fetchPublicPage(session.username).catch(() => null);
@@ -67,6 +70,8 @@ export const ExportDataCard: React.FC = () => {
           isActive: b.isActive,
           isArchived: b.isArchived,
           position: b.position,
+          signup: b.signup,
+          isProtected: b.kind === 'link' ? (protectedSet.has(b.id) || b.isProtected === true) : undefined,
         })),
       };
 

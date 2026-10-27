@@ -14,6 +14,7 @@ interface VibePhoneProps {
   buttonRadiusOverride?: number;
   className?: string;
   ariaLabel?: string;
+  protectedIds?: ReadonlySet<string>;
 }
 
 export const VibePhone: React.FC<VibePhoneProps> = React.memo(
@@ -27,6 +28,7 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
     buttonRadiusOverride,
     className,
     ariaLabel,
+    protectedIds,
   }) => {
     const scale = width / 300;
 
@@ -47,6 +49,7 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
             embedMode={embedMode}
             buttonRadiusOverride={buttonRadiusOverride}
             scale={scale}
+            protectedIds={protectedIds}
           />
         </div>
       </PhoneFrame>

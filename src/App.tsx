@@ -87,6 +87,14 @@ export default function App() {
             }
           />
           <Route
+            path="/dashboard/contacts"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
             path="/dashboard/analytics"
             element={
               <RequireOnboarded>

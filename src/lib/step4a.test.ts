@@ -183,9 +183,18 @@ test('site: pageUrl generates clean url without duplicate slashes', () => {
 });
 
 test('plan: defines all pro features and labels', () => {
-  assert.deepEqual(PRO_FEATURES, ['embeds', 'scheduling', 'hide_footer', 'analytics_detail']);
+  assert.deepEqual(PRO_FEATURES, [
+    'embeds',
+    'scheduling',
+    'hide_footer',
+    'analytics_detail',
+    'password_links',
+    'contact_forms',
+  ]);
   assert.equal(getProFeatureName('embeds'), 'Embeds');
   assert.equal(getProFeatureName('scheduling'), 'Scheduling');
   assert.equal(getProFeatureName('hide_footer'), 'Removing the iveo mark');
   assert.equal(getProFeatureName('analytics_detail'), 'Advanced analytics');
+  assert.equal(getProFeatureName('password_links'), 'Password-protected links');
+  assert.equal(getProFeatureName('contact_forms'), 'Email and phone collection');
 });

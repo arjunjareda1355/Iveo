@@ -1,4 +1,4 @@
-import { PublicPageData, PublicBlock } from './types';
+import { PublicPageData, PublicBlock, SignupConfig } from './types';
 import { storagePublicUrl } from './storageApi';
 import { VIBES, VibeId } from '../lib/vibes';
 import { parseEmbedUrl } from '../lib/embeds';
@@ -29,7 +29,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       const mappedLinks: PublicBlock[] = (data.links || [])
         .map((row: any): PublicBlock | null => {
           if (!row || typeof row !== 'object') return null;
-          const kind = ['link', 'header', 'divider', 'embed'].includes(row.kind)
+          const kind = ['link', 'header', 'divider', 'embed', 'signup'].includes(row.kind)
             ? row.kind
             : null;
           if (!kind) return null;
@@ -46,16 +46,44 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             return null;
           }
 
+          let signupConfig: SignupConfig | null = null;
+          if (kind === 'signup') {
+            const s = row.signup || row.signup_config;
+            if (s && typeof s === 'object') {
+              const collectValid = ['email', 'phone', 'both'].includes(s.collect);
+              const buttonValid = typeof s.button === 'string' && s.button.length >= 1 && s.button.length <= 20;
+              const consentValid = typeof s.consent === 'string' && s.consent.length >= 1 && s.consent.length <= 200;
+              const descValid = s.description === null || s.description === undefined || (typeof s.description === 'string' && s.description.length <= 120);
+
+              if (collectValid && buttonValid && consentValid && descValid) {
+                signupConfig = {
+                  collect: s.collect,
+                  button: s.button,
+                  consent: s.consent,
+                  description: typeof s.description === 'string' ? s.description : null,
+                };
+              }
+            }
+            if (!signupConfig) {
+              return null;
+            }
+          }
+
+          const isProtected = Boolean(row.is_protected);
+
           return {
             id: String(row.id),
             kind,
             title: String(row.title || ''),
-            url: row.url ? String(row.url) : null,
+            // The real address of a protected link must NEVER reach visitor's browser before unlock
+            url: isProtected ? null : (row.url ? String(row.url) : null),
             icon: row.icon ? String(row.icon) : null,
             thumbnailPath: row.thumbnail_path ? String(row.thumbnail_path) : null,
             thumbnailUrl: storagePublicUrl(row.thumbnail_path),
             layout,
             embedProvider,
+            isProtected,
+            signup: signupConfig,
           };
         })
         .filter((b: PublicBlock | null): b is PublicBlock => b !== null);
@@ -96,25 +124,32 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       const parsedMeta = userMeta ? JSON.parse(userMeta) : {};
       const isPro = parsedMeta.plan === 'pro';
 
+      const localProtected = new Set<string>(JSON.parse(localStorage.getItem('iveo_protected_ids') || '[]'));
       const filteredLinks: PublicBlock[] = allBlocks
         .filter((b: any) => {
           if (!b.isActive || b.isArchived) return false;
           if (b.startAt && new Date(b.startAt) > now) return false;
           if (b.endAt && new Date(b.endAt) <= now) return false;
-          if (!isPro && (b.kind === 'embed' || b.startAt || b.endAt)) return false;
+          const isProt = localProtected.has(b.id);
+          if (!isPro && (b.kind === 'embed' || b.kind === 'signup' || b.startAt || b.endAt || isProt)) return false;
           return true;
         })
-        .map((b: any) => ({
-          id: b.id,
-          kind: b.kind,
-          title: b.title || '',
-          url: b.url || null,
-          icon: b.icon || null,
-          thumbnailPath: b.thumbnailPath || null,
-          thumbnailUrl: storagePublicUrl(b.thumbnailPath),
-          layout: b.layout || 'classic',
-          embedProvider: b.embedProvider || null,
-        }));
+        .map((b: any) => {
+          const isProt = localProtected.has(b.id);
+          return {
+            id: b.id,
+            kind: b.kind,
+            title: b.title || '',
+            url: isProt ? null : (b.url || null),
+            icon: b.icon || null,
+            thumbnailPath: b.thumbnailPath || null,
+            thumbnailUrl: storagePublicUrl(b.thumbnailPath),
+            layout: b.layout || 'classic',
+            embedProvider: b.embedProvider || null,
+            isProtected: isProt,
+            signup: b.signup || null,
+          };
+        });
 
       return {
         profile: {

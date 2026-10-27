@@ -21,6 +21,7 @@ interface PhonePageProps {
   hideFooterMark?: boolean;
   embedMode?: 'placeholder' | 'live';
   scale?: number; // relative to 300px base
+  protectedIds?: ReadonlySet<string>;
 }
 
 export const PhonePage: React.FC<PhonePageProps> = React.memo(
@@ -32,6 +33,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
     hideFooterMark = false,
     embedMode = 'placeholder',
     scale = 1,
+    protectedIds,
   }) => {
     return (
       <PageRenderer
@@ -43,6 +45,7 @@ export const PhonePage: React.FC<PhonePageProps> = React.memo(
         embedMode={embedMode}
         isPublicPage={false}
         scale={scale}
+        protectedIds={protectedIds}
       />
     );
   }

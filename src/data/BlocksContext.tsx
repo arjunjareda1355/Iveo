@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Block, BlockLayout, EmbedProvider } from './types';
+import { Block, BlockLayout, EmbedProvider, SignupConfig } from './types';
 import {
   listMyBlocks,
   createBlock,
@@ -15,6 +15,7 @@ interface BlocksContextValue {
   isLoading: boolean;
   addLink: (title: string, url: string) => Promise<void>;
   addEmbed: (url: string, caption: string, provider: EmbedProvider) => Promise<void>;
+  addSignupForm: (config: SignupConfig) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
   addDivider: () => Promise<void>;
   updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
@@ -96,6 +97,28 @@ export const BlocksProvider: React.FC<{
         openUpgrade('embeds');
       } else {
         showToast("Couldn't add embed. Try again.");
+      }
+      throw err;
+    }
+  };
+
+  const addSignupForm = async (config: SignupConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'signup',
+        title: config.heading || 'Join my list',
+        position: blocks.length,
+        signup: config,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      showToast('Signup form added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      if (err instanceof Error && err.message === 'pro_required') {
+        openUpgrade('contact_forms');
+      } else {
+        showToast("Couldn't add signup form. Try again.");
       }
       throw err;
     }
@@ -256,6 +279,7 @@ export const BlocksProvider: React.FC<{
         isLoading,
         addLink,
         addEmbed,
+        addSignupForm,
         addHeader,
         addDivider,
         updateBlock: updateBlockFields,

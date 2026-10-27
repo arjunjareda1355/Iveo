@@ -10,11 +10,13 @@ import { LinksTab } from '../components/dashboard/LinksTab';
 import { AppearanceTab } from '../components/dashboard/AppearanceTab';
 import { SettingsTab } from '../components/dashboard/SettingsTab';
 import { AnalyticsTab } from './AnalyticsTab';
+import { ContactsTab } from './ContactsTab';
 import { VibePhone } from '../components/phone/VibePhone';
 import { PhoneProfile } from '../components/phone/PhonePage';
 import { ShareDialog } from '../components/share/ShareDialog';
 import { BlocksProvider, useBlocks } from '../data/BlocksContext';
 import { useIvioSession } from '../auth/useIvioSession';
+import { useProtectedLinkIds } from '../data/hooks/useProtectedLinkIds';
 import { VIBES, VibeId } from '../lib/vibes';
 import { ButtonShape } from '../lib/preferences';
 import { useNow, isBlockVisibleNow } from '../lib/time';
@@ -32,6 +34,7 @@ const DashboardContent: React.FC = () => {
   const session = useIvioSession();
   const location = useLocation();
   const { blocks } = useBlocks();
+  const { protectedIds } = useProtectedLinkIds();
   const now = useNow(30000);
 
   const [previewVibeId, setPreviewVibeId] = useState<VibeId>(session.vibeId);
@@ -47,13 +50,16 @@ const DashboardContent: React.FC = () => {
 
   // Determine active tab & document title
   const isAppearance = location.pathname.includes('/appearance');
+  const isContacts = location.pathname.includes('/contacts');
   const isAnalytics = location.pathname.includes('/analytics');
   const isSettings = location.pathname.includes('/settings');
-  const isLinks = !isAppearance && !isAnalytics && !isSettings;
+  const isLinks = !isAppearance && !isContacts && !isAnalytics && !isSettings;
 
   useEffect(() => {
     if (isAppearance) {
       document.title = copy.dashboard.titles.appearance;
+    } else if (isContacts) {
+      document.title = copy.dashboard.titles.contacts;
     } else if (isAnalytics) {
       document.title = copy.dashboard.titles.analytics;
     } else if (isSettings) {
@@ -61,7 +67,7 @@ const DashboardContent: React.FC = () => {
     } else {
       document.title = copy.dashboard.titles.links;
     }
-  }, [isAppearance, isAnalytics, isSettings]);
+  }, [isAppearance, isContacts, isAnalytics, isSettings]);
 
   // Lock scroll on mobile preview sheet open
   useEffect(() => {
@@ -178,6 +184,27 @@ const DashboardContent: React.FC = () => {
           </NavLink>
 
           <NavLink
+            to="/dashboard/contacts"
+            className={({ isActive }) =>
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+                isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span>{copy.dashboard.tabs.contacts}</span>
+                {isActive && (
+                  <span
+                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-ink"
+                    aria-hidden="true"
+                  />
+                )}
+              </>
+            )}
+          </NavLink>
+
+          <NavLink
             to="/dashboard/analytics"
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
@@ -228,6 +255,10 @@ const DashboardContent: React.FC = () => {
             <div className="w-full">
               <AnalyticsTab />
             </div>
+          ) : isContacts ? (
+            <div className="w-full">
+              <ContactsTab />
+            </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
               {/* Left Column (7 of 12): Tab Panel */}
@@ -248,6 +279,7 @@ const DashboardContent: React.FC = () => {
                   currentVibe={activeVibe}
                   profile={profileData}
                   blocks={visiblePreviewBlocks}
+                  protectedIds={protectedIds}
                   hideFooterMark={hideFooterMark}
                   embedMode="placeholder"
                   buttonRadiusOverride={buttonRadiusOverride}
@@ -262,8 +294,8 @@ const DashboardContent: React.FC = () => {
         </Container>
       </main>
 
-      {/* Floating Preview Button and Sheet on Mobile (hidden on Analytics) */}
-      {!isAnalytics && (
+      {/* Floating Preview Button and Sheet on Mobile (hidden on Analytics & Contacts) */}
+      {!isAnalytics && !isContacts && (
         <>
           <div className="lg:hidden fixed bottom-6 right-6 z-40">
             <button
@@ -297,6 +329,7 @@ const DashboardContent: React.FC = () => {
                     currentVibe={activeVibe}
                     profile={profileData}
                     blocks={visiblePreviewBlocks}
+                    protectedIds={protectedIds}
                     hideFooterMark={hideFooterMark}
                     embedMode="placeholder"
                     buttonRadiusOverride={buttonRadiusOverride}

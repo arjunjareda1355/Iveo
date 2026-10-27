@@ -1,4 +1,4 @@
-import { Block, BlockKind, BlockLayout, EmbedProvider } from './types';
+import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig } from './types';
 import { storagePublicUrl } from './storageApi';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -12,6 +12,7 @@ export interface CreateBlockInput {
   thumbnailPath?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
+  signup?: SignupConfig | null;
   startAt?: string | null;
   endAt?: string | null;
   position?: number;
@@ -25,6 +26,7 @@ export interface UpdateBlockInput {
   thumbnailPath?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
+  signup?: SignupConfig | null;
   startAt?: string | null;
   endAt?: string | null;
   isActive?: boolean;
@@ -84,10 +86,10 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
     }));
   }
 
-  const response = await fetch(
+    const response = await fetch(
     `${rawSupabaseUrl}/rest/v1/links?user_id=eq.${encodeURIComponent(
       userId
-    )}&select=id,kind,title,url,icon,thumbnail_path,layout,embed_provider,start_at,end_at,is_active,is_archived,position&order=position.asc,created_at.asc`,
+    )}&select=id,kind,title,url,icon,thumbnail_path,layout,embed_provider,signup_config,start_at,end_at,is_active,is_archived,position&order=position.asc,created_at.asc`,
     {
       headers: {
         apikey: anonKey,
@@ -111,6 +113,15 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
     thumbnailUrl: storagePublicUrl(row.thumbnail_path),
     layout: row.layout || 'classic',
     embedProvider: row.embed_provider || null,
+    signup:
+      row.signup_config && typeof row.signup_config === 'object'
+        ? {
+            collect: row.signup_config.collect,
+            button: row.signup_config.button,
+            consent: row.signup_config.consent,
+            description: row.signup_config.description || null,
+          }
+        : null,
     startAt: row.start_at || null,
     endAt: row.end_at || null,
     isActive: row.is_active ?? true,
@@ -134,6 +145,7 @@ export async function createBlock(
     thumbnailUrl: storagePublicUrl(input.thumbnailPath),
     layout: input.layout || 'classic',
     embedProvider: input.embedProvider || null,
+    signup: input.signup || null,
     startAt: input.startAt || null,
     endAt: input.endAt || null,
     isActive: input.isActive ?? true,
@@ -157,6 +169,7 @@ export async function createBlock(
     thumbnail_path: input.thumbnailPath || null,
     layout: input.layout || 'classic',
     embed_provider: input.embedProvider || null,
+    signup_config: input.signup || null,
     start_at: input.startAt || null,
     end_at: input.endAt || null,
     position: input.position ?? 0,
@@ -193,6 +206,15 @@ export async function createBlock(
     thumbnailUrl: storagePublicUrl(row.thumbnail_path),
     layout: row.layout || 'classic',
     embedProvider: row.embed_provider || null,
+    signup:
+      row.signup_config && typeof row.signup_config === 'object'
+        ? {
+            collect: row.signup_config.collect,
+            button: row.signup_config.button,
+            consent: row.signup_config.consent,
+            description: row.signup_config.description || null,
+          }
+        : null,
     startAt: row.start_at || null,
     endAt: row.end_at || null,
     isActive: row.is_active ?? true,
@@ -221,6 +243,7 @@ export async function updateBlock(
   if (input.thumbnailPath !== undefined) payload.thumbnail_path = input.thumbnailPath;
   if (input.layout !== undefined) payload.layout = input.layout;
   if (input.embedProvider !== undefined) payload.embed_provider = input.embedProvider;
+  if (input.signup !== undefined) payload.signup_config = input.signup;
   if (input.startAt !== undefined) payload.start_at = input.startAt;
   if (input.endAt !== undefined) payload.end_at = input.endAt;
   if (input.isActive !== undefined) payload.is_active = input.isActive;

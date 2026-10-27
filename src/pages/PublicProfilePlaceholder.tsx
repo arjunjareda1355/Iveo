@@ -3,10 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
 import { PageRenderer } from '../components/page/PageRenderer';
+import { UnlockDialog } from '../components/public/UnlockDialog';
+import { SignupFormBlock } from '../components/public/SignupFormBlock';
 import { NotFound } from './NotFound';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { fetchPublicPage } from '../data/publicPageApi';
-import { PublicPageData } from '../data/types';
+import { PublicPageData, PageBlock } from '../data/types';
 import { VIBES } from '../lib/vibes';
 import { pageUrl } from '../lib/site';
 import { copy } from '../content/copy';
@@ -28,6 +30,8 @@ export const PublicProfilePlaceholder: React.FC = () => {
   const clean = normalizeUsername(rawUsername);
   const [pageData, setPageData] = useState<PublicPageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [unlockedUrls, setUnlockedUrls] = useState<Record<string, string>>({});
+  const [unlockBlock, setUnlockBlock] = useState<PageBlock | null>(null);
 
   const session = useIveoSession();
   const viewTrackedRef = useRef(false);
@@ -169,6 +173,17 @@ export const PublicProfilePlaceholder: React.FC = () => {
       ? BUTTON_RADIUS_MAP[pageData.profile.buttonShape]
       : undefined;
 
+    const effectiveBlocks = pageData.links.map((b) => {
+      if (unlockedUrls[b.id]) {
+        return {
+          ...b,
+          url: unlockedUrls[b.id],
+          isProtected: false,
+        };
+      }
+      return b;
+    });
+
     return (
       <div
         className="min-h-screen w-full flex justify-center"
@@ -184,14 +199,36 @@ export const PublicProfilePlaceholder: React.FC = () => {
               avatarUrl: pageData.profile.avatarUrl,
               socials: pageData.profile.socials,
             }}
-            blocks={pageData.links}
+            blocks={effectiveBlocks}
             buttonRadiusOverride={buttonRadiusOverride}
             hideFooterMark={pageData.profile.hideFooter}
             embedMode="live"
             isPublicPage={true}
             onLinkClick={trackLinkClick}
+            onUnlock={(block) => setUnlockBlock(block)}
+            renderSignupForm={(block) => (
+              <SignupFormBlock
+                block={block}
+                vibe={vibe}
+                ownerName={pageData.profile?.displayName || clean}
+                username={clean}
+                buttonRadiusOverride={buttonRadiusOverride}
+              />
+            )}
           />
         </div>
+
+        <UnlockDialog
+          isOpen={unlockBlock !== null}
+          onClose={() => setUnlockBlock(null)}
+          block={unlockBlock}
+          vibe={vibe}
+          buttonRadiusOverride={buttonRadiusOverride}
+          onSuccess={(block, url) => {
+            setUnlockedUrls((prev) => ({ ...prev, [block.id]: url }));
+            trackLinkClick(block);
+          }}
+        />
       </div>
     );
   }
