@@ -45,10 +45,23 @@ function getLocalBlocks(userId: string): Block[] {
   return [];
 }
 
+async function syncBlocksToServer(userId: string, blocks: Block[]): Promise<void> {
+  try {
+    await fetch('/api/blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: userId, blocks }),
+    });
+  } catch {
+    // Suppress network errors
+  }
+}
+
 function saveLocalBlocks(userId: string, blocks: Block[]) {
   try {
     localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocks));
   } catch {}
+  syncBlocksToServer(userId, blocks);
 }
 
 export async function seedStarterLinks(
@@ -78,6 +91,25 @@ export async function seedStarterLinks(
 }
 
 export async function listMyBlocks(token: string | null, userId: string): Promise<Block[]> {
+  // Query server database first
+  try {
+    const res = await fetch(`/api/blocks?username=${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.blocks) && data.blocks.length > 0) {
+        try {
+          localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(data.blocks));
+        } catch {}
+        return data.blocks.map((b: any) => ({
+          ...b,
+          thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
+        }));
+      }
+    }
+  } catch {
+    // Continue
+  }
+
   if (!rawSupabaseUrl) {
     const local = getLocalBlocks(userId);
     return local.map((b) => ({

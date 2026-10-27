@@ -1,4 +1,6 @@
 import { publicRpc } from './supabase.ts';
+import { dbGetProfile } from './azureSql.ts';
+import { VIBES } from '../../src/lib/vibes.ts';
 
 export interface PublicPageServerData {
   displayName: string | null;
@@ -35,7 +37,24 @@ export async function loadPublicPage(
   username: string
 ): Promise<PublicPageServerData | null> {
   if (!username) return null;
+  const clean = username.toLowerCase().trim();
 
+  // 1. Check Azure SQL / Server database first
+  try {
+    const dbProf = await dbGetProfile(clean);
+    if (dbProf && dbProf.username) {
+      return {
+        username: dbProf.username.toLowerCase(),
+        displayName: dbProf.displayName || `@${dbProf.username}`,
+        bio: dbProf.bio || null,
+        avatarUrl: isAllowedAvatarHost(dbProf.avatarUrl) ? dbProf.avatarUrl : null,
+        vibeId: dbProf.vibeId || 'clean',
+        hideFromSearch: Boolean(dbProf.hideFromSearch),
+      };
+    }
+  } catch {}
+
+  // 2. Check Supabase RPC if configured
   try {
     const raw = await publicRpc<{
       profile?: {
@@ -46,30 +65,36 @@ export async function loadPublicPage(
         vibe_id?: string | null;
         hide_from_search?: boolean;
       } | null;
-    }>('get_public_page', { p_username: username.toLowerCase() });
+    }>('get_public_page', { p_username: clean });
 
-    if (!raw || !raw.profile || !raw.profile.username) {
-      return null;
+    if (raw && raw.profile && raw.profile.username) {
+      const p = raw.profile;
+      const cleanAvatar = isAllowedAvatarHost(p.avatar_url) ? p.avatar_url! : null;
+      return {
+        username: p.username.toLowerCase(),
+        displayName: p.display_name?.trim() || null,
+        bio: p.bio?.trim() || null,
+        avatarUrl: cleanAvatar,
+        vibeId: p.vibe_id || 'clean',
+        hideFromSearch: Boolean(p.hide_from_search),
+      };
     }
+  } catch {}
 
-    const p = raw.profile;
-    const pageUsername = p.username;
-    if (!pageUsername) {
-      return null;
-    }
-    const cleanAvatar = isAllowedAvatarHost(p.avatar_url) ? p.avatar_url! : null;
-
+  // 3. Demo persona fallback
+  const personaVibe = VIBES.find((v) => v.persona.handle === clean);
+  if (personaVibe) {
     return {
-      username: pageUsername.toLowerCase(),
-      displayName: p.display_name?.trim() || null,
-      bio: p.bio?.trim() || null,
-      avatarUrl: cleanAvatar,
-      vibeId: p.vibe_id || 'clean',
-      hideFromSearch: Boolean(p.hide_from_search),
+      username: clean,
+      displayName: personaVibe.persona.name,
+      bio: personaVibe.persona.bio,
+      avatarUrl: null,
+      vibeId: personaVibe.id,
+      hideFromSearch: false,
     };
-  } catch {
-    return null;
   }
+
+  return null;
 }
 
 export async function version(page: PublicPageServerData): Promise<string> {

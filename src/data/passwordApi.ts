@@ -15,6 +15,17 @@ export async function setLinkPassword(
     throw new Error('invalid_password');
   }
 
+  // Sync to Azure SQL / Server database
+  try {
+    await fetch('/api/link-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkId, password: cleanPass }),
+    });
+  } catch {
+    // Continue
+  }
+
   if (!rawSupabaseUrl) {
     // Local / development fallback
     try {
@@ -63,6 +74,17 @@ export async function clearLinkPassword(
   token: string | null,
   linkId: string
 ): Promise<void> {
+  // Sync to Azure SQL / Server database
+  try {
+    await fetch('/api/link-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkId, password: '' }),
+    });
+  } catch {
+    // Continue
+  }
+
   if (!rawSupabaseUrl) {
     try {
       localStorage.removeItem(`iveo_link_pwd_${linkId}`);

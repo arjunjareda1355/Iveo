@@ -11,6 +11,29 @@ export async function unlockLink(
   linkId: string,
   password: string
 ): Promise<UnlockLinkResult> {
+  // 1. Try unified server endpoint first
+  try {
+    const res = await fetch('/api/unlock-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkId, password }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok === true && typeof data.url === 'string') {
+        if (isSafeHref(data.url)) {
+          return { ok: true, url: data.url };
+        }
+        return { ok: false, reason: 'unavailable' };
+      }
+      if (data && data.reason) {
+        return { ok: false, reason: data.reason };
+      }
+    }
+  } catch {
+    // Continue
+  }
+
   if (!rawSupabaseUrl) {
     try {
       const stored = localStorage.getItem(`iveo_link_pwd_${linkId}`);
@@ -83,9 +106,34 @@ export type SubmitContactResult =
     };
 
 export async function submitContact(args: SubmitContactArgs): Promise<SubmitContactResult> {
+  if (!args.consent) return { ok: false, reason: 'consent_required' };
+  if (args.hp) return { ok: true };
+
+  // 1. Try unified server endpoint
+  try {
+    const res = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: args.username,
+        linkId: args.linkId,
+        email: args.email || null,
+        phone: args.phone || null,
+        consent: args.consent,
+        hp: args.hp || '',
+        source: args.source || '',
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok === true) return { ok: true };
+      if (data && data.reason) return { ok: false, reason: data.reason };
+    }
+  } catch {
+    // Continue
+  }
+
   if (!rawSupabaseUrl) {
-    if (!args.consent) return { ok: false, reason: 'consent_required' };
-    if (args.hp) return { ok: true };
     return { ok: true };
   }
 

@@ -21,3 +21,19 @@ export const PRO_FEATURE_NAMES: Record<ProFeature, string> = {
 export function getProFeatureName(feature: ProFeature): string {
   return PRO_FEATURE_NAMES[feature] || 'Pro feature';
 }
+
+/**
+ * Designated owner emails who automatically have full Pro privileges for free
+ */
+export const OWNER_EMAILS = [
+  'help@iveo.site',
+  'arjunjareda2007@gmail.com',
+  'help@fanq.me',
+  'arjunjared1355@gmail.com',
+] as const;
+
+export function isOwnerEmail(email: string | null | undefined): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const clean = email.trim().toLowerCase();
+  return OWNER_EMAILS.some((owner) => owner.toLowerCase() === clean);
+}

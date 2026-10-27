@@ -110,7 +110,21 @@ async function startServer() {
     }
   });
 
-  // 4. Vite Dev Server / Static SPA Fallback
+  // 4. Azure SQL & Backend Persistence Routes
+  const dbHandlers = await import('./api/db-handlers.ts');
+  app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
+  app.get('/api/public-page', dbHandlers.handleGetPublicPage);
+  app.post('/api/profile', dbHandlers.handleSaveProfile);
+  app.get('/api/blocks', dbHandlers.handleGetBlocks);
+  app.post('/api/blocks', dbHandlers.handleSaveBlocks);
+  app.post('/api/contacts', dbHandlers.handleSaveContact);
+  app.get('/api/contacts', dbHandlers.handleGetContacts);
+  app.delete('/api/contacts', dbHandlers.handleDeleteContacts);
+  app.post('/api/unlock-link', dbHandlers.handleUnlockLink);
+  app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
+  app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
+
+  // 5. Vite Dev Server / Static SPA Fallback
   if (!isProd) {
     const fs = await import('node:fs');
     const { createServer } = await import('vite');

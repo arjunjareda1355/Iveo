@@ -50,6 +50,17 @@ export async function listContacts(
   const sanitizedTerm = sanitizeSearchTerm(search || '');
 
   if (!rawSupabaseUrl) {
+    try {
+      const res = await fetch(`/api/contacts?search=${encodeURIComponent(sanitizedTerm)}&page=${page}&pageSize=${pageSize}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.rows)) {
+          return { rows: data.rows, total: typeof data.total === 'number' ? data.total : data.rows.length };
+        }
+      }
+    } catch {
+      // Continue to local fallback
+    }
     const all = getLocalContacts();
     let filtered = all;
     if (sanitizedTerm) {
@@ -120,6 +131,10 @@ export async function deleteContact(
   token: string | null,
   id: string
 ): Promise<void> {
+  try {
+    await fetch(`/api/contacts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch {}
+
   if (!rawSupabaseUrl) {
     const list = getLocalContacts();
     saveLocalContacts(list.filter((c) => c.id !== id));
@@ -140,6 +155,10 @@ export async function deleteContact(
 }
 
 export async function deleteAllContacts(token: string | null): Promise<void> {
+  try {
+    await fetch('/api/contacts?all=true', { method: 'DELETE' });
+  } catch {}
+
   if (!rawSupabaseUrl) {
     saveLocalContacts([]);
     return;

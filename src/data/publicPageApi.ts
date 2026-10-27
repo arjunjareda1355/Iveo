@@ -9,6 +9,46 @@ const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export async function fetchPublicPage(username: string): Promise<PublicPageData | null> {
   const clean = username.toLowerCase().trim();
+  if (!clean) return null;
+
+  // 1. Unified server endpoint (Azure SQL Database / Server store)
+  // Ensures published pages are accessible across any browser, device, or crawler
+  try {
+    const res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.profile) {
+        return {
+          profile: {
+            username: data.profile.username || clean,
+            displayName: data.profile.displayName || data.profile.username || clean,
+            bio: data.profile.bio || '',
+            avatarUrl: isAllowedAvatarUrl(data.profile.avatarUrl) ? data.profile.avatarUrl : null,
+            vibeId: (data.profile.vibeId as VibeId) || 'clean',
+            buttonShape: data.profile.buttonShape || null,
+            socials: data.profile.socials || {},
+            hideFromSearch: Boolean(data.profile.hideFromSearch),
+            hideFooter: Boolean(data.profile.hideFooter),
+          },
+          links: (Array.isArray(data.links) ? data.links : []).map((b: any) => ({
+            id: String(b.id),
+            kind: b.kind,
+            title: String(b.title || ''),
+            url: b.isProtected ? null : (b.url ? String(b.url) : null),
+            icon: b.icon || null,
+            thumbnailPath: b.thumbnailPath || null,
+            thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
+            layout: b.layout || 'classic',
+            embedProvider: b.embedProvider || null,
+            isProtected: Boolean(b.isProtected),
+            signup: b.signup || null,
+          })),
+        };
+      }
+    }
+  } catch {
+    // Continue to Supabase / local fallback
+  }
 
   if (rawSupabaseUrl) {
     try {

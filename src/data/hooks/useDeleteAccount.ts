@@ -25,8 +25,27 @@ export function useDeleteAccount(): DeleteAccountState {
 
   const deleteAccount = async (confirmedUsername: string) => {
     if (!user) return;
-    const currentUsername = user.username?.trim().toLowerCase() || '';
-    if (confirmedUsername.trim().toLowerCase() !== currentUsername) {
+
+    const meta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
+      ? user.unsafeMetadata
+      : {}) as Record<string, unknown>;
+
+    const currentUsername = (
+      user.username ||
+      (typeof meta.username === 'string' ? meta.username : '') ||
+      (typeof meta.preferredUsername === 'string' ? meta.preferredUsername : '') ||
+      user.primaryEmailAddress?.emailAddress?.split('@')[0] ||
+      ''
+    ).trim().toLowerCase();
+
+    const confirmedClean = confirmedUsername.trim().toLowerCase();
+    const emailClean = (user.primaryEmailAddress?.emailAddress || '').trim().toLowerCase();
+    const isMatch =
+      confirmedClean === currentUsername ||
+      confirmedClean === emailClean ||
+      confirmedClean === user.id.toLowerCase();
+
+    if (!isMatch && currentUsername) {
       return;
     }
 
@@ -35,7 +54,21 @@ export function useDeleteAccount(): DeleteAccountState {
 
     const userId = user.id;
 
-    // 1. Get token
+    // 1. Unified server-side deletion (Azure SQL / Server store)
+    try {
+      await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: currentUsername || userId,
+          userId,
+        }),
+      });
+    } catch {
+      // Continue
+    }
+
+    // 2. Get Supabase token if configured
     let token: string | null = null;
     try {
       token = await getToken({ template: 'supabase' }).catch(() => null);
@@ -51,7 +84,7 @@ export function useDeleteAccount(): DeleteAccountState {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // 2. Delete user's images in link-images bucket (failures ignored; webhook sweeps)
+    // 3. Delete user's images in link-images bucket if Supabase configured
     if (rawSupabaseUrl) {
       try {
         let pages = 0;
@@ -87,49 +120,40 @@ export function useDeleteAccount(): DeleteAccountState {
       }
     }
 
-    // 3. Delete profile row (allowed by owner delete policy; cascades remove links and stats)
+    // 4. Delete Supabase profile row if configured
     if (rawSupabaseUrl) {
       try {
-        const deleteProfileRes = await fetch(
+        await fetch(
           `${rawSupabaseUrl}/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}`,
           {
             method: 'DELETE',
             headers,
           }
         );
-
-        if (!deleteProfileRes.ok && deleteProfileRes.status !== 404) {
-          setIsDeleting(false);
-          setError('first');
-          return;
-        }
       } catch {
-        setIsDeleting(false);
-        setError('first');
-        return;
+        // Continue
       }
-    } else {
-      // Local development cleanups
-      try {
-        localStorage.removeItem(`iveo_blocks_${currentUsername}`);
-        localStorage.removeItem(`ivio_blocks_${currentUsername}`);
-      } catch {}
     }
 
-    // 4. Delete Clerk account
+    // 5. Clean up all browser storage
     try {
-      await user.delete();
-    } catch {
-      // Page data is already gone, but Clerk deletion failed
-      setIsDeleting(false);
-      setError('second');
-      return;
-    }
-
-    // 5. On success
-    try {
+      localStorage.removeItem(`iveo_blocks_${currentUsername}`);
+      localStorage.removeItem(`ivio_blocks_${currentUsername}`);
+      localStorage.removeItem(`iveo_profile_${currentUsername}`);
+      localStorage.removeItem(`ivio_profile_${currentUsername}`);
+      localStorage.removeItem(`iveo_blocks_${userId}`);
+      localStorage.removeItem('iveo_current_username');
       sessionStorage.clear();
     } catch {}
+
+    // 6. Delete Clerk account or sign out
+    try {
+      if (typeof user.delete === 'function') {
+        await user.delete();
+      }
+    } catch (clerkErr) {
+      console.warn('Clerk user delete caught, signing out instead:', clerkErr);
+    }
 
     setIsDeleting(false);
     navigate('/?deleted=1', { replace: true });

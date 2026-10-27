@@ -9,6 +9,7 @@ import {
 } from '../lib/preferences';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { isAllowedAvatarUrl } from '../lib/avatar';
+import { isOwnerEmail } from '../lib/plan';
 
 export interface IveoSession {
   isLoaded: boolean;
@@ -134,9 +135,22 @@ function useClerkSession(): IveoSession {
   const isUsernameValid = username ? validateUsername(username).ok : false;
   const onboardingComplete = preferences.onboardingComplete === true && isUsernameValid;
 
-  const plan = preferences.plan;
-  const isPro = plan === 'pro';
+  const isOwner = primaryEmail ? isOwnerEmail(primaryEmail) : false;
+  const plan: 'free' | 'pro' = isOwner ? 'pro' : preferences.plan;
+  const isPro = isOwner || plan === 'pro';
   const hideFooter = preferences.hideIveoFooter || preferences.hideIvioFooter || false;
+
+  const syncToServer = async (payload: Record<string, unknown>) => {
+    try {
+      await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Background sync, suppress errors
+    }
+  };
 
   const updateUsername = async (newUsername: string): Promise<void> => {
     const clean = normalizeUsername(newUsername);
@@ -189,6 +203,18 @@ function useClerkSession(): IveoSession {
       );
       localStorage.setItem('iveo_current_username', clean);
     } catch {}
+
+    // Mirror to Azure SQL / Server database
+    syncToServer({
+      username: clean,
+      displayName: displayName || clean,
+      bio,
+      avatarUrl: imageUrl,
+      vibeId: preferences.vibeId,
+      buttonShape: preferences.buttonShape,
+      socials,
+      hideFooter,
+    });
   };
 
   const updatePreferences = async (patch: Partial<Omit<IveoPreferences, 'plan'>>): Promise<void> => {
@@ -226,6 +252,18 @@ function useClerkSession(): IveoSession {
           })
         );
       } catch {}
+
+      // Mirror to Azure SQL / Server database
+      syncToServer({
+        username,
+        displayName: merged.displayName !== undefined ? merged.displayName : displayName,
+        bio: merged.bio !== undefined ? merged.bio : bio,
+        avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : imageUrl,
+        vibeId: merged.vibeId || preferences.vibeId,
+        buttonShape: merged.buttonShape || preferences.buttonShape,
+        socials: merged.socials !== undefined ? merged.socials : socials,
+        hideFooter: merged.hideIveoFooter || merged.hideIvioFooter || hideFooter,
+      });
     }
   };
 
