@@ -13,6 +13,8 @@ import { PhoneProfile } from '../phone/PhonePage';
 import { SocialIcon } from '../phone/SocialIcons';
 import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
+import { TipJarBlock } from '../public/TipJarBlock';
+import { FaqBlock } from '../public/FaqBlock';
 import { formatExternalUrl } from '../../lib/urls';
 import { Logo } from '../ui/Logo';
 
@@ -166,11 +168,52 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         </p>
       )}
 
+      {/* Top Socials placement if configured or default */}
+      {(profile?.socialsPosition === 'top' || !profile?.socialsPosition) && activeSocialEntries.length > 0 && (
+        <div
+          className="flex items-center justify-center flex-wrap shrink-0"
+          style={{
+            marginTop: `${Math.round(14 * scale)}px`,
+            gap: `${Math.round(14 * scale)}px`,
+            color: tokens.text,
+            opacity: 0.85,
+          }}
+        >
+          {activeSocialEntries.map(([platform, url]) => {
+            const cleanUrl = formatExternalUrl(url);
+            if (isPublicPage) {
+              return (
+                <a
+                  key={platform}
+                  href={cleanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  aria-label={platform}
+                  className="transition-transform duration-120 hover:scale-110 active:scale-95"
+                  style={{ color: tokens.text }}
+                >
+                  <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+                </a>
+              );
+            }
+            return (
+              <span
+                key={platform}
+                title={`${platform}: ${url}`}
+                className="opacity-80 hover:opacity-100 transition-opacity"
+              >
+                <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* Blocks Container */}
       <div
         className="w-full flex flex-col"
         style={{
-          marginTop: `${Math.round(24 * scale)}px`,
+          marginTop: `${Math.round((activeSocialEntries.length > 0 && (profile?.socialsPosition === 'top' || !profile?.socialsPosition) ? 16 : 24) * scale)}px`,
           gap: `${Math.round(10 * scale)}px`,
         }}
       >
@@ -311,6 +354,35 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
+          // 4b. Tip Jar Block
+          if (block.kind === 'tip_jar' && block.tipJar) {
+            return (
+              <div key={block.id} className="w-full">
+                <TipJarBlock
+                  config={block.tipJar}
+                  tokens={tokens}
+                  buttonRadius={effectiveRadius}
+                  scale={scale}
+                />
+              </div>
+            );
+          }
+
+          // 4c. FAQ Accordion Block
+          if (block.kind === 'faq' && block.faq) {
+            return (
+              <div key={block.id} className="w-full">
+                <FaqBlock
+                  title={block.title}
+                  config={block.faq}
+                  tokens={tokens}
+                  buttonRadius={effectiveRadius}
+                  scale={scale}
+                />
+              </div>
+            );
+          }
+
           const isProtected = block.isProtected === true || (protectedIds?.has(block.id) ?? false);
 
           // 5. Featured link
@@ -351,9 +423,21 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             ? thumbSize + 16
             : Math.round(14 * scale);
 
+          const animClass =
+            block.animation === 'pulse'
+              ? 'animate-pulse'
+              : block.animation === 'bounce'
+              ? 'hover:animate-bounce'
+              : '';
+
+          const glowShadow =
+            block.animation === 'glow'
+              ? `0 0 16px ${tokens.text}40`
+              : (tokens.buttonShadow || 'none');
+
           const innerButton = (
             <div
-              className="w-full relative flex items-center justify-center truncate transition-all duration-150 select-none"
+              className={`w-full relative flex items-center justify-center truncate transition-all duration-150 select-none ${animClass}`}
               style={{
                 height: `${Math.round(44 * scale)}px`,
                 paddingLeft: `${sidePadding}px`,
@@ -364,11 +448,24 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 border: tokens.buttonBorder
                   ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
                   : 'none',
-                boxShadow: tokens.buttonShadow || 'none',
+                boxShadow: glowShadow,
                 fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
                 fontWeight: 500,
               }}
             >
+              {/* Badge if specified */}
+              {block.badge && (
+                <span
+                  className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm pointer-events-none z-10"
+                  style={{
+                    backgroundColor: tokens.text,
+                    color: tokens.bg,
+                    border: `1px solid ${tokens.buttonBorder || 'transparent'}`,
+                  }}
+                >
+                  {block.badge}
+                </span>
+              )}
               {/* Left thumbnail or icon */}
               {hasThumb ? (
                 <div
@@ -456,8 +553,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         })}
       </div>
 
-      {/* Social Row: Rendered ONLY if user added social accounts */}
-      {activeSocialEntries.length > 0 && (
+      {/* Social Row: Rendered at bottom if user configured bottom placement */}
+      {profile?.socialsPosition === 'bottom' && activeSocialEntries.length > 0 && (
         <div
           className="flex items-center justify-center flex-wrap shrink-0"
           style={{

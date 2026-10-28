@@ -1,4 +1,4 @@
-import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig } from './types';
+import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig, LinkAnimation, TipJarConfig, FaqConfig } from './types';
 import { storagePublicUrl } from './storageApi';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -13,6 +13,10 @@ export interface CreateBlockInput {
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
   signup?: SignupConfig | null;
+  tipJar?: TipJarConfig | null;
+  faq?: FaqConfig | null;
+  animation?: LinkAnimation | null;
+  badge?: string | null;
   startAt?: string | null;
   endAt?: string | null;
   position?: number;
@@ -27,6 +31,10 @@ export interface UpdateBlockInput {
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
   signup?: SignupConfig | null;
+  tipJar?: TipJarConfig | null;
+  faq?: FaqConfig | null;
+  animation?: LinkAnimation | null;
+  badge?: string | null;
   startAt?: string | null;
   endAt?: string | null;
   isActive?: boolean;
@@ -178,6 +186,10 @@ export async function createBlock(
     layout: input.layout || 'classic',
     embedProvider: input.embedProvider || null,
     signup: input.signup || null,
+    tipJar: input.tipJar || null,
+    faq: input.faq || null,
+    animation: input.animation || null,
+    badge: input.badge || null,
     startAt: input.startAt || null,
     endAt: input.endAt || null,
     isActive: input.isActive ?? true,

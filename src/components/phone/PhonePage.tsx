@@ -11,6 +11,7 @@ export interface PhoneProfile {
   initials?: string;
   links?: readonly string[];
   socials?: Record<string, string>;
+  socialsPosition?: 'top' | 'bottom';
 }
 
 interface PhonePageProps {

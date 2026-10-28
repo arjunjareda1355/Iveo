@@ -23,6 +23,7 @@ export interface IveoSession {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
+  socialsPosition: 'top' | 'bottom';
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
@@ -54,6 +55,7 @@ const FALLBACK_SESSION: IveoSession = {
   vibeId: DEFAULT_PREFERENCES.vibeId,
   buttonShape: DEFAULT_PREFERENCES.buttonShape,
   socials: {},
+  socialsPosition: 'top',
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
@@ -86,6 +88,7 @@ function useClerkSession(): IveoSession {
       vibeId: DEFAULT_PREFERENCES.vibeId,
       buttonShape: DEFAULT_PREFERENCES.buttonShape,
       socials: {},
+      socialsPosition: 'top',
       onboardingComplete: false,
       plan: 'free',
       isPro: false,
@@ -299,6 +302,7 @@ function useClerkSession(): IveoSession {
     vibeId: preferences.vibeId,
     buttonShape: preferences.buttonShape,
     socials,
+    socialsPosition: preferences.socialsPosition || 'top',
     onboardingComplete,
     plan,
     isPro,

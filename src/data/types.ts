@@ -1,9 +1,10 @@
 import { VibeId } from '../lib/vibes';
 import { ButtonShape } from '../lib/preferences';
 
-export type BlockKind = 'link' | 'header' | 'divider' | 'embed' | 'signup';
+export type BlockKind = 'link' | 'header' | 'divider' | 'embed' | 'signup' | 'tip_jar' | 'faq';
 export type BlockLayout = 'classic' | 'featured';
 export type EmbedProvider = 'youtube' | 'spotify' | 'soundcloud';
+export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
 
 export type SignupCollectMode = 'email' | 'phone' | 'both';
 
@@ -13,6 +14,24 @@ export interface SignupConfig {
   consent: string;
   description: string | null;
   heading?: string;
+}
+
+export interface TipJarConfig {
+  amounts: number[];
+  currency: string;
+  buttonText: string;
+  paymentUrl: string;
+  description?: string | null;
+}
+
+export interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface FaqConfig {
+  items: FaqItem[];
 }
 
 export interface Block {
@@ -26,6 +45,10 @@ export interface Block {
   layout: BlockLayout;
   embedProvider: EmbedProvider | null;
   signup?: SignupConfig | null;
+  tipJar?: TipJarConfig | null;
+  faq?: FaqConfig | null;
+  animation?: LinkAnimation | null;
+  badge?: string | null;
   isProtected?: boolean;
   startAt: string | null;
   endAt: string | null;
@@ -46,6 +69,10 @@ export interface PublicBlock {
   embedProvider: EmbedProvider | null;
   isProtected?: boolean;
   signup?: SignupConfig | null;
+  tipJar?: TipJarConfig | null;
+  faq?: FaqConfig | null;
+  animation?: LinkAnimation | null;
+  badge?: string | null;
 }
 
 export interface PageBlock {
@@ -60,6 +87,10 @@ export interface PageBlock {
   embedProvider?: EmbedProvider | null;
   isProtected?: boolean;
   signup?: SignupConfig | null;
+  tipJar?: TipJarConfig | null;
+  faq?: FaqConfig | null;
+  animation?: LinkAnimation | null;
+  badge?: string | null;
   startAt?: string | null;
   endAt?: string | null;
   isActive?: boolean;

@@ -3,8 +3,17 @@ import QRCode from 'qrcode';
 const svgCache = new Map<string, string>();
 const pngCache = new Map<string, string>();
 
-export async function makeQrSvg(url: string): Promise<string> {
-  const cached = svgCache.get(url);
+export interface QrOptions {
+  darkColor?: string;
+  lightColor?: string;
+}
+
+export async function makeQrSvg(url: string, options?: QrOptions): Promise<string> {
+  const dark = options?.darkColor || '#0A0A0A';
+  const light = options?.lightColor || '#FFFFFF';
+  const cacheKey = `${url}::${dark}::${light}`;
+
+  const cached = svgCache.get(cacheKey);
   if (cached) return cached;
 
   const result = await QRCode.toString(url, {
@@ -12,17 +21,21 @@ export async function makeQrSvg(url: string): Promise<string> {
     errorCorrectionLevel: 'M',
     margin: 4,
     color: {
-      dark: '#0A0A0A',
-      light: '#FFFFFF',
+      dark,
+      light,
     },
   });
 
-  svgCache.set(url, result);
+  svgCache.set(cacheKey, result);
   return result;
 }
 
-export async function makeQrPngDataUrl(url: string): Promise<string> {
-  const cached = pngCache.get(url);
+export async function makeQrPngDataUrl(url: string, options?: QrOptions): Promise<string> {
+  const dark = options?.darkColor || '#0A0A0A';
+  const light = options?.lightColor || '#FFFFFF';
+  const cacheKey = `${url}::${dark}::${light}`;
+
+  const cached = pngCache.get(cacheKey);
   if (cached) return cached;
 
   const result = await QRCode.toDataURL(url, {
@@ -31,12 +44,12 @@ export async function makeQrPngDataUrl(url: string): Promise<string> {
     errorCorrectionLevel: 'M',
     margin: 4,
     color: {
-      dark: '#0A0A0A',
-      light: '#FFFFFF',
+      dark,
+      light,
     },
   });
 
-  pngCache.set(url, result);
+  pngCache.set(cacheKey, result);
   return result;
 }
 

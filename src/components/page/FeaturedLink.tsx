@@ -56,6 +56,19 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
             className="w-full h-full object-cover block"
           />
 
+          {/* Badge if present */}
+          {block.badge && (
+            <div
+              className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm pointer-events-none z-10"
+              style={{
+                backgroundColor: tokens.text,
+                color: tokens.bg,
+              }}
+            >
+              {block.badge}
+            </div>
+          )}
+
           {/* Protected chip in top-right corner (8px inset) */}
           {isProtected && (
             <div

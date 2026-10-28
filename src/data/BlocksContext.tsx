@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Block, BlockLayout, EmbedProvider, SignupConfig } from './types';
+import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem } from './types';
 import {
   listMyBlocks,
   createBlock,
@@ -16,6 +16,8 @@ interface BlocksContextValue {
   addLink: (title: string, url: string) => Promise<void>;
   addEmbed: (url: string, caption: string, provider: EmbedProvider) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
+  addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
+  addFaq: (items: FaqItem[], title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
   addDivider: () => Promise<void>;
   updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
@@ -120,6 +122,42 @@ export const BlocksProvider: React.FC<{
       } else {
         showToast("Couldn't add signup form. Try again.");
       }
+      throw err;
+    }
+  };
+
+  const addTipJar = async (config: TipJarConfig, title: string = 'Support My Work') => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'tip_jar',
+        title,
+        position: blocks.length,
+        tipJar: config,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      showToast('Tip Jar added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add tip jar. Try again.");
+      throw err;
+    }
+  };
+
+  const addFaq = async (items: FaqItem[], title: string = 'Frequently Asked Questions') => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'faq',
+        title,
+        position: blocks.length,
+        faq: { items },
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      showToast('FAQ section added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add FAQ. Try again.");
       throw err;
     }
   };
@@ -280,6 +318,8 @@ export const BlocksProvider: React.FC<{
         addLink,
         addEmbed,
         addSignupForm,
+        addTipJar,
+        addFaq,
         addHeader,
         addDivider,
         updateBlock: updateBlockFields,

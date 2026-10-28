@@ -15,6 +15,7 @@ export interface IveoPreferences {
   avatarUrl?: string | null;
   category?: string | null;
   socials?: Record<string, string>;
+  socialsPosition?: 'top' | 'bottom';
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -32,6 +33,7 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   avatarUrl: null,
   category: null,
   socials: {},
+  socialsPosition: 'top',
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -106,6 +108,8 @@ export function parsePreferences(raw: unknown): IveoPreferences {
       ? (record.socials as Record<string, string>)
       : {};
 
+  const socialsPosition = record.socialsPosition === 'bottom' ? 'bottom' : 'top';
+
   return {
     vibeId,
     buttonShape,
@@ -119,5 +123,6 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     avatarUrl,
     category,
     socials,
+    socialsPosition,
   };
 }

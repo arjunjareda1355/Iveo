@@ -11,7 +11,7 @@ import { formatExternalUrl } from '../../lib/urls';
 
 export const SocialLinksCard: React.FC = () => {
   const session = useIveoSession();
-  const { socials, updateSocials } = session;
+  const { socials, updateSocials, socialsPosition = 'top', updatePreferences } = session;
 
   const [isAdding, setIsAdding] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('instagram');
@@ -131,6 +131,38 @@ export const SocialLinksCard: React.FC = () => {
             <span>Add social icon</span>
           </Button>
         )}
+      </div>
+
+      {/* Position setting */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-surface-2/60 border border-border/80 rounded-[10px]">
+        <div>
+          <span className="text-[13px] font-semibold text-ink block">Icon placement</span>
+          <span className="text-[12px] text-muted block">Choose where social icons appear on your public page</span>
+        </div>
+        <div className="inline-flex p-1 bg-surface border border-border rounded-[8px] self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => updatePreferences({ socialsPosition: 'top' })}
+            className={`px-3 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
+              socialsPosition === 'top'
+                ? 'bg-ink text-surface shadow-xs font-semibold'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            Top (under bio)
+          </button>
+          <button
+            type="button"
+            onClick={() => updatePreferences({ socialsPosition: 'bottom' })}
+            className={`px-3 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
+              socialsPosition === 'bottom'
+                ? 'bg-ink text-surface shadow-xs font-semibold'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            Bottom (under links)
+          </button>
+        </div>
       </div>
 
       {/* Form: Adding new social icon */}

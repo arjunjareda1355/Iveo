@@ -17,6 +17,9 @@ import {
   AlertTriangle,
   Mail,
   Lock,
+  Heart,
+  HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -31,7 +34,10 @@ import { ScheduleChip } from '../links/ScheduleChip';
 import { PasswordSection } from '../links/PasswordSection';
 import { EmbedComposer } from '../links/EmbedComposer';
 import { SignupComposer } from '../links/SignupComposer';
-import { Block, BlockLayout } from '../../data/types';
+import { TipJarComposer } from '../links/TipJarComposer';
+import { FaqComposer } from '../links/FaqComposer';
+import { AnimationControl } from '../links/AnimationControl';
+import { Block, BlockLayout, LinkAnimation } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
 import { useClickCounts } from '../../data/hooks/useClickCounts';
 import { useProtectedLinkIds } from '../../data/hooks/useProtectedLinkIds';
@@ -46,6 +52,8 @@ export const LinksTab: React.FC = () => {
     addLink,
     addEmbed,
     addSignupForm,
+    addTipJar,
+    addFaq,
     addHeader,
     addDivider,
     updateBlock,
@@ -61,9 +69,9 @@ export const LinksTab: React.FC = () => {
   const { openUpgrade } = useUpgradeDialog();
   const { protectedIds } = useProtectedLinkIds();
 
-  // Active composer: null | 'link' | 'embed' | 'signup' | 'header'
+  // Active composer: null | 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq'
   const [activeComposer, setActiveComposer] = useState<
-    'link' | 'embed' | 'signup' | 'header' | null
+    'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | null
   >(null);
 
   // Quick inputs for link/header composers
@@ -77,6 +85,8 @@ export const LinksTab: React.FC = () => {
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
   const [editLayout, setEditLayout] = useState<BlockLayout>('classic');
+  const [editAnimation, setEditAnimation] = useState<LinkAnimation>('none');
+  const [editBadge, setEditBadge] = useState<string>('');
   const [editStartAt, setEditStartAt] = useState<string | null>(null);
   const [editEndAt, setEditEndAt] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
@@ -94,7 +104,7 @@ export const LinksTab: React.FC = () => {
   const archivedBlocks = blocks.filter((b) => b.isArchived);
 
   // Composer opening handlers
-  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header') => {
+  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq') => {
     setEditingBlockId(null);
     if (type === 'embed' && !isPro) {
       openUpgrade('embeds');
@@ -160,6 +170,8 @@ export const LinksTab: React.FC = () => {
     setEditTitle(block.title);
     setEditUrl(block.url || '');
     setEditLayout(block.layout || 'classic');
+    setEditAnimation(block.animation || 'none');
+    setEditBadge(block.badge || '');
     setEditStartAt(block.startAt);
     setEditEndAt(block.endAt);
     setEditError(null);
@@ -195,6 +207,8 @@ export const LinksTab: React.FC = () => {
           title: editTitle.trim(),
           url: editUrl.trim(),
           layout: block.thumbnailPath ? editLayout : 'classic',
+          animation: editAnimation,
+          badge: editBadge.trim() || null,
           startAt: editStartAt,
           endAt: editEndAt,
         });
@@ -285,6 +299,24 @@ export const LinksTab: React.FC = () => {
           <Plus size={16} strokeWidth={2} />
           <span>{copy.signup.dashboard.addButton}</span>
           {!isPro && <ProBadge className="ml-1" />}
+        </Button>
+
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('tip_jar')}
+        >
+          <Heart size={16} strokeWidth={2} className="text-red-500" />
+          <span>Add tip jar</span>
+        </Button>
+
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('faq')}
+        >
+          <HelpCircle size={16} strokeWidth={2} className="text-blue-500" />
+          <span>Add FAQ</span>
         </Button>
 
         <Button
@@ -421,6 +453,26 @@ export const LinksTab: React.FC = () => {
         </Card>
       )}
 
+      {activeComposer === 'tip_jar' && (
+        <TipJarComposer
+          onAdd={async (cfg, title) => {
+            await addTipJar(cfg, title);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'faq' && (
+        <FaqComposer
+          onAdd={async (items, title) => {
+            await addFaq(items, title);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
       {/* 3. Items List */}
       {activeBlocks.length === 0 && !activeComposer ? (
         <Card className="flex flex-col items-start gap-4 p-6 sm:p-8">
@@ -444,6 +496,8 @@ export const LinksTab: React.FC = () => {
             const isHeader = block.kind === 'header';
             const isDivider = block.kind === 'divider';
             const isSignup = block.kind === 'signup';
+            const isTipJar = block.kind === 'tip_jar';
+            const isFaq = block.kind === 'faq';
             const isLink = block.kind === 'link';
             const isProtected = isLink && (protectedIds.has(block.id) || block.isProtected === true);
 
@@ -479,6 +533,10 @@ export const LinksTab: React.FC = () => {
                           <ProviderGlyph size={18} className="text-ink" strokeWidth={1.5} />
                         ) : isSignup ? (
                           <Mail size={18} className="text-subtle" strokeWidth={1.5} />
+                        ) : isTipJar ? (
+                          <Heart size={18} className="text-red-500 fill-red-500" strokeWidth={1.5} />
+                        ) : isFaq ? (
+                          <HelpCircle size={18} className="text-blue-500" strokeWidth={1.5} />
                         ) : isHeader ? (
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
@@ -500,8 +558,17 @@ export const LinksTab: React.FC = () => {
                               ? 'Divider'
                               : isSignup
                               ? block.signup?.heading || block.title || copy.signup.dashboard.defaultHeading
+                              : isTipJar
+                              ? `Support: ${block.tipJar?.buttonText || block.title || 'Tip Jar'}`
+                              : isFaq
+                              ? `FAQ: ${block.title || 'Questions'}`
                               : block.title || (isEmbed ? 'Embed' : 'Untitled')}
                           </span>
+                          {block.badge && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-neutral-200 dark:bg-neutral-800 text-ink uppercase">
+                              {block.badge}
+                            </span>
+                          )}
                           <ScheduleChip block={block} isActive={block.isActive} />
                           {isProtected && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-surface-2 text-muted border border-border">
@@ -515,6 +582,20 @@ export const LinksTab: React.FC = () => {
                         </div>
 
                         {/* Subtitle / Host line with click counts */}
+                        {isTipJar && block.tipJar && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight">
+                            <span>
+                              {block.tipJar.currency} amounts: {block.tipJar.amounts?.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        {isFaq && block.faq && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight">
+                            <span>
+                              {block.faq.items?.length || 0} questions & answers
+                            </span>
+                          </div>
+                        )}
                         {isSignup && (
                           <div className="flex items-center text-[12px] text-muted leading-tight">
                             <span>
@@ -678,6 +759,34 @@ export const LinksTab: React.FC = () => {
                     }}
                     onCancel={() => setEditingBlockId(null)}
                   />
+                ) : isTipJar ? (
+                  <TipJarComposer
+                    initialValues={block.tipJar || undefined}
+                    initialTitle={block.title || undefined}
+                    isEditing
+                    onAdd={async (config, title) => {
+                      await updateBlock(block.id, {
+                        title,
+                        tipJar: config,
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isFaq ? (
+                  <FaqComposer
+                    initialItems={block.faq?.items || undefined}
+                    initialTitle={block.title || undefined}
+                    isEditing
+                    onAdd={async (items, title) => {
+                      await updateBlock(block.id, {
+                        title,
+                        faq: { items },
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
                 ) : (
                   // Full Edit Panel (Section 12.3)
                   <div className="flex flex-col gap-4">
@@ -743,6 +852,16 @@ export const LinksTab: React.FC = () => {
                         hasImage={!!block.thumbnailPath}
                         layout={editLayout}
                         onChange={(l) => setEditLayout(l)}
+                      />
+                    )}
+
+                    {/* Animation & Badge Control (Links only) */}
+                    {isLink && (
+                      <AnimationControl
+                        animation={editAnimation}
+                        badge={editBadge}
+                        onAnimationChange={(anim) => setEditAnimation(anim)}
+                        onBadgeChange={(badgeText) => setEditBadge(badgeText)}
                       />
                     )}
 

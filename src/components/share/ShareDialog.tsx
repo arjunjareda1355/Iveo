@@ -24,6 +24,15 @@ interface ShareDialogProps {
   isPublished?: boolean;
 }
 
+const QR_COLORS = [
+  { label: 'Onyx', value: '#0A0A0A' },
+  { label: 'Indigo', value: '#4F46E5' },
+  { label: 'Emerald', value: '#059669' },
+  { label: 'Rose', value: '#E11D48' },
+  { label: 'Amber', value: '#D97706' },
+  { label: 'Violet', value: '#7C3AED' },
+];
+
 export const ShareDialog: React.FC<ShareDialogProps> = ({
   isOpen,
   onClose,
@@ -36,6 +45,8 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 }) => {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('#0A0A0A');
+  const [showBrandedFrame, setShowBrandedFrame] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [qrPngDataUrl, setQrPngDataUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState(false);
@@ -48,7 +59,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const qrUrl = pageUrl(username, { src: 'qr' });
   const displayAddress = fullUrl.replace(/^https?:\/\//i, '');
 
-  // Generate QR lazily when opened (using qrUrl for automatic QR tracking)
+  // Generate QR lazily when opened or when color changes
   useEffect(() => {
     if (!isOpen || !username) return;
 
@@ -56,7 +67,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     setIsGenerating(true);
     setQrError(false);
 
-    Promise.all([makeQrSvg(qrUrl), makeQrPngDataUrl(qrUrl)])
+    Promise.all([
+      makeQrSvg(qrUrl, { darkColor: selectedColor }),
+      makeQrPngDataUrl(qrUrl, { darkColor: selectedColor }),
+    ])
       .then(([svg, png]) => {
         if (!isMounted) return;
         setQrSvg(svg);
@@ -72,7 +86,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, username, qrUrl]);
+  }, [isOpen, username, qrUrl, selectedColor]);
 
   // Trap focus and lock body scroll
   useEffect(() => {
@@ -238,17 +252,84 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </Button>
           )}
 
-          {/* 3. QR code block */}
-          <div className="flex flex-col items-center">
-            <div className="w-full flex flex-col items-center justify-center bg-white border border-border rounded-[14px] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <div className="w-[224px] h-[224px] flex items-center justify-center bg-white">
+          {/* 3. QR Code Studio */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-ink">QR Code Studio</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted">Card frame</span>
+                <button
+                  type="button"
+                  onClick={() => setShowBrandedFrame((prev) => !prev)}
+                  className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative p-0.5 ${
+                    showBrandedFrame ? 'bg-ink' : 'bg-border'
+                  }`}
+                  aria-label="Toggle branded card frame"
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-surface shadow-xs transition-transform ${
+                      showBrandedFrame ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Color palette selector */}
+            <div className="flex items-center gap-2 overflow-x-auto py-1">
+              {QR_COLORS.map((c) => {
+                const isActive = selectedColor === c.value;
+                return (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setSelectedColor(c.value)}
+                    title={c.label}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-transform cursor-pointer shrink-0 ${
+                      isActive ? 'ring-2 ring-offset-2 ring-ink scale-105' : 'hover:scale-105 opacity-80 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: c.value }}
+                  >
+                    {isActive && (
+                      <span className="w-2 h-2 rounded-full bg-white shadow-xs" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* QR Card Container */}
+            <div className="w-full flex flex-col items-center justify-center bg-white border border-border rounded-[14px] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] text-center">
+              {showBrandedFrame && (
+                <div className="flex flex-col items-center mb-3">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName || username}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-xs mb-1.5"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-surface-2 border border-border flex items-center justify-center font-bold text-ink text-[16px] mb-1.5 shadow-xs">
+                      {(displayName || username).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-[14px] font-semibold text-ink leading-tight">
+                    {displayName || `@${username}`}
+                  </span>
+                  <span className="text-[11px] text-muted mt-0.5">
+                    Scan to view my profile
+                  </span>
+                </div>
+              )}
+
+              <div className="w-[200px] h-[200px] flex items-center justify-center bg-white">
                 {qrSvg ? (
                   <img
                     src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvg)}`}
                     alt={`QR code that opens ${fullUrl}`}
-                    width={224}
-                    height={224}
-                    className="w-[224px] h-[224px] block object-contain"
+                    width={200}
+                    height={200}
+                    className="w-[200px] h-[200px] block object-contain"
                   />
                 ) : qrError ? (
                   <div className="flex flex-col items-center text-center p-4">
@@ -261,7 +342,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                       onClick={() => {
                         setQrError(false);
                         setIsGenerating(true);
-                        Promise.all([makeQrSvg(fullUrl), makeQrPngDataUrl(fullUrl)])
+                        Promise.all([
+                          makeQrSvg(qrUrl, { darkColor: selectedColor }),
+                          makeQrPngDataUrl(qrUrl, { darkColor: selectedColor }),
+                        ])
                           .then(([svg, png]) => {
                             setQrSvg(svg);
                             setQrPngDataUrl(png);
@@ -278,12 +362,19 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                     </Button>
                   </div>
                 ) : (
-                  <div className="w-[224px] h-[224px] bg-surface-2 rounded-[8px]" />
+                  <div className="w-[200px] h-[200px] bg-surface-2 rounded-[8px] animate-pulse" />
                 )}
               </div>
+
+              {showBrandedFrame && (
+                <div className="mt-3 pt-2.5 border-t border-border/60 w-full flex items-center justify-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-ink tracking-tight font-sans">iveo</span>
+                  <span className="text-[10px] text-muted">· iveo.site/{username}</span>
+                </div>
+              )}
             </div>
 
-            <div className="mt-3 w-full grid grid-cols-2 gap-2.5">
+            <div className="w-full grid grid-cols-2 gap-2.5">
               <Button
                 variant="secondary"
                 size="md"
@@ -304,8 +395,8 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
               </Button>
             </div>
 
-            <p className="mt-2.5 text-center text-[13px] text-muted leading-relaxed">
-              Scans to iveo.site/{username}. Print it at least 2 cm (0.8 in) wide.
+            <p className="text-center text-[12px] text-muted leading-relaxed">
+              Scans directly to iveo.site/{username}. High resolution for print & signage.
             </p>
           </div>
 
