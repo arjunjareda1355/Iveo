@@ -570,16 +570,20 @@ export async function dbSaveContact(contact: {
   writeServerStore(store);
 }
 
-export async function dbGetContacts(username: string): Promise<any[]> {
-  const clean = username.toLowerCase().trim();
+export async function dbGetContacts(username?: string): Promise<any[]> {
+  const clean = username ? username.toLowerCase().trim() : '';
   const pool = await getAzureSqlPool();
 
   if (pool) {
     try {
-      const res = await pool
-        .request()
-        .input('username', sql.NVarChar(64), clean)
-        .query('SELECT * FROM iveo_contacts WHERE username = @username ORDER BY created_at DESC');
+      const req = pool.request();
+      let query = 'SELECT * FROM iveo_contacts';
+      if (clean) {
+        req.input('username', sql.NVarChar(64), clean);
+        query += ' WHERE username = @username';
+      }
+      query += ' ORDER BY created_at DESC';
+      const res = await req.query(query);
 
       return res.recordset.map((r) => ({
         id: r.id,
@@ -596,20 +600,29 @@ export async function dbGetContacts(username: string): Promise<any[]> {
   }
 
   const store = readServerStore();
-  return store.contacts[clean] || [];
+  if (clean) {
+    return store.contacts[clean] || [];
+  }
+  const all: any[] = [];
+  for (const list of Object.values(store.contacts)) {
+    all.push(...list);
+  }
+  return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function dbDeleteContact(username: string, contactId: string): Promise<void> {
-  const clean = username.toLowerCase().trim();
+export async function dbDeleteContact(username: string | undefined, contactId: string): Promise<void> {
+  const clean = username ? username.toLowerCase().trim() : '';
   const pool = await getAzureSqlPool();
 
   if (pool) {
     try {
-      await pool
-        .request()
-        .input('username', sql.NVarChar(64), clean)
-        .input('id', sql.NVarChar(128), contactId)
-        .query('DELETE FROM iveo_contacts WHERE username = @username AND id = @id');
+      const req = pool.request().input('id', sql.NVarChar(128), contactId);
+      let query = 'DELETE FROM iveo_contacts WHERE id = @id';
+      if (clean) {
+        req.input('username', sql.NVarChar(64), clean);
+        query += ' AND username = @username';
+      }
+      await req.query(query);
       return;
     } catch (err: any) {
       console.warn('[Azure SQL] dbDeleteContact note:', err?.message || err);
@@ -617,22 +630,29 @@ export async function dbDeleteContact(username: string, contactId: string): Prom
   }
 
   const store = readServerStore();
-  if (store.contacts[clean]) {
+  if (clean && store.contacts[clean]) {
     store.contacts[clean] = store.contacts[clean].filter((c) => c.id !== contactId);
-    writeServerStore(store);
+  } else {
+    for (const key of Object.keys(store.contacts)) {
+      store.contacts[key] = store.contacts[key].filter((c) => c.id !== contactId);
+    }
   }
+  writeServerStore(store);
 }
 
-export async function dbDeleteAllContacts(username: string): Promise<void> {
-  const clean = username.toLowerCase().trim();
+export async function dbDeleteAllContacts(username?: string): Promise<void> {
+  const clean = username ? username.toLowerCase().trim() : '';
   const pool = await getAzureSqlPool();
 
   if (pool) {
     try {
-      await pool
-        .request()
-        .input('username', sql.NVarChar(64), clean)
-        .query('DELETE FROM iveo_contacts WHERE username = @username');
+      const req = pool.request();
+      let query = 'DELETE FROM iveo_contacts';
+      if (clean) {
+        req.input('username', sql.NVarChar(64), clean);
+        query += ' WHERE username = @username';
+      }
+      await req.query(query);
       return;
     } catch (err: any) {
       console.warn('[Azure SQL] dbDeleteAllContacts note:', err?.message || err);
@@ -640,7 +660,11 @@ export async function dbDeleteAllContacts(username: string): Promise<void> {
   }
 
   const store = readServerStore();
-  store.contacts[clean] = [];
+  if (clean) {
+    store.contacts[clean] = [];
+  } else {
+    store.contacts = {};
+  }
   writeServerStore(store);
 }
 

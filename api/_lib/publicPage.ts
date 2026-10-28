@@ -67,11 +67,11 @@ export async function loadPublicPage(
       } | null;
     }>('get_public_page', { p_username: clean });
 
-    if (raw && raw.profile && raw.profile.username) {
+    if (raw && raw.profile && typeof raw.profile.username === 'string' && raw.profile.username) {
       const p = raw.profile;
       const cleanAvatar = isAllowedAvatarHost(p.avatar_url) ? p.avatar_url! : null;
       return {
-        username: p.username.toLowerCase(),
+        username: (p.username || clean).toLowerCase(),
         displayName: p.display_name?.trim() || null,
         bio: p.bio?.trim() || null,
         avatarUrl: cleanAvatar,

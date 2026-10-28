@@ -206,13 +206,23 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleGetContacts(req: ExpressReq, res: ExpressRes) {
   const username = (req.query.username as string || '').toLowerCase().trim();
-  if (!username) {
-    return res.status(400).json({ error: 'missing_username' });
-  }
+  const search = (req.query.search as string || '').toLowerCase().trim();
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const pageSize = Math.max(1, parseInt(req.query.pageSize as string, 10) || 20);
 
   try {
-    const contacts = await dbGetContacts(username);
-    return res.status(200).json(contacts);
+    let contacts = await dbGetContacts(username || undefined);
+    if (search) {
+      contacts = contacts.filter((c: any) =>
+        (c.email && c.email.toLowerCase().includes(search)) ||
+        (c.phone && c.phone.toLowerCase().includes(search)) ||
+        (c.formTitle && c.formTitle.toLowerCase().includes(search))
+      );
+    }
+    const total = contacts.length;
+    const from = (page - 1) * pageSize;
+    const rows = contacts.slice(from, from + pageSize);
+    return res.status(200).json({ rows, total });
   } catch (err: any) {
     return res.status(500).json({ error: 'fetch_failed', message: err?.message });
   }
@@ -224,19 +234,15 @@ export async function handleGetContacts(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleDeleteContacts(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
-  const username = (body.username as string || '').toLowerCase().trim();
-  const contactId = body.contactId as string;
-  const all = Boolean(body.all);
-
-  if (!username) {
-    return res.status(400).json({ error: 'missing_username' });
-  }
+  const username = (req.query.username as string || body.username as string || '').toLowerCase().trim();
+  const contactId = (req.query.id as string || req.query.contactId as string || body.contactId as string || body.id as string || '').trim();
+  const all = Boolean(req.query.all === 'true' || body.all);
 
   try {
     if (all) {
-      await dbDeleteAllContacts(username);
+      await dbDeleteAllContacts(username || undefined);
     } else if (contactId) {
-      await dbDeleteContact(username, contactId);
+      await dbDeleteContact(username || undefined, contactId);
     }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
