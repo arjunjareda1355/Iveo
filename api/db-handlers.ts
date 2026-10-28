@@ -1,4 +1,4 @@
-import { Request as ExpressReq, Response as ExpressRes } from 'express';
+import type { Request as ExpressReq, Response as ExpressRes } from 'express';
 import {
   checkDatabaseReadiness,
   dbSaveProfile,
