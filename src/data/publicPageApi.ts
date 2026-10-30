@@ -27,6 +27,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             vibeId: (data.profile.vibeId as VibeId) || 'clean',
             buttonShape: data.profile.buttonShape || null,
             socials: data.profile.socials || {},
+            socialsPosition: data.profile.socialsPosition || 'top',
             hideFromSearch: Boolean(data.profile.hideFromSearch),
             hideFooter: Boolean(data.profile.hideFooter),
           },
@@ -42,6 +43,11 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             embedProvider: b.embedProvider || null,
             isProtected: Boolean(b.isProtected),
             signup: b.signup || null,
+            tipJar: b.tipJar || null,
+            faq: b.faq || null,
+            vcard: b.vcard || null,
+            animation: b.animation || null,
+            badge: b.badge || null,
           })),
         };
       }
@@ -188,6 +194,10 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             embedProvider: b.embedProvider || null,
             isProtected: isProt,
             signup: b.signup || null,
+            tipJar: b.tipJar || null,
+            faq: b.faq || null,
+            animation: b.animation || null,
+            badge: b.badge || null,
           };
         });
 
@@ -200,6 +210,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           vibeId: parsedMeta.vibeId || 'clean',
           buttonShape: parsedMeta.buttonShape || null,
           socials: parsedMeta.socials || {},
+          socialsPosition: parsedMeta.socialsPosition || 'top',
           hideFromSearch: false,
           hideFooter:
             isPro &&

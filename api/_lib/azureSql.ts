@@ -312,6 +312,13 @@ function writeServerStore(data: ServerStoreData): void {
 // Unified High-Level Operations (Azure SQL with automatic server-store fallback)
 // ============================================================================
 
+const OWNER_EMAILS_LIST = [
+  'help@iveo.site',
+  'arjunjareda2007@gmail.com',
+  'help@fanq.me',
+  'arjunjared1355@gmail.com',
+];
+
 export async function dbSaveProfile(profile: {
   userId: string;
   username: string;
@@ -321,12 +328,26 @@ export async function dbSaveProfile(profile: {
   vibeId?: string;
   buttonShape?: string | null;
   socials?: Record<string, string>;
+  socialsPosition?: 'top' | 'bottom';
+  primaryEmail?: string | null;
   plan?: string;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
 }): Promise<void> {
   const cleanUsername = profile.username.toLowerCase().trim();
   const pool = await getAzureSqlPool();
+
+  const isOwner =
+    (profile.primaryEmail &&
+      OWNER_EMAILS_LIST.includes(profile.primaryEmail.toLowerCase().trim())) ||
+    profile.plan === 'pro';
+  const effectivePlan = isOwner ? 'pro' : profile.plan || 'free';
+
+  const socialsPayload = {
+    links: profile.socials || {},
+    position: profile.socialsPosition || 'top',
+    email: profile.primaryEmail || null,
+  };
 
   if (pool) {
     try {
@@ -338,8 +359,8 @@ export async function dbSaveProfile(profile: {
       req.input('avatarUrl', sql.NVarChar(2048), profile.avatarUrl || null);
       req.input('vibeId', sql.NVarChar(32), profile.vibeId || 'clean');
       req.input('buttonShape', sql.NVarChar(32), profile.buttonShape || 'rounded');
-      req.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(profile.socials || {}));
-      req.input('plan', sql.NVarChar(32), profile.plan || 'free');
+      req.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(socialsPayload));
+      req.input('plan', sql.NVarChar(32), effectivePlan);
       req.input('hideFooter', sql.Bit, profile.hideFooter ? 1 : 0);
       req.input('hideFromSearch', sql.Bit, profile.hideFromSearch ? 1 : 0);
 
@@ -374,6 +395,9 @@ export async function dbSaveProfile(profile: {
   store.profiles[cleanUsername] = {
     ...store.profiles[cleanUsername],
     ...profile,
+    plan: effectivePlan,
+    socials: profile.socials || {},
+    socialsPosition: profile.socialsPosition || 'top',
     username: cleanUsername,
     updatedAt: new Date().toISOString(),
   };
@@ -393,9 +417,20 @@ export async function dbGetProfile(username: string): Promise<any | null> {
 
       if (res.recordset.length > 0) {
         const row = res.recordset[0];
-        let socials = {};
+        let socials: Record<string, string> = {};
+        let socialsPosition: 'top' | 'bottom' = 'top';
+        let primaryEmail: string | null = null;
         try {
-          socials = row.socials_json ? JSON.parse(row.socials_json) : {};
+          if (row.socials_json) {
+            const parsed = JSON.parse(row.socials_json);
+            if (parsed && typeof parsed === 'object' && 'links' in parsed) {
+              socials = parsed.links || {};
+              socialsPosition = parsed.position || 'top';
+              primaryEmail = parsed.email || null;
+            } else if (parsed && typeof parsed === 'object') {
+              socials = parsed;
+            }
+          }
         } catch {}
         return {
           userId: row.user_id,
@@ -406,6 +441,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           vibeId: row.vibe_id,
           buttonShape: row.button_shape,
           socials,
+          socialsPosition,
+          primaryEmail,
           plan: row.plan,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
@@ -447,7 +484,15 @@ export async function dbSaveBlocks(username: string, blocks: any[]): Promise<voi
         insReq.input('thumbnailUrl', sql.NVarChar(2048), b.thumbnailUrl || null);
         insReq.input('layout', sql.NVarChar(32), b.layout || 'classic');
         insReq.input('embedProvider', sql.NVarChar(32), b.embedProvider || null);
-        insReq.input('signupJson', sql.NVarChar(sql.MAX), b.signup ? JSON.stringify(b.signup) : null);
+        const extraPayload = {
+          signup: b.signup || null,
+          tipJar: b.tipJar || null,
+          faq: b.faq || null,
+          vcard: b.vcard || null,
+          animation: b.animation || null,
+          badge: b.badge || null,
+        };
+        insReq.input('signupJson', sql.NVarChar(sql.MAX), JSON.stringify(extraPayload));
         insReq.input('isProtected', sql.Bit, b.isProtected ? 1 : 0);
         insReq.input('startAt', sql.NVarChar(64), b.startAt || null);
         insReq.input('endAt', sql.NVarChar(64), b.endAt || null);
@@ -476,7 +521,7 @@ export async function dbSaveBlocks(username: string, blocks: any[]): Promise<voi
   }
 
   const store = readServerStore();
-  store.blocks[clean] = blocks;
+  store.blocks[clean] = blocks.map((b) => ({ ...b }));
   writeServerStore(store);
 }
 
@@ -493,8 +538,28 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
 
       return res.recordset.map((r) => {
         let signup = null;
+        let tipJar = null;
+        let faq = null;
+        let vcard = null;
+        let animation = null;
+        let badge = null;
+
         try {
-          signup = r.signup_config_json ? JSON.parse(r.signup_config_json) : null;
+          if (r.signup_config_json) {
+            const parsed = JSON.parse(r.signup_config_json);
+            if (parsed && typeof parsed === 'object') {
+              if ('signup' in parsed || 'tipJar' in parsed || 'faq' in parsed || 'vcard' in parsed) {
+                signup = parsed.signup || null;
+                tipJar = parsed.tipJar || null;
+                faq = parsed.faq || null;
+                vcard = parsed.vcard || null;
+                animation = parsed.animation || null;
+                badge = parsed.badge || null;
+              } else {
+                signup = parsed;
+              }
+            }
+          }
         } catch {}
 
         return {
@@ -509,6 +574,11 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           layout: r.layout,
           embedProvider: r.embed_provider,
           signup,
+          tipJar,
+          faq,
+          vcard,
+          animation,
+          badge,
           isProtected: Boolean(r.is_protected),
           startAt: r.start_at,
           endAt: r.end_at,

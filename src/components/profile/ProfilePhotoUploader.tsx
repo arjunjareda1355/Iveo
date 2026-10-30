@@ -6,6 +6,7 @@ import { useToast } from '../ui/Toast';
 interface ProfilePhotoUploaderProps {
   currentAvatarUrl?: string | null;
   initials?: string;
+  username?: string | null;
   onAvatarChange: (newUrl: string | null) => Promise<void> | void;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -14,6 +15,7 @@ interface ProfilePhotoUploaderProps {
 export const ProfilePhotoUploader: React.FC<ProfilePhotoUploaderProps> = ({
   currentAvatarUrl,
   initials = 'ME',
+  username,
   onAvatarChange,
   size = 'md',
   className = '',
@@ -65,7 +67,24 @@ export const ProfilePhotoUploader: React.FC<ProfilePhotoUploaderProps> = ({
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, startX, startY, minSide, minSide, 0, 0, maxDim, maxDim);
             const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-            await onAvatarChange(dataUrl);
+
+            let finalUrl = dataUrl;
+            try {
+              const u = username || localStorage.getItem('iveo_current_username') || 'owner';
+              const upRes = await fetch('/api/avatar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, dataUrl }),
+              });
+              if (upRes.ok) {
+                const upJson = await upRes.json();
+                if (upJson.avatarUrl) {
+                  finalUrl = upJson.avatarUrl;
+                }
+              }
+            } catch {}
+
+            await onAvatarChange(finalUrl);
             showToast('Profile photo updated');
           }
           setIsProcessing(false);

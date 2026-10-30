@@ -198,6 +198,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
               bio: pageData.profile.bio,
               avatarUrl: pageData.profile.avatarUrl,
               socials: pageData.profile.socials,
+              socialsPosition: pageData.profile.socialsPosition || 'top',
             }}
             blocks={effectiveBlocks}
             buttonRadiusOverride={buttonRadiusOverride}

@@ -1,5 +1,6 @@
 import { normalizeUsername, RESERVED, USERNAME_PATTERN } from './_lib/usernames.ts';
 import { adminClient } from './_lib/supabase.ts';
+import { dbGetProfile } from './_lib/azureSql.ts';
 
 export const DEMO_TAKEN_USERNAMES = new Set([
   'maya',
@@ -53,6 +54,19 @@ export async function GET(request: Request): Promise<Response> {
       message: "That name isn't available. Try another.",
     });
   }
+
+  // Check Azure SQL / Server database
+  try {
+    const existing = await dbGetProfile(clean);
+    if (existing && existing.username) {
+      return Response.json({
+        ok: true,
+        available: false,
+        reason: 'taken',
+        message: 'That name is already claimed. Try another.',
+      });
+    }
+  } catch {}
 
   // Check Supabase database if configured
   const supabase = adminClient();

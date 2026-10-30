@@ -115,6 +115,8 @@ async function startServer() {
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
   app.get('/api/public-page', dbHandlers.handleGetPublicPage);
   app.post('/api/profile', dbHandlers.handleSaveProfile);
+  app.post('/api/avatar', dbHandlers.handleUploadAvatar);
+  app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);
   app.get('/api/blocks', dbHandlers.handleGetBlocks);
   app.post('/api/blocks', dbHandlers.handleSaveBlocks);
   app.post('/api/contacts', dbHandlers.handleSaveContact);

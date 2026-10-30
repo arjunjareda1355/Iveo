@@ -21,8 +21,9 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
-  const cleanTarget = (username || '').trim().toLowerCase();
-  const isMatch = confirmInput.trim().toLowerCase() === cleanTarget;
+  const cleanTarget = (username || '').trim().toLowerCase().replace(/^@/, '');
+  const inputClean = confirmInput.trim().toLowerCase().replace(/^@/, '');
+  const isMatch = Boolean(cleanTarget) && inputClean === cleanTarget;
 
   const host = (() => {
     try {

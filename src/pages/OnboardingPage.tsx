@@ -283,6 +283,27 @@ export const OnboardingPage: React.FC = () => {
         vibeId: selectedVibeId,
         buttonShape,
       });
+
+      const uname = session.username || usernameInput;
+      if (uname) {
+        // Direct server sync to guarantee instant cross-browser availability
+        try {
+          await fetch('/api/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: uname,
+              displayName: displayName.trim() || uname,
+              bio: bio.trim(),
+              avatarUrl,
+              vibeId: selectedVibeId,
+              buttonShape,
+              plan: session.isPro ? 'pro' : 'free',
+            }),
+          });
+        } catch {}
+      }
+
       try {
         sessionStorage.removeItem('iveo.claim');
         sessionStorage.removeItem('ivio.claim');
@@ -408,6 +429,7 @@ export const OnboardingPage: React.FC = () => {
                       <ProfilePhotoUploader
                         currentAvatarUrl={avatarUrl}
                         initials={displayName || usernameInput || 'ME'}
+                        username={usernameInput || session.username}
                         onAvatarChange={(url) => setAvatarUrl(url)}
                       />
                     </div>

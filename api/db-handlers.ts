@@ -1,4 +1,6 @@
 import type { Request as ExpressReq, Response as ExpressRes } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   checkDatabaseReadiness,
   dbSaveProfile,
@@ -73,6 +75,11 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         embedProvider: b.embedProvider || null,
         isProtected: Boolean(b.isProtected),
         signup: b.signup || null,
+        tipJar: b.tipJar || null,
+        faq: b.faq || null,
+        vcard: b.vcard || null,
+        animation: b.animation || null,
+        badge: b.badge || null,
       }));
 
     return res.status(200).json({
@@ -84,6 +91,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         vibeId: profile.vibeId || 'clean',
         buttonShape: profile.buttonShape || 'rounded',
         socials: profile.socials || {},
+        socialsPosition: profile.socialsPosition || 'top',
         hideFromSearch: Boolean(profile.hideFromSearch),
         hideFooter: Boolean(profile.hideFooter),
       },
@@ -115,6 +123,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       vibeId: body.vibeId,
       buttonShape: body.buttonShape,
       socials: body.socials,
+      socialsPosition: body.socialsPosition,
+      primaryEmail: body.primaryEmail,
       plan: body.plan,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
@@ -123,6 +133,76 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
   }
+}
+
+const AVATAR_DIR = path.resolve(process.cwd(), 'data', 'avatars');
+
+/**
+ * POST /api/avatar
+ * Securely uploads and stores user avatar on server disk (works without Clerk metadata size limits)
+ */
+export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const username = (body.username as string || '').toLowerCase().trim();
+  const dataUrl = body.dataUrl as string;
+
+  if (!username) {
+    return res.status(400).json({ error: 'missing_username' });
+  }
+
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return res.status(400).json({ error: 'missing_data_url' });
+  }
+
+  try {
+    if (!fs.existsSync(AVATAR_DIR)) {
+      fs.mkdirSync(AVATAR_DIR, { recursive: true });
+    }
+
+    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ error: 'invalid_data_url' });
+    }
+
+    const buffer = Buffer.from(matches[2], 'base64');
+    const avatarFile = path.join(AVATAR_DIR, `${username}.jpg`);
+    fs.writeFileSync(avatarFile, buffer);
+
+    const avatarUrl = `/api/avatar/${username}?v=${Date.now()}`;
+
+    // Update in database immediately
+    const existing = await dbGetProfile(username);
+    if (existing) {
+      await dbSaveProfile({
+        ...existing,
+        avatarUrl,
+      });
+    }
+
+    return res.status(200).json({ ok: true, avatarUrl });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'upload_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/avatar/:username
+ * Serves user avatar image
+ */
+export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
+  const username = (req.params.username as string || '').toLowerCase().trim();
+  if (!username) {
+    return res.status(400).end();
+  }
+
+  const avatarFile = path.join(AVATAR_DIR, `${username}.jpg`);
+  if (fs.existsSync(avatarFile)) {
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(avatarFile);
+  }
+
+  return res.status(404).end();
 }
 
 /**

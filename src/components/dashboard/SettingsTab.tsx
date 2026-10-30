@@ -368,9 +368,7 @@ export const SettingsTab: React.FC = () => {
       </Card>
 
       {/* 5. Delete Account Card */}
-      {session.username && (
-        <DeleteAccountCard username={session.username} />
-      )}
+      <DeleteAccountCard username={session.username || session.primaryEmail?.split('@')[0] || 'account'} />
 
       {/* Share Dialog */}
       {session.username && (

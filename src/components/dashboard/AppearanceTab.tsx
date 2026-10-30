@@ -122,6 +122,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
           <ProfilePhotoUploader
             currentAvatarUrl={session.imageUrl}
             initials={displayName || session.username || 'ME'}
+            username={session.username}
             onAvatarChange={handleAvatarChange}
           />
         </div>
