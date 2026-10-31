@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { UserCheck, Download, Check, Phone, Mail, Building } from 'lucide-react';
 import { VCardConfig } from '../../data/types';
 import { VibeTokens } from '../../lib/vibes';
+import { buildVCardString, sanitizeVCardFilename } from '../../lib/vcard';
 
 interface VCardBlockProps {
   config: VCardConfig;
@@ -22,27 +23,21 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
     e.preventDefault();
     e.stopPropagation();
 
-    // Generate standard RFC 6350 vCard (Version 3.0)
-    const lines = [
-      'BEGIN:VCARD',
-      'VERSION:3.0',
-      `FN:${config.fullName}`,
-      config.title ? `TITLE:${config.title}` : '',
-      config.organization ? `ORG:${config.organization}` : '',
-      config.phone ? `TEL;TYPE=CELL,VOICE:${config.phone}` : '',
-      config.email ? `EMAIL;TYPE=INTERNET,PREF:${config.email}` : '',
-      config.note ? `NOTE:${config.note}` : '',
-      `URL:${typeof window !== 'undefined' ? window.location.href : 'https://iveo.site'}`,
-      'END:VCARD',
-    ].filter(Boolean);
+    const vcardData = buildVCardString({
+      fullName: config.fullName,
+      title: config.title,
+      organization: config.organization,
+      phone: config.phone,
+      email: config.email,
+      note: config.note,
+      url: typeof window !== 'undefined' ? window.location.href : 'https://iveo.site',
+    });
 
-    const vcardData = lines.join('\r\n');
     const blob = new Blob([vcardData], { type: 'text/vcard;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    const cleanName = config.fullName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    link.download = `${cleanName || 'contact'}.vcf`;
+    link.download = sanitizeVCardFilename(config.fullName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

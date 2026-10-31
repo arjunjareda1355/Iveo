@@ -58,7 +58,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     // Map public blocks (strip URLs from protected links until unlocked)
     const filteredBlocks = allBlocks
       .filter((b) => {
-        if (!b.isActive || b.isArchived) return false;
+        if (b.isActive === false || b.isArchived) return false;
         if (b.startAt && new Date(b.startAt) > now) return false;
         if (b.endAt && new Date(b.endAt) <= now) return false;
         return true;

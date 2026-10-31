@@ -1,6 +1,46 @@
 {
-  "profiles": {},
-  "blocks": {},
+  "profiles": {
+    "arjun": {
+      "userId": "owner",
+      "username": "arjun",
+      "displayName": "Arjun Bharti Mina",
+      "bio": "",
+      "avatarUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zTEJLRExLWUVzaUJPZ2lMYWQ2V3Z3TzJVZ2QifQ",
+      "vibeId": "clean",
+      "buttonShape": "square",
+      "socials": {},
+      "socialsPosition": "top",
+      "primaryEmail": "arjunjareda2007@gmail.com",
+      "plan": "pro",
+      "hideFooter": false,
+      "updatedAt": "2026-10-31T03:02:03.580Z"
+    },
+    "alex": {
+      "userId": "owner",
+      "username": "alex",
+      "displayName": "Alex Morgan",
+      "bio": "Design & Engineering",
+      "vibeId": "clean",
+      "socials": {},
+      "socialsPosition": "top",
+      "plan": "pro",
+      "updatedAt": "2026-10-31T03:03:40.756Z"
+    }
+  },
+  "blocks": {
+    "alex": [
+      {
+        "id": "b1",
+        "kind": "vcard",
+        "title": "Alex Morgan",
+        "vcard": {
+          "fullName": "Alex Morgan",
+          "title": "Designer",
+          "email": "alex@example.com"
+        }
+      }
+    ]
+  },
   "contacts": {},
   "passwords": {
     "b1": "secretpassword"

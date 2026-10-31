@@ -521,7 +521,11 @@ export async function dbSaveBlocks(username: string, blocks: any[]): Promise<voi
   }
 
   const store = readServerStore();
-  store.blocks[clean] = blocks.map((b) => ({ ...b }));
+  store.blocks[clean] = blocks.map((b) => ({
+    ...b,
+    isActive: b.isActive !== false,
+    isArchived: Boolean(b.isArchived),
+  }));
   writeServerStore(store);
 }
 
