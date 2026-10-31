@@ -19,12 +19,15 @@ const AZURE_SQL_CONNECTION_STRING = process.env.AZURE_SQL_CONNECTION_STRING || '
 
 let globalPool: sql.ConnectionPool | null = null;
 let schemaEnsured = false;
+let entraUnavailable = false;
+let lastPoolAttemptTime = 0;
+const POOL_RETRY_COOLDOWN_MS = 60000;
 
 /**
  * Acquire Microsoft Entra Access Token for Azure SQL
  */
 async function getAzureEntraToken(): Promise<string | null> {
-  if (!AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
+  if (entraUnavailable || !AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
     return null;
   }
   try {
@@ -36,7 +39,11 @@ async function getAzureEntraToken(): Promise<string | null> {
     const tokenResponse = await credential.getToken('https://database.windows.net/.default');
     return tokenResponse?.token || null;
   } catch (err: any) {
-    console.warn('[Azure SQL] Entra token acquisition note:', err?.message || err);
+    // If tenant is invalid or not found, mark Entra as permanently unavailable to avoid spamming
+    const msg = err?.message || String(err);
+    if (msg.includes('AADSTS90002') || msg.includes('Tenant') || msg.includes('not found')) {
+      entraUnavailable = true;
+    }
     return null;
   }
 }
@@ -49,6 +56,13 @@ export async function getAzureSqlPool(): Promise<sql.ConnectionPool | null> {
     return globalPool;
   }
 
+  // Cooldown backoff so failed attempts don't stall HTTP requests
+  const now = Date.now();
+  if (now - lastPoolAttemptTime < POOL_RETRY_COOLDOWN_MS) {
+    return null;
+  }
+  lastPoolAttemptTime = now;
+
   // 1. Try Microsoft Entra Service Principal Authentication
   const entraToken = await getAzureEntraToken();
   if (entraToken) {
@@ -60,8 +74,8 @@ export async function getAzureSqlPool(): Promise<sql.ConnectionPool | null> {
         options: {
           encrypt: true,
           trustServerCertificate: false,
-          connectTimeout: 15000,
-          requestTimeout: 15000,
+          connectTimeout: 3000,
+          requestTimeout: 3000,
         },
         authentication: {
           type: 'azure-active-directory-access-token',
@@ -81,8 +95,8 @@ export async function getAzureSqlPool(): Promise<sql.ConnectionPool | null> {
       globalPool = pool;
       await ensureSchema(pool);
       return pool;
-    } catch (err: any) {
-      console.warn('[Azure SQL] Entra connection note:', err?.message || err);
+    } catch {
+      // Gracefully fall through
     }
   }
 
@@ -94,8 +108,8 @@ export async function getAzureSqlPool(): Promise<sql.ConnectionPool | null> {
       globalPool = pool;
       await ensureSchema(pool);
       return pool;
-    } catch (err: any) {
-      console.warn('[Azure SQL] Connection string note:', err?.message || err);
+    } catch {
+      // Gracefully fall through
     }
   }
 
@@ -111,8 +125,8 @@ export async function getAzureSqlPool(): Promise<sql.ConnectionPool | null> {
         options: {
           encrypt: true,
           trustServerCertificate: false,
-          connectTimeout: 15000,
-          requestTimeout: 15000,
+          connectTimeout: 3000,
+          requestTimeout: 3000,
         },
         pool: {
           max: 10,
@@ -126,8 +140,8 @@ export async function getAzureSqlPool(): Promise<sql.ConnectionPool | null> {
       globalPool = pool;
       await ensureSchema(pool);
       return pool;
-    } catch (err: any) {
-      console.warn('[Azure SQL] SQL auth note:', err?.message || err);
+    } catch {
+      // Gracefully fall through
     }
   }
 
@@ -222,8 +236,8 @@ async function ensureSchema(pool: sql.ConnectionPool): Promise<void> {
 
     await pool.request().query(migrationSql);
     schemaEnsured = true;
-  } catch (err: any) {
-    console.warn('[Azure SQL] Schema migration note:', err?.message || err);
+  } catch {
+    // Ignore schema errors on unavailable connections
   }
 }
 
@@ -273,12 +287,17 @@ export async function checkDatabaseReadiness(): Promise<{
 }
 
 // ============================================================================
+import { RESERVED } from './usernames.ts';
+
+// ============================================================================
 // Server-Side Persistent Store Fallback (Ensures cross-browser functionality)
 // ============================================================================
 const STORE_PATH = path.resolve(process.cwd(), 'data', 'server_store.json');
 
-interface ServerStoreData {
+export interface ServerStoreData {
   profiles: Record<string, any>;
+  userToUsername: Record<string, string>;
+  claims: Record<string, { userId: string; username: string; claimedAt: string }>;
   blocks: Record<string, any[]>;
   contacts: Record<string, any[]>;
   passwords: Record<string, string>;
@@ -291,10 +310,30 @@ function readServerStore(): ServerStoreData {
     }
     if (fs.existsSync(STORE_PATH)) {
       const raw = fs.readFileSync(STORE_PATH, 'utf-8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const profiles = parsed.profiles || {};
+      const userToUsername = parsed.userToUsername || {};
+      const claims = parsed.claims || {};
+
+      // Auto-populate userToUsername mapping if profiles have userIds
+      for (const [uname, prof] of Object.entries(profiles)) {
+        const u = prof as any;
+        if (u.userId && u.userId !== 'owner' && !userToUsername[u.userId]) {
+          userToUsername[u.userId] = uname;
+        }
+      }
+
+      return {
+        profiles,
+        userToUsername,
+        claims,
+        blocks: parsed.blocks || {},
+        contacts: parsed.contacts || {},
+        passwords: parsed.passwords || {},
+      };
     }
   } catch {}
-  return { profiles: {}, blocks: {}, contacts: {}, passwords: {} };
+  return { profiles: {}, userToUsername: {}, claims: {}, blocks: {}, contacts: {}, passwords: {} };
 }
 
 function writeServerStore(data: ServerStoreData): void {
@@ -319,6 +358,258 @@ const OWNER_EMAILS_LIST = [
   'arjunjared1355@gmail.com',
 ];
 
+export async function dbVerifyOwnership(
+  username: string,
+  userId?: string | null,
+  primaryEmail?: string | null
+): Promise<boolean> {
+  const cleanUsername = username.toLowerCase().trim();
+  const profile = await dbGetProfile(cleanUsername);
+  if (!profile) return true; // not yet created
+
+  if (!userId) return false;
+  if (profile.userId === userId) return true;
+
+  // Check admin emails list
+  if (primaryEmail && OWNER_EMAILS_LIST.includes(primaryEmail.toLowerCase().trim())) {
+    return true;
+  }
+  if (profile.primaryEmail && primaryEmail && profile.primaryEmail.toLowerCase().trim() === primaryEmail.toLowerCase().trim()) {
+    return true;
+  }
+  if (profile.userId === 'owner') {
+    // Unassigned legacy owner record - allow binding
+    return true;
+  }
+
+  return false;
+}
+
+export async function dbClaimUsername(
+  userId: string,
+  username: string,
+  profileData?: Partial<any>,
+  primaryEmail?: string | null
+): Promise<{ ok: boolean; error?: string; message?: string; username?: string; profileUrl?: string }> {
+  const clean = username.toLowerCase().trim();
+  if (!clean || clean.length < 3 || clean.length > 24) {
+    return { ok: false, error: 'invalid_format', message: 'Use 3 to 24 letters, numbers or underscores.' };
+  }
+  if (!/^[a-z0-9_]+$/.test(clean)) {
+    return { ok: false, error: 'invalid_format', message: 'Use 3 to 24 letters, numbers or underscores.' };
+  }
+  if (RESERVED.has(clean)) {
+    return { ok: false, error: 'reserved', message: 'That name is reserved. Choose another.' };
+  }
+
+  const isOwnerEmailMatch = Boolean(
+    primaryEmail && OWNER_EMAILS_LIST.includes(primaryEmail.toLowerCase().trim())
+  );
+
+  const pool = await getAzureSqlPool();
+  if (pool) {
+    try {
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+
+      // Check if username is already claimed
+      const checkReq = new sql.Request(transaction);
+      checkReq.input('username', sql.NVarChar(64), clean);
+      const existing = await checkReq.query('SELECT user_id, display_name FROM iveo_profiles WHERE username = @username');
+
+      if (existing.recordset.length > 0) {
+        const existingUserId = existing.recordset[0].user_id;
+        if (existingUserId && existingUserId !== userId && existingUserId !== 'owner' && !isOwnerEmailMatch) {
+          await transaction.rollback();
+          return { ok: false, error: 'already_claimed', message: 'That address is already claimed. Try another.' };
+        }
+      }
+
+      // Check if this user already claimed a different username, rename/migrate blocks
+      const userCheckReq = new sql.Request(transaction);
+      userCheckReq.input('userId', sql.NVarChar(128), userId);
+      const prevClaims = await userCheckReq.query('SELECT username FROM iveo_profiles WHERE user_id = @userId');
+
+      if (prevClaims.recordset.length > 0) {
+        for (const row of prevClaims.recordset) {
+          if (row.username !== clean) {
+            const delReq = new sql.Request(transaction);
+            delReq.input('oldUsername', sql.NVarChar(64), row.username);
+            await delReq.query('DELETE FROM iveo_profiles WHERE username = @oldUsername');
+
+            const moveBlocksReq = new sql.Request(transaction);
+            moveBlocksReq.input('oldUsername', sql.NVarChar(64), row.username);
+            moveBlocksReq.input('newUsername', sql.NVarChar(64), clean);
+            await moveBlocksReq.query('UPDATE iveo_blocks SET username = @newUsername WHERE username = @oldUsername');
+          }
+        }
+      }
+
+      // Insert or update profile
+      const effectivePlan = isOwnerEmailMatch ? 'pro' : (profileData?.plan || 'free');
+      const insReq = new sql.Request(transaction);
+      insReq.input('userId', sql.NVarChar(128), userId);
+      insReq.input('username', sql.NVarChar(64), clean);
+      insReq.input('displayName', sql.NVarChar(128), profileData?.displayName || clean);
+      insReq.input('bio', sql.NVarChar(500), profileData?.bio || '');
+      insReq.input('avatarUrl', sql.NVarChar(2048), profileData?.avatarUrl || null);
+      insReq.input('vibeId', sql.NVarChar(32), profileData?.vibeId || 'clean');
+      insReq.input('buttonShape', sql.NVarChar(32), profileData?.buttonShape || 'rounded');
+      insReq.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify({ links: profileData?.socials || {}, position: profileData?.socialsPosition || 'top' }));
+      insReq.input('plan', sql.NVarChar(32), effectivePlan);
+
+      await insReq.query(`
+        MERGE iveo_profiles AS target
+        USING (SELECT @username AS username) AS source
+        ON (target.username = source.username)
+        WHEN MATCHED THEN
+          UPDATE SET user_id = @userId, display_name = @displayName, bio = @bio, updated_at = SYSUTCDATETIME()
+        WHEN NOT MATCHED THEN
+          INSERT (user_id, username, display_name, bio, avatar_url, vibe_id, button_shape, socials_json, plan, is_published)
+          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @vibeId, @buttonShape, @socialsJson, @plan, 1);
+      `);
+
+      await transaction.commit();
+      return { ok: true, username: clean, profileUrl: `https://iveo.site/${clean}` };
+    } catch {
+      // Gracefully fall through to server store
+    }
+  }
+
+  // Server store fallback
+  const store = readServerStore();
+  const existingProfile = store.profiles[clean];
+  if (
+    existingProfile &&
+    existingProfile.userId &&
+    existingProfile.userId !== userId &&
+    existingProfile.userId !== 'owner' &&
+    !isOwnerEmailMatch
+  ) {
+    return { ok: false, error: 'already_claimed', message: 'That address is already claimed. Try another.' };
+  }
+
+  // If user previously owned another username, release/transfer
+  const previousUsername = store.userToUsername[userId];
+  if (previousUsername && previousUsername !== clean) {
+    if (store.blocks[previousUsername] && !store.blocks[clean]) {
+      store.blocks[clean] = store.blocks[previousUsername].map((b) => ({ ...b, username: clean }));
+    }
+    delete store.profiles[previousUsername];
+    delete store.claims[previousUsername];
+  }
+
+  store.userToUsername[userId] = clean;
+  store.claims[clean] = {
+    userId,
+    username: clean,
+    claimedAt: new Date().toISOString(),
+  };
+
+  store.profiles[clean] = {
+    ...(store.profiles[clean] || {}),
+    userId,
+    username: clean,
+    displayName: profileData?.displayName || store.profiles[clean]?.displayName || clean,
+    bio: profileData?.bio || store.profiles[clean]?.bio || '',
+    avatarUrl: profileData?.avatarUrl || store.profiles[clean]?.avatarUrl || null,
+    vibeId: profileData?.vibeId || store.profiles[clean]?.vibeId || 'clean',
+    buttonShape: profileData?.buttonShape || store.profiles[clean]?.buttonShape || 'rounded',
+    socials: profileData?.socials || store.profiles[clean]?.socials || {},
+    socialsPosition: profileData?.socialsPosition || store.profiles[clean]?.socialsPosition || 'top',
+    primaryEmail: primaryEmail || store.profiles[clean]?.primaryEmail || null,
+    plan: isOwnerEmailMatch ? 'pro' : (profileData?.plan || store.profiles[clean]?.plan || 'free'),
+    hideFooter: Boolean(profileData?.hideFooter ?? store.profiles[clean]?.hideFooter),
+    hideFromSearch: Boolean(profileData?.hideFromSearch ?? store.profiles[clean]?.hideFromSearch),
+    claimedAt: store.profiles[clean]?.claimedAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  writeServerStore(store);
+  return { ok: true, username: clean, profileUrl: `https://iveo.site/${clean}` };
+}
+
+export async function dbGetProfileByUserId(userId: string, email?: string | null): Promise<any | null> {
+  if (!userId && !email) return null;
+  const pool = await getAzureSqlPool();
+  if (pool) {
+    try {
+      const req = pool.request();
+      let query = 'SELECT TOP 1 * FROM iveo_profiles WHERE ';
+      if (userId) {
+        req.input('userId', sql.NVarChar(128), userId);
+        query += 'user_id = @userId';
+      }
+      query += ' ORDER BY updated_at DESC';
+      const res = await req.query(query);
+
+      if (res.recordset.length > 0) {
+        const row = res.recordset[0];
+        let socials: Record<string, string> = {};
+        let socialsPosition: 'top' | 'bottom' = 'top';
+        let primaryEmail: string | null = null;
+        try {
+          if (row.socials_json) {
+            const parsed = JSON.parse(row.socials_json);
+            if (parsed && typeof parsed === 'object' && 'links' in parsed) {
+              socials = parsed.links || {};
+              socialsPosition = parsed.position || 'top';
+              primaryEmail = parsed.email || null;
+            } else if (parsed && typeof parsed === 'object') {
+              socials = parsed;
+            }
+          }
+        } catch {}
+        return {
+          userId: row.user_id,
+          username: row.username,
+          displayName: row.display_name,
+          bio: row.bio,
+          avatarUrl: row.avatar_url,
+          vibeId: row.vibe_id,
+          buttonShape: row.button_shape,
+          socials,
+          socialsPosition,
+          primaryEmail,
+          plan: row.plan,
+          hideFooter: Boolean(row.hide_footer),
+          hideFromSearch: Boolean(row.hide_from_search),
+          isPublished: Boolean(row.is_published),
+        };
+      }
+    } catch {
+      // Fall through to server store fallback
+    }
+  }
+
+  const store = readServerStore();
+  const cleanEmail = email ? email.toLowerCase().trim() : null;
+
+  // Direct userToUsername lookup
+  if (userId && store.userToUsername[userId]) {
+    const uname = store.userToUsername[userId];
+    if (store.profiles[uname]) return store.profiles[uname];
+  }
+
+  // Scan profiles
+  for (const [uname, p] of Object.entries(store.profiles)) {
+    if (userId && p.userId === userId) {
+      store.userToUsername[userId] = uname;
+      return p;
+    }
+    if (cleanEmail && p.primaryEmail && p.primaryEmail.toLowerCase().trim() === cleanEmail) {
+      if (userId && (!p.userId || p.userId === 'owner')) {
+        p.userId = userId;
+        store.userToUsername[userId] = uname;
+        writeServerStore(store);
+      }
+      return p;
+    }
+  }
+
+  return null;
+}
+
 export async function dbSaveProfile(profile: {
   userId: string;
   username: string;
@@ -333,8 +624,15 @@ export async function dbSaveProfile(profile: {
   plan?: string;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
-}): Promise<void> {
+}): Promise<{ ok: boolean; error?: string }> {
   const cleanUsername = profile.username.toLowerCase().trim();
+
+  // Ownership verification check
+  const isAuthorized = await dbVerifyOwnership(cleanUsername, profile.userId, profile.primaryEmail);
+  if (!isAuthorized) {
+    return { ok: false, error: 'unauthorized' };
+  }
+
   const pool = await getAzureSqlPool();
 
   const isOwner =
@@ -370,6 +668,7 @@ export async function dbSaveProfile(profile: {
         ON (target.username = source.username)
         WHEN MATCHED THEN
           UPDATE SET
+            user_id = CASE WHEN target.user_id = 'owner' THEN @userId ELSE target.user_id END,
             display_name = @displayName,
             bio = @bio,
             avatar_url = @avatarUrl,
@@ -384,24 +683,34 @@ export async function dbSaveProfile(profile: {
           INSERT (user_id, username, display_name, bio, avatar_url, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
           VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
       `);
-      return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbSaveProfile note:', err?.message || err);
+      return { ok: true };
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
   // Server store fallback
   const store = readServerStore();
+  const existingProf = store.profiles[cleanUsername];
+  const finalUserId = (existingProf?.userId && existingProf.userId !== 'owner') ? existingProf.userId : (profile.userId || 'owner');
+
   store.profiles[cleanUsername] = {
     ...store.profiles[cleanUsername],
     ...profile,
+    userId: finalUserId,
     plan: effectivePlan,
     socials: profile.socials || {},
     socialsPosition: profile.socialsPosition || 'top',
     username: cleanUsername,
     updatedAt: new Date().toISOString(),
   };
+
+  if (finalUserId && finalUserId !== 'owner') {
+    store.userToUsername[finalUserId] = cleanUsername;
+  }
+
   writeServerStore(store);
+  return { ok: true };
 }
 
 export async function dbGetProfile(username: string): Promise<any | null> {
@@ -449,8 +758,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           isPublished: Boolean(row.is_published),
         };
       }
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbGetProfile note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -458,8 +767,21 @@ export async function dbGetProfile(username: string): Promise<any | null> {
   return store.profiles[clean] || null;
 }
 
-export async function dbSaveBlocks(username: string, blocks: any[]): Promise<void> {
+export async function dbSaveBlocks(
+  username: string,
+  blocks: any[],
+  userId?: string,
+  primaryEmail?: string | null
+): Promise<{ ok: boolean; error?: string }> {
   const clean = username.toLowerCase().trim();
+
+  if (userId) {
+    const isAuthorized = await dbVerifyOwnership(clean, userId, primaryEmail);
+    if (!isAuthorized) {
+      return { ok: false, error: 'unauthorized' };
+    }
+  }
+
   const pool = await getAzureSqlPool();
 
   if (pool) {
@@ -514,9 +836,9 @@ export async function dbSaveBlocks(username: string, blocks: any[]): Promise<voi
       }
 
       await transaction.commit();
-      return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbSaveBlocks note:', err?.message || err);
+      return { ok: true };
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -527,6 +849,7 @@ export async function dbSaveBlocks(username: string, blocks: any[]): Promise<voi
     isArchived: Boolean(b.isArchived),
   }));
   writeServerStore(store);
+  return { ok: true };
 }
 
 export async function dbGetBlocks(username: string): Promise<any[]> {
@@ -591,8 +914,8 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           position: r.position,
         };
       });
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbGetBlocks note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -630,8 +953,8 @@ export async function dbSaveContact(contact: {
         VALUES (@id, @userId, @username, @linkId, @email, @phone, @consentText, @source)
       `);
       return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbSaveContact note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -668,8 +991,8 @@ export async function dbGetContacts(username?: string): Promise<any[]> {
         source: r.source,
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
       }));
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbGetContacts note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -698,8 +1021,8 @@ export async function dbDeleteContact(username: string | undefined, contactId: s
       }
       await req.query(query);
       return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbDeleteContact note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -728,8 +1051,8 @@ export async function dbDeleteAllContacts(username?: string): Promise<void> {
       }
       await req.query(query);
       return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbDeleteAllContacts note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -742,8 +1065,20 @@ export async function dbDeleteAllContacts(username?: string): Promise<void> {
   writeServerStore(store);
 }
 
-export async function dbDeleteAccount(username: string): Promise<void> {
+export async function dbDeleteAccount(
+  username: string,
+  userId?: string,
+  primaryEmail?: string | null
+): Promise<{ ok: boolean; error?: string }> {
   const clean = username.toLowerCase().trim();
+
+  if (userId) {
+    const isAuthorized = await dbVerifyOwnership(clean, userId, primaryEmail);
+    if (!isAuthorized) {
+      return { ok: false, error: 'unauthorized' };
+    }
+  }
+
   const pool = await getAzureSqlPool();
 
   if (pool) {
@@ -756,16 +1091,25 @@ export async function dbDeleteAccount(username: string): Promise<void> {
 
       const req3 = pool.request().input('username', sql.NVarChar(64), clean);
       await req3.query('DELETE FROM iveo_contacts WHERE username = @username');
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbDeleteAccount note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
   const store = readServerStore();
   delete store.profiles[clean];
+  delete store.claims[clean];
   delete store.blocks[clean];
   delete store.contacts[clean];
+
+  for (const [uid, uname] of Object.entries(store.userToUsername)) {
+    if (uname === clean) {
+      delete store.userToUsername[uid];
+    }
+  }
+
   writeServerStore(store);
+  return { ok: true };
 }
 
 export async function dbSetLinkPassword(linkId: string, password: string): Promise<void> {
@@ -786,8 +1130,8 @@ export async function dbSetLinkPassword(linkId: string, password: string): Promi
             INSERT (link_id, password_text) VALUES (@linkId, @password);
         `);
       return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbSetLinkPassword note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -805,8 +1149,8 @@ export async function dbClearLinkPassword(linkId: string): Promise<void> {
         .input('linkId', sql.NVarChar(128), linkId)
         .query('DELETE FROM iveo_link_passwords WHERE link_id = @linkId');
       return;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbClearLinkPassword note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 
@@ -825,8 +1169,8 @@ export async function dbVerifyLinkPassword(linkId: string, password: string): Pr
         .input('password', sql.NVarChar(256), password)
         .query('SELECT link_id FROM iveo_link_passwords WHERE link_id = @linkId AND password_text = @password');
       return res.recordset.length > 0;
-    } catch (err: any) {
-      console.warn('[Azure SQL] dbVerifyLinkPassword note:', err?.message || err);
+    } catch {
+      // Fall through to server store fallback
     }
   }
 

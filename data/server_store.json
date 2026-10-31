@@ -25,6 +25,33 @@
       "socialsPosition": "top",
       "plan": "pro",
       "updatedAt": "2026-10-31T03:03:40.756Z"
+    },
+    "security_1793417444376": {
+      "userId": "user_owner_1793417444376",
+      "username": "security_1793417444376",
+      "displayName": "Legitimate Owner Updated",
+      "bio": "",
+      "avatarUrl": null,
+      "vibeId": "clean",
+      "buttonShape": "rounded",
+      "socials": {},
+      "socialsPosition": "top",
+      "primaryEmail": null,
+      "plan": "free",
+      "hideFooter": false,
+      "hideFromSearch": false,
+      "claimedAt": "2026-10-31T03:30:44.376Z",
+      "updatedAt": "2026-10-31T03:30:44.377Z"
+    }
+  },
+  "userToUsername": {
+    "user_owner_1793417444376": "security_1793417444376"
+  },
+  "claims": {
+    "security_1793417444376": {
+      "userId": "user_owner_1793417444376",
+      "username": "security_1793417444376",
+      "claimedAt": "2026-10-31T03:30:44.376Z"
     }
   },
   "blocks": {
@@ -38,6 +65,30 @@
           "title": "Designer",
           "email": "alex@example.com"
         }
+      }
+    ],
+    "security_1793417444376": [
+      {
+        "id": "b1",
+        "title": "Owner Link",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "oldname_1793417444379": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "oldname_1793417473241": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
       }
     ]
   },

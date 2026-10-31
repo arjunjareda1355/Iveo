@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   checkDatabaseReadiness,
+  dbClaimUsername,
+  dbGetProfileByUserId,
+  dbVerifyOwnership,
   dbSaveProfile,
   dbGetProfile,
   dbSaveBlocks,
@@ -103,8 +106,114 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
 }
 
 /**
+ * POST /api/claim-username
+ * Atomically validates, reserves, and claims a username in the database
+ */
+export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const username = (body.username as string || '').toLowerCase().trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+  const profileData = body.profile || body.profileData || body;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'unauthorized', message: 'You must be signed in to claim an address.' });
+  }
+
+  if (!username) {
+    return res.status(400).json({ error: 'missing_username', message: 'Username is required.' });
+  }
+
+  try {
+    const result = await dbClaimUsername(userId, username, profileData, primaryEmail);
+    if (!result.ok) {
+      const statusCode = result.error === 'already_claimed' ? 409 : 400;
+      return res.status(statusCode).json({
+        ok: false,
+        error: result.error,
+        message: result.message || 'That address is unavailable.',
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      username: result.username,
+      profileUrl: result.profileUrl,
+      message: `iveo.site/${result.username} successfully claimed!`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'claim_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/me
+ * Retrieves user's claimed username and settings across any browser/device
+ */
+export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
+  const userId = (req.query.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const email = (req.query.email as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+
+  if (!userId && !email) {
+    return res.status(400).json({ error: 'missing_user_id', message: 'User identifier required.' });
+  }
+
+  try {
+    const profile = await dbGetProfileByUserId(userId, email);
+    if (!profile) {
+      return res.status(200).json({ ok: true, claimed: false });
+    }
+
+    const blocks = await dbGetBlocks(profile.username);
+
+    return res.status(200).json({
+      ok: true,
+      claimed: true,
+      username: profile.username,
+      profile,
+      blocks,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'fetch_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/migrate-legacy
+ * Safely migrates legacy local storage data into centralized database
+ */
+export async function handleMigrateLegacy(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const userId = (body.userId as string || '').trim();
+  const username = (body.username as string || '').toLowerCase().trim();
+  const primaryEmail = (body.primaryEmail as string || '').toLowerCase().trim() || null;
+  const profileData = body.profile || {};
+  const blocks = Array.isArray(body.blocks) ? body.blocks : [];
+
+  if (!userId || !username) {
+    return res.status(400).json({ error: 'invalid_migration_payload' });
+  }
+
+  try {
+    // Check if username can be claimed / already owned
+    const claimRes = await dbClaimUsername(userId, username, profileData, primaryEmail);
+    if (!claimRes.ok && claimRes.error === 'already_claimed') {
+      return res.status(409).json({ ok: false, error: 'already_claimed' });
+    }
+
+    if (blocks.length > 0) {
+      await dbSaveBlocks(username, blocks, userId, primaryEmail);
+    }
+
+    return res.status(200).json({ ok: true, migrated: true, username });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'migration_failed', message: err?.message });
+  }
+}
+
+/**
  * POST /api/profile
- * Saves or updates profile in database
+ * Saves or updates profile in database with server-side ownership verification
  */
 export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
@@ -114,8 +223,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    await dbSaveProfile({
-      userId: body.userId || 'owner',
+    const saveResult = await dbSaveProfile({
+      userId: body.userId || req.headers['x-user-id'] as string || 'owner',
       username,
       displayName: body.displayName,
       bio: body.bio,
@@ -124,11 +233,19 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       buttonShape: body.buttonShape,
       socials: body.socials,
       socialsPosition: body.socialsPosition,
-      primaryEmail: body.primaryEmail,
+      primaryEmail: body.primaryEmail || req.headers['x-user-email'] as string || null,
       plan: body.plan,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
     });
+
+    if (saveResult && !saveResult.ok) {
+      if (saveResult.error === 'unauthorized') {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to edit this page.' });
+      }
+      return res.status(400).json({ error: saveResult.error });
+    }
+
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
@@ -231,13 +348,21 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
   const username = (body.username as string || '').toLowerCase().trim();
   const blocks = Array.isArray(body.blocks) ? body.blocks : [];
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
 
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
   try {
-    await dbSaveBlocks(username, blocks);
+    const result = await dbSaveBlocks(username, blocks, userId || undefined, primaryEmail);
+    if (result && !result.ok) {
+      if (result.error === 'unauthorized') {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to edit this page.' });
+      }
+      return res.status(400).json({ error: result.error });
+    }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
@@ -390,13 +515,23 @@ export async function handleSetLinkPassword(req: ExpressReq, res: ExpressRes) {
  * Deletes user profile and data from database
  */
 export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
-  const { username } = req.body || {};
+  const body = req.body || {};
+  const username = (body.username as string || '').toLowerCase().trim();
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
   try {
-    await dbDeleteAccount(username.toLowerCase().trim());
+    const result = await dbDeleteAccount(username, userId || undefined, primaryEmail);
+    if (result && !result.ok) {
+      if (result.error === 'unauthorized') {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to delete this page.' });
+      }
+      return res.status(400).json({ error: result.error });
+    }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'delete_failed', message: err?.message });

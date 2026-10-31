@@ -277,32 +277,16 @@ export const OnboardingPage: React.FC = () => {
   const handleFinish = async () => {
     setIsSaving(true);
     try {
+      const uname = session.username || usernameInput;
       await session.updatePreferences({
         onboardingComplete: true,
         onboardedAt: new Date().toISOString(),
         vibeId: selectedVibeId,
         buttonShape,
+        displayName: displayName.trim() || uname,
+        bio: bio.trim(),
+        avatarUrl,
       });
-
-      const uname = session.username || usernameInput;
-      if (uname) {
-        // Direct server sync to guarantee instant cross-browser availability
-        try {
-          await fetch('/api/profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username: uname,
-              displayName: displayName.trim() || uname,
-              bio: bio.trim(),
-              avatarUrl,
-              vibeId: selectedVibeId,
-              buttonShape,
-              plan: session.isPro ? 'pro' : 'free',
-            }),
-          });
-        } catch {}
-      }
 
       try {
         sessionStorage.removeItem('iveo.claim');

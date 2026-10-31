@@ -114,6 +114,9 @@ async function startServer() {
   const dbHandlers = await import('./api/db-handlers.ts');
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
   app.get('/api/public-page', dbHandlers.handleGetPublicPage);
+  app.post('/api/claim-username', dbHandlers.handleClaimUsername);
+  app.get('/api/me', dbHandlers.handleGetMe);
+  app.post('/api/migrate-legacy', dbHandlers.handleMigrateLegacy);
   app.post('/api/profile', dbHandlers.handleSaveProfile);
   app.post('/api/avatar', dbHandlers.handleUploadAvatar);
   app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);

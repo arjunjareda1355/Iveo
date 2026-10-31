@@ -151,76 +151,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
         links: mappedLinks,
       };
     } catch {
-      // Fall through to local fallback
+      // Fall through
     }
   }
-
-  // Local fallback for development / test accounts
-  try {
-    const userMeta =
-      localStorage.getItem(`iveo_profile_${clean}`) ||
-      localStorage.getItem(`ivio_profile_${clean}`);
-    const rawBlocks =
-      localStorage.getItem(`iveo_blocks_${clean}`) ||
-      localStorage.getItem(`ivio_blocks_${clean}`);
-
-    if (rawBlocks || userMeta) {
-      const allBlocks = rawBlocks ? JSON.parse(rawBlocks) : [];
-      const now = new Date();
-      const parsedMeta = userMeta ? JSON.parse(userMeta) : {};
-      const isPro = parsedMeta.plan === 'pro';
-
-      const localProtected = new Set<string>(JSON.parse(localStorage.getItem('iveo_protected_ids') || '[]'));
-      const filteredLinks: PublicBlock[] = allBlocks
-        .filter((b: any) => {
-          if (!b.isActive || b.isArchived) return false;
-          if (b.startAt && new Date(b.startAt) > now) return false;
-          if (b.endAt && new Date(b.endAt) <= now) return false;
-          const isProt = localProtected.has(b.id);
-          if (!isPro && (b.kind === 'embed' || b.kind === 'signup' || b.startAt || b.endAt || isProt)) return false;
-          return true;
-        })
-        .map((b: any) => {
-          const isProt = localProtected.has(b.id);
-          return {
-            id: b.id,
-            kind: b.kind,
-            title: b.title || '',
-            url: isProt ? null : (b.url || null),
-            icon: b.icon || null,
-            thumbnailPath: b.thumbnailPath || null,
-            thumbnailUrl: storagePublicUrl(b.thumbnailPath),
-            layout: b.layout || 'classic',
-            embedProvider: b.embedProvider || null,
-            isProtected: isProt,
-            signup: b.signup || null,
-            tipJar: b.tipJar || null,
-            faq: b.faq || null,
-            animation: b.animation || null,
-            badge: b.badge || null,
-          };
-        });
-
-      return {
-        profile: {
-          username: clean,
-          displayName: parsedMeta.displayName || clean,
-          bio: parsedMeta.bio || '',
-          avatarUrl: parsedMeta.avatarUrl || null,
-          vibeId: parsedMeta.vibeId || 'clean',
-          buttonShape: parsedMeta.buttonShape || null,
-          socials: parsedMeta.socials || {},
-          socialsPosition: parsedMeta.socialsPosition || 'top',
-          hideFromSearch: false,
-          hideFooter:
-            isPro &&
-            (parsedMeta.hideIveoFooter === true ||
-              parsedMeta.hideIvioFooter === true),
-        },
-        links: filteredLinks,
-      };
-    }
-  } catch {}
 
   // If username matches default demo persona like maya
   const personaVibe = VIBES.find((v) => v.persona.handle === clean);

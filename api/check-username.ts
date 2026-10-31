@@ -17,6 +17,7 @@ export const DEMO_TAKEN_USERNAMES = new Set([
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const raw = url.searchParams.get('u') || url.searchParams.get('username') || '';
+  const requestingUserId = url.searchParams.get('userId') || '';
   const clean = raw.trim().toLowerCase();
 
   if (!clean || clean.length < 3) {
@@ -46,24 +47,23 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  if (DEMO_TAKEN_USERNAMES.has(clean)) {
-    return Response.json({
-      ok: true,
-      available: false,
-      reason: 'taken',
-      message: "That name isn't available. Try another.",
-    });
-  }
-
-  // Check Azure SQL / Server database
+  // Check centralized database (Azure SQL / server store)
   try {
     const existing = await dbGetProfile(clean);
     if (existing && existing.username) {
+      if (requestingUserId && existing.userId === requestingUserId) {
+        return Response.json({
+          ok: true,
+          available: true,
+          username: clean,
+          message: `iveo.site/${clean} is your address`,
+        });
+      }
       return Response.json({
         ok: true,
         available: false,
         reason: 'taken',
-        message: 'That name is already claimed. Try another.',
+        message: 'That address is already claimed. Try another.',
       });
     }
   } catch {}
@@ -74,16 +74,24 @@ export async function GET(request: Request): Promise<Response> {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('username')
+        .select('username, user_id')
         .eq('username', clean)
         .maybeSingle();
 
       if (!error && data && data.username) {
+        if (requestingUserId && data.user_id === requestingUserId) {
+          return Response.json({
+            ok: true,
+            available: true,
+            username: clean,
+            message: `iveo.site/${clean} is your address`,
+          });
+        }
         return Response.json({
           ok: true,
           available: false,
           reason: 'taken',
-          message: 'That name is already taken. Try another.',
+          message: 'That address is already claimed. Try another.',
         });
       }
     } catch {
