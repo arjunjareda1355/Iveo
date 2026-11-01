@@ -350,9 +350,6 @@ export const OnboardingPage: React.FC = () => {
 
                   <form onSubmit={handleUsernameNext} className="mt-6">
                     <div className="relative flex h-14 w-full items-center rounded-[14px] px-2 pl-4 bg-surface border border-border-strong hover:border-[#A3A3A3] focus-within:border-ink focus-within:shadow-[0_0_0_3px_rgba(10,10,10,0.08)] transition-all duration-120">
-                      <span className="font-mono text-[16px] text-muted select-none pointer-events-none shrink-0">
-                        iveo.site/
-                      </span>
                       <input
                         type="text"
                         value={usernameInput}
@@ -363,6 +360,9 @@ export const OnboardingPage: React.FC = () => {
                         className="flex-1 min-w-0 bg-transparent text-[16px] text-ink outline-none font-sans px-1 placeholder:text-subtle"
                         autoFocus
                       />
+                      <span className="font-mono text-[16px] text-muted select-none pointer-events-none shrink-0 pr-2">
+                        .iveo.site
+                      </span>
                       {usernameAvailable && (
                         <div className="mr-3 text-emerald-600 flex items-center gap-1 text-[13px] font-medium">
                           <Check size={16} strokeWidth={2.5} />
@@ -731,7 +731,7 @@ export const OnboardingPage: React.FC = () => {
                         onClick={copyAddress}
                         className="font-mono text-[14px] font-semibold text-ink hover:underline flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>iveo.site/{session.username || usernameInput}</span>
+                        <span>{session.username || usernameInput}.iveo.site</span>
                         <Copy size={13} className="text-muted" />
                       </button>
                     </div>

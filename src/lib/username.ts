@@ -22,12 +22,12 @@ export type UsernameValidationResult =
   | { status: 'available'; message: string; username: string };
 
 export function validateUsernameSync(raw: string): UsernameValidationResult {
-  const lower = (raw || '').toLowerCase();
+  const lower = (raw || '').toLowerCase().trim();
 
   if (lower.length === 0) {
     return {
       status: 'empty',
-      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or underscores.`,
+      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or hyphens.`,
     };
   }
 
@@ -36,7 +36,7 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
   if (sanitized.length < USERNAME_MIN) {
     return {
       status: 'too_short',
-      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or underscores.`,
+      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or hyphens.`,
     };
   }
 
@@ -49,13 +49,13 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
   ) {
     return {
       status: 'unavailable',
-      message: "That name isn't available. Try another.",
+      message: ruleResult.ok ? "That address isn't available. Try another." : (ruleResult.message || "That address isn't available. Try another."),
     };
   }
 
   return {
     status: 'available',
-    message: `iveo.site/${sanitized} is available`,
+    message: `${sanitized}.iveo.site is available`,
     username: sanitized,
   };
 }
@@ -94,7 +94,7 @@ export async function checkUsernameAvailability(
       }
       return {
         status: 'available',
-        message: data.message || `iveo.site/${clean} is available`,
+        message: data.message || `${clean}.iveo.site is available`,
         username: clean,
       };
     }

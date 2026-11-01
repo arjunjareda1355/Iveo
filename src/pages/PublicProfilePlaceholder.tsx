@@ -17,9 +17,13 @@ import { setAnalyticsContext, trackView } from '../lib/analytics/track';
 import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
 
-export const PublicProfilePlaceholder: React.FC = () => {
+export interface PublicProfilePlaceholderProps {
+  usernameOverride?: string;
+}
+
+export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> = ({ usernameOverride }) => {
   const { username } = useParams<{ username: string }>();
-  const rawUsername = username || '';
+  const rawUsername = (usernameOverride || username || '').trim();
   const validation = validateUsername(rawUsername);
 
   // If reserved or invalid username format, render NotFound component directly
@@ -76,7 +80,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
     if (pageData?.profile) {
       document.title = `${pageData.profile.displayName} (@${clean}) | iveo`;
     } else {
-      document.title = `iveo.site/${clean}`;
+      document.title = `${clean}.iveo.site`;
     }
 
     let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
@@ -241,7 +245,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
         <Logo tone="light" size="lg" />
 
         <div className="mt-5 font-mono text-[20px] font-medium text-ink">
-          iveo.site/{clean}
+          {clean}.iveo.site
         </div>
 
         <h1 className="mt-3 text-[24px] font-medium text-ink leading-tight tracking-[-0.02em]">

@@ -55,6 +55,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     buttonRadiusOverride !== undefined ? buttonRadiusOverride : tokens.buttonRadius;
 
   const [activeEmbedId, setActiveEmbedId] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
+
+  // Reset avatar error when avatarUrl changes
+  React.useEffect(() => {
+    setAvatarError(false);
+  }, [profile?.avatarUrl, persona.avatarUrl]);
 
   // Profile data
   const displayName = profile?.name ?? persona.name;
@@ -112,13 +118,15 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           fontSize: `${Math.round(22 * scale)}px`,
         }}
       >
-        {profile?.avatarUrl ? (
+        {(profile?.avatarUrl ?? persona.avatarUrl) && !avatarError ? (
           <img
-            src={profile.avatarUrl}
+            src={profile?.avatarUrl ?? persona.avatarUrl}
             alt={displayName}
             loading="eager"
             decoding="async"
             referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
+            onError={() => setAvatarError(true)}
             className="w-full h-full object-cover block"
           />
         ) : (

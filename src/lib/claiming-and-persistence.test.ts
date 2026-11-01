@@ -31,7 +31,7 @@ test('dbClaimUsername: rejects invalid format and reserved usernames', async () 
 test('dbClaimUsername: atomically claims username and enforces case-insensitive uniqueness', async () => {
   const testUserA = `user_alice_${Date.now()}`;
   const testUserB = `user_bob_${Date.now()}`;
-  const username = `alice_${Date.now()}`;
+  const username = `alice-${Date.now()}`;
 
   // 1. User A claims username
   const claimA = await dbClaimUsername(testUserA, username, {
@@ -41,7 +41,7 @@ test('dbClaimUsername: atomically claims username and enforces case-insensitive 
   });
   assert.equal(claimA.ok, true);
   assert.equal(claimA.username, username.toLowerCase());
-  assert.equal(claimA.profileUrl, `https://iveo.site/${username.toLowerCase()}`);
+  assert.equal(claimA.profileUrl, `https://${username.toLowerCase()}.iveo.site`);
 
   // 2. User B tries to claim the same username (uppercase variant) -> must be rejected
   const claimB = await dbClaimUsername(testUserB, username.toUpperCase());
@@ -61,7 +61,7 @@ test('dbClaimUsername: atomically claims username and enforces case-insensitive 
 
 test('dbGetProfileByUserId: resolves user page on new browser / device via authenticated account ID', async () => {
   const testUserId = `user_device_sync_${Date.now()}`;
-  const username = `sync_${Date.now()}`;
+  const username = `sync-${Date.now()}`;
 
   // User claims on Device 1
   await dbClaimUsername(testUserId, username, {
@@ -82,7 +82,7 @@ test('dbGetProfileByUserId: resolves user page on new browser / device via authe
 test('dbVerifyOwnership: prevents unauthorized users from modifying or deleting pages', async () => {
   const ownerId = `user_owner_${Date.now()}`;
   const hackerId = `user_hacker_${Date.now()}`;
-  const username = `security_${Date.now()}`;
+  const username = `sec-${Date.now()}`;
 
   // Owner claims
   await dbClaimUsername(ownerId, username, {
@@ -126,8 +126,8 @@ test('dbVerifyOwnership: prevents unauthorized users from modifying or deleting 
 
 test('dbClaimUsername: user can rename their address and their blocks transfer seamlessly', async () => {
   const userId = `user_rename_${Date.now()}`;
-  const oldName = `oldname_${Date.now()}`;
-  const newName = `newname_${Date.now()}`;
+  const oldName = `old-${Date.now()}`;
+  const newName = `new-${Date.now()}`;
 
   // Claim initial address
   await dbClaimUsername(userId, oldName, { displayName: 'Renamer' });

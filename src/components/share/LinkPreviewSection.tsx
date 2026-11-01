@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SITE_ORIGIN } from '../../lib/site';
+import { SITE_ORIGIN, pageDisplayUrl } from '../../lib/site';
 import { computeShareVersion } from '../../lib/share-image';
 import { copy } from '../../content/copy';
 
@@ -37,13 +37,7 @@ export const LinkPreviewSection: React.FC<LinkPreviewSectionProps> = ({
     return null;
   }
 
-  const host = (() => {
-    try {
-      return new URL(SITE_ORIGIN).host;
-    } catch {
-      return 'iveo.site';
-    }
-  })();
+  const host = pageDisplayUrl(username);
 
   const titleName = displayName || `@${username}`;
   const cardTitle = `${titleName} | iveo`;

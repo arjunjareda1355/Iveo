@@ -6,6 +6,7 @@ import {
   RequireNotOnboarded,
 } from './auth/guards';
 import { AccountDeletionProvider } from './components/account/AccountDeletionProvider';
+import { getSubdomainFromHostname } from './lib/site';
 
 // Lazy-load every route except the landing page
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -42,6 +43,26 @@ function LoadingBar() {
 }
 
 export default function App() {
+  const currentSubdomain = typeof window !== 'undefined'
+    ? getSubdomainFromHostname(window.location.hostname)
+    : null;
+
+  // Hostname-based multi-tenant routing for subdomains (e.g. arjun.iveo.site)
+  if (currentSubdomain) {
+    return (
+      <AccountDeletionProvider>
+        <ScrollToTop />
+        <Suspense fallback={<LoadingBar />}>
+          <Routes>
+            <Route path="/" element={<PublicProfilePlaceholder usernameOverride={currentSubdomain} />} />
+            <Route path="/:username" element={<PublicProfilePlaceholder usernameOverride={currentSubdomain} />} />
+            <Route path="*" element={<PublicProfilePlaceholder usernameOverride={currentSubdomain} />} />
+          </Routes>
+        </Suspense>
+      </AccountDeletionProvider>
+    );
+  }
+
   return (
     <AccountDeletionProvider>
       <ScrollToTop />

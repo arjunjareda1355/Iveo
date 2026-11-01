@@ -19,6 +19,8 @@ export interface IveoSession {
   displayName: string;
   bio: string;
   imageUrl: string | null;
+  avatarType: 'default' | 'uploaded';
+  avatarId: string | null;
   category: string | null;
   primaryEmail: string | null;
   vibeId: VibeId;
@@ -36,6 +38,8 @@ export interface IveoSession {
     displayName?: string;
     bio?: string;
     avatarUrl?: string | null;
+    avatarType?: 'default' | 'uploaded';
+    avatarId?: string | null;
     category?: string | null;
   }) => Promise<void>;
   updateSocials: (socials: Record<string, string>) => Promise<void>;
@@ -51,6 +55,8 @@ const FALLBACK_SESSION: IveoSession = {
   displayName: 'Your name',
   bio: '',
   imageUrl: null,
+  avatarType: 'default',
+  avatarId: null,
   category: null,
   primaryEmail: null,
   vibeId: DEFAULT_PREFERENCES.vibeId,
@@ -268,6 +274,8 @@ function useClerkSession(): IveoSession {
       displayName: 'Your name',
       bio: '',
       imageUrl: null,
+      avatarType: 'default',
+      avatarId: null,
       category: null,
       primaryEmail: null,
       vibeId: DEFAULT_PREFERENCES.vibeId,
@@ -363,6 +371,12 @@ function useClerkSession(): IveoSession {
 
     const { plan: _ignoredPlan, ...safePatch } = patch as any;
 
+    // 1. Immediately update serverProfile React state for immediate UI consistency
+    setServerProfile((prev: any) => ({
+      ...(prev || {}),
+      ...safePatch,
+    }));
+
     const merged = {
       ...currentMeta,
       ...safePatch,
@@ -391,18 +405,22 @@ function useClerkSession(): IveoSession {
             displayName: merged.displayName !== undefined ? merged.displayName : parsed.displayName,
             bio: merged.bio !== undefined ? merged.bio : parsed.bio,
             avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : parsed.avatarUrl,
+            avatarType: merged.avatarType !== undefined ? merged.avatarType : parsed.avatarType,
+            avatarId: merged.avatarId !== undefined ? merged.avatarId : parsed.avatarId,
             socials: merged.socials !== undefined ? merged.socials : parsed.socials,
             socialsPosition: merged.socialsPosition || parsed.socialsPosition || 'top',
           })
         );
       } catch {}
 
-      // Mirror to Azure SQL / Server database
-      syncToServer({
+      // Await sync to Azure SQL / Server database
+      await syncToServer({
         username,
         displayName: merged.displayName !== undefined ? merged.displayName : displayName,
         bio: merged.bio !== undefined ? merged.bio : bio,
         avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : imageUrl,
+        avatarType: merged.avatarType || (merged.avatarId ? 'default' : (merged.avatarUrl ? 'uploaded' : 'default')),
+        avatarId: merged.avatarId || null,
         vibeId: merged.vibeId || preferences.vibeId,
         buttonShape: merged.buttonShape || preferences.buttonShape,
         socials: merged.socials !== undefined ? merged.socials : socials,
@@ -418,9 +436,13 @@ function useClerkSession(): IveoSession {
     displayName?: string;
     bio?: string;
     avatarUrl?: string | null;
+    avatarType?: 'default' | 'uploaded';
+    avatarId?: string | null;
     category?: string | null;
   }): Promise<void> => {
     let finalAvatarUrl = profile.avatarUrl;
+    let finalAvatarType = profile.avatarType;
+    let finalAvatarId = profile.avatarId;
 
     // If a base64 data URL was passed, upload it to the server backend first
     // to keep Clerk metadata well below the 8 KB limit and fit in SQL columns
@@ -429,13 +451,24 @@ function useClerkSession(): IveoSession {
         const u = username || localStorage.getItem('iveo_current_username') || 'owner';
         const res = await fetch('/api/avatar', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: u, dataUrl: finalAvatarUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': currentUser.id,
+            'x-user-email': primaryEmail || '',
+          },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            username: u,
+            dataUrl: finalAvatarUrl,
+            primaryEmail,
+          }),
         });
         if (res.ok) {
           const json = await res.json();
           if (json.avatarUrl) {
             finalAvatarUrl = json.avatarUrl;
+            finalAvatarType = 'uploaded';
+            finalAvatarId = null;
           }
         }
       } catch (uploadErr) {
@@ -443,10 +476,22 @@ function useClerkSession(): IveoSession {
       }
     }
 
+    // Immediately update local React state
+    setServerProfile((prev: any) => ({
+      ...(prev || {}),
+      ...(profile.displayName !== undefined ? { displayName: profile.displayName } : {}),
+      ...(profile.bio !== undefined ? { bio: profile.bio } : {}),
+      ...(finalAvatarUrl !== undefined ? { avatarUrl: finalAvatarUrl } : {}),
+      ...(finalAvatarType !== undefined ? { avatarType: finalAvatarType } : {}),
+      ...(finalAvatarId !== undefined ? { avatarId: finalAvatarId } : {}),
+    }));
+
     await updatePreferences({
       displayName: profile.displayName !== undefined ? profile.displayName : preferences.displayName,
       bio: profile.bio !== undefined ? profile.bio : preferences.bio,
       avatarUrl: finalAvatarUrl !== undefined ? finalAvatarUrl : preferences.avatarUrl,
+      avatarType: finalAvatarType !== undefined ? finalAvatarType : (serverProfile?.avatarType || 'default'),
+      avatarId: finalAvatarId !== undefined ? finalAvatarId : (serverProfile?.avatarId || null),
       category: profile.category !== undefined ? profile.category : preferences.category,
     });
   };
@@ -464,6 +509,8 @@ function useClerkSession(): IveoSession {
     displayName,
     bio,
     imageUrl,
+    avatarType: serverProfile?.avatarType || (serverProfile?.avatarId ? 'default' : (serverProfile?.avatarUrl ? 'uploaded' : 'default')),
+    avatarId: serverProfile?.avatarId || null,
     category,
     primaryEmail,
     vibeId: preferences.vibeId,

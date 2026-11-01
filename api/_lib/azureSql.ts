@@ -164,6 +164,8 @@ async function ensureSchema(pool: sql.ConnectionPool): Promise<void> {
           display_name NVARCHAR(128) NULL,
           bio NVARCHAR(500) NULL,
           avatar_url NVARCHAR(2048) NULL,
+          avatar_type NVARCHAR(32) DEFAULT 'default',
+          avatar_id NVARCHAR(64) NULL,
           vibe_id NVARCHAR(32) DEFAULT 'clean',
           button_shape NVARCHAR(32) DEFAULT 'rounded',
           socials_json NVARCHAR(MAX) NULL,
@@ -175,6 +177,17 @@ async function ensureSchema(pool: sql.ConnectionPool): Promise<void> {
           updated_at DATETIME2 DEFAULT SYSUTCDATETIME()
         );
         CREATE INDEX IX_iveo_profiles_user_id ON iveo_profiles(user_id);
+      END
+      ELSE
+      BEGIN
+        IF COL_LENGTH('iveo_profiles', 'avatar_type') IS NULL
+        BEGIN
+          ALTER TABLE iveo_profiles ADD avatar_type NVARCHAR(32) DEFAULT 'default';
+        END
+        IF COL_LENGTH('iveo_profiles', 'avatar_id') IS NULL
+        BEGIN
+          ALTER TABLE iveo_profiles ADD avatar_id NVARCHAR(64) NULL;
+        END
       END
 
       -- 2. Blocks Table
@@ -392,13 +405,22 @@ export async function dbClaimUsername(
   primaryEmail?: string | null
 ): Promise<{ ok: boolean; error?: string; message?: string; username?: string; profileUrl?: string }> {
   const clean = username.toLowerCase().trim();
-  if (!clean || clean.length < 3 || clean.length > 24) {
-    return { ok: false, error: 'invalid_format', message: 'Use 3 to 24 letters, numbers or underscores.' };
+  if (!clean || clean.length < 3 || clean.length > 30) {
+    return { ok: false, error: 'invalid_format', message: 'Use 3 to 30 characters.' };
   }
-  if (!/^[a-z0-9_]+$/.test(clean)) {
-    return { ok: false, error: 'invalid_format', message: 'Use 3 to 24 letters, numbers or underscores.' };
+  if (clean.includes('_') || clean.includes(' ')) {
+    return { ok: false, error: 'invalid_format', message: 'Use hyphens instead of underscores or spaces.' };
   }
-  if (RESERVED.has(clean)) {
+  if (clean.startsWith('-') || clean.endsWith('-')) {
+    return { ok: false, error: 'invalid_format', message: 'Must start and end with a letter or number.' };
+  }
+  if (clean.includes('--')) {
+    return { ok: false, error: 'invalid_format', message: 'Cannot contain consecutive hyphens (--).' };
+  }
+  if (!/^[a-z0-9-]+$/.test(clean)) {
+    return { ok: false, error: 'invalid_format', message: 'Only lowercase letters, numbers, and hyphens allowed.' };
+  }
+  if (RESERVED.has(clean) || RESERVED.has(clean.replace(/-/g, ''))) {
     return { ok: false, error: 'reserved', message: 'That name is reserved. Choose another.' };
   }
 
@@ -453,6 +475,8 @@ export async function dbClaimUsername(
       insReq.input('displayName', sql.NVarChar(128), profileData?.displayName || clean);
       insReq.input('bio', sql.NVarChar(500), profileData?.bio || '');
       insReq.input('avatarUrl', sql.NVarChar(2048), profileData?.avatarUrl || null);
+      insReq.input('avatarType', sql.NVarChar(32), profileData?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')));
+      insReq.input('avatarId', sql.NVarChar(64), profileData?.avatarId || null);
       insReq.input('vibeId', sql.NVarChar(32), profileData?.vibeId || 'clean');
       insReq.input('buttonShape', sql.NVarChar(32), profileData?.buttonShape || 'rounded');
       insReq.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify({ links: profileData?.socials || {}, position: profileData?.socialsPosition || 'top' }));
@@ -463,14 +487,25 @@ export async function dbClaimUsername(
         USING (SELECT @username AS username) AS source
         ON (target.username = source.username)
         WHEN MATCHED THEN
-          UPDATE SET user_id = @userId, display_name = @displayName, bio = @bio, updated_at = SYSUTCDATETIME()
+          UPDATE SET
+            user_id = @userId,
+            display_name = @displayName,
+            bio = @bio,
+            avatar_url = @avatarUrl,
+            avatar_type = @avatarType,
+            avatar_id = @avatarId,
+            vibe_id = @vibeId,
+            button_shape = @buttonShape,
+            socials_json = @socialsJson,
+            plan = @plan,
+            updated_at = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
-          INSERT (user_id, username, display_name, bio, avatar_url, vibe_id, button_shape, socials_json, plan, is_published)
-          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @vibeId, @buttonShape, @socialsJson, @plan, 1);
+          INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, is_published)
+          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, 1);
       `);
 
       await transaction.commit();
-      return { ok: true, username: clean, profileUrl: `https://iveo.site/${clean}` };
+      return { ok: true, username: clean, profileUrl: `https://${clean}.iveo.site` };
     } catch {
       // Gracefully fall through to server store
     }
@@ -513,6 +548,8 @@ export async function dbClaimUsername(
     displayName: profileData?.displayName || store.profiles[clean]?.displayName || clean,
     bio: profileData?.bio || store.profiles[clean]?.bio || '',
     avatarUrl: profileData?.avatarUrl || store.profiles[clean]?.avatarUrl || null,
+    avatarType: profileData?.avatarType || store.profiles[clean]?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
+    avatarId: profileData?.avatarId || store.profiles[clean]?.avatarId || null,
     vibeId: profileData?.vibeId || store.profiles[clean]?.vibeId || 'clean',
     buttonShape: profileData?.buttonShape || store.profiles[clean]?.buttonShape || 'rounded',
     socials: profileData?.socials || store.profiles[clean]?.socials || {},
@@ -526,7 +563,7 @@ export async function dbClaimUsername(
   };
 
   writeServerStore(store);
-  return { ok: true, username: clean, profileUrl: `https://iveo.site/${clean}` };
+  return { ok: true, username: clean, profileUrl: `https://${clean}.iveo.site` };
 }
 
 export async function dbGetProfileByUserId(userId: string, email?: string | null): Promise<any | null> {
@@ -566,6 +603,8 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           displayName: row.display_name,
           bio: row.bio,
           avatarUrl: row.avatar_url,
+          avatarType: row.avatar_type || (row.avatar_id ? 'default' : (row.avatar_url ? 'uploaded' : 'default')),
+          avatarId: row.avatar_id || null,
           vibeId: row.vibe_id,
           buttonShape: row.button_shape,
           socials,
@@ -616,6 +655,8 @@ export async function dbSaveProfile(profile: {
   displayName?: string;
   bio?: string;
   avatarUrl?: string | null;
+  avatarType?: 'default' | 'uploaded';
+  avatarId?: string | null;
   vibeId?: string;
   buttonShape?: string | null;
   socials?: Record<string, string>;
@@ -647,6 +688,8 @@ export async function dbSaveProfile(profile: {
     email: profile.primaryEmail || null,
   };
 
+  const calculatedAvatarType = profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default'));
+
   if (pool) {
     try {
       const req = pool.request();
@@ -655,6 +698,8 @@ export async function dbSaveProfile(profile: {
       req.input('displayName', sql.NVarChar(128), profile.displayName || cleanUsername);
       req.input('bio', sql.NVarChar(500), profile.bio || '');
       req.input('avatarUrl', sql.NVarChar(2048), profile.avatarUrl || null);
+      req.input('avatarType', sql.NVarChar(32), calculatedAvatarType);
+      req.input('avatarId', sql.NVarChar(64), profile.avatarId || null);
       req.input('vibeId', sql.NVarChar(32), profile.vibeId || 'clean');
       req.input('buttonShape', sql.NVarChar(32), profile.buttonShape || 'rounded');
       req.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(socialsPayload));
@@ -672,6 +717,8 @@ export async function dbSaveProfile(profile: {
             display_name = @displayName,
             bio = @bio,
             avatar_url = @avatarUrl,
+            avatar_type = @avatarType,
+            avatar_id = @avatarId,
             vibe_id = @vibeId,
             button_shape = @buttonShape,
             socials_json = @socialsJson,
@@ -680,8 +727,8 @@ export async function dbSaveProfile(profile: {
             hide_from_search = @hideFromSearch,
             updated_at = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
-          INSERT (user_id, username, display_name, bio, avatar_url, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
-          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
+          INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
+          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
       `);
       return { ok: true };
     } catch {
@@ -699,6 +746,9 @@ export async function dbSaveProfile(profile: {
     ...profile,
     userId: finalUserId,
     plan: effectivePlan,
+    avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : (existingProf?.avatarUrl || null),
+    avatarType: calculatedAvatarType,
+    avatarId: profile.avatarId !== undefined ? profile.avatarId : (existingProf?.avatarId || null),
     socials: profile.socials || {},
     socialsPosition: profile.socialsPosition || 'top',
     username: cleanUsername,
@@ -747,6 +797,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           displayName: row.display_name,
           bio: row.bio,
           avatarUrl: row.avatar_url,
+          avatarType: row.avatar_type || (row.avatar_id ? 'default' : (row.avatar_url ? 'uploaded' : 'default')),
+          avatarId: row.avatar_id || null,
           vibeId: row.vibe_id,
           buttonShape: row.button_shape,
           socials,
@@ -764,7 +816,13 @@ export async function dbGetProfile(username: string): Promise<any | null> {
   }
 
   const store = readServerStore();
-  return store.profiles[clean] || null;
+  const prof = store.profiles[clean];
+  if (!prof) return null;
+  return {
+    ...prof,
+    avatarType: prof.avatarType || (prof.avatarId ? 'default' : (prof.avatarUrl ? 'uploaded' : 'default')),
+    avatarId: prof.avatarId || null,
+  };
 }
 
 export async function dbSaveBlocks(

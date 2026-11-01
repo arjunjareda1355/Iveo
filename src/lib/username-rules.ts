@@ -1,11 +1,15 @@
 export const USERNAME_MIN = 3;
-export const USERNAME_MAX = 24;
-export const USERNAME_PATTERN = /^[a-z0-9_]+$/;
+export const USERNAME_MAX = 30;
 
-// Keep in sync with the router and the database.
+// Subdomain-compatible pattern: 3-30 chars, lowercase letters, numbers, and hyphens.
+// Must start and end with an alphanumeric character, no consecutive hyphens.
+export const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9]|-(?!-)){1,28}[a-z0-9]$/;
+
+// Keep in sync with the router, server and database.
 export const RESERVED_USERNAMES: readonly string[] = [
   'admin',
   'administrator',
+  'analytics',
   'api',
   'app',
   'about',
@@ -14,9 +18,16 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'auth',
   'billing',
   'blog',
+  'checkout',
   'clerk',
   'contact',
   'dashboard',
+  'demo',
+  'dev',
+  'developer',
+  'discover',
+  'docs',
+  'explore',
   'help',
   'home',
   'iveo',
@@ -26,6 +37,7 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'logout',
   'mail',
   'onboarding',
+  'pay',
   'pricing',
   'privacy',
   'root',
@@ -35,10 +47,12 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'signup',
   'sso-callback',
   'ssocallback',
+  'staging',
   'status',
   'supabase',
   'support',
   'terms',
+  'test',
   'user',
   'users',
   'vercel',
@@ -69,14 +83,16 @@ export const SIMULATED_TAKEN_USERNAMES_SET = new Set([
 ]);
 
 /**
- * Normalizes username by converting to lowercase, stripping any character
- * that is not a-z, 0-9 or underscore, and capping at USERNAME_MAX.
+ * Normalizes username by converting to lowercase, replacing underscores and spaces with hyphens,
+ * stripping invalid characters, collapsing consecutive hyphens, and trimming hyphens from ends.
  */
 export function normalizeUsername(input: string): string {
   if (!input) return '';
   return input
     .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '')
+    .trim()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
     .slice(0, USERNAME_MAX);
 }
 
@@ -85,26 +101,42 @@ export type UsernameValidationResult =
   | {
       ok: false;
       reason: 'too_short' | 'too_long' | 'invalid_chars' | 'reserved';
+      message?: string;
     };
 
 export function validateUsername(input: string): UsernameValidationResult {
-  const lower = (input || '').toLowerCase();
+  const lower = (input || '').toLowerCase().trim();
 
   if (lower.length < USERNAME_MIN) {
-    return { ok: false, reason: 'too_short' };
+    return { ok: false, reason: 'too_short', message: 'Use 3 to 30 characters.' };
   }
 
   if (lower.length > USERNAME_MAX) {
-    return { ok: false, reason: 'too_long' };
+    return { ok: false, reason: 'too_long', message: 'Maximum 30 characters allowed.' };
   }
 
-  // Check invalid characters on raw input (hyphens, periods, spaces, etc.)
-  if (!USERNAME_PATTERN.test(lower)) {
-    return { ok: false, reason: 'invalid_chars' };
+  // Must not contain underscores or spaces
+  if (lower.includes('_') || lower.includes(' ')) {
+    return { ok: false, reason: 'invalid_chars', message: 'Use hyphens instead of underscores or spaces.' };
+  }
+
+  // Must start and end with an alphanumeric character
+  if (lower.startsWith('-') || lower.endsWith('-')) {
+    return { ok: false, reason: 'invalid_chars', message: 'Must start and end with a letter or number.' };
+  }
+
+  // No consecutive hyphens
+  if (lower.includes('--')) {
+    return { ok: false, reason: 'invalid_chars', message: 'Cannot contain consecutive hyphens (--).' };
+  }
+
+  // Only lowercase English letters, numbers, and hyphens allowed
+  if (!/^[a-z0-9-]+$/.test(lower)) {
+    return { ok: false, reason: 'invalid_chars', message: 'Only lowercase letters, numbers, and hyphens allowed.' };
   }
 
   if (RESERVED_USERNAMES_SET.has(lower) || RESERVED_USERNAMES_SET.has(lower.replace(/-/g, ''))) {
-    return { ok: false, reason: 'reserved' };
+    return { ok: false, reason: 'reserved', message: 'That name is reserved. Choose another.' };
   }
 
   return { ok: true };

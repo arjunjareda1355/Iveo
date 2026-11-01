@@ -20,6 +20,7 @@ import {
   dbVerifyLinkPassword,
 } from './_lib/azureSql.ts';
 import { isAllowedAvatarHost } from './_lib/publicPage.ts';
+import { RESERVED } from './_lib/usernames.ts';
 
 /**
  * GET /api/db/readiness
@@ -43,7 +44,24 @@ export async function handleDbReadiness(_req: ExpressReq, res: ExpressRes) {
  * Returns public page data for any browser / visitor
  */
 export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
-  const raw = (req.query.u as string) || '';
+  let raw = ((req.query.u || req.query.username) as string) || '';
+
+  // If not provided in query param, extract from Host header subdomain
+  if (!raw) {
+    const host = (req.headers.host || req.hostname || '').toLowerCase().split(':')[0];
+    if (host.endsWith('.iveo.site')) {
+      const sub = host.slice(0, -'.iveo.site'.length);
+      if (sub && !RESERVED.has(sub)) {
+        raw = sub;
+      }
+    } else if (host.endsWith('.localhost')) {
+      const sub = host.slice(0, -'.localhost'.length);
+      if (sub && !RESERVED.has(sub)) {
+        raw = sub;
+      }
+    }
+  }
+
   const clean = raw.toLowerCase().trim();
   if (!clean) {
     return res.status(400).json({ error: 'missing_username' });
@@ -91,6 +109,8 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         displayName: profile.displayName || profile.username,
         bio: profile.bio || '',
         avatarUrl: isAllowedAvatarHost(profile.avatarUrl) ? profile.avatarUrl : null,
+        avatarType: profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default')),
+        avatarId: profile.avatarId || null,
         vibeId: profile.vibeId || 'clean',
         buttonShape: profile.buttonShape || 'rounded',
         socials: profile.socials || {},
@@ -139,7 +159,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
       ok: true,
       username: result.username,
       profileUrl: result.profileUrl,
-      message: `iveo.site/${result.username} successfully claimed!`,
+      message: `${result.username}.iveo.site successfully claimed!`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: 'claim_failed', message: err?.message });
@@ -229,6 +249,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       displayName: body.displayName,
       bio: body.bio,
       avatarUrl: body.avatarUrl,
+      avatarType: body.avatarType,
+      avatarId: body.avatarId,
       vibeId: body.vibeId,
       buttonShape: body.buttonShape,
       socials: body.socials,
@@ -256,12 +278,14 @@ const AVATAR_DIR = path.resolve(process.cwd(), 'data', 'avatars');
 
 /**
  * POST /api/avatar
- * Securely uploads and stores user avatar on server disk (works without Clerk metadata size limits)
+ * Securely uploads and stores user avatar on server disk with ownership verification
  */
 export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
   const username = (body.username as string || '').toLowerCase().trim();
   const dataUrl = body.dataUrl as string;
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
 
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
@@ -272,6 +296,15 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
+    // Verify ownership before overwriting avatar
+    const existing = await dbGetProfile(username);
+    if (existing) {
+      const authorized = await dbVerifyOwnership(username, userId || existing.userId, primaryEmail || existing.primaryEmail);
+      if (!authorized) {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to update this avatar.' });
+      }
+    }
+
     if (!fs.existsSync(AVATAR_DIR)) {
       fs.mkdirSync(AVATAR_DIR, { recursive: true });
     }
@@ -288,15 +321,25 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
     const avatarUrl = `/api/avatar/${username}?v=${Date.now()}`;
 
     // Update in database immediately
-    const existing = await dbGetProfile(username);
-    if (existing) {
-      await dbSaveProfile({
-        ...existing,
-        avatarUrl,
-      });
-    }
+    await dbSaveProfile({
+      userId: userId || existing?.userId || 'owner',
+      username,
+      displayName: existing?.displayName || username,
+      bio: existing?.bio || '',
+      avatarUrl,
+      avatarType: 'uploaded',
+      avatarId: null,
+      vibeId: existing?.vibeId || 'clean',
+      buttonShape: existing?.buttonShape || 'rounded',
+      socials: existing?.socials || {},
+      socialsPosition: existing?.socialsPosition || 'top',
+      primaryEmail: primaryEmail || existing?.primaryEmail || null,
+      plan: existing?.plan || 'free',
+      hideFooter: existing?.hideFooter,
+      hideFromSearch: existing?.hideFromSearch,
+    });
 
-    return res.status(200).json({ ok: true, avatarUrl });
+    return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
   } catch (err: any) {
     return res.status(500).json({ error: 'upload_failed', message: err?.message });
   }
@@ -304,7 +347,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
 
 /**
  * GET /api/avatar/:username
- * Serves user avatar image
+ * Serves user avatar image with short cache and stale-while-revalidate for immediate updates
  */
 export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
   const username = (req.params.username as string || '').toLowerCase().trim();
@@ -314,8 +357,15 @@ export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
 
   const avatarFile = path.join(AVATAR_DIR, `${username}.jpg`);
   if (fs.existsSync(avatarFile)) {
+    const stats = fs.statSync(avatarFile);
+    const etag = `"${Math.floor(stats.mtimeMs).toString(36)}-${stats.size.toString(36)}"`;
     res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=86400');
+    res.setHeader('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
     return res.sendFile(avatarFile);
   }
 

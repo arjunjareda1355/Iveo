@@ -1,7 +1,7 @@
 {
   "profiles": {
     "arjun": {
-      "userId": "owner",
+      "userId": "user_3LBKDF78G1PGyFZbKXib4q0P1jO",
       "username": "arjun",
       "displayName": "Arjun Bharti Mina",
       "bio": "",
@@ -9,11 +9,11 @@
       "vibeId": "clean",
       "buttonShape": "square",
       "socials": {},
-      "socialsPosition": "top",
+      "socialsPosition": "bottom",
       "primaryEmail": "arjunjareda2007@gmail.com",
       "plan": "pro",
       "hideFooter": false,
-      "updatedAt": "2026-10-31T03:02:03.580Z"
+      "updatedAt": "2026-11-01T13:28:38.086Z"
     },
     "alex": {
       "userId": "owner",
@@ -45,7 +45,8 @@
     }
   },
   "userToUsername": {
-    "user_owner_1793417444376": "security_1793417444376"
+    "user_owner_1793417444376": "security_1793417444376",
+    "user_3LBKDF78G1PGyFZbKXib4q0P1jO": "arjun"
   },
   "claims": {
     "security_1793417444376": {
@@ -84,6 +85,127 @@
       }
     ],
     "oldname_1793417473241": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "arjun": [
+      {
+        "id": "b4b6bc3a-c14e-4d0b-ae2e-2c4813028b29",
+        "kind": "vcard",
+        "title": "Save Arjun Bharti Mina's Contact",
+        "url": null,
+        "icon": null,
+        "thumbnailPath": null,
+        "thumbnailUrl": "",
+        "layout": "classic",
+        "embedProvider": null,
+        "signup": null,
+        "tipJar": null,
+        "faq": null,
+        "vcard": {
+          "fullName": "Arjun Bharti Mina",
+          "title": "Student",
+          "organization": "FanQ",
+          "phone": "+918233538355",
+          "email": "arjunjareda2007@gmail.com",
+          "note": "🤔"
+        },
+        "animation": null,
+        "badge": null,
+        "startAt": null,
+        "endAt": null,
+        "isActive": true,
+        "isArchived": false,
+        "position": 3
+      },
+      {
+        "id": "51257a48-cb1c-400c-af4a-487817fae913",
+        "kind": "faq",
+        "title": "Frequently Asked Questions",
+        "url": null,
+        "icon": null,
+        "thumbnailPath": null,
+        "thumbnailUrl": "",
+        "layout": "classic",
+        "embedProvider": null,
+        "signup": null,
+        "tipJar": null,
+        "faq": {
+          "items": [
+            {
+              "id": "ed11c989-d10b-4734-be3f-ff6ffe079b65",
+              "question": "What services or products do you offer?",
+              "answer": "Check out the links above for my portfolio, booking calendar, and latest projects."
+            },
+            {
+              "id": "086040c8-6bf8-4868-8010-8713ced7cd69",
+              "question": "How can I get in touch?",
+              "answer": "Reach out via the email or socials at the top of this page."
+            }
+          ]
+        },
+        "animation": null,
+        "badge": null,
+        "startAt": null,
+        "endAt": null,
+        "isActive": true,
+        "isArchived": false,
+        "position": 2
+      },
+      {
+        "id": "fccc29a1-d120-4c20-91e8-7b504f0f4cb7",
+        "kind": "link",
+        "title": "Website",
+        "url": "https://fanq.me",
+        "icon": null,
+        "thumbnailPath": null,
+        "thumbnailUrl": null,
+        "layout": "classic",
+        "embedProvider": null,
+        "startAt": null,
+        "endAt": null,
+        "position": 0,
+        "isActive": true,
+        "isArchived": false
+      },
+      {
+        "id": "ed207282-cf67-4da9-94c2-043badc81ed9",
+        "kind": "link",
+        "title": "Social profile",
+        "url": "https://",
+        "icon": null,
+        "thumbnailPath": null,
+        "thumbnailUrl": null,
+        "layout": "classic",
+        "embedProvider": null,
+        "startAt": null,
+        "endAt": null,
+        "position": 1,
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "oldname_1793539898374": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "oldname_1793539938473": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1793539968108": [
       {
         "id": "b_initial",
         "title": "My Work",

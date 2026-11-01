@@ -1,4 +1,4 @@
-import { normalizeUsername, RESERVED, USERNAME_PATTERN } from './_lib/usernames.ts';
+import { validateUsernameServer } from './_lib/usernames.ts';
 import { adminClient } from './_lib/supabase.ts';
 import { dbGetProfile } from './_lib/azureSql.ts';
 
@@ -20,30 +20,13 @@ export async function GET(request: Request): Promise<Response> {
   const requestingUserId = url.searchParams.get('userId') || '';
   const clean = raw.trim().toLowerCase();
 
-  if (!clean || clean.length < 3) {
+  const validation = validateUsernameServer(clean);
+  if (!validation.ok) {
     return Response.json({
       ok: true,
       available: false,
-      reason: 'too_short',
-      message: 'Use 3 to 24 letters, numbers or underscores.',
-    });
-  }
-
-  if (clean.length > 24 || !USERNAME_PATTERN.test(clean)) {
-    return Response.json({
-      ok: true,
-      available: false,
-      reason: 'invalid_format',
-      message: 'Use 3 to 24 letters, numbers or underscores.',
-    });
-  }
-
-  if (RESERVED.has(clean)) {
-    return Response.json({
-      ok: true,
-      available: false,
-      reason: 'reserved',
-      message: 'That name is reserved. Choose another.',
+      reason: validation.reason,
+      message: validation.message,
     });
   }
 
@@ -56,7 +39,8 @@ export async function GET(request: Request): Promise<Response> {
           ok: true,
           available: true,
           username: clean,
-          message: `iveo.site/${clean} is your address`,
+          subdomainUrl: `https://${clean}.iveo.site`,
+          message: `${clean}.iveo.site is your address`,
         });
       }
       return Response.json({
@@ -84,7 +68,8 @@ export async function GET(request: Request): Promise<Response> {
             ok: true,
             available: true,
             username: clean,
-            message: `iveo.site/${clean} is your address`,
+            subdomainUrl: `https://${clean}.iveo.site`,
+            message: `${clean}.iveo.site is your address`,
           });
         }
         return Response.json({
@@ -103,7 +88,8 @@ export async function GET(request: Request): Promise<Response> {
     ok: true,
     available: true,
     username: clean,
-    message: `iveo.site/${clean} is available`,
+    subdomainUrl: `https://${clean}.iveo.site`,
+    message: `${clean}.iveo.site is available`,
   });
 }
 
@@ -113,7 +99,9 @@ export async function POST(request: Request): Promise<Response> {
     body = await request.json();
   } catch {}
   const u = body.u || body.username || '';
+  const userId = body.userId || '';
   const url = new URL(request.url);
   url.searchParams.set('u', u);
+  if (userId) url.searchParams.set('userId', userId);
   return GET(new Request(url.toString(), { method: 'GET', headers: request.headers }));
 }
