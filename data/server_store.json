@@ -13,7 +13,9 @@
       "primaryEmail": "arjunjareda2007@gmail.com",
       "plan": "pro",
       "hideFooter": false,
-      "updatedAt": "2026-11-01T13:28:38.086Z"
+      "updatedAt": "2026-11-02T14:56:47.648Z",
+      "avatarType": "uploaded",
+      "avatarId": null
     },
     "alex": {
       "userId": "owner",
@@ -206,6 +208,14 @@
       }
     ],
     "old-1793539968108": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1793631419396": [
       {
         "id": "b_initial",
         "title": "My Work",

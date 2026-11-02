@@ -1,5 +1,4 @@
 import sql from 'mssql';
-import { ClientSecretCredential } from '@azure/identity';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -31,6 +30,7 @@ async function getAzureEntraToken(): Promise<string | null> {
     return null;
   }
   try {
+    const { ClientSecretCredential } = await import('@azure/identity');
     const credential = new ClientSecretCredential(
       AZURE_TENANT_ID,
       AZURE_CLIENT_ID,
@@ -40,10 +40,7 @@ async function getAzureEntraToken(): Promise<string | null> {
     return tokenResponse?.token || null;
   } catch (err: any) {
     // If tenant is invalid or not found, mark Entra as permanently unavailable to avoid spamming
-    const msg = err?.message || String(err);
-    if (msg.includes('AADSTS90002') || msg.includes('Tenant') || msg.includes('not found')) {
-      entraUnavailable = true;
-    }
+    entraUnavailable = true;
     return null;
   }
 }
