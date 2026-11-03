@@ -13,7 +13,7 @@
       "primaryEmail": "arjunjareda2007@gmail.com",
       "plan": "pro",
       "hideFooter": false,
-      "updatedAt": "2026-11-02T14:56:47.648Z",
+      "updatedAt": "2026-11-03T17:16:27.444Z",
       "avatarType": "uploaded",
       "avatarId": null
     },
@@ -232,6 +232,14 @@
       }
     ],
     "old-1793724843733": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1793726251531": [
       {
         "id": "b_initial",
         "title": "My Work",
