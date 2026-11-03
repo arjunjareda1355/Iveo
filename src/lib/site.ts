@@ -97,10 +97,10 @@ export function getSubdomainFromHostname(hostname: string): string | null {
   }
 
   // 4. Cloud Run / staging URLs (e.g. arjun---xyz.run.app)
-  if (host.includes('.run.app')) {
-    const parts = host.split('.');
-    if (parts.length >= 4 && parts[0] && !RESERVED_USERNAMES_SET.has(parts[0])) {
-      return parts[0];
+  if (host.includes('.run.app') && host.includes('---')) {
+    const candidate = host.split('---')[0];
+    if (candidate && !RESERVED_USERNAMES_SET.has(candidate)) {
+      return candidate;
     }
   }
 

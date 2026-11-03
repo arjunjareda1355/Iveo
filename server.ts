@@ -127,6 +127,7 @@ async function startServer() {
   app.delete('/api/contacts', dbHandlers.handleDeleteContacts);
   app.post('/api/unlock-link', dbHandlers.handleUnlockLink);
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
+  app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
   // 4.5 Subdomain & Path Redirect Handler (Legacy iveo.site/:username -> https://:username.iveo.site)
   const { RESERVED, USERNAME_PATTERN } = await import('./api/_lib/usernames.ts');
   app.use((req, res, next) => {

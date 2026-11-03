@@ -288,7 +288,7 @@ export const SettingsTab: React.FC = () => {
             variant="secondary"
             size="md"
             as="a"
-            href={session.username ? `/${session.username}` : '#'}
+            href={session.username ? pageUrl(session.username) : '#'}
             target="_blank"
             rel="noopener noreferrer"
             iconRight={<ExternalLink size={14} />}

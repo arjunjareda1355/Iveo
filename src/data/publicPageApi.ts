@@ -14,7 +14,20 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
   // 1. Unified server endpoint (Azure SQL Database / Server store)
   // Ensures published pages are accessible across any browser, device, or crawler
   try {
-    const res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}`);
+    let res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}`);
+
+    // If on a user subdomain and same-origin /api/public-page is 404, fallback to apex iveo.site
+    if (
+      !res.ok &&
+      typeof window !== 'undefined' &&
+      window.location.hostname.endsWith('.iveo.site') &&
+      window.location.hostname !== 'iveo.site'
+    ) {
+      try {
+        res = await fetch(`https://iveo.site/api/public-page?u=${encodeURIComponent(clean)}`);
+      } catch {}
+    }
+
     if (res.ok) {
       const data = await res.json();
       if (data && data.profile) {
@@ -54,6 +67,33 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     }
   } catch {
     // Continue to Supabase / local fallback
+  }
+
+  // 2. Check local client cache (instant fallback if user just claimed on this device)
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem(`iveo_profile_${clean}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
+        const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
+        return {
+          profile: {
+            username: clean,
+            displayName: parsed.displayName || clean,
+            bio: parsed.bio || '',
+            avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
+            vibeId: (parsed.vibeId as VibeId) || 'clean',
+            buttonShape: parsed.buttonShape || null,
+            socials: parsed.socials || {},
+            socialsPosition: parsed.socialsPosition || 'top',
+            hideFromSearch: Boolean(parsed.hideFromSearch),
+            hideFooter: Boolean(parsed.hideFooter),
+          },
+          links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
+        };
+      }
+    } catch {}
   }
 
   if (rawSupabaseUrl) {

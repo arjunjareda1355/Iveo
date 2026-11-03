@@ -11,6 +11,7 @@ import {
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 import { isOwnerEmail } from '../lib/plan';
+import { getSubdomainFromHostname } from '../lib/site';
 
 export interface IveoSession {
   isLoaded: boolean;
