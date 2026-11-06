@@ -127,7 +127,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               : 'bg-surface text-ink border-border-strong'
           )}
         >
-          {username || 'you'}.iveo.site
+          iveo.site/{username || 'you'}
         </div>
 
         <Button
@@ -148,7 +148,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     if (statusState === 'empty_submit') {
       return (
         <span className="text-error font-normal text-[14px]">
-          Enter the address you want.
+          Enter the name you want.
         </span>
       );
     }
@@ -179,7 +179,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     if (statusState === 'unavailable') {
       return (
         <span className="text-error font-normal text-[14px]">
-          That address isn't available. Try another.
+          That name isn't available. Try another.
         </span>
       );
     }
@@ -193,7 +193,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           )}
         >
           <Check size={16} strokeWidth={2} className="shrink-0" />
-          <span>{availableUsername}.iveo.site is available</span>
+          <span>iveo.site/{availableUsername} is available</span>
         </span>
       );
     }
@@ -206,7 +206,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           isDark ? 'text-inverse-muted' : 'text-muted'
         )}
       >
-        Use {USERNAME_MIN} to {USERNAME_MAX} letters, numbers or hyphens.
+        Use {USERNAME_MIN} to {USERNAME_MAX} letters, numbers or underscores.
       </span>
     );
   };
@@ -228,6 +228,14 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               : 'bg-surface border border-border-strong hover:border-[#A3A3A3] focus-within:border-ink focus-within:shadow-[0_0_0_3px_rgba(10,10,10,0.08)]'
           )}
         >
+          <span
+            className={cn(
+              'font-mono text-[16px] select-none shrink-0 pointer-events-none',
+              isDark ? 'text-inverse-muted' : 'text-muted'
+            )}
+          >
+            iveo.site/
+          </span>
           <input
             ref={inputRef}
             type="text"
@@ -235,7 +243,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
             value={rawInput}
             onChange={handleChange}
             placeholder={copy.hero.claimPlaceholder}
-            aria-label="Choose your iveo address"
+            aria-label="Choose your iveo username"
             aria-describedby={statusId}
             maxLength={USERNAME_MAX}
             className={cn(
@@ -243,14 +251,6 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               isDark ? 'text-inverse-text' : 'text-ink'
             )}
           />
-          <span
-            className={cn(
-              'font-mono text-[16px] select-none shrink-0 pointer-events-none pr-2',
-              isDark ? 'text-inverse-muted' : 'text-muted'
-            )}
-          >
-            .iveo.site
-          </span>
           {/* Desktop inline button */}
           <div className="hidden sm:block shrink-0">
             <Button

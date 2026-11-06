@@ -78,7 +78,7 @@ export const SettingsTab: React.FC = () => {
     if (e) e.preventDefault();
     const clean = sanitizeUsername(usernameInput);
     if (!clean) {
-      setUsernameError('Use 3 to 30 letters, numbers or hyphens.');
+      setUsernameError('Use 3 to 24 letters, numbers or underscores.');
       return;
     }
 
@@ -155,6 +155,9 @@ export const SettingsTab: React.FC = () => {
 
               <form onSubmit={handleSaveUsername} className="flex flex-col gap-2">
                 <div className="flex items-center rounded-[8px] border border-border bg-surface px-2.5 h-10 focus-within:border-ink">
+                  <span className="text-[14px] text-muted font-mono select-none">
+                    iveo.site/
+                  </span>
                   <input
                     type="text"
                     value={usernameInput}
@@ -166,9 +169,6 @@ export const SettingsTab: React.FC = () => {
                     className="flex-1 font-mono text-[14px] text-ink bg-transparent outline-none pl-0.5"
                     autoFocus
                   />
-                  <span className="text-[14px] text-muted font-mono select-none pr-1">
-                    .iveo.site
-                  </span>
                   {isCheckingUsername && (
                     <Loader2 size={14} className="animate-spin text-muted" />
                   )}
@@ -288,7 +288,7 @@ export const SettingsTab: React.FC = () => {
             variant="secondary"
             size="md"
             as="a"
-            href={session.username ? pageUrl(session.username) : '#'}
+            href={session.username ? `/${session.username}` : '#'}
             target="_blank"
             rel="noopener noreferrer"
             iconRight={<ExternalLink size={14} />}
@@ -368,7 +368,9 @@ export const SettingsTab: React.FC = () => {
       </Card>
 
       {/* 5. Delete Account Card */}
-      <DeleteAccountCard username={session.username || session.primaryEmail?.split('@')[0] || 'account'} />
+      {session.username && (
+        <DeleteAccountCard username={session.username} />
+      )}
 
       {/* Share Dialog */}
       {session.username && (

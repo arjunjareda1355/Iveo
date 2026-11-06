@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { useAuth, useUser, useClerk } from '@clerk/react';
 import { HAS_CLERK_KEY } from '../lib/env';
 import { VibeId } from '../lib/vibes';
@@ -11,7 +10,6 @@ import {
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 import { isOwnerEmail } from '../lib/plan';
-import { getSubdomainFromHostname } from '../lib/site';
 
 export interface IveoSession {
   isLoaded: boolean;
@@ -20,8 +18,6 @@ export interface IveoSession {
   displayName: string;
   bio: string;
   imageUrl: string | null;
-  avatarType: 'default' | 'uploaded';
-  avatarId: string | null;
   category: string | null;
   primaryEmail: string | null;
   vibeId: VibeId;
@@ -39,8 +35,6 @@ export interface IveoSession {
     displayName?: string;
     bio?: string;
     avatarUrl?: string | null;
-    avatarType?: 'default' | 'uploaded';
-    avatarId?: string | null;
     category?: string | null;
   }) => Promise<void>;
   updateSocials: (socials: Record<string, string>) => Promise<void>;
@@ -56,8 +50,6 @@ const FALLBACK_SESSION: IveoSession = {
   displayName: 'Your name',
   bio: '',
   imageUrl: null,
-  avatarType: 'default',
-  avatarId: null,
   category: null,
   primaryEmail: null,
   vibeId: DEFAULT_PREFERENCES.vibeId,
@@ -81,193 +73,9 @@ function useClerkSession(): IveoSession {
   const { isLoaded: userLoaded, user } = useUser();
   const { signOut } = useClerk();
 
-  const isLoaded = Boolean(authLoaded && userLoaded);
-  const activeUser = isLoaded && isSignedIn && user ? user : null;
+  const isLoaded = authLoaded && userLoaded;
 
-  // Server-side profile data retrieved via /api/me for cross-browser synchronization
-  const [serverProfile, setServerProfile] = useState<any | null>(null);
-
-  // Fetch claimed profile from database whenever activeUser loads
-  useEffect(() => {
-    if (!activeUser?.id) {
-      setServerProfile(null);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchServerProfile = async () => {
-      try {
-        const email = activeUser.primaryEmailAddress?.emailAddress || '';
-        const res = await fetch(
-          `/api/me?userId=${encodeURIComponent(activeUser.id)}&email=${encodeURIComponent(email)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.claimed && data.username && isMounted) {
-            setServerProfile(data.profile);
-
-            // Sync username back to Clerk unsafeMetadata if it was missing or out of sync
-            const currentMeta = (activeUser.unsafeMetadata && typeof activeUser.unsafeMetadata === 'object'
-              ? activeUser.unsafeMetadata
-              : {}) as Record<string, unknown>;
-
-            if (currentMeta.username !== data.username) {
-              try {
-                await activeUser.update({
-                  unsafeMetadata: {
-                    ...currentMeta,
-                    username: data.username,
-                    onboardingComplete: true,
-                  },
-                });
-              } catch {}
-            }
-          }
-        }
-      } catch {}
-    };
-
-    fetchServerProfile();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeUser?.id, activeUser?.primaryEmailAddress?.emailAddress]);
-
-  // Support reading username from serverProfile, user.username or fallback to unsafeMetadata.username
-  const meta = (activeUser?.unsafeMetadata && typeof activeUser.unsafeMetadata === 'object'
-    ? activeUser.unsafeMetadata
-    : {}) as Record<string, unknown>;
-
-  const rawUsername =
-    serverProfile?.username ||
-    activeUser?.username ||
-    (typeof meta.username === 'string' ? meta.username : '') ||
-    (typeof meta.preferredUsername === 'string' ? meta.preferredUsername : '') ||
-    '';
-  const normalizedUsername = normalizeUsername(rawUsername);
-  const username = normalizedUsername || null;
-
-  const preferences = parsePreferences(activeUser?.unsafeMetadata);
-
-  const displayName =
-    serverProfile?.displayName ||
-    preferences.displayName ||
-    activeUser?.fullName ||
-    username ||
-    'Your name';
-
-  const bio = serverProfile?.bio !== undefined ? serverProfile.bio : (preferences.bio || '');
-
-  // Avatar can come from server profile, custom uploaded avatarUrl or Clerk image
-  const candidateAvatar = serverProfile?.avatarUrl || preferences.avatarUrl || activeUser?.imageUrl;
-  const imageUrl: string | null = (isAllowedAvatarUrl(candidateAvatar) ? candidateAvatar : null) ?? null;
-  const category = preferences.category || null;
-  const socials = serverProfile?.socials || preferences.socials || {};
-
-  const primaryEmail = activeUser?.primaryEmailAddress?.emailAddress || null;
-
-  const isUsernameValid = username ? validateUsername(username).ok : false;
-  const onboardingComplete =
-    (serverProfile || preferences.onboardingComplete === true) && isUsernameValid;
-
-  const isOwner = primaryEmail ? isOwnerEmail(primaryEmail) : false;
-  const plan: 'free' | 'pro' = isOwner || serverProfile?.plan === 'pro' ? 'pro' : preferences.plan;
-  const isPro = isOwner || plan === 'pro';
-  const hideFooter = serverProfile?.hideFooter ?? (preferences.hideIveoFooter || preferences.hideIvioFooter || false);
-  const socialsPosition = serverProfile?.socialsPosition || preferences.socialsPosition || 'top';
-  const vibeId = serverProfile?.vibeId || preferences.vibeId || DEFAULT_PREFERENCES.vibeId;
-  const buttonShape = serverProfile?.buttonShape || preferences.buttonShape || DEFAULT_PREFERENCES.buttonShape;
-
-  const syncToServer = async (payload: Record<string, unknown>) => {
-    if (!activeUser?.id) return;
-    try {
-      await fetch('/api/profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUser.id,
-          'x-user-email': primaryEmail || '',
-        },
-        body: JSON.stringify({
-          ...payload,
-          userId: activeUser.id,
-          primaryEmail,
-        }),
-      });
-    } catch {
-      // Background sync, suppress errors
-    }
-  };
-
-  // Safe migration of legacy localStorage profile data to database
-  useEffect(() => {
-    if (!activeUser?.id || !username) return;
-
-    const migrationKey = `iveo_migrated_${activeUser.id}`;
-    if (typeof window !== 'undefined' && !localStorage.getItem(migrationKey)) {
-      try {
-        const rawLegacy = localStorage.getItem(`iveo_profile_${username}`);
-        const rawBlocks = localStorage.getItem(`iveo_blocks_${username}`);
-        if (rawLegacy || rawBlocks) {
-          const legacyProf = rawLegacy ? JSON.parse(rawLegacy) : {};
-          const legacyBlocks = rawBlocks ? JSON.parse(rawBlocks) : [];
-          fetch('/api/migrate-legacy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: activeUser.id,
-              username,
-              primaryEmail,
-              profile: legacyProf,
-              blocks: legacyBlocks,
-            }),
-          })
-            .then(() => {
-              localStorage.setItem(migrationKey, 'true');
-            })
-            .catch(() => {});
-        } else {
-          localStorage.setItem(migrationKey, 'true');
-        }
-      } catch {
-        localStorage.setItem(migrationKey, 'true');
-      }
-    }
-  }, [activeUser?.id, username, primaryEmail]);
-
-  // Automatic sync on session load to ensure Azure SQL and server store have current user profile
-  useEffect(() => {
-    if (activeUser?.id && username) {
-      syncToServer({
-        username,
-        displayName: displayName || username,
-        bio,
-        avatarUrl: imageUrl,
-        vibeId,
-        buttonShape,
-        socials,
-        socialsPosition,
-        primaryEmail,
-        plan: isPro ? 'pro' : plan,
-        hideFooter,
-      });
-    }
-  }, [
-    activeUser?.id,
-    username,
-    displayName,
-    bio,
-    imageUrl,
-    vibeId,
-    buttonShape,
-    socialsPosition,
-    primaryEmail,
-    isPro,
-    plan,
-    hideFooter,
-  ]);
-
-  if (!activeUser) {
+  if (!isLoaded || !isSignedIn || !user) {
     return {
       isLoaded,
       isSignedIn: false,
@@ -275,8 +83,6 @@ function useClerkSession(): IveoSession {
       displayName: 'Your name',
       bio: '',
       imageUrl: null,
-      avatarType: 'default',
-      avatarId: null,
       category: null,
       primaryEmail: null,
       vibeId: DEFAULT_PREFERENCES.vibeId,
@@ -298,7 +104,56 @@ function useClerkSession(): IveoSession {
     };
   }
 
-  const currentUser = activeUser;
+  // Support reading username from user.username or fallback to unsafeMetadata.username
+  const meta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
+    ? user.unsafeMetadata
+    : {}) as Record<string, unknown>;
+
+  const rawUsername =
+    user.username ||
+    (typeof meta.username === 'string' ? meta.username : '') ||
+    (typeof meta.preferredUsername === 'string' ? meta.preferredUsername : '') ||
+    '';
+  const normalizedUsername = normalizeUsername(rawUsername);
+  const username = normalizedUsername || null;
+
+  const preferences = parsePreferences(user.unsafeMetadata);
+
+  const displayName =
+    preferences.displayName ||
+    user.fullName ||
+    username ||
+    'Your name';
+
+  const bio = preferences.bio || '';
+
+  // Avatar can come from custom uploaded avatarUrl or Clerk image
+  const candidateAvatar = preferences.avatarUrl || user.imageUrl;
+  const imageUrl = isAllowedAvatarUrl(candidateAvatar) ? candidateAvatar : null;
+  const category = preferences.category || null;
+  const socials = preferences.socials || {};
+
+  const primaryEmail = user.primaryEmailAddress?.emailAddress || null;
+
+  const isUsernameValid = username ? validateUsername(username).ok : false;
+  const onboardingComplete = preferences.onboardingComplete === true && isUsernameValid;
+
+  const isOwner = primaryEmail ? isOwnerEmail(primaryEmail) : false;
+  const plan: 'free' | 'pro' = isOwner ? 'pro' : preferences.plan;
+  const isPro = isOwner || plan === 'pro';
+  const hideFooter = preferences.hideIveoFooter || preferences.hideIvioFooter || false;
+
+  const syncToServer = async (payload: Record<string, unknown>) => {
+    try {
+      await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Background sync, suppress errors
+    }
+  };
 
   const updateUsername = async (newUsername: string): Promise<void> => {
     const clean = normalizeUsername(newUsername);
@@ -306,50 +161,13 @@ function useClerkSession(): IveoSession {
       throw new Error('Please enter a valid address (3 to 24 letters, numbers or underscores).');
     }
 
-    // 1. Atomically claim username on database FIRST
-    const claimRes = await fetch('/api/claim-username', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': currentUser.id,
-        'x-user-email': primaryEmail || '',
-      },
-      body: JSON.stringify({
-        userId: currentUser.id,
-        username: clean,
-        primaryEmail,
-        displayName: displayName || clean,
-        bio,
-        avatarUrl: imageUrl,
-        vibeId: preferences.vibeId,
-        buttonShape: preferences.buttonShape,
-        socials,
-        socialsPosition: preferences.socialsPosition || 'top',
-        plan: isPro ? 'pro' : plan,
-        hideFooter,
-      }),
-    });
-
-    const claimData = await claimRes.json();
-    if (!claimRes.ok || !claimData.ok) {
-      throw new Error(claimData.message || 'That address is unavailable. Try another.');
-    }
-
-    // 2. Set serverProfile state immediately
-    setServerProfile((prev: any) => ({
-      ...(prev || {}),
-      userId: currentUser.id,
-      username: clean,
-      displayName: displayName || clean,
-    }));
-
-    // 3. Write to Clerk unsafeMetadata
-    const currentMeta = (currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
-      ? currentUser.unsafeMetadata
+    const currentMeta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
+      ? user.unsafeMetadata
       : {}) as Record<string, unknown>;
 
+    // 1. Always write to unsafeMetadata first (universally supported by Clerk)
     try {
-      await currentUser.update({
+      await user.update({
         unsafeMetadata: {
           ...currentMeta,
           username: clean,
@@ -359,37 +177,64 @@ function useClerkSession(): IveoSession {
       console.warn('Could not save username to unsafeMetadata:', metaErr);
     }
 
-    // 4. Try updating top-level Clerk username (if enabled in Clerk dashboard settings)
+    // 2. Try updating top-level Clerk username (if enabled in Clerk dashboard settings)
     try {
-      await currentUser.update({ username: clean });
+      await user.update({ username: clean });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      // Suppress "username is not a valid parameter for this request" because username is already persisted in metadata
+      if (
+        msg.includes('not a valid parameter') ||
+        msg.includes('username is not a valid parameter')
+      ) {
+        // Silently handled via metadata
+      } else {
+        console.warn('Clerk top-level username update note:', msg);
+      }
+    }
+
+    // 3. Mirror to localStorage
+    try {
+      const raw = localStorage.getItem(`iveo_profile_${clean}`) || '{}';
+      const parsed = JSON.parse(raw);
+      localStorage.setItem(
+        `iveo_profile_${clean}`,
+        JSON.stringify({
+          ...parsed,
+          username: clean,
+        })
+      );
+      localStorage.setItem('iveo_current_username', clean);
     } catch {}
+
+    // Mirror to Azure SQL / Server database
+    syncToServer({
+      username: clean,
+      displayName: displayName || clean,
+      bio,
+      avatarUrl: imageUrl,
+      vibeId: preferences.vibeId,
+      buttonShape: preferences.buttonShape,
+      socials,
+      hideFooter,
+    });
   };
 
   const updatePreferences = async (patch: Partial<Omit<IveoPreferences, 'plan'>>): Promise<void> => {
-    const currentMeta = (currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
-      ? currentUser.unsafeMetadata
+    const currentMeta = (user.unsafeMetadata && typeof user.unsafeMetadata === 'object'
+      ? user.unsafeMetadata
       : {}) as Record<string, unknown>;
 
     const { plan: _ignoredPlan, ...safePatch } = patch as any;
-
-    // 1. Immediately update serverProfile React state for immediate UI consistency
-    setServerProfile((prev: any) => ({
-      ...(prev || {}),
-      ...safePatch,
-    }));
 
     const merged = {
       ...currentMeta,
       ...safePatch,
     };
 
-    try {
-      await currentUser.update({
-        unsafeMetadata: merged,
-      });
-    } catch (metaErr) {
-      console.warn('Clerk metadata update note:', metaErr);
-    }
+    await user.update({
+      unsafeMetadata: merged,
+    });
 
     // Mirror to localStorage for offline and public profile fallback
     if (username) {
@@ -406,28 +251,20 @@ function useClerkSession(): IveoSession {
             displayName: merged.displayName !== undefined ? merged.displayName : parsed.displayName,
             bio: merged.bio !== undefined ? merged.bio : parsed.bio,
             avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : parsed.avatarUrl,
-            avatarType: merged.avatarType !== undefined ? merged.avatarType : parsed.avatarType,
-            avatarId: merged.avatarId !== undefined ? merged.avatarId : parsed.avatarId,
             socials: merged.socials !== undefined ? merged.socials : parsed.socials,
-            socialsPosition: merged.socialsPosition || parsed.socialsPosition || 'top',
           })
         );
       } catch {}
 
-      // Await sync to Azure SQL / Server database
-      await syncToServer({
+      // Mirror to Azure SQL / Server database
+      syncToServer({
         username,
         displayName: merged.displayName !== undefined ? merged.displayName : displayName,
         bio: merged.bio !== undefined ? merged.bio : bio,
         avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : imageUrl,
-        avatarType: merged.avatarType || (merged.avatarId ? 'default' : (merged.avatarUrl ? 'uploaded' : 'default')),
-        avatarId: merged.avatarId || null,
         vibeId: merged.vibeId || preferences.vibeId,
         buttonShape: merged.buttonShape || preferences.buttonShape,
         socials: merged.socials !== undefined ? merged.socials : socials,
-        socialsPosition: (merged.socialsPosition as any) || preferences.socialsPosition || 'top',
-        primaryEmail,
-        plan: isPro ? 'pro' : plan,
         hideFooter: merged.hideIveoFooter || merged.hideIvioFooter || hideFooter,
       });
     }
@@ -437,62 +274,12 @@ function useClerkSession(): IveoSession {
     displayName?: string;
     bio?: string;
     avatarUrl?: string | null;
-    avatarType?: 'default' | 'uploaded';
-    avatarId?: string | null;
     category?: string | null;
   }): Promise<void> => {
-    let finalAvatarUrl = profile.avatarUrl;
-    let finalAvatarType = profile.avatarType;
-    let finalAvatarId = profile.avatarId;
-
-    // If a base64 data URL was passed, upload it to the server backend first
-    // to keep Clerk metadata well below the 8 KB limit and fit in SQL columns
-    if (finalAvatarUrl && finalAvatarUrl.startsWith('data:image/')) {
-      try {
-        const u = username || localStorage.getItem('iveo_current_username') || 'owner';
-        const res = await fetch('/api/avatar', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': currentUser.id,
-            'x-user-email': primaryEmail || '',
-          },
-          body: JSON.stringify({
-            userId: currentUser.id,
-            username: u,
-            dataUrl: finalAvatarUrl,
-            primaryEmail,
-          }),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.avatarUrl) {
-            finalAvatarUrl = json.avatarUrl;
-            finalAvatarType = 'uploaded';
-            finalAvatarId = null;
-          }
-        }
-      } catch (uploadErr) {
-        console.warn('Avatar server upload note:', uploadErr);
-      }
-    }
-
-    // Immediately update local React state
-    setServerProfile((prev: any) => ({
-      ...(prev || {}),
-      ...(profile.displayName !== undefined ? { displayName: profile.displayName } : {}),
-      ...(profile.bio !== undefined ? { bio: profile.bio } : {}),
-      ...(finalAvatarUrl !== undefined ? { avatarUrl: finalAvatarUrl } : {}),
-      ...(finalAvatarType !== undefined ? { avatarType: finalAvatarType } : {}),
-      ...(finalAvatarId !== undefined ? { avatarId: finalAvatarId } : {}),
-    }));
-
     await updatePreferences({
       displayName: profile.displayName !== undefined ? profile.displayName : preferences.displayName,
       bio: profile.bio !== undefined ? profile.bio : preferences.bio,
-      avatarUrl: finalAvatarUrl !== undefined ? finalAvatarUrl : preferences.avatarUrl,
-      avatarType: finalAvatarType !== undefined ? finalAvatarType : (serverProfile?.avatarType || 'default'),
-      avatarId: finalAvatarId !== undefined ? finalAvatarId : (serverProfile?.avatarId || null),
+      avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : preferences.avatarUrl,
       category: profile.category !== undefined ? profile.category : preferences.category,
     });
   };
@@ -510,8 +297,6 @@ function useClerkSession(): IveoSession {
     displayName,
     bio,
     imageUrl,
-    avatarType: serverProfile?.avatarType || (serverProfile?.avatarId ? 'default' : (serverProfile?.avatarUrl ? 'uploaded' : 'default')),
-    avatarId: serverProfile?.avatarId || null,
     category,
     primaryEmail,
     vibeId: preferences.vibeId,

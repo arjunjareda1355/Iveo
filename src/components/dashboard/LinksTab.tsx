@@ -20,8 +20,6 @@ import {
   Heart,
   HelpCircle,
   Sparkles,
-  UserCheck,
-  Search,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -38,8 +36,6 @@ import { EmbedComposer } from '../links/EmbedComposer';
 import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
 import { FaqComposer } from '../links/FaqComposer';
-import { VCardComposer } from '../links/VCardComposer';
-import { AddBlockModal, FeatureType } from './AddBlockModal';
 import { AnimationControl } from '../links/AnimationControl';
 import { Block, BlockLayout, LinkAnimation } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
@@ -58,7 +54,6 @@ export const LinksTab: React.FC = () => {
     addSignupForm,
     addTipJar,
     addFaq,
-    addVCard,
     addHeader,
     addDivider,
     updateBlock,
@@ -70,20 +65,13 @@ export const LinksTab: React.FC = () => {
     clearSchedule,
   } = useBlocks();
 
-  const { isPro, username, displayName, primaryEmail } = useIvioSession();
+  const { isPro, username } = useIvioSession();
   const { openUpgrade } = useUpgradeDialog();
   const { protectedIds } = useProtectedLinkIds();
 
-  // Add block modal state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-  // Search & category filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterCategory, setFilterCategory] = useState<'all' | 'links' | 'media_forms' | 'headers'>('all');
-
-  // Active composer: null | 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard'
+  // Active composer: null | 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq'
   const [activeComposer, setActiveComposer] = useState<
-    'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard' | null
+    'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | null
   >(null);
 
   // Quick inputs for link/header composers
@@ -115,35 +103,8 @@ export const LinksTab: React.FC = () => {
   const activeBlocks = blocks.filter((b) => !b.isArchived);
   const archivedBlocks = blocks.filter((b) => b.isArchived);
 
-  // Filtered active blocks based on search and category
-  const filteredActiveBlocks = activeBlocks.filter((b) => {
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const titleMatch = b.title ? b.title.toLowerCase().includes(q) : false;
-      const urlMatch = b.url ? b.url.toLowerCase().includes(q) : false;
-      const vcardMatch = b.vcard ? (
-        (b.vcard.fullName && b.vcard.fullName.toLowerCase().includes(q)) ||
-        (b.vcard.organization && b.vcard.organization.toLowerCase().includes(q)) ||
-        (b.vcard.title && b.vcard.title.toLowerCase().includes(q))
-      ) : false;
-      if (!titleMatch && !urlMatch && !vcardMatch) return false;
-    }
-
-    if (filterCategory === 'links') {
-      return b.kind === 'link';
-    }
-    if (filterCategory === 'media_forms') {
-      return b.kind === 'embed' || b.kind === 'signup' || b.kind === 'tip_jar' || b.kind === 'faq' || b.kind === 'vcard';
-    }
-    if (filterCategory === 'headers') {
-      return b.kind === 'header' || b.kind === 'divider';
-    }
-
-    return true;
-  });
-
   // Composer opening handlers
-  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard') => {
+  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq') => {
     setEditingBlockId(null);
     if (type === 'embed' && !isPro) {
       openUpgrade('embeds');
@@ -309,147 +270,76 @@ export const LinksTab: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* 1. Organized Control Bar & Quick Actions */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3 sm:p-4 rounded-xl border border-border">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => handleOpenComposer('link')}
-              className="shadow-sm"
-            >
-              <Plus size={16} strokeWidth={2} />
-              <span>Add link</span>
-            </Button>
+      {/* 1. Action Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="primary"
+          size="md"
+          onClick={() => handleOpenComposer('link')}
+        >
+          <Plus size={16} strokeWidth={2} />
+          <span>Add link</span>
+        </Button>
 
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 border-ink/20"
-            >
-              <Sparkles size={15} strokeWidth={2} className="text-amber-500" />
-              <span>Explore All Features</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-ink/5 text-ink">
-                8 types
-              </span>
-            </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('embed')}
+        >
+          <Plus size={16} strokeWidth={2} />
+          <span>Add embed</span>
+          <ProBadge className="ml-1" />
+        </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleOpenComposer('tip_jar')}
-              className="hidden lg:flex items-center gap-1.5 text-muted hover:text-ink text-[13px]"
-            >
-              <Heart size={14} className="text-rose-500" />
-              <span>Tip Jar</span>
-            </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('signup')}
+        >
+          <Plus size={16} strokeWidth={2} />
+          <span>{copy.signup.dashboard.addButton}</span>
+          {!isPro && <ProBadge className="ml-1" />}
+        </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleOpenComposer('vcard')}
-              className="hidden lg:flex items-center gap-1.5 text-muted hover:text-ink text-[13px]"
-            >
-              <UserCheck size={14} className="text-emerald-600" />
-              <span>Contact Card</span>
-            </Button>
-          </div>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('tip_jar')}
+        >
+          <Heart size={16} strokeWidth={2} className="text-red-500" />
+          <span>Add tip jar</span>
+        </Button>
 
-          {/* Quick Search */}
-          <div className="flex items-center gap-2 w-full sm:w-64">
-            <div className="relative w-full">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
-              />
-              <input
-                type="text"
-                placeholder="Search links..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-8 pr-7 text-[13px] bg-surface-2 border border-border rounded-lg text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink text-[11px] px-1 py-0.5"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('faq')}
+        >
+          <HelpCircle size={16} strokeWidth={2} className="text-blue-500" />
+          <span>Add FAQ</span>
+        </Button>
 
-        {/* Category Pills & View Toggles */}
-        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-[13px] no-scrollbar">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setFilterCategory('all')}
-              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                filterCategory === 'all'
-                  ? 'bg-ink text-white'
-                  : 'bg-surface-2 text-muted hover:text-ink'
-              }`}
-            >
-              All ({activeBlocks.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('links')}
-              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                filterCategory === 'links'
-                  ? 'bg-ink text-white'
-                  : 'bg-surface-2 text-muted hover:text-ink'
-              }`}
-            >
-              Links ({activeBlocks.filter((b) => b.kind === 'link').length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('media_forms')}
-              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                filterCategory === 'media_forms'
-                  ? 'bg-ink text-white'
-                  : 'bg-surface-2 text-muted hover:text-ink'
-              }`}
-            >
-              Media & Interactive ({
-                activeBlocks.filter((b) =>
-                  ['embed', 'signup', 'tip_jar', 'faq', 'vcard'].includes(b.kind)
-                ).length
-              })
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCategory('headers')}
-              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                filterCategory === 'headers'
-                  ? 'bg-ink text-white'
-                  : 'bg-surface-2 text-muted hover:text-ink'
-              }`}
-            >
-              Headers ({
-                activeBlocks.filter((b) => ['header', 'divider'].includes(b.kind)).length
-              })
-            </button>
-          </div>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => handleOpenComposer('header')}
+        >
+          <Plus size={16} strokeWidth={2} />
+          <span>Add header</span>
+        </Button>
 
-          {archivedBlocks.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowArchived(!showArchived)}
-              className="ml-auto text-[12px] text-muted hover:text-ink font-medium px-2 py-1 shrink-0"
-            >
-              {showArchived ? 'Hide Archived' : `Archived (${archivedBlocks.length})`}
-            </button>
-          )}
-        </div>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={async () => {
+            setEditingBlockId(null);
+            setActiveComposer(null);
+            await addDivider();
+          }}
+        >
+          <Plus size={16} strokeWidth={2} />
+          <span>Add divider</span>
+        </Button>
       </div>
 
       {/* 2. Composers */}
@@ -583,18 +473,6 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
-      {activeComposer === 'vcard' && (
-        <VCardComposer
-          onSave={async (cfg, title) => {
-            await addVCard(cfg, title);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-          defaultFullName={displayName || username || ''}
-          defaultEmail={primaryEmail || ''}
-        />
-      )}
-
       {/* 3. Items List */}
       {activeBlocks.length === 0 && !activeComposer ? (
         <Card className="flex flex-col items-start gap-4 p-6 sm:p-8">
@@ -606,29 +484,13 @@ export const LinksTab: React.FC = () => {
               Your page is ready for links
             </h3>
             <p className="mt-2 text-[15px] leading-relaxed text-muted max-w-[48ch]">
-              Add your first link, embed, contact card, or tip jar above to build your page.
+              Add your first link, embed, or header above to build your page.
             </p>
           </div>
         </Card>
-      ) : filteredActiveBlocks.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
-          <p className="text-[15px] font-medium text-ink">
-            No items match your filter {searchQuery ? `"${searchQuery}"` : ''}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchQuery('');
-              setFilterCategory('all');
-            }}
-          >
-            Clear filters
-          </Button>
-        </Card>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {filteredActiveBlocks.map((block, idx) => {
+          {activeBlocks.map((block, idx) => {
             const isEditing = editingBlockId === block.id;
             const isEmbed = block.kind === 'embed';
             const isHeader = block.kind === 'header';
@@ -636,7 +498,6 @@ export const LinksTab: React.FC = () => {
             const isSignup = block.kind === 'signup';
             const isTipJar = block.kind === 'tip_jar';
             const isFaq = block.kind === 'faq';
-            const isVCard = block.kind === 'vcard';
             const isLink = block.kind === 'link';
             const isProtected = isLink && (protectedIds.has(block.id) || block.isProtected === true);
 
@@ -676,8 +537,6 @@ export const LinksTab: React.FC = () => {
                           <Heart size={18} className="text-red-500 fill-red-500" strokeWidth={1.5} />
                         ) : isFaq ? (
                           <HelpCircle size={18} className="text-blue-500" strokeWidth={1.5} />
-                        ) : isVCard ? (
-                          <UserCheck size={18} className="text-emerald-600" strokeWidth={1.5} />
                         ) : isHeader ? (
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
@@ -703,8 +562,6 @@ export const LinksTab: React.FC = () => {
                               ? `Support: ${block.tipJar?.buttonText || block.title || 'Tip Jar'}`
                               : isFaq
                               ? `FAQ: ${block.title || 'Questions'}`
-                              : isVCard
-                              ? (block.vcard?.fullName ? `Contact: ${block.vcard.fullName}` : block.title || 'Contact Card')
                               : block.title || (isEmbed ? 'Embed' : 'Untitled')}
                           </span>
                           {block.badge && (
@@ -736,13 +593,6 @@ export const LinksTab: React.FC = () => {
                           <div className="flex items-center text-[12px] text-muted leading-tight">
                             <span>
                               {block.faq.items?.length || 0} questions & answers
-                            </span>
-                          </div>
-                        )}
-                        {isVCard && block.vcard && (
-                          <div className="flex items-center text-[12px] text-muted leading-tight">
-                            <span className="truncate">
-                              {[block.vcard.title, block.vcard.organization, block.vcard.phone, block.vcard.email].filter(Boolean).join(' • ') || 'Digital vCard'}
                             </span>
                           </div>
                         )}
@@ -1168,20 +1018,6 @@ export const LinksTab: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* 7. Categorized Add Feature Modal */}
-      <AddBlockModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSelectFeature={async (type: FeatureType) => {
-          if (type === 'divider') {
-            await addDivider();
-          } else {
-            handleOpenComposer(type);
-          }
-        }}
-        isPro={isPro}
-      />
     </div>
   );
 };

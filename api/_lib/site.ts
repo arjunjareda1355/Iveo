@@ -1,6 +1,7 @@
 export function pageAddress(origin: string, username: string): string {
+  const cleanOrigin = origin.replace(/\/+$/, '');
   const cleanUser = encodeURIComponent(username.toLowerCase());
-  return `https://${cleanUser}.iveo.site`;
+  return `${cleanOrigin}/${cleanUser}`;
 }
 
 export function ogImageAddress(

@@ -23,15 +23,9 @@ export const AddressPill: React.FC<AddressPillProps> = ({ username }) => {
   return (
     <div className="flex items-center gap-1.5 select-none">
       {/* Desktop pill */}
-      <a
-        href={pageUrl(username)}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Open your public page in a new tab"
-        className="hidden sm:flex h-9 items-center rounded-full bg-surface border border-border px-3 text-[13px] font-mono text-ink shadow-xs hover:border-ink transition-colors cursor-pointer"
-      >
-        {username}.iveo.site
-      </a>
+      <div className="hidden sm:flex h-9 items-center rounded-full bg-surface border border-border px-3 text-[13px] font-mono text-ink shadow-xs">
+        iveo.site/{username}
+      </div>
 
       {/* Copy icon button (both desktop and mobile) */}
       <button

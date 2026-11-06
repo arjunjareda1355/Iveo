@@ -1,12 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/**/*.ts": { "includeFiles": "{data/**,dist/**}" },
     "api/page.ts": { "includeFiles": "dist/index.html" }
   },
   "rewrites": [
-    { "source": "/api/avatar/:username", "destination": "/api/avatar?u=:username" },
-    { "source": "/:username([A-Za-z0-9-]{3,30})", "destination": "/api/page?u=:username" },
+    { "source": "/:username([A-Za-z0-9_]{3,24})", "destination": "/api/page?u=:username" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [

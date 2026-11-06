@@ -1,6 +1,5 @@
-import { validateUsernameServer } from './_lib/usernames.ts';
+import { normalizeUsername, RESERVED, USERNAME_PATTERN } from './_lib/usernames.ts';
 import { adminClient } from './_lib/supabase.ts';
-import { dbGetProfile } from './_lib/azureSql.ts';
 
 export const DEMO_TAKEN_USERNAMES = new Set([
   'maya',
@@ -17,40 +16,43 @@ export const DEMO_TAKEN_USERNAMES = new Set([
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const raw = url.searchParams.get('u') || url.searchParams.get('username') || '';
-  const requestingUserId = url.searchParams.get('userId') || '';
   const clean = raw.trim().toLowerCase();
 
-  const validation = validateUsernameServer(clean);
-  if (!validation.ok) {
+  if (!clean || clean.length < 3) {
     return Response.json({
       ok: true,
       available: false,
-      reason: validation.reason,
-      message: validation.message,
+      reason: 'too_short',
+      message: 'Use 3 to 24 letters, numbers or underscores.',
     });
   }
 
-  // Check centralized database (Azure SQL / server store)
-  try {
-    const existing = await dbGetProfile(clean);
-    if (existing && existing.username) {
-      if (requestingUserId && existing.userId === requestingUserId) {
-        return Response.json({
-          ok: true,
-          available: true,
-          username: clean,
-          subdomainUrl: `https://${clean}.iveo.site`,
-          message: `${clean}.iveo.site is your address`,
-        });
-      }
-      return Response.json({
-        ok: true,
-        available: false,
-        reason: 'taken',
-        message: 'That address is already claimed. Try another.',
-      });
-    }
-  } catch {}
+  if (clean.length > 24 || !USERNAME_PATTERN.test(clean)) {
+    return Response.json({
+      ok: true,
+      available: false,
+      reason: 'invalid_format',
+      message: 'Use 3 to 24 letters, numbers or underscores.',
+    });
+  }
+
+  if (RESERVED.has(clean)) {
+    return Response.json({
+      ok: true,
+      available: false,
+      reason: 'reserved',
+      message: 'That name is reserved. Choose another.',
+    });
+  }
+
+  if (DEMO_TAKEN_USERNAMES.has(clean)) {
+    return Response.json({
+      ok: true,
+      available: false,
+      reason: 'taken',
+      message: "That name isn't available. Try another.",
+    });
+  }
 
   // Check Supabase database if configured
   const supabase = adminClient();
@@ -58,25 +60,16 @@ export async function GET(request: Request): Promise<Response> {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('username, user_id')
+        .select('username')
         .eq('username', clean)
         .maybeSingle();
 
       if (!error && data && data.username) {
-        if (requestingUserId && data.user_id === requestingUserId) {
-          return Response.json({
-            ok: true,
-            available: true,
-            username: clean,
-            subdomainUrl: `https://${clean}.iveo.site`,
-            message: `${clean}.iveo.site is your address`,
-          });
-        }
         return Response.json({
           ok: true,
           available: false,
           reason: 'taken',
-          message: 'That address is already claimed. Try another.',
+          message: 'That name is already taken. Try another.',
         });
       }
     } catch {
@@ -88,8 +81,7 @@ export async function GET(request: Request): Promise<Response> {
     ok: true,
     available: true,
     username: clean,
-    subdomainUrl: `https://${clean}.iveo.site`,
-    message: `${clean}.iveo.site is available`,
+    message: `iveo.site/${clean} is available`,
   });
 }
 
@@ -99,9 +91,7 @@ export async function POST(request: Request): Promise<Response> {
     body = await request.json();
   } catch {}
   const u = body.u || body.username || '';
-  const userId = body.userId || '';
   const url = new URL(request.url);
   url.searchParams.set('u', u);
-  if (userId) url.searchParams.set('userId', userId);
   return GET(new Request(url.toString(), { method: 'GET', headers: request.headers }));
 }

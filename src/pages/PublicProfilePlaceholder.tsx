@@ -17,13 +17,9 @@ import { setAnalyticsContext, trackView } from '../lib/analytics/track';
 import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
 
-export interface PublicProfilePlaceholderProps {
-  usernameOverride?: string;
-}
-
-export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> = ({ usernameOverride }) => {
+export const PublicProfilePlaceholder: React.FC = () => {
   const { username } = useParams<{ username: string }>();
-  const rawUsername = (usernameOverride || username || '').trim();
+  const rawUsername = username || '';
   const validation = validateUsername(rawUsername);
 
   // If reserved or invalid username format, render NotFound component directly
@@ -80,7 +76,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     if (pageData?.profile) {
       document.title = `${pageData.profile.displayName} (@${clean}) | iveo`;
     } else {
-      document.title = `${clean}.iveo.site`;
+      document.title = `iveo.site/${clean}`;
     }
 
     let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
@@ -202,7 +198,6 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
               bio: pageData.profile.bio,
               avatarUrl: pageData.profile.avatarUrl,
               socials: pageData.profile.socials,
-              socialsPosition: pageData.profile.socialsPosition || 'top',
             }}
             blocks={effectiveBlocks}
             buttonRadiusOverride={buttonRadiusOverride}
@@ -245,7 +240,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
         <Logo tone="light" size="lg" />
 
         <div className="mt-5 font-mono text-[20px] font-medium text-ink">
-          {clean}.iveo.site
+          iveo.site/{clean}
         </div>
 
         <h1 className="mt-3 text-[24px] font-medium text-ink leading-tight tracking-[-0.02em]">

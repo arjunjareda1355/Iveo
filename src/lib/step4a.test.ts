@@ -177,9 +177,9 @@ test('time: isBlockVisibleNow enforces Pro and scheduling status', () => {
 });
 
 // 5. Site Origin & Plan
-test('site: pageUrl generates clean subdomain url without duplicate slashes', () => {
-  assert.equal(pageUrl('maya'), 'https://maya.iveo.site');
-  assert.equal(pageUrl('/maya'), 'https://maya.iveo.site');
+test('site: pageUrl generates clean url without duplicate slashes', () => {
+  assert.equal(pageUrl('maya'), `${SITE_ORIGIN}/maya`);
+  assert.equal(pageUrl('/maya'), `${SITE_ORIGIN}/maya`);
 });
 
 test('plan: defines all pro features and labels', () => {

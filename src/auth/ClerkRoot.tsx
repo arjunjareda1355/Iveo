@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/react';
 import { CLERK_PUBLISHABLE_KEY, HAS_CLERK_KEY } from '../lib/env';
 import { iveoAppearance } from './appearance';
-import { getSubdomainFromHostname } from '../lib/site';
 
 interface ClerkRootProps {
   children: React.ReactNode;

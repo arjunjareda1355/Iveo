@@ -14,20 +14,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
   // 1. Unified server endpoint (Azure SQL Database / Server store)
   // Ensures published pages are accessible across any browser, device, or crawler
   try {
-    let res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}`);
-
-    // If on a user subdomain and same-origin /api/public-page is 404, fallback to apex iveo.site
-    if (
-      !res.ok &&
-      typeof window !== 'undefined' &&
-      window.location.hostname.endsWith('.iveo.site') &&
-      window.location.hostname !== 'iveo.site'
-    ) {
-      try {
-        res = await fetch(`https://iveo.site/api/public-page?u=${encodeURIComponent(clean)}`);
-      } catch {}
-    }
-
+    const res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}`);
     if (res.ok) {
       const data = await res.json();
       if (data && data.profile) {
@@ -40,7 +27,6 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             vibeId: (data.profile.vibeId as VibeId) || 'clean',
             buttonShape: data.profile.buttonShape || null,
             socials: data.profile.socials || {},
-            socialsPosition: data.profile.socialsPosition || 'top',
             hideFromSearch: Boolean(data.profile.hideFromSearch),
             hideFooter: Boolean(data.profile.hideFooter),
           },
@@ -56,44 +42,12 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             embedProvider: b.embedProvider || null,
             isProtected: Boolean(b.isProtected),
             signup: b.signup || null,
-            tipJar: b.tipJar || null,
-            faq: b.faq || null,
-            vcard: b.vcard || null,
-            animation: b.animation || null,
-            badge: b.badge || null,
           })),
         };
       }
     }
   } catch {
     // Continue to Supabase / local fallback
-  }
-
-  // 2. Check local client cache (instant fallback if user just claimed on this device)
-  if (typeof window !== 'undefined') {
-    try {
-      const cached = localStorage.getItem(`iveo_profile_${clean}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
-        const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
-        return {
-          profile: {
-            username: clean,
-            displayName: parsed.displayName || clean,
-            bio: parsed.bio || '',
-            avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
-            vibeId: (parsed.vibeId as VibeId) || 'clean',
-            buttonShape: parsed.buttonShape || null,
-            socials: parsed.socials || {},
-            socialsPosition: parsed.socialsPosition || 'top',
-            hideFromSearch: Boolean(parsed.hideFromSearch),
-            hideFooter: Boolean(parsed.hideFooter),
-          },
-          links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
-        };
-      }
-    } catch {}
   }
 
   if (rawSupabaseUrl) {
@@ -191,9 +145,71 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
         links: mappedLinks,
       };
     } catch {
-      // Fall through
+      // Fall through to local fallback
     }
   }
+
+  // Local fallback for development / test accounts
+  try {
+    const userMeta =
+      localStorage.getItem(`iveo_profile_${clean}`) ||
+      localStorage.getItem(`ivio_profile_${clean}`);
+    const rawBlocks =
+      localStorage.getItem(`iveo_blocks_${clean}`) ||
+      localStorage.getItem(`ivio_blocks_${clean}`);
+
+    if (rawBlocks || userMeta) {
+      const allBlocks = rawBlocks ? JSON.parse(rawBlocks) : [];
+      const now = new Date();
+      const parsedMeta = userMeta ? JSON.parse(userMeta) : {};
+      const isPro = parsedMeta.plan === 'pro';
+
+      const localProtected = new Set<string>(JSON.parse(localStorage.getItem('iveo_protected_ids') || '[]'));
+      const filteredLinks: PublicBlock[] = allBlocks
+        .filter((b: any) => {
+          if (!b.isActive || b.isArchived) return false;
+          if (b.startAt && new Date(b.startAt) > now) return false;
+          if (b.endAt && new Date(b.endAt) <= now) return false;
+          const isProt = localProtected.has(b.id);
+          if (!isPro && (b.kind === 'embed' || b.kind === 'signup' || b.startAt || b.endAt || isProt)) return false;
+          return true;
+        })
+        .map((b: any) => {
+          const isProt = localProtected.has(b.id);
+          return {
+            id: b.id,
+            kind: b.kind,
+            title: b.title || '',
+            url: isProt ? null : (b.url || null),
+            icon: b.icon || null,
+            thumbnailPath: b.thumbnailPath || null,
+            thumbnailUrl: storagePublicUrl(b.thumbnailPath),
+            layout: b.layout || 'classic',
+            embedProvider: b.embedProvider || null,
+            isProtected: isProt,
+            signup: b.signup || null,
+          };
+        });
+
+      return {
+        profile: {
+          username: clean,
+          displayName: parsedMeta.displayName || clean,
+          bio: parsedMeta.bio || '',
+          avatarUrl: parsedMeta.avatarUrl || null,
+          vibeId: parsedMeta.vibeId || 'clean',
+          buttonShape: parsedMeta.buttonShape || null,
+          socials: parsedMeta.socials || {},
+          hideFromSearch: false,
+          hideFooter:
+            isPro &&
+            (parsedMeta.hideIveoFooter === true ||
+              parsedMeta.hideIvioFooter === true),
+        },
+        links: filteredLinks,
+      };
+    }
+  } catch {}
 
   // If username matches default demo persona like maya
   const personaVibe = VIBES.find((v) => v.persona.handle === clean);

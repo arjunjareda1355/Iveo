@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem, VCardConfig } from './types';
+import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem } from './types';
 import {
   listMyBlocks,
   createBlock,
@@ -18,7 +18,6 @@ interface BlocksContextValue {
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
-  addVCard: (config: VCardConfig, title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
   addDivider: () => Promise<void>;
   updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
@@ -159,24 +158,6 @@ export const BlocksProvider: React.FC<{
     } catch (err: unknown) {
       setBlocks(prev);
       showToast("Couldn't add FAQ. Try again.");
-      throw err;
-    }
-  };
-
-  const addVCard = async (config: VCardConfig, title?: string) => {
-    const prev = [...blocks];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'vcard',
-        title: title || config.fullName || 'Save Contact',
-        position: blocks.length,
-        vcard: config,
-      });
-      setBlocks((b) => [newBlock, ...b]);
-      showToast('Contact card added');
-    } catch (err: unknown) {
-      setBlocks(prev);
-      showToast("Couldn't add contact card. Try again.");
       throw err;
     }
   };
@@ -339,7 +320,6 @@ export const BlocksProvider: React.FC<{
         addSignupForm,
         addTipJar,
         addFaq,
-        addVCard,
         addHeader,
         addDivider,
         updateBlock: updateBlockFields,

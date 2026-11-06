@@ -114,12 +114,7 @@ async function startServer() {
   const dbHandlers = await import('./api/db-handlers.ts');
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
   app.get('/api/public-page', dbHandlers.handleGetPublicPage);
-  app.post('/api/claim-username', dbHandlers.handleClaimUsername);
-  app.get('/api/me', dbHandlers.handleGetMe);
-  app.post('/api/migrate-legacy', dbHandlers.handleMigrateLegacy);
   app.post('/api/profile', dbHandlers.handleSaveProfile);
-  app.post('/api/avatar', dbHandlers.handleUploadAvatar);
-  app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);
   app.get('/api/blocks', dbHandlers.handleGetBlocks);
   app.post('/api/blocks', dbHandlers.handleSaveBlocks);
   app.post('/api/contacts', dbHandlers.handleSaveContact);
@@ -128,23 +123,6 @@ async function startServer() {
   app.post('/api/unlock-link', dbHandlers.handleUnlockLink);
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
   app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
-  // 4.5 Subdomain & Path Redirect Handler (Legacy iveo.site/:username -> https://:username.iveo.site)
-  const { RESERVED, USERNAME_PATTERN } = await import('./api/_lib/usernames.ts');
-  app.use((req, res, next) => {
-    const host = (req.get('host') || '').toLowerCase().split(':')[0];
-    const pathParts = req.path.split('/').filter(Boolean);
-
-    if (pathParts.length === 1 && !req.path.startsWith('/api') && !req.path.includes('.')) {
-      const candidate = pathParts[0].toLowerCase();
-      if (!RESERVED.has(candidate) && USERNAME_PATTERN.test(candidate)) {
-        if (host === 'iveo.site' || host === 'www.iveo.site') {
-          const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-          return res.redirect(301, `https://${candidate}.iveo.site${queryString}`);
-        }
-      }
-    }
-    next();
-  });
 
   // 5. Vite Dev Server / Static SPA Fallback
   if (!isProd) {

@@ -35,7 +35,7 @@ export const copy = {
     claimButton: 'Claim',
     goToDashboard: 'Go to dashboard',
     continueSetup: 'Continue setup',
-    floatingChipTop: 'maya.iveo.site',
+    floatingChipTop: 'iveo.site/maya',
     floatingChipBottom: 'Updated just now',
   },
   madeFor: {
@@ -250,7 +250,7 @@ export const copy = {
       preview: 'Preview',
     },
     usernameStatus: {
-      validFormat: 'Use 3 to 30 letters, numbers or hyphens.',
+      validFormat: 'Use 3 to 24 letters, numbers or underscores.',
       reserved: 'That name is reserved. Choose another.',
       taken: 'That name is already taken. Try another.',
       saveFailed: "We couldn't save that. Try again.",

@@ -1,4 +1,4 @@
-import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig, LinkAnimation, TipJarConfig, FaqConfig, VCardConfig } from './types';
+import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig, LinkAnimation, TipJarConfig, FaqConfig } from './types';
 import { storagePublicUrl } from './storageApi';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -15,7 +15,6 @@ export interface CreateBlockInput {
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
-  vcard?: VCardConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -34,7 +33,6 @@ export interface UpdateBlockInput {
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
-  vcard?: VCardConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -55,32 +53,19 @@ function getLocalBlocks(userId: string): Block[] {
   return [];
 }
 
-export async function syncBlocksToServer(userId: string, blocks: Block[]): Promise<void> {
-  const clean = (userId || '').trim().toLowerCase();
-  if (!clean) return;
-
+async function syncBlocksToServer(userId: string, blocks: Block[]): Promise<void> {
   try {
     await fetch('/api/blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: clean, blocks }),
+      body: JSON.stringify({ username: userId, blocks }),
     });
-
-    // If current username in localStorage is different from userId (e.g. user set their handle), sync for that handle as well
-    const currentUsername = localStorage.getItem('iveo_current_username');
-    if (currentUsername && currentUsername.toLowerCase() !== clean && clean === 'owner') {
-      await fetch('/api/blocks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUsername.toLowerCase(), blocks }),
-      });
-    }
   } catch {
     // Suppress network errors
   }
 }
 
-export function saveLocalBlocks(userId: string, blocks: Block[]) {
+function saveLocalBlocks(userId: string, blocks: Block[]) {
   try {
     localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocks));
   } catch {}
@@ -110,24 +95,20 @@ export async function seedStarterLinks(
       isActive: true,
       isArchived: false,
     }));
-  const updated = [...existing, ...newBlocks];
-  saveLocalBlocks(userId, updated);
+  saveLocalBlocks(userId, [...existing, ...newBlocks]);
 }
 
 export async function listMyBlocks(token: string | null, userId: string): Promise<Block[]> {
-  const cleanId = (userId || 'owner').trim().toLowerCase();
-
-  // 1. Query server database first (Azure SQL / Server store)
+  // Query server database first
   try {
-    const res = await fetch(`/api/blocks?username=${encodeURIComponent(cleanId)}`);
+    const res = await fetch(`/api/blocks?username=${encodeURIComponent(userId)}`);
     if (res.ok) {
       const data = await res.json();
-      const blocksArray = Array.isArray(data) ? data : (Array.isArray(data?.blocks) ? data.blocks : null);
-      if (blocksArray && blocksArray.length > 0) {
+      if (Array.isArray(data.blocks) && data.blocks.length > 0) {
         try {
-          localStorage.setItem(`iveo_blocks_${cleanId}`, JSON.stringify(blocksArray));
+          localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(data.blocks));
         } catch {}
-        return blocksArray.map((b: any) => ({
+        return data.blocks.map((b: any) => ({
           ...b,
           thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
         }));
@@ -137,23 +118,8 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
     // Continue
   }
 
-  // 2. Local fallback
   if (!rawSupabaseUrl) {
-    let local = getLocalBlocks(cleanId);
-    // If cleanId has no local blocks, check if there are blocks stored under 'owner'
-    if (local.length === 0 && cleanId !== 'owner') {
-      const ownerBlocks = getLocalBlocks('owner');
-      if (ownerBlocks.length > 0) {
-        local = ownerBlocks;
-        saveLocalBlocks(cleanId, local);
-      }
-    }
-
-    if (local.length > 0) {
-      // Ensure server is seeded with local blocks in background
-      syncBlocksToServer(cleanId, local);
-    }
-
+    const local = getLocalBlocks(userId);
     return local.map((b) => ({
       ...b,
       thumbnailUrl: storagePublicUrl(b.thumbnailPath),
@@ -222,7 +188,6 @@ export async function createBlock(
     signup: input.signup || null,
     tipJar: input.tipJar || null,
     faq: input.faq || null,
-    vcard: input.vcard || null,
     animation: input.animation || null,
     badge: input.badge || null,
     startAt: input.startAt || null,
