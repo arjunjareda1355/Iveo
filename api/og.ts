@@ -316,3 +316,52 @@ export async function GET(request: Request): Promise<Response> {
     return renderGenericCard();
   }
 }
+
+export default async function handler(req: any, res?: any): Promise<Response | void> {
+  if (req instanceof Request || (req && typeof req.text === 'function' && !res)) {
+    return GET(req);
+  }
+
+  try {
+    const protocol = (req.headers && req.headers['x-forwarded-proto']) || 'https';
+    const host = (req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || 'iveo.site';
+    const url = `${protocol}://${host}${req.url || '/'}`;
+
+    const headers = new Headers();
+    if (req.headers) {
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value) {
+          if (Array.isArray(value)) {
+            value.forEach((v) => headers.append(key, v));
+          } else {
+            headers.set(key, String(value));
+          }
+        }
+      }
+    }
+
+    const webRequest = new Request(url, {
+      method: req.method || 'GET',
+      headers,
+    });
+
+    const webResponse = await GET(webRequest);
+
+    if (res && typeof res.status === 'function') {
+      res.status(webResponse.status);
+      webResponse.headers.forEach((val: string, key: string) => {
+        res.setHeader(key, val);
+      });
+      const buffer = await webResponse.arrayBuffer();
+      return res.send(Buffer.from(buffer));
+    }
+
+    return webResponse;
+  } catch {
+    if (res && typeof res.status === 'function') {
+      return res.status(500).send('Error generating OG image');
+    }
+    return new Response('Error generating OG image', { status: 500 });
+  }
+}
+

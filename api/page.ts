@@ -76,6 +76,74 @@ export async function POST(): Promise<Response> {
   });
 }
 
+/**
+ * Default export handler for Vercel Serverless Function runner and Node/Express
+ */
+export default async function handler(req: any, res?: any): Promise<Response | void> {
+  // 1. Web Standard API (Request -> Response)
+  if (req instanceof Request || (req && typeof req.text === 'function' && !res)) {
+    const isHead = (req.method || '').toUpperCase() === 'HEAD';
+    return handleRequest(req, isHead);
+  }
+
+  // 2. Node / Express Serverless Function (IncomingMessage, ServerResponse)
+  try {
+    const method = (req.method || 'GET').toUpperCase();
+    if (method === 'POST') {
+      if (res && typeof res.status === 'function') {
+        res.setHeader('Allow', 'GET, HEAD');
+        return res.status(405).end();
+      }
+      return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+    }
+
+    const isHead = method === 'HEAD';
+    const protocol = (req.headers && req.headers['x-forwarded-proto']) || 'https';
+    const host = (req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || 'iveo.site';
+    const url = `${protocol}://${host}${req.url || '/'}`;
+
+    const headers = new Headers();
+    if (req.headers) {
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value) {
+          if (Array.isArray(value)) {
+            value.forEach((v) => headers.append(key, v));
+          } else {
+            headers.set(key, String(value));
+          }
+        }
+      }
+    }
+
+    const webRequest = new Request(url, {
+      method,
+      headers,
+    });
+
+    const webResponse = await handleRequest(webRequest, isHead);
+
+    if (res && typeof res.status === 'function') {
+      res.status(webResponse.status);
+      webResponse.headers.forEach((val: string, key: string) => {
+        res.setHeader(key, val);
+      });
+      if (isHead || !webResponse.body) {
+        return res.end();
+      }
+      const text = await webResponse.text();
+      return res.send(text);
+    }
+
+    return webResponse;
+  } catch (err: any) {
+    if (res && typeof res.status === 'function') {
+      return res.status(500).send('Internal Server Error');
+    }
+    return new Response('Internal Server Error', { status: 500 });
+  }
+}
+
+
 async function handleRequest(request: Request, isHead: boolean): Promise<Response> {
   const origin = getSiteOrigin(request);
   const url = new URL(request.url);

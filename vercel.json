@@ -1,8 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/**/*.ts": { "includeFiles": "{data/**,dist/**}" },
-    "api/page.ts": { "includeFiles": "dist/index.html" }
+    "api/**/*.ts": { "includeFiles": "{data/**,dist/**}" }
   },
   "rewrites": [
     { "source": "/api/avatar/:username", "destination": "/api/avatar?u=:username" },
