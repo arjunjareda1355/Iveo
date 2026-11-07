@@ -83,15 +83,13 @@ async function startServer() {
   app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 
   // 1. Razorpay API routes
-  const createOrderModule = await import('./api/razorpay/create-order.ts');
-  const verifyPaymentModule = await import('./api/razorpay/verify-payment.ts');
-  const webhookModule = await import('./api/razorpay/webhook.ts');
+  const razorpayModule = await import('./api/razorpay.ts');
   const clerkWebhookModule = await import('./api/clerk-webhook.ts');
   const checkUsernameModule = await import('./api/check-username.ts');
 
-  app.post('/api/razorpay/create-order', adaptWebHandler(createOrderModule.POST));
-  app.post('/api/razorpay/verify-payment', adaptWebHandler(verifyPaymentModule.POST));
-  app.post('/api/razorpay/webhook', adaptWebHandler(webhookModule.POST));
+  app.post('/api/razorpay/create-order', adaptWebHandler(razorpayModule.handleCreateOrder));
+  app.post('/api/razorpay/verify-payment', adaptWebHandler(razorpayModule.handleVerifyPayment));
+  app.post('/api/razorpay/webhook', adaptWebHandler(razorpayModule.handleWebhook));
   app.post('/api/clerk-webhook', adaptWebHandler(clerkWebhookModule.POST));
   app.get('/api/check-username', adaptWebHandler(checkUsernameModule.GET));
   app.post('/api/check-username', adaptWebHandler(checkUsernameModule.POST));
@@ -123,7 +121,7 @@ async function startServer() {
   });
 
   // 4. Azure SQL & Backend Persistence Routes
-  const dbHandlers = await import('./api/db-handlers.ts');
+  const dbHandlers = await import('./api/_lib/db-handlers.ts');
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
   app.get('/api/public-page', dbHandlers.handleGetPublicPage);
   app.post('/api/claim-username', dbHandlers.handleClaimUsername);
