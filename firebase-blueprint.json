@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile settings, appearance vibe, and branding configuration",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 32 },
+        "displayName": { "type": "string", "maxLength": 80 },
+        "bio": { "type": "string", "maxLength": 300 },
+        "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "avatarType": { "type": "string", "enum": ["default", "uploaded"] },
+        "avatarId": { "type": "string", "maxLength": 64 },
+        "vibeId": { "type": "string", "maxLength": 32 },
+        "buttonShape": { "type": "string", "enum": ["square", "rounded", "pill"] },
+        "plan": { "type": "string", "enum": ["free", "pro"] },
+        "updatedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "username"]
+    },
+    "PageBlock": {
+      "title": "PageBlock",
+      "description": "Individual link, embed, contact card, header, or interactive block on user page",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "kind": { "type": "string", "maxLength": 32 },
+        "title": { "type": "string", "maxLength": 120 },
+        "url": { "type": "string", "maxLength": 2048 },
+        "isActive": { "type": "boolean" },
+        "order": { "type": "number" },
+        "layout": { "type": "string", "maxLength": 32 },
+        "thumbnailUrl": { "type": "string", "maxLength": 2048 },
+        "animation": { "type": "string", "maxLength": 32 },
+        "badge": { "type": "string", "maxLength": 40 },
+        "isProtected": { "type": "boolean" },
+        "startAt": { "type": "string" },
+        "endAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "kind", "title"]
+    },
+    "PageContact": {
+      "title": "PageContact",
+      "description": "Subscriber contact lead captured via user signup block",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 320 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId"]
+    },
+    "BlockClickCount": {
+      "title": "BlockClickCount",
+      "description": "Aggregated click counter for link analytics",
+      "type": "object",
+      "properties": {
+        "blockId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "count": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["blockId", "userId", "count"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Public and private user page profile configurations"
+    },
+    "/users/{userId}/blocks/{blockId}": {
+      "schema": { "$ref": "#/entities/PageBlock" },
+      "description": "Blocks and links belonging to the user's page"
+    },
+    "/users/{userId}/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/PageContact" },
+      "description": "Collected subscriber contacts for the page owner"
+    },
+    "/users/{userId}/clicks/{clickId}": {
+      "schema": { "$ref": "#/entities/BlockClickCount" },
+      "description": "Click telemetry counter records for user links"
+    }
+  }
+}

@@ -1,6 +1,11 @@
 import type { Request as ExpressReq, Response as ExpressRes } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   checkDatabaseReadiness,
+  dbClaimUsername,
+  dbGetProfileByUserId,
+  dbVerifyOwnership,
   dbSaveProfile,
   dbGetProfile,
   dbSaveBlocks,
@@ -15,6 +20,7 @@ import {
   dbVerifyLinkPassword,
 } from './_lib/azureSql.ts';
 import { isAllowedAvatarHost } from './_lib/publicPage.ts';
+import { RESERVED } from './_lib/usernames.ts';
 
 /**
  * GET /api/db/readiness
@@ -38,7 +44,24 @@ export async function handleDbReadiness(_req: ExpressReq, res: ExpressRes) {
  * Returns public page data for any browser / visitor
  */
 export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
-  const raw = (req.query.u as string) || '';
+  let raw = ((req.query.u || req.query.username) as string) || '';
+
+  // If not provided in query param, extract from Host header subdomain
+  if (!raw) {
+    const host = (req.headers.host || req.hostname || '').toLowerCase().split(':')[0];
+    if (host.endsWith('.iveo.site')) {
+      const sub = host.slice(0, -'.iveo.site'.length);
+      if (sub && !RESERVED.has(sub)) {
+        raw = sub;
+      }
+    } else if (host.endsWith('.localhost')) {
+      const sub = host.slice(0, -'.localhost'.length);
+      if (sub && !RESERVED.has(sub)) {
+        raw = sub;
+      }
+    }
+  }
+
   const clean = raw.toLowerCase().trim();
   if (!clean) {
     return res.status(400).json({ error: 'missing_username' });
@@ -56,7 +79,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     // Map public blocks (strip URLs from protected links until unlocked)
     const filteredBlocks = allBlocks
       .filter((b) => {
-        if (!b.isActive || b.isArchived) return false;
+        if (b.isActive === false || b.isArchived) return false;
         if (b.startAt && new Date(b.startAt) > now) return false;
         if (b.endAt && new Date(b.endAt) <= now) return false;
         return true;
@@ -73,6 +96,11 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         embedProvider: b.embedProvider || null,
         isProtected: Boolean(b.isProtected),
         signup: b.signup || null,
+        tipJar: b.tipJar || null,
+        faq: b.faq || null,
+        vcard: b.vcard || null,
+        animation: b.animation || null,
+        badge: b.badge || null,
       }));
 
     return res.status(200).json({
@@ -81,9 +109,12 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         displayName: profile.displayName || profile.username,
         bio: profile.bio || '',
         avatarUrl: isAllowedAvatarHost(profile.avatarUrl) ? profile.avatarUrl : null,
+        avatarType: profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default')),
+        avatarId: profile.avatarId || null,
         vibeId: profile.vibeId || 'clean',
         buttonShape: profile.buttonShape || 'rounded',
         socials: profile.socials || {},
+        socialsPosition: profile.socialsPosition || 'top',
         hideFromSearch: Boolean(profile.hideFromSearch),
         hideFooter: Boolean(profile.hideFooter),
       },
@@ -95,8 +126,114 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
 }
 
 /**
+ * POST /api/claim-username
+ * Atomically validates, reserves, and claims a username in the database
+ */
+export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const username = (body.username as string || '').toLowerCase().trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+  const profileData = body.profile || body.profileData || body;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'unauthorized', message: 'You must be signed in to claim an address.' });
+  }
+
+  if (!username) {
+    return res.status(400).json({ error: 'missing_username', message: 'Username is required.' });
+  }
+
+  try {
+    const result = await dbClaimUsername(userId, username, profileData, primaryEmail);
+    if (!result.ok) {
+      const statusCode = result.error === 'already_claimed' ? 409 : 400;
+      return res.status(statusCode).json({
+        ok: false,
+        error: result.error,
+        message: result.message || 'That address is unavailable.',
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      username: result.username,
+      profileUrl: result.profileUrl,
+      message: `iveo.site/${result.username} successfully claimed!`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'claim_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/me
+ * Retrieves user's claimed username and settings across any browser/device
+ */
+export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
+  const userId = (req.query.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const email = (req.query.email as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+
+  if (!userId && !email) {
+    return res.status(400).json({ error: 'missing_user_id', message: 'User identifier required.' });
+  }
+
+  try {
+    const profile = await dbGetProfileByUserId(userId, email);
+    if (!profile) {
+      return res.status(200).json({ ok: true, claimed: false });
+    }
+
+    const blocks = await dbGetBlocks(profile.username);
+
+    return res.status(200).json({
+      ok: true,
+      claimed: true,
+      username: profile.username,
+      profile,
+      blocks,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'fetch_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/migrate-legacy
+ * Safely migrates legacy local storage data into centralized database
+ */
+export async function handleMigrateLegacy(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const userId = (body.userId as string || '').trim();
+  const username = (body.username as string || '').toLowerCase().trim();
+  const primaryEmail = (body.primaryEmail as string || '').toLowerCase().trim() || null;
+  const profileData = body.profile || {};
+  const blocks = Array.isArray(body.blocks) ? body.blocks : [];
+
+  if (!userId || !username) {
+    return res.status(400).json({ error: 'invalid_migration_payload' });
+  }
+
+  try {
+    // Check if username can be claimed / already owned
+    const claimRes = await dbClaimUsername(userId, username, profileData, primaryEmail);
+    if (!claimRes.ok && claimRes.error === 'already_claimed') {
+      return res.status(409).json({ ok: false, error: 'already_claimed' });
+    }
+
+    if (blocks.length > 0) {
+      await dbSaveBlocks(username, blocks, userId, primaryEmail);
+    }
+
+    return res.status(200).json({ ok: true, migrated: true, username });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'migration_failed', message: err?.message });
+  }
+}
+
+/**
  * POST /api/profile
- * Saves or updates profile in database
+ * Saves or updates profile in database with server-side ownership verification
  */
 export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
@@ -106,23 +243,133 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    await dbSaveProfile({
-      userId: body.userId || 'owner',
+    const saveResult = await dbSaveProfile({
+      userId: body.userId || req.headers['x-user-id'] as string || 'owner',
       username,
       displayName: body.displayName,
       bio: body.bio,
       avatarUrl: body.avatarUrl,
+      avatarType: body.avatarType,
+      avatarId: body.avatarId,
       vibeId: body.vibeId,
       buttonShape: body.buttonShape,
       socials: body.socials,
+      socialsPosition: body.socialsPosition,
+      primaryEmail: body.primaryEmail || req.headers['x-user-email'] as string || null,
       plan: body.plan,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
     });
+
+    if (saveResult && !saveResult.ok) {
+      if (saveResult.error === 'unauthorized') {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to edit this page.' });
+      }
+      return res.status(400).json({ error: saveResult.error });
+    }
+
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
   }
+}
+
+const AVATAR_DIR = path.resolve(process.cwd(), 'data', 'avatars');
+
+/**
+ * POST /api/avatar
+ * Securely uploads and stores user avatar on server disk with ownership verification
+ */
+export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const username = (body.username as string || '').toLowerCase().trim();
+  const dataUrl = body.dataUrl as string;
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+
+  if (!username) {
+    return res.status(400).json({ error: 'missing_username' });
+  }
+
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return res.status(400).json({ error: 'missing_data_url' });
+  }
+
+  try {
+    // Verify ownership before overwriting avatar
+    const existing = await dbGetProfile(username);
+    if (existing) {
+      const authorized = await dbVerifyOwnership(username, userId || existing.userId, primaryEmail || existing.primaryEmail);
+      if (!authorized) {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to update this avatar.' });
+      }
+    }
+
+    if (!fs.existsSync(AVATAR_DIR)) {
+      fs.mkdirSync(AVATAR_DIR, { recursive: true });
+    }
+
+    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ error: 'invalid_data_url' });
+    }
+
+    const buffer = Buffer.from(matches[2], 'base64');
+    const avatarFile = path.join(AVATAR_DIR, `${username}.jpg`);
+    fs.writeFileSync(avatarFile, buffer);
+
+    const avatarUrl = `/api/avatar/${username}?v=${Date.now()}`;
+
+    // Update in database immediately
+    await dbSaveProfile({
+      userId: userId || existing?.userId || 'owner',
+      username,
+      displayName: existing?.displayName || username,
+      bio: existing?.bio || '',
+      avatarUrl,
+      avatarType: 'uploaded',
+      avatarId: null,
+      vibeId: existing?.vibeId || 'clean',
+      buttonShape: existing?.buttonShape || 'rounded',
+      socials: existing?.socials || {},
+      socialsPosition: existing?.socialsPosition || 'top',
+      primaryEmail: primaryEmail || existing?.primaryEmail || null,
+      plan: existing?.plan || 'free',
+      hideFooter: existing?.hideFooter,
+      hideFromSearch: existing?.hideFromSearch,
+    });
+
+    return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'upload_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/avatar/:username
+ * Serves user avatar image with short cache and stale-while-revalidate for immediate updates
+ */
+export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
+  const username = (req.params.username as string || '').toLowerCase().trim();
+  if (!username) {
+    return res.status(400).end();
+  }
+
+  const avatarFile = path.join(AVATAR_DIR, `${username}.jpg`);
+  if (fs.existsSync(avatarFile)) {
+    const stats = fs.statSync(avatarFile);
+    const etag = `"${Math.floor(stats.mtimeMs).toString(36)}-${stats.size.toString(36)}"`;
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=86400');
+    res.setHeader('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+    return res.sendFile(avatarFile);
+  }
+
+  return res.status(404).end();
 }
 
 /**
@@ -151,13 +398,21 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
   const username = (body.username as string || '').toLowerCase().trim();
   const blocks = Array.isArray(body.blocks) ? body.blocks : [];
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
 
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
   try {
-    await dbSaveBlocks(username, blocks);
+    const result = await dbSaveBlocks(username, blocks, userId || undefined, primaryEmail);
+    if (result && !result.ok) {
+      if (result.error === 'unauthorized') {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to edit this page.' });
+      }
+      return res.status(400).json({ error: result.error });
+    }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
@@ -310,13 +565,23 @@ export async function handleSetLinkPassword(req: ExpressReq, res: ExpressRes) {
  * Deletes user profile and data from database
  */
 export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
-  const { username } = req.body || {};
+  const body = req.body || {};
+  const username = (body.username as string || '').toLowerCase().trim();
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
   try {
-    await dbDeleteAccount(username.toLowerCase().trim());
+    const result = await dbDeleteAccount(username, userId || undefined, primaryEmail);
+    if (result && !result.ok) {
+      if (result.error === 'unauthorized') {
+        return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to delete this page.' });
+      }
+      return res.status(400).json({ error: result.error });
+    }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'delete_failed', message: err?.message });

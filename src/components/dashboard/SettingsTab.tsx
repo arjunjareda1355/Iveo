@@ -78,7 +78,7 @@ export const SettingsTab: React.FC = () => {
     if (e) e.preventDefault();
     const clean = sanitizeUsername(usernameInput);
     if (!clean) {
-      setUsernameError('Use 3 to 24 letters, numbers or underscores.');
+      setUsernameError('Use 3 to 30 letters, numbers or hyphens.');
       return;
     }
 
@@ -155,7 +155,7 @@ export const SettingsTab: React.FC = () => {
 
               <form onSubmit={handleSaveUsername} className="flex flex-col gap-2">
                 <div className="flex items-center rounded-[8px] border border-border bg-surface px-2.5 h-10 focus-within:border-ink">
-                  <span className="text-[14px] text-muted font-mono select-none">
+                  <span className="text-[14px] text-muted font-mono select-none pl-1 pr-0.5 font-medium">
                     iveo.site/
                   </span>
                   <input
@@ -273,35 +273,27 @@ export const SettingsTab: React.FC = () => {
           <span className="font-mono text-[14px] text-ink select-all truncate flex-1">
             {fullUrl || 'https://iveo.site'}
           </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 mt-1">
           <Button
-            variant="secondary"
-            size="md"
+            variant="ghost"
+            size="sm"
             onClick={handleCopyLink}
-            iconRight={<Copy size={14} />}
+            aria-label="Copy page link"
+            className="text-muted hover:text-ink shrink-0"
           >
-            Copy link
+            <Copy size={15} />
+            <span className="ml-1 text-[13px]">Copy</span>
           </Button>
           <Button
             variant="secondary"
-            size="md"
+            size="sm"
             as="a"
-            href={session.username ? `/${session.username}` : '#'}
+            href={session.username ? pageUrl(session.username) : '#'}
             target="_blank"
             rel="noopener noreferrer"
-            iconRight={<ExternalLink size={14} />}
+            className="shrink-0"
           >
-            View page
-          </Button>
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={() => setIsShareOpen(true)}
-            iconRight={<Share2 size={14} />}
-          >
-            Share
+            <span>Open page</span>
+            <ExternalLink size={13} className="ml-1 opacity-70" />
           </Button>
         </div>
 
@@ -368,9 +360,7 @@ export const SettingsTab: React.FC = () => {
       </Card>
 
       {/* 5. Delete Account Card */}
-      {session.username && (
-        <DeleteAccountCard username={session.username} />
-      )}
+      <DeleteAccountCard username={session.username || session.primaryEmail?.split('@')[0] || 'account'} />
 
       {/* Share Dialog */}
       {session.username && (

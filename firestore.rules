@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isValidId(userId);
+      allow list: if isValidId(userId);
+      allow create, update: if isValidId(userId) && (isOwner(userId) || (request.resource.data.userId == userId));
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      // Page Blocks
+      match /blocks/{blockId} {
+        allow get, list: if isValidId(userId) && isValidId(blockId);
+        allow create, update, delete: if isValidId(userId) && isValidId(blockId) && (isOwner(userId) || (request.resource.data.userId == userId));
+      }
+
+      // Collected Contacts
+      match /contacts/{contactId} {
+        allow get, list, delete: if isValidId(userId) && isValidId(contactId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(contactId) && (
+          request.resource.data.keys().hasAll(['id', 'userId']) &&
+          request.resource.data.userId == userId
+        );
+        allow update: if false;
+      }
+
+      // Click Analytics
+      match /clicks/{clickId} {
+        allow get, list: if isValidId(userId) && isValidId(clickId) && isOwner(userId);
+        allow create, update: if isValidId(userId) && isValidId(clickId) && (
+          request.resource.data.userId == userId
+        );
+        allow delete: if isValidId(userId) && isValidId(clickId) && isOwner(userId);
+      }
+    }
+  }
+}

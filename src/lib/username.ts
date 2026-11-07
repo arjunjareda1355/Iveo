@@ -22,12 +22,12 @@ export type UsernameValidationResult =
   | { status: 'available'; message: string; username: string };
 
 export function validateUsernameSync(raw: string): UsernameValidationResult {
-  const lower = (raw || '').toLowerCase();
+  const lower = (raw || '').toLowerCase().trim();
 
   if (lower.length === 0) {
     return {
       status: 'empty',
-      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or underscores.`,
+      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or hyphens.`,
     };
   }
 
@@ -36,7 +36,7 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
   if (sanitized.length < USERNAME_MIN) {
     return {
       status: 'too_short',
-      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or underscores.`,
+      message: `Use ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or hyphens.`,
     };
   }
 
@@ -49,23 +49,8 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
   ) {
     return {
       status: 'unavailable',
-      message: "That name isn't available. Try another.",
+      message: ruleResult.ok ? "That address isn't available. Try another." : (ruleResult.message || "That address isn't available. Try another."),
     };
-  }
-
-  // Check client-side storage for existing users created in this browser session
-  if (typeof window !== 'undefined') {
-    try {
-      const existingProfile =
-        localStorage.getItem(`iveo_profile_${sanitized}`) ||
-        localStorage.getItem(`ivio_profile_${sanitized}`);
-      if (existingProfile) {
-        return {
-          status: 'unavailable',
-          message: 'That name is already taken. Try another.',
-        };
-      }
-    } catch {}
   }
 
   return {
@@ -76,10 +61,11 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
 }
 
 /**
- * Real async availability check: validates syntax, checks local existing profiles, and calls /api/check-username
+ * Real async availability check: validates syntax and calls centralized /api/check-username database endpoint
  */
 export async function checkUsernameAvailability(
-  raw: string
+  raw: string,
+  requestingUserId?: string
 ): Promise<UsernameValidationResult> {
   const syncResult = validateUsernameSync(raw);
   if (syncResult.status !== 'available') {
@@ -87,9 +73,10 @@ export async function checkUsernameAvailability(
   }
 
   const clean = syncResult.username;
+  const userParam = requestingUserId ? `&userId=${encodeURIComponent(requestingUserId)}` : '';
 
   try {
-    const res = await fetch(`/api/check-username?u=${encodeURIComponent(clean)}`, {
+    const res = await fetch(`/api/check-username?u=${encodeURIComponent(clean)}${userParam}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -102,9 +89,14 @@ export async function checkUsernameAvailability(
       if (!data.available) {
         return {
           status: 'unavailable',
-          message: data.message || "That name isn't available. Try another.",
+          message: data.message || "That address is already claimed. Try another.",
         };
       }
+      return {
+        status: 'available',
+        message: data.message || `iveo.site/${clean} is available`,
+        username: clean,
+      };
     }
   } catch {
     // If network fails, rely on sync check

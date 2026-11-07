@@ -2,6 +2,7 @@ import express from 'express';
 type ExpressReq = express.Request;
 type ExpressRes = express.Response;
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -9,7 +10,14 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
-const isProd = process.env.NODE_ENV === 'production';
+const distPath = path.resolve(__dirname, 'dist');
+const hasBuiltDist = fs.existsSync(path.resolve(distPath, 'index.html'));
+const isProd =
+  process.env.NODE_ENV === 'production' ||
+  Boolean(process.env.K_SERVICE) ||
+  Boolean(process.env.K_REVISION) ||
+  Boolean(process.env.CLOUD_RUN_JOB) ||
+  hasBuiltDist;
 
 // Support JSON bodies for API requests
 app.use(express.json());
@@ -70,6 +78,10 @@ function adaptWebHandler(
 }
 
 async function startServer() {
+  // 0. Container Health Checks
+  app.get('/_health', (_req, res) => res.status(200).send('ok'));
+  app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+
   // 1. Razorpay API routes
   const createOrderModule = await import('./api/razorpay/create-order.ts');
   const verifyPaymentModule = await import('./api/razorpay/verify-payment.ts');
@@ -114,7 +126,12 @@ async function startServer() {
   const dbHandlers = await import('./api/db-handlers.ts');
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
   app.get('/api/public-page', dbHandlers.handleGetPublicPage);
+  app.post('/api/claim-username', dbHandlers.handleClaimUsername);
+  app.get('/api/me', dbHandlers.handleGetMe);
+  app.post('/api/migrate-legacy', dbHandlers.handleMigrateLegacy);
   app.post('/api/profile', dbHandlers.handleSaveProfile);
+  app.post('/api/avatar', dbHandlers.handleUploadAvatar);
+  app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);
   app.get('/api/blocks', dbHandlers.handleGetBlocks);
   app.post('/api/blocks', dbHandlers.handleSaveBlocks);
   app.post('/api/contacts', dbHandlers.handleSaveContact);
@@ -124,9 +141,23 @@ async function startServer() {
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
   app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
 
+  // 4.5 Subdomain to Path Redirect Handler (Legacy https://:username.iveo.site -> https://iveo.site/:username)
+  const { RESERVED, USERNAME_PATTERN } = await import('./api/_lib/usernames.ts');
+  app.use((req, res, next) => {
+    const host = (req.get('host') || '').toLowerCase().split(':')[0];
+    if (host.endsWith('.iveo.site') && host !== 'iveo.site' && host !== 'www.iveo.site') {
+      const candidate = host.slice(0, -'.iveo.site'.length);
+      if (!RESERVED.has(candidate) && USERNAME_PATTERN.test(candidate)) {
+        const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+        const pathSuffix = req.path === '/' ? '' : req.path;
+        return res.redirect(301, `https://iveo.site/${candidate}${pathSuffix}${queryString}`);
+      }
+    }
+    next();
+  });
+
   // 5. Vite Dev Server / Static SPA Fallback
   if (!isProd) {
-    const fs = await import('node:fs');
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
@@ -147,7 +178,6 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));

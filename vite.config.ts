@@ -5,10 +5,20 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'html-transform-site-origin',
+        transformIndexHtml(html: string) {
+          const origin = process.env.VITE_SITE_ORIGIN || 'https://iveo.site';
+          return html.replace(/%VITE_SITE_ORIGIN%/g, origin);
+        },
+      },
+    ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {

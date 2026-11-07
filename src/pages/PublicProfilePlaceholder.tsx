@@ -17,9 +17,13 @@ import { setAnalyticsContext, trackView } from '../lib/analytics/track';
 import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
 
-export const PublicProfilePlaceholder: React.FC = () => {
+export interface PublicProfilePlaceholderProps {
+  usernameOverride?: string;
+}
+
+export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> = ({ usernameOverride }) => {
   const { username } = useParams<{ username: string }>();
-  const rawUsername = username || '';
+  const rawUsername = (usernameOverride || username || '').trim();
   const validation = validateUsername(rawUsername);
 
   // If reserved or invalid username format, render NotFound component directly
@@ -198,6 +202,7 @@ export const PublicProfilePlaceholder: React.FC = () => {
               bio: pageData.profile.bio,
               avatarUrl: pageData.profile.avatarUrl,
               socials: pageData.profile.socials,
+              socialsPosition: pageData.profile.socialsPosition || 'top',
             }}
             blocks={effectiveBlocks}
             buttonRadiusOverride={buttonRadiusOverride}

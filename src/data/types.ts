@@ -1,7 +1,7 @@
 import { VibeId } from '../lib/vibes';
 import { ButtonShape } from '../lib/preferences';
 
-export type BlockKind = 'link' | 'header' | 'divider' | 'embed' | 'signup' | 'tip_jar' | 'faq';
+export type BlockKind = 'link' | 'header' | 'divider' | 'embed' | 'signup' | 'tip_jar' | 'faq' | 'vcard';
 export type BlockLayout = 'classic' | 'featured';
 export type EmbedProvider = 'youtube' | 'spotify' | 'soundcloud';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
@@ -34,6 +34,15 @@ export interface FaqConfig {
   items: FaqItem[];
 }
 
+export interface VCardConfig {
+  fullName: string;
+  organization?: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  note?: string;
+}
+
 export interface Block {
   id: string;
   kind: BlockKind;
@@ -47,6 +56,7 @@ export interface Block {
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
+  vcard?: VCardConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   isProtected?: boolean;
@@ -71,6 +81,7 @@ export interface PublicBlock {
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
+  vcard?: VCardConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
 }
@@ -89,6 +100,7 @@ export interface PageBlock {
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
+  vcard?: VCardConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -133,6 +145,7 @@ export interface PublicProfileData {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
+  socialsPosition?: 'top' | 'bottom';
   hideFromSearch: boolean;
   hideFooter: boolean;
 }

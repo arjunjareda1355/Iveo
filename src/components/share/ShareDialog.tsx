@@ -57,7 +57,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
   const fullUrl = pageUrl(username);
   const qrUrl = pageUrl(username, { src: 'qr' });
-  const displayAddress = fullUrl.replace(/^https?:\/\//i, '');
+  const displayAddress = `iveo.site/${username}`;
 
   // Generate QR lazily when opened or when color changes
   useEffect(() => {

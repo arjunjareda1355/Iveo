@@ -44,7 +44,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
     const isInverse = variant === 'inverse';
 
     const baseStyles =
-      'group inline-flex items-center justify-center font-medium font-sans select-none transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-offset-2';
+      'group inline-flex items-center justify-center font-medium font-sans select-none whitespace-nowrap shrink-0 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-offset-2';
 
     const sizeStyles =
       size === 'sm'
@@ -140,7 +140,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
           aria-disabled={disabled}
           {...(props as any)}
         >
-          <span>{children}</span>
+          {children}
           {renderIcon()}
         </Link>
       );
@@ -157,7 +157,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
           aria-disabled={disabled}
           {...(props as any)}
         >
-          <span>{children}</span>
+          {children}
           {renderIcon()}
         </a>
       );
@@ -170,7 +170,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
         className={combinedClassName}
         {...props}
       >
-        <span>{children}</span>
+        {children}
         {renderIcon()}
       </button>
     );

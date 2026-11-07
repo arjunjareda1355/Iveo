@@ -177,9 +177,9 @@ test('time: isBlockVisibleNow enforces Pro and scheduling status', () => {
 });
 
 // 5. Site Origin & Plan
-test('site: pageUrl generates clean url without duplicate slashes', () => {
-  assert.equal(pageUrl('maya'), `${SITE_ORIGIN}/maya`);
-  assert.equal(pageUrl('/maya'), `${SITE_ORIGIN}/maya`);
+test('site: pageUrl generates clean url without duplicate slashes in format iveo.site/username', () => {
+  assert.equal(pageUrl('maya'), 'https://iveo.site/maya');
+  assert.equal(pageUrl('/maya'), 'https://iveo.site/maya');
 });
 
 test('plan: defines all pro features and labels', () => {

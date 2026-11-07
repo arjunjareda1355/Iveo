@@ -19,13 +19,18 @@ export function isAllowedAvatarUrl(url: string | null | undefined): boolean {
     return trimmed.length < 1500000;
   }
 
+  // Allow relative URLs for server-hosted avatars (e.g. /api/avatar/username)
+  if (trimmed.startsWith('/api/avatar/') || trimmed.startsWith('/')) {
+    return true;
+  }
+
   if (trimmed.length > 2048) {
     return false;
   }
 
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'https:' || (parsed.protocol === 'http:' && parsed.hostname === 'localhost');
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
   } catch {
     return false;
   }

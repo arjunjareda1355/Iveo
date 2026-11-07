@@ -7,19 +7,18 @@
     <meta name="description" content="iveo gives you one calm, customizable page for all your links. Claim your name, pick a vibe and share it anywhere. Free to start." />
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#FAFAFA" />
-    <!-- Set VITE_SITE_ORIGIN in Vercel (Production) before building. -->
-    <link rel="canonical" href="%VITE_SITE_ORIGIN%/" />
+    <link rel="canonical" href="https://iveo.site/" />
 
-    <!-- Favicon: rounded square with white "i" dot and stem -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='7' fill='%230A0A0A'/%3E%3Ccircle cx='12' cy='7.25' r='1.75' fill='%23FFFFFF'/%3E%3Crect x='10.5' y='10.5' width='3' height='8' rx='1.5' fill='%23FFFFFF'/%3E%3C/svg%3E" />
+    <!-- Favicon: official site logo -->
+    <link rel="icon" type="image/jpeg" href="https://i.postimg.cc/HkbTTdWH/File-Kit-1000252682-compress-image.jpg" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="iveo" />
     <meta property="og:title" content="iveo: one link for everything you make" />
     <meta property="og:description" content="iveo gives you one calm, customizable page for all your links. Claim your name, pick a vibe and share it anywhere. Free to start." />
-    <meta property="og:url" content="%VITE_SITE_ORIGIN%/" />
-    <meta property="og:image" content="%VITE_SITE_ORIGIN%/api/og" />
+    <meta property="og:url" content="https://iveo.site/" />
+    <meta property="og:image" content="https://iveo.site/api/og" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/png" />
@@ -29,7 +28,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="iveo: one link for everything you make" />
     <meta name="twitter:description" content="iveo gives you one calm, customizable page for all your links. Claim your name, pick a vibe and share it anywhere. Free to start." />
-    <meta name="twitter:image" content="%VITE_SITE_ORIGIN%/api/og" />
+    <meta name="twitter:image" content="https://iveo.site/api/og" />
 
     <!-- Google Fonts with preconnect and display=swap -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -42,7 +41,7 @@
         "@context": "https://schema.org",
         "@type": "Organization",
         "name": "iveo",
-        "url": "%VITE_SITE_ORIGIN%",
+        "url": "https://iveo.site",
         "email": "help@iveo.site",
         "description": "One calm home for your links."
       }
@@ -121,9 +120,274 @@
         ]
       }
     </script>
+    <!-- ═══════════════════════════════════════════════════════════════
+         iveo Site Intro Styles: curtain wipe, logo tile & wordmark reveal
+         ═══════════════════════════════════════════════════════════════ -->
+    <style id="iveo-intro-css">
+      #iveo-intro {
+        --iv-bg: #fafafa;
+        --iv-black: #060606;
+        --iv-white: #fafafa;
+        --iv-ease: cubic-bezier(.76, 0, .24, 1);
+        --iv-out: cubic-bezier(.16, 1, .3, 1);
+        --iv-spring: cubic-bezier(.34, 1.56, .64, 1);
+        position: fixed; inset: 0; z-index: 2147483000;
+        display: grid; place-items: center;
+        background: var(--iv-bg); overflow: hidden; will-change: transform;
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      #iveo-intro .iv-grid {
+        position: absolute; inset: 0; opacity: 0;
+        background-image:
+          linear-gradient(to right, rgba(6,6,6,.05) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(6,6,6,.05) 1px, transparent 1px);
+        background-size: 56px 56px;
+        -webkit-mask-image: radial-gradient(circle at center, #000 0, transparent 60%);
+                mask-image: radial-gradient(circle at center, #000 0, transparent 60%);
+        animation: iv-fade 1s .1s ease forwards;
+      }
+
+      /* black wipe that grows out of the logo tile */
+      #iveo-intro .iv-wipe {
+        position: absolute; inset: 0; background: var(--iv-black);
+        clip-path: circle(0 at 50% 50%);
+        animation: iv-wipe 1s 1.35s var(--iv-ease) forwards;
+      }
+      #iveo-intro .iv-wipe::after { /* faint light bloom inside the black */
+        content: ""; position: absolute; left: 50%; top: 50%; width: min(90vw, 720px); aspect-ratio: 1;
+        transform: translate(-50%, -50%); border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255,255,255,.09), transparent 70%);
+      }
+
+      #iveo-intro .iv-stage { position: relative; display: grid; place-items: center; width: 100%; }
+      #iveo-intro .iv-stage > * { grid-area: 1 / 1; }
+
+      /* ── official logo tile ── */
+      #iveo-intro .iv-tile {
+        width: min(34vw, 150px); height: auto; overflow: hidden; border-radius: 27%;
+        filter: drop-shadow(0 24px 40px rgba(0,0,0,.28));
+        opacity: 0; transform: scale(.5);
+        animation: iv-tile-in .95s .15s var(--iv-spring) forwards,
+                   iv-tile-out .55s 1.95s var(--iv-ease) forwards;
+      }
+      #iveo-intro .iv-t-body {
+        fill: #fff; transform-box: fill-box; transform-origin: 50% 100%;
+        transform: scaleY(0); opacity: 0;
+        animation: iv-grow .7s .5s var(--iv-out) forwards;
+      }
+      #iveo-intro .iv-t-fold { opacity: 0; animation: iv-fade .5s 1s ease forwards; }
+      #iveo-intro .iv-t-dot {
+        fill: #fff; transform: translateY(-420px); opacity: 0;
+        animation: iv-drop .85s .85s var(--iv-spring) forwards;
+      }
+
+      /* ── official wordmark ── */
+      #iveo-intro .iv-mark { width: min(72vw, 400px); height: auto; overflow: hidden; }
+      #iveo-intro .iv-l {
+        fill: var(--iv-white); transform: translateY(640px);
+        animation: iv-letter 1s calc(2.0s + var(--i) * .085s) var(--iv-out) forwards;
+      }
+      #iveo-intro .iv-l-dot {
+        transform: translateY(-420px);
+        animation: iv-drop .95s 2.45s var(--iv-spring) forwards;
+      }
+      #iveo-intro .iv-ping {
+        fill: none; stroke: #fff; stroke-width: 5; opacity: 0;
+        transform-box: fill-box; transform-origin: center;
+        animation: iv-ping 1s 2.95s ease-out forwards;
+      }
+
+      /* tagline */
+      #iveo-intro .iv-tag {
+        position: absolute; left: 0; right: 0; top: calc(50% + min(24vw, 128px));
+        display: flex; flex-wrap: wrap; justify-content: center; gap: 0 .7em;
+        font-size: clamp(10px, 2.9vw, 12px); letter-spacing: .34em; font-weight: 500;
+        color: rgba(255,255,255,.58); text-transform: uppercase; padding: 0 20px;
+      }
+      #iveo-intro .iv-tag span {
+        display: inline-block; opacity: 0; transform: translateY(12px); filter: blur(5px);
+        animation: iv-rise .9s var(--iv-out) forwards;
+      }
+      #iveo-intro .iv-tag span:nth-child(1) { animation-delay: 2.7s; }
+      #iveo-intro .iv-tag span:nth-child(2) { animation-delay: 2.82s; }
+      #iveo-intro .iv-tag span:nth-child(3) { animation-delay: 2.94s; }
+
+      /* progress (auto-contrast over light and dark) */
+      #iveo-intro .iv-foot {
+        color: #fff; mix-blend-mode: difference;
+        position: absolute; left: 0; right: 0; bottom: max(28px, env(safe-area-inset-bottom));
+        display: grid; justify-items: center; gap: 12px; opacity: 0; animation: iv-fade .6s .3s ease forwards;
+      }
+      #iveo-intro .iv-bar { width: min(52vw, 220px); height: 2px; background: rgba(255,255,255,.25); border-radius: 2px; overflow: hidden; }
+      #iveo-intro .iv-bar i { display: block; height: 100%; background: #fff; transform: scaleX(0); transform-origin: left; }
+      #iveo-intro .iv-count { font: 500 11px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .14em; font-variant-numeric: tabular-nums; opacity: .8; }
+
+      /* curved lower edge revealed as the curtain lifts */
+      #iveo-intro .iv-edge {
+        position: absolute; left: -10%; right: -10%; top: calc(100% - 1px); height: 16vh; background: var(--iv-black);
+        border-radius: 0 0 50% 50% / 0 0 100% 100%; pointer-events: none;
+      }
+
+      /* exit */
+      #iveo-intro.is-leaving { animation: iv-curtain 1s var(--iv-ease) forwards; pointer-events: none; }
+      #iveo-intro.is-leaving .iv-stage, #iveo-intro.is-leaving .iv-tag { animation: iv-stage-out .7s var(--iv-ease) forwards; }
+      #iveo-intro.is-leaving .iv-foot { animation: iv-fade-out .25s ease forwards; }
+
+      @keyframes iv-tile-in  { to { opacity: 1; transform: none } }
+      @keyframes iv-tile-out { to { opacity: 0; transform: scale(.78) } }
+      @keyframes iv-grow     { to { transform: none; opacity: 1 } }
+      @keyframes iv-drop     { to { transform: none; opacity: 1 } }
+      @keyframes iv-letter   { to { transform: none } }
+      @keyframes iv-wipe     { to { clip-path: circle(120vmax at 50% 50%) } }
+      @keyframes iv-ping     { 0% { opacity: .9; transform: scale(1) } 100% { opacity: 0; transform: scale(2.6) } }
+      @keyframes iv-rise     { to { opacity: 1; transform: none; filter: blur(0) } }
+      @keyframes iv-fade     { to { opacity: 1 } }
+      @keyframes iv-fade-out { to { opacity: 0 } }
+      @keyframes iv-curtain  { to { transform: translateY(-100%) } }
+      @keyframes iv-stage-out{ to { transform: translateY(-50px) scale(.96); opacity: 0 } }
+
+      html.iveo-intro-active, html.iveo-intro-active body { overflow: hidden !important; }
+
+      @media (prefers-reduced-motion: reduce) {
+        #iveo-intro, #iveo-intro * { animation-duration: .01s !important; animation-delay: 0s !important; }
+        #iveo-intro.is-leaving { animation: iv-fade-out .4s ease forwards !important; }
+        #iveo-intro .iv-tile { display: none; }
+      }
+    </style>
+    <noscript><style>#iveo-intro{display:none!important}</style></noscript>
   </head>
   <body class="bg-bg text-ink antialiased selection:bg-ink selection:text-white">
+    <!-- ═══════════════════════════════════════════════════════════════
+         iveo Site Intro: plays once on first site visit, lifts like curtain
+         ═══════════════════════════════════════════════════════════════ -->
+    <div id="iveo-intro" role="status" aria-label="Loading iveo">
+      <div class="iv-grid"></div>
+      <div class="iv-wipe"></div>
+
+      <div class="iv-stage">
+        <!-- Official logo tile -->
+        <svg class="iv-tile" viewBox="88 88 1077 1077" aria-hidden="true">
+          <defs>
+            <linearGradient id="iv-fold" x1="0.9" y1="0.1" x2="0.15" y2="0.95">
+              <stop offset="0" stop-color="#fff"/>
+              <stop offset=".55" stop-color="#6c6c6c"/>
+              <stop offset="1" stop-color="#e9e9e9"/>
+            </linearGradient>
+            <linearGradient id="iv-sheen" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#2a2a2a"/><stop offset=".35" stop-color="#050505"/><stop offset="1" stop-color="#000"/>
+            </linearGradient>
+          </defs>
+          <rect x="88" y="88" width="1077" height="1077" rx="300" fill="url(#iv-sheen)"/>
+          <path class="iv-t-body" d="M718 436Q760 440 760 472L760 818Q760 848 736 866L548 1008Q530 1018 516 1000Q488 968 488 934L488 612Q488 582 520 554L690 446Q704 436 718 436Z"/>
+          <path class="iv-t-fold" fill="url(#iv-fold)" d="M760 652L760 818Q760 848 736 866L548 1008Q530 1018 516 1000Q488 968 488 934Q500 876 566 826L758 656Z"/>
+          <circle class="iv-t-dot" cx="625" cy="316" r="112"/>
+        </svg>
+
+        <!-- Official wordmark -->
+        <svg class="iv-mark" viewBox="330 60 1535 590" aria-hidden="true">
+          <path class="iv-l" style="--i:0" fill-rule="evenodd" d="M347 222C344 222 345 226 345 232L345 510C345 572 400 606 474 629Q487 632 487 620L487 362C487 328 468 301 430 276L355 226Q350 222 347 222Z"/>
+          <path class="iv-l" style="--i:1" d="M470 236Q464 222 484 222L598 222Q637 224 655 255L753 430L670 562Z"/>
+          <path class="iv-l" style="--i:2" d="M1060 225L940 222Q895 224 872 262L685 555Q672 580 682 605Q705 632 750 630Q790 628 812 598Z"/>
+          <path class="iv-l" style="--i:3" fill-rule="evenodd" d="M1398 345C1385 270 1300 215 1205 215C1090 215 993 305 993 425C993 545 1090 635 1205 635C1280 635 1350 585 1395 520Q1402 508 1388 507L1308 507Q1280 507 1262 520Q1235 530 1195 530C1150 530 1118 505 1113 462Q1113 467 1128 467L1280 467Q1310 467 1330 445L1388 385Q1405 368 1398 345ZM1302 378L1200 378Q1170 380 1150 398L1115 452C1100 440 1095 432 1095 420C1095 360 1145 318 1205 318C1245 318 1285 345 1302 378Z"/>
+          <path class="iv-l" style="--i:4" fill-rule="evenodd" d="M1635 209A213 213 0 1 1 1634.9 209ZM1635 317A105 105 0 1 0 1635.1 317Z"/>
+          <circle class="iv-l iv-l-dot" cx="419" cy="147" r="76"/>
+          <circle class="iv-ping" cx="419" cy="147" r="76"/>
+        </svg>
+
+        <div class="iv-tag" aria-hidden="true"><span>Simple.</span><span>Connected.</span><span>Personal.</span></div>
+      </div>
+
+      <div class="iv-foot" aria-hidden="true">
+        <div class="iv-bar"><i></i></div>
+        <div class="iv-count">000</div>
+      </div>
+      <div class="iv-edge"></div>
+    </div>
+
+    <!-- Early check: skip instantly if already seen for first time (no flash). -->
+    <script>
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var forceIntro = params.has('intro') || params.has('replay-intro');
+          if (!forceIntro && (localStorage.getItem('iveo-intro-seen') === '1' || sessionStorage.getItem('iveo-intro-seen') === '1')) {
+            var el = document.getElementById('iveo-intro');
+            if (el) el.remove();
+          } else {
+            document.documentElement.classList.add('iveo-intro-active');
+          }
+        } catch (e) {
+          document.documentElement.classList.add('iveo-intro-active');
+        }
+      })();
+    </script>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         iveo Intro Controller: smooth progress, auto curtain lift, persistence
+         ═══════════════════════════════════════════════════════════════ -->
+    <script id="iveo-intro-js">
+      (function () {
+        var root = document.getElementById('iveo-intro');
+        if (!root) return;
+
+        var CONFIG = {
+          duration: 3900,        // ms before curtain lifts
+          maxWait: 7000          // fail-safe: site always opens by then
+        };
+
+        var html = document.documentElement;
+        var reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var bar = root.querySelector('.iv-bar i');
+        var count = root.querySelector('.iv-count');
+        var leaving = false, start = performance.now();
+        var total = reduced ? 600 : CONFIG.duration;
+
+        function tick(now) {
+          if (leaving) return;
+          var t = Math.min((now - start) / (total - 400), 1);
+          var e = 1 - Math.pow(1 - t, 3);
+          if (bar) bar.style.transform = 'scaleX(' + e + ')';
+          if (count) count.textContent = String(Math.round(e * 100)).padStart(3, '0');
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+
+        function finish() {
+          if (!root.parentNode) return;
+          root.remove();
+          html.classList.remove('iveo-intro-active');
+          try {
+            localStorage.setItem('iveo-intro-seen', '1');
+            sessionStorage.setItem('iveo-intro-seen', '1');
+          } catch (e) {}
+          window.dispatchEvent(new CustomEvent('iveo:intro:done'));
+        }
+
+        function leave() {
+          if (leaving) return;
+          leaving = true;
+          if (bar) bar.style.transform = 'scaleX(1)';
+          if (count) count.textContent = '100';
+          root.classList.add('is-leaving');
+          root.addEventListener('animationend', function h(e) {
+            if (e.target !== root) return;
+            root.removeEventListener('animationend', h);
+            finish();
+          });
+          setTimeout(finish, 1600);
+        }
+
+        var minTime = new Promise(function (r) { setTimeout(r, total); });
+        var loaded = new Promise(function (r) {
+          if (document.readyState === 'complete') r();
+          else window.addEventListener('load', r, { once: true });
+        });
+        Promise.all([minTime, loaded]).then(leave);
+        setTimeout(leave, CONFIG.maxWait);
+      })();
+    </script>
   </body>
 </html>

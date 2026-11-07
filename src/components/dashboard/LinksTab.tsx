@@ -20,6 +20,8 @@ import {
   Heart,
   HelpCircle,
   Sparkles,
+  UserCheck,
+  Search,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -36,6 +38,8 @@ import { EmbedComposer } from '../links/EmbedComposer';
 import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
 import { FaqComposer } from '../links/FaqComposer';
+import { VCardComposer } from '../links/VCardComposer';
+import { AddBlockModal, FeatureType } from './AddBlockModal';
 import { AnimationControl } from '../links/AnimationControl';
 import { Block, BlockLayout, LinkAnimation } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
@@ -54,6 +58,7 @@ export const LinksTab: React.FC = () => {
     addSignupForm,
     addTipJar,
     addFaq,
+    addVCard,
     addHeader,
     addDivider,
     updateBlock,
@@ -65,13 +70,20 @@ export const LinksTab: React.FC = () => {
     clearSchedule,
   } = useBlocks();
 
-  const { isPro, username } = useIvioSession();
+  const { isPro, username, displayName, primaryEmail } = useIvioSession();
   const { openUpgrade } = useUpgradeDialog();
   const { protectedIds } = useProtectedLinkIds();
 
-  // Active composer: null | 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq'
+  // Add block modal state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // Search & category filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState<'all' | 'links' | 'media_forms' | 'headers'>('all');
+
+  // Active composer: null | 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard'
   const [activeComposer, setActiveComposer] = useState<
-    'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | null
+    'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard' | null
   >(null);
 
   // Quick inputs for link/header composers
@@ -103,8 +115,35 @@ export const LinksTab: React.FC = () => {
   const activeBlocks = blocks.filter((b) => !b.isArchived);
   const archivedBlocks = blocks.filter((b) => b.isArchived);
 
+  // Filtered active blocks based on search and category
+  const filteredActiveBlocks = activeBlocks.filter((b) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const titleMatch = b.title ? b.title.toLowerCase().includes(q) : false;
+      const urlMatch = b.url ? b.url.toLowerCase().includes(q) : false;
+      const vcardMatch = b.vcard ? (
+        (b.vcard.fullName && b.vcard.fullName.toLowerCase().includes(q)) ||
+        (b.vcard.organization && b.vcard.organization.toLowerCase().includes(q)) ||
+        (b.vcard.title && b.vcard.title.toLowerCase().includes(q))
+      ) : false;
+      if (!titleMatch && !urlMatch && !vcardMatch) return false;
+    }
+
+    if (filterCategory === 'links') {
+      return b.kind === 'link';
+    }
+    if (filterCategory === 'media_forms') {
+      return b.kind === 'embed' || b.kind === 'signup' || b.kind === 'tip_jar' || b.kind === 'faq' || b.kind === 'vcard';
+    }
+    if (filterCategory === 'headers') {
+      return b.kind === 'header' || b.kind === 'divider';
+    }
+
+    return true;
+  });
+
   // Composer opening handlers
-  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq') => {
+  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard') => {
     setEditingBlockId(null);
     if (type === 'embed' && !isPro) {
       openUpgrade('embeds');
@@ -270,121 +309,185 @@ export const LinksTab: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* 1. Action Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => handleOpenComposer('link')}
-        >
-          <Plus size={16} strokeWidth={2} />
-          <span>Add link</span>
-        </Button>
+      {/* 1. Simple & Clean Action Bar */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-xl border border-border shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => handleOpenComposer('link')}
+              className="gap-2 shadow-2xs"
+            >
+              <Plus size={16} strokeWidth={2.2} />
+              <span>Add link</span>
+            </Button>
 
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => handleOpenComposer('embed')}
-        >
-          <Plus size={16} strokeWidth={2} />
-          <span>Add embed</span>
-          <ProBadge className="ml-1" />
-        </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setIsAddModalOpen(true)}
+              className="gap-2 border-border hover:border-ink/30"
+            >
+              <Sparkles size={15} strokeWidth={1.8} className="text-ink/80" />
+              <span>Add other blocks</span>
+            </Button>
+          </div>
 
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => handleOpenComposer('signup')}
-        >
-          <Plus size={16} strokeWidth={2} />
-          <span>{copy.signup.dashboard.addButton}</span>
-          {!isPro && <ProBadge className="ml-1" />}
-        </Button>
+          {/* Clean Quick Search */}
+          <div className="relative w-full sm:w-60">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Search links..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-8 pr-7 text-[13px] bg-surface-2 border border-border rounded-lg text-ink placeholder:text-muted/70 focus-visible:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition-all"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink text-[12px] p-0.5 rounded cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
 
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => handleOpenComposer('tip_jar')}
-        >
-          <Heart size={16} strokeWidth={2} className="text-red-500" />
-          <span>Add tip jar</span>
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => handleOpenComposer('faq')}
-        >
-          <HelpCircle size={16} strokeWidth={2} className="text-blue-500" />
-          <span>Add FAQ</span>
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => handleOpenComposer('header')}
-        >
-          <Plus size={16} strokeWidth={2} />
-          <span>Add header</span>
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={async () => {
-            setEditingBlockId(null);
-            setActiveComposer(null);
-            await addDivider();
-          }}
-        >
-          <Plus size={16} strokeWidth={2} />
-          <span>Add divider</span>
-        </Button>
-      </div>
-
-      {/* 2. Composers */}
-      {activeComposer === 'link' && (
-        <Card className="p-4 sm:p-5 border-ink/20 shadow-[0_2px_8px_rgba(10,10,10,0.06)]">
-          <form onSubmit={handleCreateLink} className="flex flex-col gap-3.5">
-            <h3 className="text-[16px] font-semibold text-ink">New link</h3>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="new-link-title" className="text-[14px] font-medium text-ink">
-                Title
-              </label>
-              <input
-                id="new-link-title"
-                type="text"
-                autoFocus
-                value={newLinkTitle}
-                onChange={(e) => setNewLinkTitle(e.target.value)}
-                placeholder="e.g. My Portfolio"
-                className="h-10 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
-              />
+        {/* Minimal Category Tabs */}
+        {activeBlocks.length > 1 && (
+          <div className="flex items-center justify-between gap-2 overflow-x-auto text-[12px] no-scrollbar py-0.5">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setFilterCategory('all')}
+                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                  filterCategory === 'all'
+                    ? 'bg-ink text-white shadow-2xs'
+                    : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
+                }`}
+              >
+                All ({activeBlocks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterCategory('links')}
+                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                  filterCategory === 'links'
+                    ? 'bg-ink text-white shadow-2xs'
+                    : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
+                }`}
+              >
+                Links ({activeBlocks.filter((b) => b.kind === 'link').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterCategory('media_forms')}
+                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                  filterCategory === 'media_forms'
+                    ? 'bg-ink text-white shadow-2xs'
+                    : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
+                }`}
+              >
+                Interactive ({
+                  activeBlocks.filter((b) =>
+                    ['embed', 'signup', 'tip_jar', 'faq', 'vcard'].includes(b.kind)
+                  ).length
+                })
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterCategory('headers')}
+                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                  filterCategory === 'headers'
+                    ? 'bg-ink text-white shadow-2xs'
+                    : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
+                }`}
+              >
+                Headers ({
+                  activeBlocks.filter((b) => ['header', 'divider'].includes(b.kind)).length
+                })
+              </button>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="new-link-url" className="text-[14px] font-medium text-ink">
-                URL
-              </label>
-              <input
-                id="new-link-url"
-                type="url"
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="h-10 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
-              />
+            {archivedBlocks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowArchived(!showArchived)}
+                className="ml-auto text-[12px] text-muted hover:text-ink font-medium px-2.5 py-1 rounded-full bg-surface border border-border hover:border-ink/20 shrink-0 transition-colors"
+              >
+                {showArchived ? 'Hide Archived' : `Archived (${archivedBlocks.length})`}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 2. Simple & Clean Link Composer */}
+      {activeComposer === 'link' && (
+        <Card className="p-4 sm:p-5 border-ink/25 shadow-sm transition-all animate-in fade-in-50 duration-150">
+          <form onSubmit={handleCreateLink} className="flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-1 border-b border-border/60">
+              <div>
+                <h3 className="text-[15px] font-semibold text-ink">Add a new link</h3>
+                <p className="text-[12px] text-muted">Add a title and destination URL for your page</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseComposer}
+                aria-label="Close"
+                className="text-muted hover:text-ink p-1 rounded-md transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="new-link-title" className="text-[13px] font-medium text-ink">
+                  Title
+                </label>
+                <input
+                  id="new-link-title"
+                  type="text"
+                  autoFocus
+                  value={newLinkTitle}
+                  onChange={(e) => setNewLinkTitle(e.target.value)}
+                  placeholder="e.g. My Website, Portfolio, Store"
+                  className="h-10 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink placeholder:text-muted/60 focus-visible:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition-all"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="new-link-url" className="text-[13px] font-medium text-ink">
+                  URL
+                </label>
+                <input
+                  id="new-link-url"
+                  type="url"
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="h-10 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink placeholder:text-muted/60 focus-visible:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition-all"
+                />
+              </div>
             </div>
 
             {composerError && (
-              <p className="text-[13px] text-error" role="alert">
+              <p className="text-[13px] text-error font-medium" role="alert">
                 {composerError}
               </p>
             )}
 
             <div className="flex items-center gap-2 pt-1">
               <Button type="submit" variant="primary" size="md">
-                Add link
+                Add to page
               </Button>
               <Button type="button" variant="ghost" size="md" onClick={handleCloseComposer}>
                 Cancel
@@ -473,24 +576,54 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
+      {activeComposer === 'vcard' && (
+        <VCardComposer
+          onSave={async (cfg, title) => {
+            await addVCard(cfg, title);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+          defaultFullName={displayName || username || ''}
+          defaultEmail={primaryEmail || ''}
+        />
+      )}
+
       {/* 3. Items List */}
-      {activeBlocks.length === 0 && !activeComposer ? (
-        <Card className="flex flex-col items-start gap-4 p-6 sm:p-8">
-          <div className="w-10 h-10 rounded-[10px] bg-surface-2 flex items-center justify-center text-subtle">
-            <Link2 size={20} strokeWidth={1.5} />
-          </div>
-          <div>
-            <h3 className="text-[20px] font-semibold text-ink leading-tight">
-              Your page is ready for links
-            </h3>
-            <p className="mt-2 text-[15px] leading-relaxed text-muted max-w-[48ch]">
-              Add your first link, embed, or header above to build your page.
-            </p>
-          </div>
+      {activeBlocks.length === 0 ? (
+        !activeComposer ? (
+          <Card className="flex flex-col items-start gap-4 p-6 sm:p-8 border-border shadow-2xs">
+            <div className="w-10 h-10 rounded-[10px] bg-surface-2 flex items-center justify-center text-subtle">
+              <Link2 size={20} strokeWidth={1.5} />
+            </div>
+            <div>
+              <h3 className="text-[18px] font-semibold text-ink leading-tight">
+                Your page is ready for links
+              </h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-muted max-w-[48ch]">
+                Click <span className="font-medium text-ink">&ldquo;Add link&rdquo;</span> above to add your first destination, or explore interactive blocks like contact cards, media embeds, and tip jars.
+              </p>
+            </div>
+          </Card>
+        ) : null
+      ) : filteredActiveBlocks.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center border-border shadow-2xs">
+          <p className="text-[14px] font-medium text-ink">
+            No items match {searchQuery ? `"${searchQuery}"` : 'the selected filter'}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchQuery('');
+              setFilterCategory('all');
+            }}
+          >
+            Clear filters
+          </Button>
         </Card>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {activeBlocks.map((block, idx) => {
+          {filteredActiveBlocks.map((block, idx) => {
             const isEditing = editingBlockId === block.id;
             const isEmbed = block.kind === 'embed';
             const isHeader = block.kind === 'header';
@@ -498,6 +631,7 @@ export const LinksTab: React.FC = () => {
             const isSignup = block.kind === 'signup';
             const isTipJar = block.kind === 'tip_jar';
             const isFaq = block.kind === 'faq';
+            const isVCard = block.kind === 'vcard';
             const isLink = block.kind === 'link';
             const isProtected = isLink && (protectedIds.has(block.id) || block.isProtected === true);
 
@@ -537,6 +671,8 @@ export const LinksTab: React.FC = () => {
                           <Heart size={18} className="text-red-500 fill-red-500" strokeWidth={1.5} />
                         ) : isFaq ? (
                           <HelpCircle size={18} className="text-blue-500" strokeWidth={1.5} />
+                        ) : isVCard ? (
+                          <UserCheck size={18} className="text-emerald-600" strokeWidth={1.5} />
                         ) : isHeader ? (
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
@@ -562,6 +698,8 @@ export const LinksTab: React.FC = () => {
                               ? `Support: ${block.tipJar?.buttonText || block.title || 'Tip Jar'}`
                               : isFaq
                               ? `FAQ: ${block.title || 'Questions'}`
+                              : isVCard
+                              ? (block.vcard?.fullName ? `Contact: ${block.vcard.fullName}` : block.title || 'Contact Card')
                               : block.title || (isEmbed ? 'Embed' : 'Untitled')}
                           </span>
                           {block.badge && (
@@ -593,6 +731,13 @@ export const LinksTab: React.FC = () => {
                           <div className="flex items-center text-[12px] text-muted leading-tight">
                             <span>
                               {block.faq.items?.length || 0} questions & answers
+                            </span>
+                          </div>
+                        )}
+                        {isVCard && block.vcard && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight">
+                            <span className="truncate">
+                              {[block.vcard.title, block.vcard.organization, block.vcard.phone, block.vcard.email].filter(Boolean).join(' • ') || 'Digital vCard'}
                             </span>
                           </div>
                         )}
@@ -1018,6 +1163,20 @@ export const LinksTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 7. Categorized Add Feature Modal */}
+      <AddBlockModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSelectFeature={async (type: FeatureType) => {
+          if (type === 'divider') {
+            await addDivider();
+          } else {
+            handleOpenComposer(type);
+          }
+        }}
+        isPro={isPro}
+      />
     </div>
   );
 };

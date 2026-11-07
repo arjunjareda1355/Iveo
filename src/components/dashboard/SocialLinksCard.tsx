@@ -127,7 +127,7 @@ export const SocialLinksCard: React.FC = () => {
             size="sm"
             onClick={handleOpenAdd}
           >
-            <Plus size={14} className="mr-1" />
+            <Plus size={14} />
             <span>Add social icon</span>
           </Button>
         )}

@@ -23,7 +23,7 @@ export const LoginPage: React.FC = () => {
     }
   }, [rawRedirectUrl, navigate]);
 
-  const validatedRedirectUrl = safeRedirectPath(rawRedirectUrl) || '/';
+  const validatedRedirectUrl = safeRedirectPath(rawRedirectUrl) || '/dashboard';
 
   return (
     <GuestOnly>

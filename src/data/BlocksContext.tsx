@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem } from './types';
+import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem, VCardConfig } from './types';
 import {
   listMyBlocks,
   createBlock,
@@ -9,6 +9,11 @@ import {
 } from './linksApi';
 import { useToast } from '../components/ui/Toast';
 import { useUpgradeDialog } from '../components/plan/UpgradeDialogProvider';
+import {
+  syncBlockToFirebase,
+  syncAllBlocksToFirebase,
+  deleteBlockFromFirebase,
+} from '../lib/firebaseSync';
 
 interface BlocksContextValue {
   blocks: Block[];
@@ -18,6 +23,7 @@ interface BlocksContextValue {
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
+  addVCard: (config: VCardConfig, title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
   addDivider: () => Promise<void>;
   updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
@@ -46,6 +52,7 @@ export const BlocksProvider: React.FC<{
     try {
       const data = await listMyBlocks(token, userId);
       setBlocks(data);
+      syncAllBlocksToFirebase(userId, data).catch(() => {});
     } catch {
       // Ignored
     } finally {
@@ -68,6 +75,7 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('Link added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -92,6 +100,7 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('Embed added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -114,6 +123,7 @@ export const BlocksProvider: React.FC<{
         signup: config,
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('Signup form added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -136,6 +146,7 @@ export const BlocksProvider: React.FC<{
         tipJar: config,
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('Tip Jar added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -154,10 +165,30 @@ export const BlocksProvider: React.FC<{
         faq: { items },
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('FAQ section added');
     } catch (err: unknown) {
       setBlocks(prev);
       showToast("Couldn't add FAQ. Try again.");
+      throw err;
+    }
+  };
+
+  const addVCard = async (config: VCardConfig, title?: string) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'vcard',
+        title: title || config.fullName || 'Save Contact',
+        position: blocks.length,
+        vcard: config,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Contact card added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add contact card. Try again.");
       throw err;
     }
   };
@@ -170,6 +201,7 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('Header added');
     } catch {
       showToast("Couldn't add header. Try again.");
@@ -184,6 +216,7 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
       showToast('Divider added');
     } catch {
       showToast("Couldn't add divider. Try again.");
@@ -196,6 +229,8 @@ export const BlocksProvider: React.FC<{
 
     try {
       await updateBlock(token, userId, id, patch);
+      const updated = { ...(blocks.find((b) => b.id === id) || {}), ...patch };
+      syncBlockToFirebase(userId, updated as Block).catch(() => {});
     } catch (err: unknown) {
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
@@ -220,6 +255,8 @@ export const BlocksProvider: React.FC<{
 
     try {
       await apiSetBlockImage(token, userId, id, { thumbnailPath, layout });
+      const updated = { ...(blocks.find((b) => b.id === id) || {}), thumbnailPath, layout };
+      syncBlockToFirebase(userId, updated as Block).catch(() => {});
     } catch (err: unknown) {
       setBlocks(prev);
       showToast("Couldn't save image. Try again.");
@@ -234,6 +271,7 @@ export const BlocksProvider: React.FC<{
 
     try {
       await apiDeleteBlock(token, userId, id);
+      deleteBlockFromFirebase(userId, id).catch(() => {});
       showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
     } catch {
       setBlocks(prev);
@@ -298,6 +336,7 @@ export const BlocksProvider: React.FC<{
     });
 
     setBlocks(reordered);
+    syncAllBlocksToFirebase(userId, reordered).catch(() => {});
 
     // Save positions
     for (let i = 0; i < orderedIds.length; i++) {
@@ -320,6 +359,7 @@ export const BlocksProvider: React.FC<{
         addSignupForm,
         addTipJar,
         addFaq,
+        addVCard,
         addHeader,
         addDivider,
         updateBlock: updateBlockFields,

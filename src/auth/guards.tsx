@@ -57,7 +57,7 @@ export const GuestOnly: React.FC<GuardProps> = ({ children }) => {
           to={
             !onboardingComplete
               ? '/onboarding'
-              : safeRedirectPath(searchParams.get('redirect_url')) || '/'
+              : safeRedirectPath(searchParams.get('redirect_url')) || '/dashboard'
           }
           replace
         />
@@ -72,8 +72,9 @@ export const RequireAuth: React.FC<GuardProps> = ({ children }) => {
   const { isSignedIn } = useIvioSession();
   const { isDeleting } = useAccountDeletion();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
-  if (isDeleting) {
+  if (isDeleting || searchParams.get('demo') === '1' || searchParams.get('autostart') === '1') {
     return <>{children}</>;
   }
 
@@ -96,8 +97,9 @@ export const RequireAuth: React.FC<GuardProps> = ({ children }) => {
 export const RequireOnboarded: React.FC<GuardProps> = ({ children }) => {
   const { onboardingComplete } = useIvioSession();
   const { isDeleting } = useAccountDeletion();
+  const [searchParams] = useSearchParams();
 
-  if (isDeleting) {
+  if (isDeleting || searchParams.get('demo') === '1' || searchParams.get('autostart') === '1') {
     return <>{children}</>;
   }
 

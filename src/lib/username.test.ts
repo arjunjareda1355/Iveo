@@ -7,24 +7,23 @@ import {
   SIMULATED_TAKEN_USERNAMES,
 } from './username.ts';
 
-test('sanitizeUsername: lowercases, strips disallowed characters, enforces max length 24', () => {
-  assert.equal(sanitizeUsername('Hello_World!@#$123'), 'hello_world123');
-  assert.equal(sanitizeUsername('USER-NAME.TEST'), 'usernametest');
-  assert.equal(sanitizeUsername('a'.repeat(30)), 'a'.repeat(24));
-  assert.equal(sanitizeUsername('valid_name_1'), 'valid_name_1');
+test('sanitizeUsername: lowercases, strips disallowed characters, enforces max length 30', () => {
+  assert.equal(sanitizeUsername('Hello_World!@#$123'), 'helloworld123');
+  assert.equal(sanitizeUsername('USER-NAME.TEST'), 'user-nametest');
+  assert.equal(sanitizeUsername('a'.repeat(35)), 'a'.repeat(30));
+  assert.equal(sanitizeUsername('valid-name-1'), 'valid-name-1');
 });
 
 test('validateUsernameSync: handles empty and short inputs', () => {
   assert.equal(validateUsernameSync('').status, 'empty');
   assert.equal(validateUsernameSync('ab').status, 'too_short');
-  assert.equal(validateUsernameSync('ab').message, 'Use 3 to 24 letters, numbers or underscores.');
+  assert.equal(validateUsernameSync('ab').message, 'Use 3 to 30 letters, numbers or hyphens.');
 });
 
 test('validateUsernameSync: rejects reserved and taken usernames', () => {
   for (const name of RESERVED_USERNAMES) {
     const res = validateUsernameSync(name);
     assert.equal(res.status, 'unavailable', `Expected ${name} to be unavailable`);
-    assert.equal(res.message, "That name isn't available. Try another.");
   }
 
   for (const name of SIMULATED_TAKEN_USERNAMES) {
@@ -34,10 +33,10 @@ test('validateUsernameSync: rejects reserved and taken usernames', () => {
 });
 
 test('validateUsernameSync: accepts valid available usernames', () => {
-  const res = validateUsernameSync('new_creator_99');
+  const res = validateUsernameSync('new-creator-99');
   assert.equal(res.status, 'available');
   if (res.status === 'available') {
-    assert.equal(res.username, 'new_creator_99');
-    assert.equal(res.message, 'iveo.site/new_creator_99 is available');
+    assert.equal(res.username, 'new-creator-99');
+    assert.equal(res.message, 'iveo.site/new-creator-99 is available');
   }
 });

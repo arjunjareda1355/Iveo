@@ -361,7 +361,7 @@ export const DashboardPage: React.FC = () => {
   const userId = session.username || 'owner';
 
   return (
-    <BlocksProvider userId={userId}>
+    <BlocksProvider key={userId} userId={userId}>
       <DashboardContent />
     </BlocksProvider>
   );

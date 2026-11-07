@@ -17,6 +17,7 @@ export interface Persona {
   handle: string;
   bio: string;
   initials: string;
+  avatarUrl?: string;
   links: readonly string[];
 }
 
@@ -54,6 +55,7 @@ export const VIBES: readonly Vibe[] = [
       handle: 'maya',
       bio: 'Illustrator and writer. Zines, prints and the occasional essay.',
       initials: 'ME',
+      avatarUrl: 'https://i.postimg.cc/Rh5vdyVb/file-0000000002448211a254292ad6932ab5.png',
       links: [
         'New zine, out now',
         'Shop prints',
@@ -86,6 +88,7 @@ export const VIBES: readonly Vibe[] = [
       handle: 'devsharma',
       bio: 'Producer and DJ. Debut EP out now, new mix every month.',
       initials: 'DS',
+      avatarUrl: 'https://i.postimg.cc/3J9H0dm8/file-0000000006c48211af7b9f917a04f2aa.png',
       links: [
         'Listen to the EP',
         'Latest mix',
@@ -119,6 +122,7 @@ export const VIBES: readonly Vibe[] = [
       handle: 'lenahoffmann',
       bio: 'Writer. Essays on cities, walking and slow reading.',
       initials: 'LH',
+      avatarUrl: 'https://i.postimg.cc/pVwmcc6W/file-000000000d048211bd8a5e2b54943ddb.png',
       links: [
         'Read the latest essay',
         'Subscribe to the newsletter',
@@ -151,6 +155,7 @@ export const VIBES: readonly Vibe[] = [
       handle: 'tomasreyes',
       bio: 'Ceramicist working in small batches in Lisbon.',
       initials: 'TR',
+      avatarUrl: 'https://i.postimg.cc/rF2pN0DV/file-0000000019908211bdd98e4830c323de.png',
       links: [
         'Shop the new collection',
         'Studio visits',
@@ -181,6 +186,7 @@ export const VIBES: readonly Vibe[] = [
       handle: 'studioode',
       bio: 'A two-person design studio for brands that last.',
       initials: 'SO',
+      avatarUrl: 'https://i.postimg.cc/5N86h5hC/file-000000001e848211bfcbd8cc993040e3.png',
       links: [
         'Selected work',
         'Services',
@@ -213,6 +219,7 @@ export const VIBES: readonly Vibe[] = [
       handle: 'irispark',
       bio: 'Developer. Open source, notes and small tools.',
       initials: 'IP',
+      avatarUrl: 'https://i.postimg.cc/SK1s6gMV/file-0000000022e48211869c7fae07926fea.png',
       links: [
         'GitHub',
         'Writing',

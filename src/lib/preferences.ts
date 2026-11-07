@@ -13,6 +13,8 @@ export interface IveoPreferences {
   displayName?: string | null;
   bio?: string | null;
   avatarUrl?: string | null;
+  avatarType?: 'default' | 'uploaded';
+  avatarId?: string | null;
   category?: string | null;
   socials?: Record<string, string>;
   socialsPosition?: 'top' | 'bottom';

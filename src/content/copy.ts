@@ -250,7 +250,7 @@ export const copy = {
       preview: 'Preview',
     },
     usernameStatus: {
-      validFormat: 'Use 3 to 24 letters, numbers or underscores.',
+      validFormat: 'Use 3 to 30 letters, numbers or hyphens.',
       reserved: 'That name is reserved. Choose another.',
       taken: 'That name is already taken. Try another.',
       saveFailed: "We couldn't save that. Try again.",

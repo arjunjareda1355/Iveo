@@ -84,6 +84,22 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     }
   };
 
+  const handleAvatarPayloadChange = async (payload: {
+    avatarUrl: string | null;
+    avatarType: 'default' | 'uploaded';
+    avatarId: string | null;
+  }) => {
+    try {
+      await session.updateProfile({
+        avatarUrl: payload.avatarUrl,
+        avatarType: payload.avatarType,
+        avatarId: payload.avatarId,
+      });
+    } catch {
+      showToast("Couldn't update photo");
+    }
+  };
+
   const handleSaveProfileInfo = async () => {
     setIsSavingProfile(true);
     try {
@@ -121,8 +137,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
           </label>
           <ProfilePhotoUploader
             currentAvatarUrl={session.imageUrl}
+            avatarType={session.avatarType}
+            avatarId={session.avatarId}
             initials={displayName || session.username || 'ME'}
+            username={session.username}
             onAvatarChange={handleAvatarChange}
+            onAvatarPayloadChange={handleAvatarPayloadChange}
           />
         </div>
 

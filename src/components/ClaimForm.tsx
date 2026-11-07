@@ -148,7 +148,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     if (statusState === 'empty_submit') {
       return (
         <span className="text-error font-normal text-[14px]">
-          Enter the name you want.
+          Enter the address you want.
         </span>
       );
     }
@@ -179,7 +179,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     if (statusState === 'unavailable') {
       return (
         <span className="text-error font-normal text-[14px]">
-          That name isn't available. Try another.
+          That address isn't available. Try another.
         </span>
       );
     }
@@ -206,7 +206,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           isDark ? 'text-inverse-muted' : 'text-muted'
         )}
       >
-        Use {USERNAME_MIN} to {USERNAME_MAX} letters, numbers or underscores.
+        Use {USERNAME_MIN} to {USERNAME_MAX} letters, numbers or hyphens.
       </span>
     );
   };
@@ -230,7 +230,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
         >
           <span
             className={cn(
-              'font-mono text-[16px] select-none shrink-0 pointer-events-none',
+              'font-mono text-[16px] select-none shrink-0 pointer-events-none pl-1 pr-1 font-medium',
               isDark ? 'text-inverse-muted' : 'text-muted'
             )}
           >
@@ -243,7 +243,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
             value={rawInput}
             onChange={handleChange}
             placeholder={copy.hero.claimPlaceholder}
-            aria-label="Choose your iveo username"
+            aria-label="Choose your iveo address"
             aria-describedby={statusId}
             maxLength={USERNAME_MAX}
             className={cn(

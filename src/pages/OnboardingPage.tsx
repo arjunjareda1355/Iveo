@@ -277,12 +277,17 @@ export const OnboardingPage: React.FC = () => {
   const handleFinish = async () => {
     setIsSaving(true);
     try {
+      const uname = session.username || usernameInput;
       await session.updatePreferences({
         onboardingComplete: true,
         onboardedAt: new Date().toISOString(),
         vibeId: selectedVibeId,
         buttonShape,
+        displayName: displayName.trim() || uname,
+        bio: bio.trim(),
+        avatarUrl,
       });
+
       try {
         sessionStorage.removeItem('iveo.claim');
         sessionStorage.removeItem('ivio.claim');
@@ -328,6 +333,32 @@ export const OnboardingPage: React.FC = () => {
             {/* Step Progress */}
             <StepProgress currentStep={currentStep} totalSteps={6} labels={STEP_LABELS} />
 
+            {/* Claimed Address Banner for quick guided profile setup */}
+            {session.username && currentStep > 1 && (
+              <div className="mt-5 p-3.5 sm:p-4 rounded-xl bg-surface border border-border shadow-2xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <Check size={14} strokeWidth={2.5} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-ink truncate">
+                      iveo.site/{session.username} is claimed
+                    </p>
+                    <p className="text-[12px] text-muted truncate">
+                      Follow these steps to complete setting up your profile
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className="text-[12px] font-medium text-muted hover:text-ink hover:underline shrink-0 cursor-pointer"
+                >
+                  Change address
+                </button>
+              </div>
+            )}
+
             <div className="mt-8">
               {/* STEP 1: Address */}
               {currentStep === 1 && (
@@ -344,8 +375,8 @@ export const OnboardingPage: React.FC = () => {
                   </p>
 
                   <form onSubmit={handleUsernameNext} className="mt-6">
-                    <div className="relative flex h-14 w-full items-center rounded-[14px] px-2 pl-4 bg-surface border border-border-strong hover:border-[#A3A3A3] focus-within:border-ink focus-within:shadow-[0_0_0_3px_rgba(10,10,10,0.08)] transition-all duration-120">
-                      <span className="font-mono text-[16px] text-muted select-none pointer-events-none shrink-0">
+                    <div className="relative flex h-14 w-full items-center rounded-[14px] px-3 bg-surface border border-border-strong hover:border-[#A3A3A3] focus-within:border-ink focus-within:shadow-[0_0_0_3px_rgba(10,10,10,0.08)] transition-all duration-120">
+                      <span className="font-mono text-[16px] text-muted select-none pointer-events-none shrink-0 pl-1 pr-1 font-medium">
                         iveo.site/
                       </span>
                       <input
@@ -359,7 +390,7 @@ export const OnboardingPage: React.FC = () => {
                         autoFocus
                       />
                       {usernameAvailable && (
-                        <div className="mr-3 text-emerald-600 flex items-center gap-1 text-[13px] font-medium">
+                        <div className="mr-2 text-emerald-600 flex items-center gap-1 text-[13px] font-medium shrink-0">
                           <Check size={16} strokeWidth={2.5} />
                           <span>Available</span>
                         </div>
@@ -408,6 +439,7 @@ export const OnboardingPage: React.FC = () => {
                       <ProfilePhotoUploader
                         currentAvatarUrl={avatarUrl}
                         initials={displayName || usernameInput || 'ME'}
+                        username={usernameInput || session.username}
                         onAvatarChange={(url) => setAvatarUrl(url)}
                       />
                     </div>
@@ -745,7 +777,7 @@ export const OnboardingPage: React.FC = () => {
                     </div>
                   </Card>
 
-                  <div className="mt-8 flex flex-col sm:flex-row items-center gap-3">
+                  <div className="mt-8">
                     <Button
                       type="button"
                       variant="primary"
@@ -755,16 +787,6 @@ export const OnboardingPage: React.FC = () => {
                       fullWidth
                     >
                       Publish & Go to Dashboard
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="lg"
-                      onClick={copyAddress}
-                    >
-                      <Copy size={16} className="mr-1.5" />
-                      <span>Copy link</span>
                     </Button>
                   </div>
                 </div>

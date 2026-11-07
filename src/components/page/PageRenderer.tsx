@@ -15,6 +15,7 @@ import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
 import { TipJarBlock } from '../public/TipJarBlock';
 import { FaqBlock } from '../public/FaqBlock';
+import { VCardBlock } from '../public/VCardBlock';
 import { formatExternalUrl } from '../../lib/urls';
 import { Logo } from '../ui/Logo';
 
@@ -54,6 +55,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     buttonRadiusOverride !== undefined ? buttonRadiusOverride : tokens.buttonRadius;
 
   const [activeEmbedId, setActiveEmbedId] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
+
+  // Reset avatar error when avatarUrl changes
+  React.useEffect(() => {
+    setAvatarError(false);
+  }, [profile?.avatarUrl, persona.avatarUrl]);
 
   // Profile data
   const displayName = profile?.name ?? persona.name;
@@ -111,13 +118,15 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           fontSize: `${Math.round(22 * scale)}px`,
         }}
       >
-        {profile?.avatarUrl ? (
+        {(profile?.avatarUrl ?? persona.avatarUrl) && !avatarError ? (
           <img
-            src={profile.avatarUrl}
+            src={profile?.avatarUrl ?? persona.avatarUrl}
             alt={displayName}
             loading="eager"
             decoding="async"
             referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
+            onError={() => setAvatarError(true)}
             className="w-full h-full object-cover block"
           />
         ) : (
@@ -375,6 +384,20 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 <FaqBlock
                   title={block.title}
                   config={block.faq}
+                  tokens={tokens}
+                  buttonRadius={effectiveRadius}
+                  scale={scale}
+                />
+              </div>
+            );
+          }
+
+          // 4d. Contact Card (vCard) Block
+          if (block.kind === 'vcard' && block.vcard) {
+            return (
+              <div key={block.id} className="w-full">
+                <VCardBlock
+                  config={block.vcard}
                   tokens={tokens}
                   buttonRadius={effectiveRadius}
                   scale={scale}
