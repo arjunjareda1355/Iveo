@@ -21,6 +21,14 @@ import {
 } from './_lib/azureSql.ts';
 import { isAllowedAvatarHost } from './_lib/publicPage.ts';
 import { RESERVED } from './_lib/usernames.ts';
+import {
+  firebaseGetProfile,
+  firebaseGetBlocks,
+  firebaseSaveProfile,
+  firebaseSaveBlocks,
+  firebaseSaveContact,
+} from './_lib/firebaseServer.ts';
+import { VIBES } from '../src/lib/vibes.ts';
 
 /**
  * GET /api/db/readiness
@@ -68,12 +76,50 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    const profile = await dbGetProfile(clean);
+    let profile = await dbGetProfile(clean);
     if (!profile) {
+      profile = await firebaseGetProfile(clean);
+    }
+
+    if (!profile) {
+      // Demo persona fallback so demo creator addresses always render
+      const personaVibe = VIBES.find((v) => v.persona.handle === clean);
+      if (personaVibe) {
+        return res.status(200).json({
+          profile: {
+            username: clean,
+            displayName: personaVibe.persona.name,
+            bio: personaVibe.persona.bio,
+            avatarUrl: null,
+            avatarType: 'default',
+            avatarId: null,
+            vibeId: personaVibe.id,
+            buttonShape: 'rounded',
+            socials: {},
+            socialsPosition: 'top',
+            hideFromSearch: false,
+            hideFooter: false,
+          },
+          links: personaVibe.persona.links.map((l, i) => ({
+            id: `persona-${i}`,
+            kind: 'link',
+            title: l,
+            url: 'https://iveo.site',
+            layout: 'classic',
+            isActive: true,
+          })),
+        });
+      }
       return res.status(404).json({ error: 'not_found' });
     }
 
-    const allBlocks = await dbGetBlocks(clean);
+    let allBlocks = await dbGetBlocks(clean);
+    if (!allBlocks || allBlocks.length === 0) {
+      const fbBlocks = await firebaseGetBlocks(clean);
+      if (fbBlocks && fbBlocks.length > 0) {
+        allBlocks = fbBlocks;
+      }
+    }
     const now = new Date();
 
     // Map public blocks (strip URLs from protected links until unlocked)
@@ -153,6 +199,11 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
         error: result.error,
         message: result.message || 'That address is unavailable.',
       });
+    }
+
+    if (result.username) {
+      // Sync claim and profile to Firebase in background
+      firebaseSaveProfile(result.username, profileData || {}, userId).catch(() => {});
     }
 
     return res.status(200).json({
@@ -267,6 +318,9 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       }
       return res.status(400).json({ error: saveResult.error });
     }
+
+    // Sync to Firebase Cloud Database in background
+    firebaseSaveProfile(username, body, body.userId || req.headers['x-user-id'] as string || 'owner').catch(() => {});
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -413,6 +467,9 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
       }
       return res.status(400).json({ error: result.error });
     }
+    // Sync to Firebase Cloud Database in background
+    firebaseSaveBlocks(username, blocks, userId || undefined).catch(() => {});
+
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
@@ -439,7 +496,7 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
 
   try {
     const id = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    await dbSaveContact({
+    const contactData = {
       id,
       userId: body.userId || 'owner',
       username,
@@ -448,7 +505,12 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
       phone: body.phone || null,
       consentText: body.consentText || null,
       source: body.source || null,
-    });
+    };
+    await dbSaveContact(contactData);
+
+    // Sync contact to Firebase in background
+    firebaseSaveContact(username, contactData).catch(() => {});
+
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'submit_failed', message: err?.message });

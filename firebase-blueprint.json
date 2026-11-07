@@ -68,9 +68,24 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["blockId", "userId", "count"]
+    },
+    "ClaimRecord": {
+      "title": "ClaimRecord",
+      "description": "Unique username registry record preventing duplicate claims",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "claimedAt": { "type": "string" }
+      },
+      "required": ["username", "userId"]
     }
   },
   "firestore": {
+    "/claims/{username}": {
+      "schema": { "$ref": "#/entities/ClaimRecord" },
+      "description": "Global atomic username reservations registry"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Public and private user page profile configurations"

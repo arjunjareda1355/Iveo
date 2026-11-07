@@ -63,12 +63,32 @@
       "hideFromSearch": false,
       "claimedAt": "2026-11-07T14:24:16.202Z",
       "updatedAt": "2026-11-07T14:24:16.202Z"
+    },
+    "testcreator777": {
+      "userId": "test_user_777",
+      "username": "testcreator777",
+      "displayName": "Test Creator 777",
+      "bio": "My custom creator bio",
+      "avatarUrl": null,
+      "avatarType": "default",
+      "avatarId": null,
+      "vibeId": "clean",
+      "buttonShape": "rounded",
+      "socials": {},
+      "socialsPosition": "top",
+      "primaryEmail": null,
+      "plan": "free",
+      "hideFooter": false,
+      "hideFromSearch": false,
+      "claimedAt": "2026-11-07T14:43:46.983Z",
+      "updatedAt": "2026-11-07T14:43:46.983Z"
     }
   },
   "userToUsername": {
     "user_owner_1793417444376": "security_1793417444376",
     "user_3LBKDF78G1PGyFZbKXib4q0P1jO": "arjun",
-    "user_alice_1794061456200": "alice-1794061456200"
+    "user_alice_1794061456200": "alice-1794061456200",
+    "test_user_777": "testcreator777"
   },
   "claims": {
     "security_1793417444376": {
@@ -80,6 +100,11 @@
       "userId": "user_alice_1794061456200",
       "username": "alice-1794061456200",
       "claimedAt": "2026-11-07T14:24:16.201Z"
+    },
+    "testcreator777": {
+      "userId": "test_user_777",
+      "username": "testcreator777",
+      "claimedAt": "2026-11-07T14:43:46.983Z"
     }
   },
   "blocks": {
@@ -321,6 +346,22 @@
       }
     ],
     "old-1794061492827": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794062711618": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794062795963": [
       {
         "id": "b_initial",
         "title": "My Work",

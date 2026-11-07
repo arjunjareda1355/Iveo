@@ -19,37 +19,42 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Claims Registry (for fast atomic check and cross-instance claim checks)
+    match /claims/{username} {
+      allow get: if isValidId(username);
+      allow list: if true;
+      allow create, update: if isValidId(username);
+      allow delete: if isValidId(username) && isSignedIn();
+    }
+
     // User Profile
     match /users/{userId} {
       allow get: if isValidId(userId);
-      allow list: if isValidId(userId);
-      allow create, update: if isValidId(userId) && (isOwner(userId) || (request.resource.data.userId == userId));
-      allow delete: if isValidId(userId) && isOwner(userId);
+      allow list: if true;
+      allow create, update: if isValidId(userId);
+      allow delete: if isValidId(userId) && (isOwner(userId) || isSignedIn());
 
       // Page Blocks
       match /blocks/{blockId} {
-        allow get, list: if isValidId(userId) && isValidId(blockId);
-        allow create, update, delete: if isValidId(userId) && isValidId(blockId) && (isOwner(userId) || (request.resource.data.userId == userId));
+        allow get: if isValidId(userId) && isValidId(blockId);
+        allow list: if isValidId(userId);
+        allow create, update, delete: if isValidId(userId) && isValidId(blockId);
       }
 
       // Collected Contacts
       match /contacts/{contactId} {
-        allow get, list, delete: if isValidId(userId) && isValidId(contactId) && isOwner(userId);
-        allow create: if isValidId(userId) && isValidId(contactId) && (
-          request.resource.data.keys().hasAll(['id', 'userId']) &&
-          request.resource.data.userId == userId
-        );
+        allow get, list, delete: if isValidId(userId);
+        allow create: if isValidId(userId) && isValidId(contactId);
         allow update: if false;
       }
 
       // Click Analytics
       match /clicks/{clickId} {
-        allow get, list: if isValidId(userId) && isValidId(clickId) && isOwner(userId);
-        allow create, update: if isValidId(userId) && isValidId(clickId) && (
-          request.resource.data.userId == userId
-        );
-        allow delete: if isValidId(userId) && isValidId(clickId) && isOwner(userId);
+        allow get, list: if isValidId(userId);
+        allow create, update: if isValidId(userId) && isValidId(clickId);
+        allow delete: if isValidId(userId);
       }
     }
   }
 }
+

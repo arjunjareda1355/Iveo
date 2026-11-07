@@ -69,12 +69,24 @@ export function getSubdomainFromHostname(hostname: string): string | null {
   if (!hostname) return null;
   const host = hostname.toLowerCase().trim().split(':')[0]; // strip port
 
-  // 1. Explicit query or pathname overrides for preview / iframe environments
+  // 1. Explicit query override for preview / iframe environments (only if explicitly requested via subdomain param and on root)
   if (typeof window !== 'undefined') {
-    const params = new URLSearchParams(window.location.search);
-    const subParam = params.get('subdomain') || params.get('u');
-    if (subParam && !RESERVED_USERNAMES_SET.has(subParam.toLowerCase().trim())) {
-      return subParam.toLowerCase().trim();
+    const pathname = window.location.pathname;
+    const isAppRoute = pathname.startsWith('/signup') ||
+      pathname.startsWith('/login') ||
+      pathname.startsWith('/onboarding') ||
+      pathname.startsWith('/dashboard') ||
+      pathname.startsWith('/account') ||
+      pathname.startsWith('/legal') ||
+      pathname.startsWith('/privacy') ||
+      pathname.startsWith('/terms');
+
+    if (!isAppRoute) {
+      const params = new URLSearchParams(window.location.search);
+      const subParam = params.get('subdomain');
+      if (subParam && !RESERVED_USERNAMES_SET.has(subParam.toLowerCase().trim())) {
+        return subParam.toLowerCase().trim();
+      }
     }
   }
 

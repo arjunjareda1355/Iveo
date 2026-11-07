@@ -96,6 +96,50 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     } catch {}
   }
 
+  // 3. Direct Firebase client lookup fallback
+  try {
+    const { doc, getDoc, getDocs, collection } = await import('firebase/firestore');
+    const { db } = await import('../lib/firebase');
+    const userDoc = await getDoc(doc(db, 'users', clean));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      const blocksSnap = await getDocs(collection(db, 'users', clean, 'blocks'));
+      const links = blocksSnap.docs.map((d) => d.data() as any);
+      return {
+        profile: {
+          username: data.username || clean,
+          displayName: data.displayName || data.username || clean,
+          bio: data.bio || '',
+          avatarUrl: isAllowedAvatarUrl(data.avatarUrl) ? data.avatarUrl : null,
+          vibeId: (data.vibeId as VibeId) || 'clean',
+          buttonShape: data.buttonShape || null,
+          socials: data.socials || {},
+          socialsPosition: data.socialsPosition || 'top',
+          hideFromSearch: Boolean(data.hideFromSearch),
+          hideFooter: Boolean(data.hideFooter),
+        },
+        links: links.map((b) => ({
+          id: String(b.id),
+          kind: b.kind || 'link',
+          title: String(b.title || ''),
+          url: b.isProtected ? null : (b.url ? String(b.url) : null),
+          icon: b.icon || null,
+          thumbnailPath: b.thumbnailPath || null,
+          thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
+          layout: b.layout || 'classic',
+          embedProvider: b.embedProvider || null,
+          isProtected: Boolean(b.isProtected),
+          signup: b.signup || null,
+          tipJar: b.tipJar || null,
+          faq: b.faq || null,
+          vcard: b.vcard || null,
+          animation: b.animation || null,
+          badge: b.badge || null,
+        })),
+      };
+    }
+  } catch {}
+
   if (rawSupabaseUrl) {
     try {
       const response = await fetch(`${rawSupabaseUrl}/rest/v1/rpc/get_public_page`, {

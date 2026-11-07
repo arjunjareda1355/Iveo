@@ -1,6 +1,7 @@
 import { validateUsernameServer } from './_lib/usernames.ts';
 import { adminClient } from './_lib/supabase.ts';
 import { dbGetProfile } from './_lib/azureSql.ts';
+import { firebaseIsUsernameClaimed } from './_lib/firebaseServer.ts';
 
 export const DEMO_TAKEN_USERNAMES = new Set([
   'maya',
@@ -17,7 +18,7 @@ export const DEMO_TAKEN_USERNAMES = new Set([
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const raw = url.searchParams.get('u') || url.searchParams.get('username') || '';
-  const requestingUserId = url.searchParams.get('userId') || '';
+  const requestingUserId = (url.searchParams.get('userId') || '').trim();
   const clean = raw.trim().toLowerCase();
 
   const validation = validateUsernameServer(clean);
@@ -30,7 +31,50 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  // Check centralized database (Azure SQL / server store)
+  // 1. Check demo creator reserved addresses
+  if (DEMO_TAKEN_USERNAMES.has(clean)) {
+    if (requestingUserId && requestingUserId.toLowerCase() === `demo_${clean}`) {
+      return Response.json({
+        ok: true,
+        available: true,
+        username: clean,
+        profileUrl: `https://iveo.site/${clean}`,
+        subdomainUrl: `https://iveo.site/${clean}`,
+        message: `iveo.site/${clean} is your address`,
+      });
+    }
+    return Response.json({
+      ok: true,
+      available: false,
+      reason: 'taken',
+      message: `iveo.site/${clean} is already claimed. Try another.`,
+    });
+  }
+
+  // 2. Check Firebase Cloud Database (persistent across revisions & instances)
+  try {
+    const fbClaim = await firebaseIsUsernameClaimed(clean, requestingUserId || undefined);
+    if (fbClaim.claimed) {
+      if (fbClaim.isOwn) {
+        return Response.json({
+          ok: true,
+          available: true,
+          username: clean,
+          profileUrl: `https://iveo.site/${clean}`,
+          subdomainUrl: `https://iveo.site/${clean}`,
+          message: `iveo.site/${clean} is your address`,
+        });
+      }
+      return Response.json({
+        ok: true,
+        available: false,
+        reason: 'taken',
+        message: `iveo.site/${clean} is already claimed. Try another.`,
+      });
+    }
+  } catch {}
+
+  // 3. Check centralized database (Azure SQL / server store)
   try {
     const existing = await dbGetProfile(clean);
     if (existing && existing.username) {

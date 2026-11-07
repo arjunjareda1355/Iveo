@@ -1,5 +1,6 @@
 import { publicRpc } from './supabase.ts';
 import { dbGetProfile } from './azureSql.ts';
+import { firebaseGetProfile } from './firebaseServer.ts';
 import { VIBES } from '../../src/lib/vibes.ts';
 
 export interface PublicPageServerData {
@@ -54,6 +55,21 @@ export async function loadPublicPage(
         avatarUrl: isAllowedAvatarHost(dbProf.avatarUrl) ? dbProf.avatarUrl : null,
         vibeId: dbProf.vibeId || 'clean',
         hideFromSearch: Boolean(dbProf.hideFromSearch),
+      };
+    }
+  } catch {}
+
+  // 1.5 Check Firebase Cloud database
+  try {
+    const fbProf = await firebaseGetProfile(clean);
+    if (fbProf && fbProf.username) {
+      return {
+        username: fbProf.username.toLowerCase(),
+        displayName: fbProf.displayName || `@${fbProf.username}`,
+        bio: fbProf.bio || null,
+        avatarUrl: isAllowedAvatarHost(fbProf.avatarUrl) ? fbProf.avatarUrl : null,
+        vibeId: fbProf.vibeId || 'clean',
+        hideFromSearch: Boolean(fbProf.hideFromSearch),
       };
     }
   } catch {}

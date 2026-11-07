@@ -119,16 +119,20 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           className
         )}
       >
-        <div
+        <Link
+          to={username ? `/${username}` : '/dashboard'}
+          target={username ? '_blank' : undefined}
+          rel={username ? 'noopener noreferrer' : undefined}
+          title={username ? `View live profile iveo.site/${username}` : undefined}
           className={cn(
-            'h-12 px-4 rounded-[10px] flex items-center justify-center font-mono text-[15px] select-none border',
+            'h-12 px-4 rounded-[10px] flex items-center justify-center font-mono text-[15px] border transition-opacity hover:opacity-85 cursor-pointer',
             isDark
               ? 'bg-[#141414] text-[#FAFAFA] border-[#262626]'
               : 'bg-surface text-ink border-border-strong'
           )}
         >
           iveo.site/{username || 'you'}
-        </div>
+        </Link>
 
         <Button
           as={Link}

@@ -68,11 +68,17 @@ export const RESERVED_USERNAMES_SET = new Set(
   RESERVED_USERNAMES.map((name) => name.toLowerCase())
 );
 
-// Simulated taken names on client for landing preview only
+// Taken names on client for instant feedback
 export const SIMULATED_TAKEN_USERNAMES_SET = new Set([
   'alex',
   'sam',
   'maya',
+  'devsharma',
+  'lenahoffmann',
+  'tomasreyes',
+  'elena',
+  'kai',
+  'arjun',
   'studio',
   'music',
   'art',
