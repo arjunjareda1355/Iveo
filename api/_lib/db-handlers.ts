@@ -18,17 +18,17 @@ import {
   dbSetLinkPassword,
   dbClearLinkPassword,
   dbVerifyLinkPassword,
-} from './_lib/azureSql.ts';
-import { isAllowedAvatarHost } from './_lib/publicPage.ts';
-import { RESERVED } from './_lib/usernames.ts';
+} from './azureSql.ts';
+import { isAllowedAvatarHost } from './publicPage.ts';
+import { RESERVED } from './usernames.ts';
 import {
   firebaseGetProfile,
   firebaseGetBlocks,
   firebaseSaveProfile,
   firebaseSaveBlocks,
   firebaseSaveContact,
-} from './_lib/firebaseServer.ts';
-import { VIBES } from '../src/lib/vibes.ts';
+} from './firebaseServer.ts';
+import { VIBES } from '../../src/lib/vibes.ts';
 
 /**
  * GET /api/db/readiness

@@ -5,6 +5,18 @@
   },
   "rewrites": [
     { "source": "/api/avatar/:username", "destination": "/api/avatar?u=:username" },
+    { "source": "/api/razorpay/:action", "destination": "/api/razorpay?action=:action" },
+    { "source": "/api/public-page", "destination": "/api/data?action=public-page" },
+    { "source": "/api/claim-username", "destination": "/api/data?action=claim-username" },
+    { "source": "/api/me", "destination": "/api/data?action=me" },
+    { "source": "/api/migrate-legacy", "destination": "/api/data?action=migrate-legacy" },
+    { "source": "/api/profile", "destination": "/api/data?action=profile" },
+    { "source": "/api/blocks", "destination": "/api/data?action=blocks" },
+    { "source": "/api/contacts", "destination": "/api/data?action=contacts" },
+    { "source": "/api/unlock-link", "destination": "/api/data?action=unlock-link" },
+    { "source": "/api/link-password", "destination": "/api/data?action=link-password" },
+    { "source": "/api/account/delete", "destination": "/api/data?action=account-delete" },
+    { "source": "/api/db/readiness", "destination": "/api/data?action=readiness" },
     { "source": "/:username([A-Za-z0-9-]{3,30})", "destination": "/api/page?u=:username" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
