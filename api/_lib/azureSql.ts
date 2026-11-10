@@ -662,6 +662,7 @@ export async function dbSaveProfile(profile: {
   plan?: string;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
+  background?: any;
 }): Promise<{ ok: boolean; error?: string }> {
   const cleanUsername = profile.username.toLowerCase().trim();
 

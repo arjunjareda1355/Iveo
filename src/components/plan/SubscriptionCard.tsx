@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Sparkles, Check, Receipt, ChevronRight } from 'lucide-react';
+import { Sparkles, Check, Receipt, ChevronRight, FileDown } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { ProBadge } from './ProBadge';
 import { useUpgradeDialog } from './UpgradeDialogProvider';
 import { useIvioSession } from '../../auth/useIvioSession';
+import { downloadInvoicePdf } from '../../lib/invoicePdf';
 
 export const SubscriptionCard: React.FC = () => {
   const session = useIvioSession();
@@ -106,6 +106,29 @@ export const SubscriptionCard: React.FC = () => {
               <div className="flex items-center justify-between pt-2 border-t border-border">
                 <span className="text-muted">Provider</span>
                 <span className="font-medium text-ink">Razorpay (256-bit SSL)</span>
+              </div>
+              <div className="pt-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  fullWidth
+                  iconLeft={<FileDown size={14} />}
+                  onClick={() => {
+                    downloadInvoicePdf({
+                      customerName: session.displayName || uname,
+                      customerEmail: session.primaryEmail,
+                      username: uname,
+                      plan: 'pro',
+                      period: subInfo?.period === 'yearly' ? 'yearly' : 'monthly',
+                      paymentId: subInfo?.paymentId || 'pay_live_verified',
+                      orderId: subInfo?.orderId || 'order_iveo_pro',
+                      date: subInfo?.subscribedAt || new Date().toISOString(),
+                      expiresAt: subInfo?.expiresAt,
+                    });
+                  }}
+                >
+                  Download PDF Invoice
+                </Button>
               </div>
             </div>
           )}

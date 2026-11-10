@@ -2,6 +2,14 @@ import type { VibeId } from './vibes.ts';
 
 export type ButtonShape = 'square' | 'rounded' | 'pill';
 
+export interface BackgroundConfig {
+  type: 'none' | 'gradient' | 'mesh' | 'image' | 'pattern';
+  value?: string;
+  blur?: number;
+  opacity?: number;
+  presetId?: string;
+}
+
 export interface IveoPreferences {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
@@ -18,6 +26,7 @@ export interface IveoPreferences {
   category?: string | null;
   socials?: Record<string, string>;
   socialsPosition?: 'top' | 'bottom';
+  background?: BackgroundConfig | null;
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -36,6 +45,7 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   category: null,
   socials: {},
   socialsPosition: 'top',
+  background: null,
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -45,6 +55,12 @@ const VALID_VIBE_IDS = new Set<VibeId>([
   'sage',
   'clay',
   'mono',
+  'cyberpunk',
+  'sunset',
+  'glass',
+  'brutalist',
+  'emerald',
+  'pastel',
 ]);
 
 const VALID_BUTTON_SHAPES = new Set<ButtonShape>(['square', 'rounded', 'pill']);
@@ -112,6 +128,11 @@ export function parsePreferences(raw: unknown): IveoPreferences {
 
   const socialsPosition = record.socialsPosition === 'bottom' ? 'bottom' : 'top';
 
+  const background =
+    record.background && typeof record.background === 'object'
+      ? (record.background as BackgroundConfig)
+      : null;
+
   return {
     vibeId,
     buttonShape,
@@ -126,5 +147,6 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     category,
     socials,
     socialsPosition,
+    background,
   };
 }

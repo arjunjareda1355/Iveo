@@ -86,22 +86,24 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!rawInput.trim()) {
-      setStatusState('empty_submit');
-      inputRef.current?.focus();
+    const trimmed = rawInput.trim();
+    if (!trimmed) {
+      navigate('/signup');
       return;
     }
 
-    setIsChecking(true);
-    const res = await checkUsernameAvailability(rawInput);
-    setIsChecking(false);
-
-    if (res.status === 'available') {
-      navigate(`/signup?u=${res.username}`);
-    } else {
-      setStatusState('unavailable');
-      inputRef.current?.focus();
+    const clean = normalizeUsername(trimmed);
+    if (!clean || clean.length < USERNAME_MIN) {
+      navigate('/signup');
+      return;
     }
+
+    try {
+      sessionStorage.setItem('iveo.claim', clean);
+      sessionStorage.setItem('ivio.claim', clean);
+    } catch {}
+
+    navigate(`/signup?u=${encodeURIComponent(clean)}`);
   };
 
   // Signed in state: compact pill + button

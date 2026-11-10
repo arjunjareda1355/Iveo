@@ -8,6 +8,7 @@ import {
   getDefaultAvatarByUrl,
   DefaultAvatar,
 } from '../../lib/defaultAvatars';
+import { compressImageFile } from '../../lib/imageCompressor';
 
 interface AvatarSelectorProps {
   currentAvatarUrl?: string | null;
@@ -86,67 +87,41 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
     setIsProcessing(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = async () => {
-          const canvas = document.createElement('canvas');
-          const maxDim = 400;
-          const width = img.width;
-          const height = img.height;
+      const { dataUrl } = await compressImageFile(file, {
+        maxWidth: 360,
+        maxHeight: 360,
+        quality: 0.82,
+        cropSquare: true,
+      });
 
-          // Crop to square center
-          const minSide = Math.min(width, height);
-          const startX = (width - minSide) / 2;
-          const startY = (height - minSide) / 2;
+      const u = username || localStorage.getItem('iveo_current_username') || 'owner';
+      let uploadedUrl = dataUrl;
 
-          canvas.width = maxDim;
-          canvas.height = maxDim;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, startX, startY, minSide, minSide, 0, 0, maxDim, maxDim);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-
-            const u = username || localStorage.getItem('iveo_current_username') || 'owner';
-            let uploadedUrl = dataUrl;
-
-            try {
-              const upRes = await fetch('/api/avatar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, dataUrl }),
-              });
-              if (upRes.ok) {
-                const upJson = await upRes.json();
-                if (upJson.avatarUrl) {
-                  uploadedUrl = upJson.avatarUrl;
-                }
-              }
-            } catch {}
-
-            setSelectedDefaultId(null);
-            await onAvatarChange({
-              avatarUrl: uploadedUrl,
-              avatarType: 'uploaded',
-              avatarId: null,
-            });
-            showToast('Custom photo uploaded successfully');
+      try {
+        const upRes = await fetch('/api/avatar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, dataUrl }),
+        });
+        if (upRes.ok) {
+          const upJson = await upRes.json();
+          if (upJson.avatarUrl) {
+            uploadedUrl = upJson.avatarUrl;
           }
-          setIsProcessing(false);
-        };
-        img.onerror = () => {
-          showToast('Failed to process image');
-          setIsProcessing(false);
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+        }
+      } catch {}
+
+      setSelectedDefaultId(null);
+      await onAvatarChange({
+        avatarUrl: uploadedUrl,
+        avatarType: 'uploaded',
+        avatarId: null,
+      });
+      showToast('Custom photo updated');
     } catch {
-      showToast('Failed to upload image');
-      setIsProcessing(false);
+      showToast('Failed to process image');
     } finally {
+      setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };

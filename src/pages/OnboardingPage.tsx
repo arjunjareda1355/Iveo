@@ -51,6 +51,12 @@ export const OnboardingPage: React.FC = () => {
     return 2;
   });
 
+  useEffect(() => {
+    if (session.isLoaded && session.onboardingComplete) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [session.isLoaded, session.onboardingComplete, navigate]);
+
   // Step 1: Address state
   const [usernameInput, setUsernameInput] = useState<string>(() => {
     if (session.username) return session.username;
@@ -291,6 +297,15 @@ export const OnboardingPage: React.FC = () => {
       try {
         sessionStorage.removeItem('iveo.claim');
         sessionStorage.removeItem('ivio.claim');
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('iveo_profile_completed', 'true');
+          if (uname) {
+            localStorage.setItem(`iveo_onboarding_done_${uname}`, 'true');
+          }
+          if (session.primaryEmail) {
+            localStorage.setItem(`iveo_onboarding_done_${session.primaryEmail}`, 'true');
+          }
+        }
       } catch {}
       showToast('Your page is published!');
       navigate('/dashboard', { replace: true });

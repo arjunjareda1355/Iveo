@@ -44,6 +44,42 @@ export const SERVER_VIBES: Record<string, ServerVibeTokens> = {
     muted: '#666666',
     avatarBg: '#E0E0E0',
   },
+  cyberpunk: {
+    bg: '#0F051D',
+    text: '#F4EEFF',
+    muted: '#A28BC4',
+    avatarBg: '#2A1647',
+  },
+  sunset: {
+    bg: '#FFF5F0',
+    text: '#2E1205',
+    muted: '#9C6246',
+    avatarBg: '#FFDEC9',
+  },
+  glass: {
+    bg: '#0A1118',
+    text: '#F0F6FC',
+    muted: '#7D8B99',
+    avatarBg: '#16222F',
+  },
+  brutalist: {
+    bg: '#FFF952',
+    text: '#000000',
+    muted: '#333333',
+    avatarBg: '#000000',
+  },
+  emerald: {
+    bg: '#0A1F18',
+    text: '#E6F5EE',
+    muted: '#739F8C',
+    avatarBg: '#13382D',
+  },
+  pastel: {
+    bg: '#F5EEFA',
+    text: '#2A1D36',
+    muted: '#867399',
+    avatarBg: '#E4D5EC',
+  },
 };
 
 export function getServerVibe(vibeId: string | null | undefined): ServerVibeTokens {

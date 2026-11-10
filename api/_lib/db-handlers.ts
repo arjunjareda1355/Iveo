@@ -23,6 +23,7 @@ import { isAllowedAvatarHost } from './publicPage.ts';
 import { RESERVED } from './usernames.ts';
 import {
   firebaseGetProfile,
+  firebaseGetProfileByUserId,
   firebaseGetBlocks,
   firebaseSaveProfile,
   firebaseSaveBlocks,
@@ -163,6 +164,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         socialsPosition: profile.socialsPosition || 'top',
         hideFromSearch: Boolean(profile.hideFromSearch),
         hideFooter: Boolean(profile.hideFooter),
+        background: profile.background || null,
       },
       links: filteredBlocks,
     });
@@ -230,12 +232,18 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    const profile = await dbGetProfileByUserId(userId, email);
+    let profile = await dbGetProfileByUserId(userId, email);
+    if (!profile) {
+      profile = await firebaseGetProfileByUserId(userId, email);
+    }
     if (!profile) {
       return res.status(200).json({ ok: true, claimed: false });
     }
 
-    const blocks = await dbGetBlocks(profile.username);
+    let blocks = await dbGetBlocks(profile.username);
+    if (!blocks || blocks.length === 0) {
+      blocks = await firebaseGetBlocks(profile.username);
+    }
 
     return res.status(200).json({
       ok: true,
@@ -310,6 +318,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       plan: body.plan,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
+      background: body.background,
     });
 
     if (saveResult && !saveResult.ok) {

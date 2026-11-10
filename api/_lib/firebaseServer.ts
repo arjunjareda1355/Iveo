@@ -137,6 +137,82 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
 }
 
 /**
+ * Retrieves a user profile by authenticated user ID or email from Firebase
+ */
+export async function firebaseGetProfileByUserId(
+  userId: string,
+  email?: string | null
+): Promise<any | null> {
+  if (!serverDb || (!userId && !email)) return null;
+
+  try {
+    // 1. Direct doc lookup by userId
+    if (userId) {
+      const userSnap = await getDoc(doc(serverDb, 'users', userId));
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data.username) {
+          return {
+            ...data,
+            username: data.username,
+          };
+        }
+      }
+
+      // 2. Query users collection where userId == userId
+      const qUser = query(collection(serverDb, 'users'), where('userId', '==', userId));
+      const qSnap = await getDocs(qUser);
+      if (!qSnap.empty) {
+        const data = qSnap.docs[0].data();
+        if (data.username) {
+          return {
+            ...data,
+            username: data.username,
+          };
+        }
+      }
+
+      // 3. Query claims collection where userId == userId
+      const qClaims = query(collection(serverDb, 'claims'), where('userId', '==', userId));
+      const claimsSnap = await getDocs(qClaims);
+      if (!claimsSnap.empty) {
+        const claimData = claimsSnap.docs[0].data();
+        const username = claimData.username || claimsSnap.docs[0].id;
+        if (username) {
+          const profile = await firebaseGetProfile(username);
+          if (profile) return profile;
+          return {
+            username,
+            userId,
+            displayName: username,
+          };
+        }
+      }
+    }
+
+    // 4. Query by primaryEmail if provided
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      const qEmail = query(collection(serverDb, 'users'), where('primaryEmail', '==', cleanEmail));
+      const emailSnap = await getDocs(qEmail);
+      if (!emailSnap.empty) {
+        const data = emailSnap.docs[0].data();
+        if (data.username) {
+          return {
+            ...data,
+            username: data.username,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[FirebaseServer] getProfileByUserId notice:', err);
+  }
+
+  return null;
+}
+
+/**
  * Retrieves user blocks from Firebase
  */
 export async function firebaseGetBlocks(username: string): Promise<any[]> {

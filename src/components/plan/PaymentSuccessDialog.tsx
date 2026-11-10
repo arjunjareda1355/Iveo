@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ArrowRight, Copy } from 'lucide-react';
+import { Check, ArrowRight, Copy, FileDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ProBadge } from './ProBadge';
 import { SubscriptionVerificationResult } from '../../lib/razorpay';
 import { useToast } from '../ui/Toast';
+import { downloadInvoicePdf } from '../../lib/invoicePdf';
 
 interface PaymentSuccessDialogProps {
   isOpen: boolean;
@@ -176,6 +177,26 @@ export const PaymentSuccessDialog: React.FC<PaymentSuccessDialogProps> = ({
               iconRight={<ArrowRight size={14} />}
             >
               View analytics
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="md"
+              iconLeft={<FileDown size={14} />}
+              onClick={() => {
+                downloadInvoicePdf({
+                  customerName: 'iveo Pro Member',
+                  username: 'member',
+                  plan: 'pro',
+                  period: data?.period || 'monthly',
+                  paymentId: data?.paymentId || 'pay_online_verified',
+                  orderId: data?.orderId || 'order_iveo_pro',
+                  date: data?.subscribedAt || new Date().toISOString(),
+                  expiresAt: data?.expiresAt,
+                });
+              }}
+            >
+              <span>Download PDF Invoice</span>
             </Button>
 
             <Button

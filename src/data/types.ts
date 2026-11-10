@@ -1,7 +1,19 @@
 import { VibeId } from '../lib/vibes';
-import { ButtonShape } from '../lib/preferences';
+import { ButtonShape, BackgroundConfig } from '../lib/preferences';
 
-export type BlockKind = 'link' | 'header' | 'divider' | 'embed' | 'signup' | 'tip_jar' | 'faq' | 'vcard';
+export type { BackgroundConfig };
+
+export type BlockKind =
+  | 'link'
+  | 'header'
+  | 'divider'
+  | 'embed'
+  | 'signup'
+  | 'tip_jar'
+  | 'faq'
+  | 'vcard'
+  | 'coffee'
+  | 'instagram';
 export type BlockLayout = 'classic' | 'featured';
 export type EmbedProvider = 'youtube' | 'spotify' | 'soundcloud';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
@@ -126,15 +138,19 @@ export interface Profile {
   displayName: string;
   bio: string;
   avatarUrl: string | null;
+  avatarType?: 'default' | 'uploaded';
+  avatarId?: string | null;
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
+  socialsPosition?: 'top' | 'bottom';
   isPublished: boolean;
   hideFromSearch: boolean;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   hideIveoFooter: boolean;
   hideIvioFooter: boolean;
+  background?: BackgroundConfig | null;
 }
 
 export interface PublicProfileData {
@@ -142,12 +158,15 @@ export interface PublicProfileData {
   displayName: string;
   bio: string;
   avatarUrl: string | null;
+  avatarType?: 'default' | 'uploaded';
+  avatarId?: string | null;
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
   socialsPosition?: 'top' | 'bottom';
   hideFromSearch: boolean;
   hideFooter: boolean;
+  background?: BackgroundConfig | null;
 }
 
 export interface PublicPageData {

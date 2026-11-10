@@ -21,7 +21,19 @@ export interface Persona {
   links: readonly string[];
 }
 
-export type VibeId = 'clean' | 'midnight' | 'paper' | 'sage' | 'clay' | 'mono';
+export type VibeId =
+  | 'clean'
+  | 'midnight'
+  | 'paper'
+  | 'sage'
+  | 'clay'
+  | 'mono'
+  | 'cyberpunk'
+  | 'sunset'
+  | 'glass'
+  | 'brutalist'
+  | 'emerald'
+  | 'pastel';
 
 export interface Vibe {
   id: VibeId;
@@ -31,6 +43,7 @@ export interface Vibe {
   nativeShape: 'Square' | 'Rounded' | 'Pill';
   tokens: VibeTokens;
   persona: Persona;
+  isPro?: boolean;
 }
 
 export const VIBES: readonly Vibe[] = [
@@ -227,6 +240,172 @@ export const VIBES: readonly Vibe[] = [
         'Talks',
         'Email me',
       ],
+    },
+  },
+  {
+    id: 'cyberpunk',
+    name: 'Cyberpunk',
+    description: 'Electric neon purple and synthwave glow for modern creators.',
+    fontFamily: "'Geist Mono', monospace",
+    nativeShape: 'Rounded',
+    isPro: true,
+    tokens: {
+      bg: '#0F051D',
+      text: '#F4EEFF',
+      muted: '#A28BC4',
+      avatarBg: '#2A1647',
+      avatarText: '#F4EEFF',
+      buttonBg: '#1E0C38',
+      buttonText: '#00FFE0',
+      buttonBorder: '#B94BFF',
+      buttonBorderWidth: '1.5px',
+      buttonRadius: 10,
+      buttonShadow: '0 0 12px rgba(185, 75, 255, 0.35)',
+    },
+    persona: {
+      name: 'Kai Vance',
+      handle: 'kaivance',
+      bio: 'Cybersecurity engineer, synthwave composer & pixel artist.',
+      initials: 'KV',
+      links: ['Listen on Spotify', 'Twitch Stream', 'Discord Community', 'Patreon'],
+    },
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset Warm',
+    description: 'Golden hour peach and terracotta warmth.',
+    fontFamily: "'Inter', sans-serif",
+    nativeShape: 'Pill',
+    isPro: true,
+    tokens: {
+      bg: '#FFF5F0',
+      text: '#2E1205',
+      muted: '#9C6246',
+      avatarBg: '#FFDEC9',
+      avatarText: '#2E1205',
+      buttonBg: '#FF5E3A',
+      buttonText: '#FFFFFF',
+      buttonRadius: 999,
+      buttonShadow: '0 4px 14px rgba(255, 94, 58, 0.25)',
+    },
+    persona: {
+      name: 'Aria Sol',
+      handle: 'ariasol',
+      bio: 'Travel photographer & slow-travel documentarian.',
+      initials: 'AS',
+      links: ['Photo Gallery', 'Print Store', 'YouTube Vlogs', 'Substack'],
+    },
+  },
+  {
+    id: 'glass',
+    name: 'Glassmorphism',
+    description: 'Frosted translucency with deep ambient obsidian backdrop.',
+    fontFamily: "'Inter', sans-serif",
+    nativeShape: 'Rounded',
+    isPro: true,
+    tokens: {
+      bg: '#0A1118',
+      text: '#F0F6FC',
+      muted: '#7D8B99',
+      avatarBg: '#16222F',
+      avatarText: '#F0F6FC',
+      buttonBg: 'rgba(255, 255, 255, 0.08)',
+      buttonText: '#FFFFFF',
+      buttonBorder: 'rgba(255, 255, 255, 0.16)',
+      buttonBorderWidth: '1px',
+      buttonRadius: 14,
+      buttonShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+    },
+    persona: {
+      name: 'Nova Labs',
+      handle: 'novalabs',
+      bio: 'Building calm spatial software and ambient UI design.',
+      initials: 'NL',
+      links: ['Explore Showcase', 'Documentation', 'Join Beta', 'Twitter / X'],
+    },
+  },
+  {
+    id: 'brutalist',
+    name: 'Brutalist Pop',
+    description: 'High voltage yellow, thick solid borders & hard offset drop shadows.',
+    fontFamily: "'Geist Mono', monospace",
+    nativeShape: 'Square',
+    isPro: true,
+    tokens: {
+      bg: '#FFF952',
+      text: '#000000',
+      muted: '#2B2B2B',
+      avatarBg: '#000000',
+      avatarText: '#FFF952',
+      buttonBg: '#FFFFFF',
+      buttonText: '#000000',
+      buttonBorder: '#000000',
+      buttonBorderWidth: '2.5px',
+      buttonRadius: 0,
+      buttonShadow: '4px 4px 0 #000000',
+    },
+    persona: {
+      name: 'Zane V',
+      handle: 'zanev',
+      bio: 'Zine publisher, risograph printmaker and poster collector.',
+      initials: 'ZV',
+      links: ['Shop Zines', 'Risograph Prints', 'Workshops', 'Instagram'],
+    },
+  },
+  {
+    id: 'emerald',
+    name: 'Emerald Forest',
+    description: 'Luxe deep pine velvet with radiant champagne gold typography.',
+    fontFamily: "'Fraunces', serif",
+    nativeShape: 'Rounded',
+    isPro: true,
+    tokens: {
+      bg: '#0A1F18',
+      text: '#E6F5EE',
+      muted: '#739F8C',
+      avatarBg: '#13382D',
+      avatarText: '#F4D06F',
+      buttonBg: '#13382D',
+      buttonText: '#F4D06F',
+      buttonBorder: '#235948',
+      buttonBorderWidth: '1px',
+      buttonRadius: 12,
+      buttonShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
+    },
+    persona: {
+      name: 'Rowan Vale',
+      handle: 'rowanvale',
+      bio: 'Botanist, wild forager and author of The Secret Forest.',
+      initials: 'RV',
+      links: ['Order the Book', 'Wild Teas & Blends', 'Field Journal', 'Workshops'],
+    },
+  },
+  {
+    id: 'pastel',
+    name: 'Pastel Dream',
+    description: 'Dreamy lilac and lavender with ultra-soft pill touchpoints.',
+    fontFamily: "'Inter', sans-serif",
+    nativeShape: 'Pill',
+    isPro: true,
+    tokens: {
+      bg: '#F5EEFA',
+      text: '#2A1D36',
+      muted: '#867399',
+      avatarBg: '#E4D5EC',
+      avatarText: '#2A1D36',
+      buttonBg: '#FFFFFF',
+      buttonText: '#6A3C94',
+      buttonBorder: '#D8BFEC',
+      buttonBorderWidth: '1px',
+      buttonRadius: 999,
+      buttonShadow: '0 4px 12px rgba(106, 60, 148, 0.08)',
+    },
+    persona: {
+      name: 'Mochi Studio',
+      handle: 'mochistudio',
+      bio: 'Cute 3D illustrations, cozy game dev and sticker club.',
+      initials: 'MS',
+      links: ['Sticker Club', 'Shop Pins', 'Play Cozy Quest', 'TikTok'],
     },
   },
 ] as const;

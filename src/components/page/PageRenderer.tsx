@@ -6,6 +6,9 @@ import {
   Mail,
   Calendar,
   Lock,
+  Share2,
+  ArrowRight,
+  Instagram,
 } from 'lucide-react';
 import { Vibe } from '../../lib/vibes';
 import { PageBlock } from '../../data/types';
@@ -16,6 +19,7 @@ import { EmbedBlock } from './EmbedBlock';
 import { TipJarBlock } from '../public/TipJarBlock';
 import { FaqBlock } from '../public/FaqBlock';
 import { VCardBlock } from '../public/VCardBlock';
+import { ShareModal } from '../public/ShareModal';
 import { formatExternalUrl } from '../../lib/urls';
 import { Logo } from '../ui/Logo';
 
@@ -97,17 +101,91 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
   let imageCounter = 0;
 
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  const handleShareClick = async () => {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `${displayName} (@${displayHandle}) | iveo`,
+          url: window.location.href,
+        });
+        return;
+      } catch {}
+    }
+    setIsShareModalOpen(true);
+  };
+
+  const bgConfig = profile?.background;
+  const hasCustomBg = Boolean(bgConfig && bgConfig.type && bgConfig.type !== 'none');
+
+  const containerBgStyle: React.CSSProperties = {
+    backgroundColor: tokens.bg,
+    color: tokens.text,
+    fontFamily: vibe.fontFamily,
+    padding: `${Math.round(32 * scale)}px ${Math.round(20 * scale)}px ${Math.round(24 * scale)}px`,
+  };
+
+  if (hasCustomBg && (bgConfig?.type === 'gradient' || bgConfig?.type === 'mesh')) {
+    containerBgStyle.background = bgConfig.value || tokens.bg;
+  }
+
   return (
     <div
-      className="w-full flex-1 flex flex-col items-center select-none"
-      style={{
-        backgroundColor: tokens.bg,
-        color: tokens.text,
-        fontFamily: vibe.fontFamily,
-        padding: `${Math.round(32 * scale)}px ${Math.round(20 * scale)}px ${Math.round(24 * scale)}px`,
-      }}
+      className="w-full flex-1 flex flex-col items-center select-none relative overflow-hidden"
+      style={containerBgStyle}
     >
-      {/* Avatar */}
+      {/* Background Image Layer */}
+      {hasCustomBg && bgConfig?.type === 'image' && bgConfig.value && (
+        <div
+          className="absolute inset-0 pointer-events-none overflow-hidden z-0"
+          style={{
+            opacity: bgConfig.opacity ?? 0.85,
+            filter: bgConfig.blur ? `blur(${bgConfig.blur}px)` : 'none',
+            transform: bgConfig.blur ? 'scale(1.05)' : 'none',
+          }}
+        >
+          <img
+            src={bgConfig.value}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
+
+      {/* Background Pattern Layer */}
+      {hasCustomBg && bgConfig?.type === 'pattern' && (
+        <div
+          className="absolute inset-0 pointer-events-none z-0 opacity-15"
+          style={{
+            backgroundImage: bgConfig.value || 'radial-gradient(#000 1px, transparent 1px)',
+            backgroundSize: '18px 18px',
+          }}
+        />
+      )}
+
+      {/* Minimal Top-Right Share Action on Public Page */}
+      {isPublicPage && displayHandle && (
+        <div className="w-full max-w-[540px] flex justify-end mb-2 relative z-10">
+          <button
+            type="button"
+            onClick={handleShareClick}
+            aria-label="Share this profile"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium backdrop-blur-md transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
+            style={{
+              backgroundColor: tokens.buttonBg,
+              color: tokens.buttonText,
+              border: `1px solid ${tokens.buttonBorder || 'rgba(0,0,0,0.1)'}`,
+            }}
+          >
+            <Share2 size={13} strokeWidth={2} />
+            <span>Share</span>
+          </button>
+        </div>
+      )}
+
+      <div className="w-full max-w-[540px] flex flex-col items-center relative z-10">
+        {/* Avatar */}
       <div
         className="rounded-full overflow-hidden flex items-center justify-center shrink-0 font-medium"
         style={{
@@ -406,6 +484,141 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
+          // 4e. Buy Me a Coffee Block
+          if (block.kind === 'coffee') {
+            const coffeeUrl = block.url ? formatExternalUrl(block.url) : 'https://buymeacoffee.com';
+            return (
+              <div
+                key={block.id}
+                className="w-full flex flex-col items-center select-none transition-transform duration-150"
+                style={{
+                  backgroundColor: tokens.buttonBg,
+                  color: tokens.buttonText,
+                  borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+                  border: tokens.buttonBorder
+                    ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+                    : '1px solid rgba(0,0,0,0.08)',
+                  padding: `${Math.round(14 * scale)}px`,
+                  boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[20px]">☕</span>
+                  <span
+                    className="font-semibold leading-tight"
+                    style={{ fontSize: `${Math.max(13, Math.round(15 * scale))}px` }}
+                  >
+                    {block.title || 'Buy Me a Coffee'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 my-2.5">
+                  {[1, 3, 5].map((count) => (
+                    <a
+                      key={count}
+                      href={isPublicPage ? coffeeUrl : undefined}
+                      target={isPublicPage ? '_blank' : undefined}
+                      rel={isPublicPage ? 'noopener noreferrer' : undefined}
+                      onClick={isPublicPage ? () => onLinkClick?.(block) : undefined}
+                      className="px-2.5 py-1 rounded-full text-[12px] font-medium border border-current/20 hover:border-current/60 transition-colors cursor-pointer"
+                      style={{ color: tokens.buttonText }}
+                    >
+                      {count} ☕ (${count * 3})
+                    </a>
+                  ))}
+                </div>
+                {isPublicPage ? (
+                  <a
+                    href={coffeeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => onLinkClick?.(block)}
+                    className="mt-1 w-full py-2 px-3 text-center rounded-[10px] text-[13px] font-semibold transition-transform active:scale-[0.98]"
+                    style={{
+                      backgroundColor: tokens.text,
+                      color: tokens.bg,
+                    }}
+                  >
+                    Support with a Coffee ☕
+                  </a>
+                ) : (
+                  <div
+                    className="mt-1 w-full py-2 px-3 text-center rounded-[10px] text-[13px] font-semibold"
+                    style={{
+                      backgroundColor: tokens.text,
+                      color: tokens.bg,
+                    }}
+                  >
+                    Support with a Coffee ☕
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // 4f. Instagram Showcase Block
+          if (block.kind === 'instagram') {
+            const igUrl = block.url ? formatExternalUrl(block.url) : 'https://instagram.com';
+            return (
+              <div
+                key={block.id}
+                className="w-full flex items-center justify-between transition-all duration-150 select-none"
+                style={{
+                  backgroundColor: tokens.buttonBg,
+                  color: tokens.buttonText,
+                  borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+                  border: tokens.buttonBorder
+                    ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+                    : '1px solid rgba(0,0,0,0.08)',
+                  padding: `${Math.round(12 * scale)}px ${Math.round(16 * scale)}px`,
+                  boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                    <Instagram size={18} strokeWidth={2} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      className="font-semibold truncate text-[14px] leading-tight"
+                      style={{ color: tokens.buttonText }}
+                    >
+                      {block.title || 'Instagram'}
+                    </span>
+                    <span className="text-[11px] opacity-70 truncate">
+                      Follow for stories & updates
+                    </span>
+                  </div>
+                </div>
+
+                {isPublicPage ? (
+                  <a
+                    href={igUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => onLinkClick?.(block)}
+                    className="px-3 py-1.5 rounded-full text-[12px] font-semibold shrink-0 transition-transform active:scale-95"
+                    style={{
+                      backgroundColor: tokens.text,
+                      color: tokens.bg,
+                    }}
+                  >
+                    Follow
+                  </a>
+                ) : (
+                  <span
+                    className="px-3 py-1.5 rounded-full text-[12px] font-semibold shrink-0"
+                    style={{
+                      backgroundColor: tokens.text,
+                      color: tokens.bg,
+                    }}
+                  >
+                    Follow
+                  </span>
+                )}
+              </div>
+            );
+          }
+
           const isProtected = block.isProtected === true || (protectedIds?.has(block.id) ?? false);
 
           // 5. Featured link
@@ -621,10 +834,29 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       <div
         className="w-full flex flex-col items-center justify-center shrink-0 pb-8 mt-auto"
         style={{
-          marginTop: `${Math.round(20 * scale)}px`,
-          gap: `${Math.round(6 * scale)}px`,
+          marginTop: `${Math.round(24 * scale)}px`,
+          gap: `${Math.round(10 * scale)}px`,
         }}
       >
+        {/* "Create your own page" Clean Action Pill */}
+        {isPublicPage && (
+          <a
+            href="https://iveo.site/signup"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-150 hover:opacity-100 hover:scale-105 active:scale-95 shadow-xs"
+            style={{
+              backgroundColor: tokens.buttonBg,
+              color: tokens.buttonText,
+              border: `1px solid ${tokens.buttonBorder || 'rgba(0,0,0,0.1)'}`,
+              opacity: 0.88,
+            }}
+          >
+            <span>Create your iveo page</span>
+            <ArrowRight size={12} strokeWidth={2} />
+          </a>
+        )}
+
         {/* iveo mark and link */}
         {!hideFooterMark && (
           <a
@@ -653,6 +885,15 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           </a>
         )}
       </div>
+      </div>
+
+      {/* Share Modal Dialog */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        username={displayHandle}
+        displayName={displayName}
+      />
     </div>
   );
 };

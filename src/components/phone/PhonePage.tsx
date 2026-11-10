@@ -1,6 +1,6 @@
 import React from 'react';
 import { Vibe } from '../../lib/vibes';
-import { PageBlock } from '../../data/types';
+import { PageBlock, BackgroundConfig } from '../../data/types';
 import { PageRenderer } from '../page/PageRenderer';
 
 export interface PhoneProfile {
@@ -12,6 +12,7 @@ export interface PhoneProfile {
   links?: readonly string[];
   socials?: Record<string, string>;
   socialsPosition?: 'top' | 'bottom';
+  background?: BackgroundConfig | null;
 }
 
 interface PhonePageProps {

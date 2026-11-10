@@ -29,6 +29,7 @@ export interface IveoSession {
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
   socialsPosition: 'top' | 'bottom';
+  background?: BackgroundConfig | null;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
@@ -43,6 +44,7 @@ export interface IveoSession {
     avatarType?: 'default' | 'uploaded';
     avatarId?: string | null;
     category?: string | null;
+    background?: BackgroundConfig | null;
   }) => Promise<void>;
   updateSocials: (socials: Record<string, string>) => Promise<void>;
   signOut: () => Promise<void>;
@@ -65,6 +67,7 @@ const FALLBACK_SESSION: IveoSession = {
   buttonShape: DEFAULT_PREFERENCES.buttonShape,
   socials: {},
   socialsPosition: 'top',
+  background: null,
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
@@ -171,12 +174,13 @@ function useClerkSession(): IveoSession {
   const isProfileSetup =
     isUsernameValid &&
     (preferences.onboardingComplete === true ||
-      Boolean(
-        serverProfile &&
-          (serverProfile.bio?.trim() ||
-            (serverProfile.displayName && serverProfile.displayName !== serverProfile.username) ||
-            serverProfile.avatarUrl)
-      ));
+      Boolean(serverProfile && serverProfile.username) ||
+      (typeof window !== 'undefined' && (
+        localStorage.getItem(`iveo_onboarding_done_${activeUser?.id}`) === 'true' ||
+        localStorage.getItem(`iveo_onboarding_done_${username}`) === 'true' ||
+        localStorage.getItem('iveo_profile_completed') === 'true' ||
+        localStorage.getItem(`iveo_profile_${username}`) !== null
+      )));
   const onboardingComplete = Boolean(isProfileSetup);
 
   const isOwner = primaryEmail ? isOwnerEmail(primaryEmail) : false;
@@ -400,6 +404,12 @@ function useClerkSession(): IveoSession {
       console.warn('Clerk metadata update note:', metaErr);
     }
 
+    if (safePatch.onboardingComplete) {
+      try {
+        localStorage.setItem(`iveo_onboarding_done_${currentUser.id}`, 'true');
+      } catch {}
+    }
+
     // Mirror to localStorage for offline and public profile fallback
     if (username) {
       try {
@@ -512,6 +522,7 @@ function useClerkSession(): IveoSession {
       ...(finalAvatarUrl !== undefined ? { avatarUrl: finalAvatarUrl } : {}),
       ...(finalAvatarType !== undefined ? { avatarType: finalAvatarType } : {}),
       ...(finalAvatarId !== undefined ? { avatarId: finalAvatarId } : {}),
+      ...(profile.background !== undefined ? { background: profile.background } : {}),
     }));
 
     await updatePreferences({
@@ -521,6 +532,7 @@ function useClerkSession(): IveoSession {
       avatarType: finalAvatarType !== undefined ? finalAvatarType : (serverProfile?.avatarType || 'default'),
       avatarId: finalAvatarId !== undefined ? finalAvatarId : (serverProfile?.avatarId || null),
       category: profile.category !== undefined ? profile.category : preferences.category,
+      background: profile.background !== undefined ? profile.background : preferences.background,
     });
   };
 
@@ -545,6 +557,7 @@ function useClerkSession(): IveoSession {
     buttonShape: preferences.buttonShape,
     socials,
     socialsPosition: preferences.socialsPosition || 'top',
+    background: serverProfile?.background || preferences.background || null,
     onboardingComplete,
     plan,
     isPro,

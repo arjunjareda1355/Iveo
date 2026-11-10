@@ -188,10 +188,18 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       return b;
     });
 
+    const bgConfig = pageData.profile.background;
+    const customBgStyle: React.CSSProperties = {
+      backgroundColor: vibe.tokens.bg,
+    };
+    if (bgConfig && (bgConfig.type === 'gradient' || bgConfig.type === 'mesh') && bgConfig.value) {
+      customBgStyle.background = bgConfig.value;
+    }
+
     return (
       <div
         className="min-h-screen w-full flex justify-center"
-        style={{ backgroundColor: vibe.tokens.bg }}
+        style={customBgStyle}
       >
         <div className="w-full max-w-[580px] min-h-screen flex flex-col">
           <PageRenderer
@@ -203,6 +211,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
               avatarUrl: pageData.profile.avatarUrl,
               socials: pageData.profile.socials,
               socialsPosition: pageData.profile.socialsPosition || 'top',
+              background: pageData.profile.background,
             }}
             blocks={effectiveBlocks}
             buttonRadiusOverride={buttonRadiusOverride}

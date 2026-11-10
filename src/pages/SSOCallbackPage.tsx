@@ -7,7 +7,8 @@ export const SSOCallbackPage: React.FC = () => {
     <AuthLayout title="Completing sign in...">
       <div className="w-full max-w-[420px] mx-auto flex flex-col items-center">
         <AuthenticateWithRedirectCallback
-          signInFallbackRedirectUrl="/"
+          signInFallbackRedirectUrl="/dashboard"
+          signInForceRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/onboarding"
           continueSignUpUrl="/onboarding"
           firstFactorUrl="/login"

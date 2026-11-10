@@ -12,9 +12,13 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
   if (!clean) return null;
 
   // 1. Unified server endpoint (Azure SQL Database / Server store)
-  // Ensures published pages are accessible across any browser, device, or crawler
+  // Ensures published pages are accessible across any browser, device, or crawler with immediate real-time sync
   try {
-    let res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}`);
+    const ts = Date.now();
+    let res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}&_t=${ts}`, {
+      cache: 'no-cache',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
 
     // If on a user subdomain and same-origin /api/public-page is 404, fallback to apex iveo.site
     if (
@@ -24,7 +28,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       window.location.hostname !== 'iveo.site'
     ) {
       try {
-        res = await fetch(`https://iveo.site/api/public-page?u=${encodeURIComponent(clean)}`);
+        res = await fetch(`https://iveo.site/api/public-page?u=${encodeURIComponent(clean)}&_t=${ts}`, {
+          cache: 'no-cache',
+        });
       } catch {}
     }
 
@@ -37,12 +43,15 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             displayName: data.profile.displayName || data.profile.username || clean,
             bio: data.profile.bio || '',
             avatarUrl: isAllowedAvatarUrl(data.profile.avatarUrl) ? data.profile.avatarUrl : null,
+            avatarType: data.profile.avatarType,
+            avatarId: data.profile.avatarId,
             vibeId: (data.profile.vibeId as VibeId) || 'clean',
             buttonShape: data.profile.buttonShape || null,
             socials: data.profile.socials || {},
             socialsPosition: data.profile.socialsPosition || 'top',
             hideFromSearch: Boolean(data.profile.hideFromSearch),
             hideFooter: Boolean(data.profile.hideFooter),
+            background: data.profile.background || null,
           },
           links: (Array.isArray(data.links) ? data.links : []).map((b: any) => ({
             id: String(b.id),
