@@ -10,19 +10,7 @@ import { copy } from '../content/copy';
 export const LoginPage: React.FC = () => {
   usePageMeta({ robots: 'noindex, nofollow' });
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const rawRedirectUrl = searchParams.get('redirect_url');
-
-  useEffect(() => {
-    if (rawRedirectUrl) {
-      const safe = safeRedirectPath(rawRedirectUrl);
-      if (!safe) {
-        // Discard unsafe redirect target silently with a replace navigation
-        navigate('/login', { replace: true });
-      }
-    }
-  }, [rawRedirectUrl, navigate]);
-
   const validatedRedirectUrl = safeRedirectPath(rawRedirectUrl) || '/dashboard';
 
   return (

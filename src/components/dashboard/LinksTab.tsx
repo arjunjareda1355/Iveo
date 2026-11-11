@@ -983,12 +983,13 @@ export const LinksTab: React.FC = () => {
                     {isLink && (
                       <ImageSection
                         userId={username || 'owner'}
+                        blockId={block.id}
                         thumbnailPath={block.thumbnailPath}
                         thumbnailUrl={block.thumbnailUrl}
-                        onImageChanged={async (newPath) => {
+                        onImageChanged={async (newPath, newUrl) => {
                           const layout = newPath ? editLayout : 'classic';
                           setEditLayout(layout);
-                          await setBlockImage(block.id, newPath, layout);
+                          await setBlockImage(block.id, newPath, layout, newUrl);
                         }}
                       />
                     )}

@@ -34,7 +34,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   className = '',
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeTab, setActiveTab] = useState<'library' | 'upload'>('library');
+  const [showLibrary, setShowLibrary] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedDefaultId, setSelectedDefaultId] = useState<string | null>(() => {
     if (avatarId) return avatarId;
@@ -156,102 +156,97 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
         aria-hidden="true"
       />
 
-      {/* Header: Current Avatar Preview + Active Mode Badge */}
-      <div className="flex items-center gap-4 p-3 rounded-xl bg-surface-2 border border-border">
-        <div className="relative shrink-0">
-          <Avatar
-            src={currentAvatarUrl}
-            alt={username || 'Profile avatar'}
-            size="lg"
-            fallbackInitials={initials}
-            className="ring-2 ring-border shadow-xs"
-          />
-          {isProcessing && (
-            <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center text-white">
-              <Loader2 size={18} className="animate-spin" />
+      {/* Header: Current Avatar Preview + Quick Actions */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-surface-2 border border-border">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="relative shrink-0">
+            <Avatar
+              src={currentAvatarUrl}
+              alt={username || 'Profile avatar'}
+              size="lg"
+              fallbackInitials={initials}
+              className="ring-2 ring-border shadow-xs"
+            />
+            {isProcessing && (
+              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center text-white">
+                <Loader2 size={18} className="animate-spin" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[14px] font-semibold text-ink truncate">
+                {username ? `@${username}` : 'Profile Picture'}
+              </span>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                  isCurrentDefault
+                    ? 'bg-ink/10 text-ink'
+                    : currentAvatarUrl
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-sand-200 text-ink/60'
+                }`}
+              >
+                {isCurrentDefault ? 'Library Avatar' : currentAvatarUrl ? 'Custom Photo' : 'No Avatar'}
+              </span>
             </div>
+            <p className="text-[12px] text-muted mt-0.5">
+              PNG, JPG or WebP. Automatically optimized.
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons: Direct Upload & Library Toggle (no duplicate buttons) */}
+        <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0 flex-wrap">
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isProcessing}
+          >
+            <Upload size={14} className="mr-1.5" />
+            <span>Upload photo</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant={showLibrary ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => setShowLibrary(!showLibrary)}
+            disabled={isProcessing}
+          >
+            <Sparkles size={14} className="mr-1.5" />
+            <span>{showLibrary ? 'Hide styles' : 'Browse styles'}</span>
+          </Button>
+
+          {currentAvatarUrl && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleRemove}
+              disabled={isProcessing}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 text-[12px]"
+            >
+              <Trash2 size={13} className="mr-1" />
+              <span>Reset</span>
+            </Button>
           )}
         </div>
-
-        <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[14px] font-semibold text-ink truncate">
-              {username ? `@${username}` : 'Profile Picture'}
-            </span>
-            <span
-              className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-                isCurrentDefault
-                  ? 'bg-ink/10 text-ink'
-                  : currentAvatarUrl
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-sand-200 text-ink/60'
-              }`}
-            >
-              {isCurrentDefault ? 'Default Avatar' : currentAvatarUrl ? 'Custom Upload' : 'No Avatar'}
-            </span>
-          </div>
-          <p className="text-[12px] text-muted mt-0.5 truncate">
-            {isCurrentDefault
-              ? 'Using an avatar from the curated library'
-              : currentAvatarUrl
-              ? 'Using your uploaded custom photo'
-              : 'Choose an avatar or upload your own'}
-          </p>
-        </div>
-
-        {currentAvatarUrl && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRemove}
-            disabled={isProcessing}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 text-[12px] shrink-0"
-          >
-            <Trash2 size={13} className="mr-1" />
-            <span>Reset</span>
-          </Button>
-        )}
       </div>
 
-      {/* Dual-choice Tabs: (A) Choose Default Avatar vs (B) Upload Custom */}
-      <div className="flex border-b border-border">
-        <button
-          type="button"
-          onClick={() => setActiveTab('library')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors cursor-pointer ${
-            activeTab === 'library'
-              ? 'border-ink text-ink'
-              : 'border-transparent text-muted hover:text-ink'
-          }`}
-        >
-          <Sparkles size={14} />
-          <span>Default Avatars ({DEFAULT_AVATAR_LIST.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('upload')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors cursor-pointer ${
-            activeTab === 'upload'
-              ? 'border-ink text-ink'
-              : 'border-transparent text-muted hover:text-ink'
-          }`}
-        >
-          <Upload size={14} />
-          <span>Upload Custom Photo</span>
-        </button>
-      </div>
-
-      {/* Tab A: Default Avatar Grid */}
-      {activeTab === 'library' && (
-        <div className="flex flex-col gap-2">
+      {/* Expandable Default Avatar Library Grid */}
+      {showLibrary && (
+        <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-surface border border-border">
           <div className="flex items-center justify-between text-[12px] text-muted px-0.5">
-            <span>Tap an avatar to apply immediately:</span>
-            <span>{DEFAULT_AVATAR_LIST.length} styles available</span>
+            <span className="font-medium text-ink">Curated Avatar Library</span>
+            <span>{DEFAULT_AVATAR_LIST.length} styles • Tap to apply instantly</span>
           </div>
 
           <div
-            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 gap-2.5 max-h-[320px] overflow-y-auto p-1.5 rounded-xl bg-surface-2/60 border border-border/80 custom-scrollbar"
+            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 gap-2.5 max-h-[260px] overflow-y-auto p-1.5 rounded-lg bg-surface-2/60 border border-border/80 custom-scrollbar"
             role="radiogroup"
             aria-label="Default avatar library"
           >
@@ -290,35 +285,6 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
                 </button>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Tab B: Upload Custom Picture */}
-      {activeTab === 'upload' && (
-        <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-xl bg-surface-2/40 text-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-sand-200 flex items-center justify-center text-ink/70">
-            <Camera size={22} />
-          </div>
-          <div>
-            <p className="text-[14px] font-medium text-ink">
-              Upload your own profile picture
-            </p>
-            <p className="text-[12px] text-muted mt-0.5">
-              PNG, JPG, or WebP up to 8 MB. Automatically cropped to square (400×400).
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 mt-1">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessing}
-            >
-              <Upload size={14} className="mr-1.5" />
-              <span>Choose image file</span>
-            </Button>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react';
 import { PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
 import { formatExternalUrl } from '../../lib/urls';
+import { storagePublicUrl } from '../../data/storageApi';
 
 interface FeaturedLinkProps {
   block: PageBlock;
@@ -44,17 +45,23 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
       }}
     >
       {/* 16/9 aspect-ratio image */}
-      {!imageError && block.thumbnailUrl && (
-        <div className="w-full relative aspect-video overflow-hidden bg-black/5">
-          <img
-            src={block.thumbnailUrl}
-            alt=""
-            loading={isEager ? 'eager' : 'lazy'}
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={() => setImageError(true)}
-            className="w-full h-full object-cover block"
-          />
+      {(() => {
+        const effectiveThumbUrl = block.thumbnailUrl || (block.thumbnailPath ? storagePublicUrl(block.thumbnailPath) : null);
+        if (imageError || !effectiveThumbUrl) return null;
+        return (
+          <div className="w-full relative aspect-video overflow-hidden bg-black/5">
+            <img
+              src={effectiveThumbUrl}
+              alt=""
+              loading={isEager ? 'eager' : 'lazy'}
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => setImageError(true)}
+              className="w-full h-full object-cover block"
+            />
+          </div>
+        );
+      })()}
 
           {/* Badge if present */}
           {block.badge && (

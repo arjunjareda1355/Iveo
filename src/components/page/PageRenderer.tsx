@@ -21,6 +21,7 @@ import { FaqBlock } from '../public/FaqBlock';
 import { VCardBlock } from '../public/VCardBlock';
 import { ShareModal } from '../public/ShareModal';
 import { formatExternalUrl } from '../../lib/urls';
+import { storagePublicUrl } from '../../data/storageApi';
 import { Logo } from '../ui/Logo';
 
 export interface PageRendererProps {
@@ -636,7 +637,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           const DefaultIcon =
             DEFAULT_BUTTON_ICONS[idx % DEFAULT_BUTTON_ICONS.length];
 
-          const hasThumb = !!block.thumbnailUrl;
+          const effectiveThumbUrl = block.thumbnailUrl || (block.thumbnailPath ? storagePublicUrl(block.thumbnailPath) : null);
+          const hasThumb = Boolean(effectiveThumbUrl);
           if (hasThumb) imageCounter++;
           const isEager = hasThumb && imageCounter <= 2;
           const thumbSize = isPublicPage ? 40 : Math.round(32 * scale);
@@ -704,7 +706,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   }}
                 >
                   <img
-                    src={block.thumbnailUrl!}
+                    src={effectiveThumbUrl!}
                     alt=""
                     loading={isEager ? 'eager' : 'lazy'}
                     decoding="async"

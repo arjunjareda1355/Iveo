@@ -352,10 +352,11 @@ export async function setBlockImage(
   token: string | null,
   userId: string,
   blockId: string,
-  input: { thumbnailPath: string | null; layout: BlockLayout }
+  input: { thumbnailPath: string | null; layout: BlockLayout; thumbnailUrl?: string | null }
 ): Promise<void> {
   await updateBlock(token, userId, blockId, {
     thumbnailPath: input.thumbnailPath,
+    thumbnailUrl: input.thumbnailUrl,
     layout: input.layout,
   });
 }

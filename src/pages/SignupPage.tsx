@@ -72,10 +72,8 @@ export const SignupPage: React.FC = () => {
           routing="path"
           path="/signup"
           signInUrl="/login"
-          forceRedirectUrl="/onboarding"
           fallbackRedirectUrl="/onboarding"
           signInFallbackRedirectUrl="/dashboard"
-          signInForceRedirectUrl="/dashboard"
           initialValues={claim ? { username: claim } : undefined}
           fallback={<AuthSkeletonCard />}
         />

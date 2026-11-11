@@ -29,7 +29,7 @@ interface BlocksContextValue {
   addHeader: (title: string) => Promise<void>;
   addDivider: () => Promise<void>;
   updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
-  setBlockImage: (id: string, thumbnailPath: string | null, layout: BlockLayout) => Promise<void>;
+  setBlockImage: (id: string, thumbnailPath: string | null, layout: BlockLayout, thumbnailUrl?: string | null) => Promise<void>;
   deleteBlock: (id: string) => Promise<void>;
   toggleArchive: (id: string) => Promise<void>;
   toggleActive: (id: string) => Promise<void>;
@@ -286,16 +286,29 @@ export const BlocksProvider: React.FC<{
   const setBlockImage = async (
     id: string,
     thumbnailPath: string | null,
-    layout: BlockLayout
+    layout: BlockLayout,
+    thumbnailUrl?: string | null
   ) => {
+    const finalThumbUrl = thumbnailUrl !== undefined ? thumbnailUrl : (thumbnailPath ? storagePublicUrl(thumbnailPath) : null);
     const prev = [...blocks];
     setBlocks((b) =>
-      b.map((item) => (item.id === id ? { ...item, thumbnailPath, layout } : item))
+      b.map((item) =>
+        item.id === id ? { ...item, thumbnailPath, thumbnailUrl: finalThumbUrl, layout } : item
+      )
     );
 
     try {
-      await apiSetBlockImage(token, userId, id, { thumbnailPath, layout });
-      const updated = { ...(blocks.find((b) => b.id === id) || {}), thumbnailPath, layout };
+      await apiSetBlockImage(token, userId, id, {
+        thumbnailPath,
+        layout,
+        thumbnailUrl: finalThumbUrl,
+      });
+      const updated = {
+        ...(blocks.find((b) => b.id === id) || {}),
+        thumbnailPath,
+        thumbnailUrl: finalThumbUrl,
+        layout,
+      };
       syncBlockToFirebase(userId, updated as Block).catch(() => {});
     } catch (err: unknown) {
       setBlocks(prev);

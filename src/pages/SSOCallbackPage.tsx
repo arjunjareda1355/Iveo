@@ -8,11 +8,8 @@ export const SSOCallbackPage: React.FC = () => {
       <div className="w-full max-w-[420px] mx-auto flex flex-col items-center">
         <AuthenticateWithRedirectCallback
           signInFallbackRedirectUrl="/dashboard"
-          signInForceRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/onboarding"
           continueSignUpUrl="/onboarding"
-          firstFactorUrl="/login"
-          secondFactorUrl="/login"
         />
         <AuthSkeletonCard />
       </div>

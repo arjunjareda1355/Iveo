@@ -531,6 +531,12 @@ export async function dbClaimUsername(
     delete store.claims[previousUsername];
   }
 
+  // If claimed by a new user after deletion of an old account, ensure old blocks and contacts are not inherited
+  if (store.claims[clean] && store.claims[clean].userId !== userId) {
+    store.blocks[clean] = [];
+    store.contacts[clean] = [];
+  }
+
   store.userToUsername[userId] = clean;
   store.claims[clean] = {
     userId,
@@ -1173,6 +1179,22 @@ export async function dbDeleteAccount(
   }
 
   writeServerStore(store);
+
+  // Clean up any uploaded avatar or link thumbnail files for this username
+  try {
+    const avatarDir = path.resolve(process.cwd(), 'data', 'avatars');
+    if (fs.existsSync(avatarDir)) {
+      const files = fs.readdirSync(avatarDir);
+      for (const f of files) {
+        if (f.startsWith(`${clean}.`) || f.startsWith(`${clean}_`)) {
+          try {
+            fs.unlinkSync(path.join(avatarDir, f));
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+
   return { ok: true };
 }
 

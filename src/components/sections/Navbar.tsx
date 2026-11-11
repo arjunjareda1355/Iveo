@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Instagram, Youtube } from 'lucide-react';
 import { Logo } from '../ui/Logo';
 import { Button } from '../ui/Button';
 import { Container } from '../ui/Container';
@@ -91,6 +91,30 @@ export const Navbar: React.FC = () => {
 
         {/* Right: Desktop Actions */}
         <div className="hidden md:flex items-center">
+          {/* Iveo Social Media Accounts CTA */}
+          <div className="flex items-center gap-1 mr-3 pr-3 border-r border-border">
+            <a
+              href="https://youtube.com/@iveosite"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="iveo on YouTube"
+              title="iveo on YouTube (@iveosite)"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-[#FF0000] hover:bg-surface-2 transition-all duration-120 cursor-pointer"
+            >
+              <Youtube size={17} strokeWidth={1.75} />
+            </a>
+            <a
+              href="https://www.instagram.com/iveo.site"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="iveo on Instagram"
+              title="iveo on Instagram (@iveo.site)"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-[#E4405F] hover:bg-surface-2 transition-all duration-120 cursor-pointer"
+            >
+              <Instagram size={17} strokeWidth={1.75} />
+            </a>
+          </div>
+
           {!isLoaded ? (
             // Reserved width placeholder while Clerk loads to avoid any layout shift
             <div className="w-[190px] h-10" aria-hidden="true" />
@@ -146,80 +170,116 @@ export const Navbar: React.FC = () => {
         </div>
       </Container>
 
-      {/* Mobile Menu Sheet */}
+      {/* Mobile Menu Backdrop & Sheet */}
       {mobileMenuOpen && (
-        <div
-          ref={menuRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mobile Navigation"
-          className="md:hidden fixed top-16 left-0 right-0 bg-surface border-b border-border shadow-lg transition-all duration-200 z-50 overflow-y-auto max-h-[calc(100vh-64px)]"
-        >
-          <div className="px-6 py-2 pb-6 flex flex-col">
-            <nav className="flex flex-col divide-y divide-border">
-              {copy.nav.links.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  onClick={closeMenu}
-                  className="h-14 flex items-center text-[18px] font-medium text-ink hover:text-ink-2 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-ink"
-                >
-                  {link.label}
-                </a>
-              ))}
-            </nav>
+        <>
+          {/* Tap-anywhere backdrop to auto-close menu on bottom screen click */}
+          <div
+            aria-hidden="true"
+            onClick={closeMenu}
+            className="md:hidden fixed inset-0 top-16 z-40 bg-black/40 backdrop-blur-xs transition-opacity duration-200 cursor-pointer"
+          />
 
-            <div className="mt-6 flex flex-col gap-3">
-              {isSignedIn ? (
-                <>
-                  <Button
-                    as={Link}
-                    to="/dashboard"
-                    variant="primary"
-                    size="lg"
-                    fullWidth
+          <div
+            ref={menuRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile Navigation"
+            className="md:hidden fixed top-16 left-0 right-0 bg-surface border-b border-border shadow-lg transition-all duration-200 z-50 overflow-y-auto max-h-[calc(100vh-64px)]"
+          >
+            <div className="px-6 py-2 pb-6 flex flex-col">
+              <nav className="flex flex-col divide-y divide-border">
+                {copy.nav.links.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
                     onClick={closeMenu}
+                    className="h-14 flex items-center text-[18px] font-medium text-ink hover:text-ink-2 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-ink"
                   >
-                    {copy.nav.dashboard}
-                  </Button>
-                  <Button
-                    as={Link}
-                    to="/account"
-                    variant="secondary"
-                    size="lg"
-                    fullWidth
-                    onClick={closeMenu}
+                    {link.label}
+                  </a>
+                ))}
+              </nav>
+
+              <div className="mt-6 flex flex-col gap-3">
+                {isSignedIn ? (
+                  <>
+                    <Button
+                      as={Link}
+                      to="/dashboard"
+                      variant="primary"
+                      size="lg"
+                      fullWidth
+                      onClick={closeMenu}
+                    >
+                      {copy.nav.dashboard}
+                    </Button>
+                    <Button
+                      as={Link}
+                      to="/account"
+                      variant="secondary"
+                      size="lg"
+                      fullWidth
+                      onClick={closeMenu}
+                    >
+                      {copy.nav.manageAccount}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      as={Link}
+                      to="/login"
+                      variant="secondary"
+                      size="lg"
+                      fullWidth
+                      onClick={closeMenu}
+                    >
+                      {copy.nav.logIn}
+                    </Button>
+                    <Button
+                      as={Link}
+                      to="/signup"
+                      variant="primary"
+                      size="lg"
+                      fullWidth
+                      onClick={closeMenu}
+                    >
+                      {copy.nav.getStarted}
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Iveo Social Media Accounts in Mobile Menu */}
+              <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
+                <span className="text-[13px] text-muted font-medium">Follow iveo</span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="https://youtube.com/@iveosite"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="iveo on YouTube"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-2 hover:bg-surface border border-border text-[13px] font-medium text-ink transition-colors"
                   >
-                    {copy.nav.manageAccount}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    as={Link}
-                    to="/login"
-                    variant="secondary"
-                    size="lg"
-                    fullWidth
-                    onClick={closeMenu}
+                    <Youtube size={15} strokeWidth={1.75} className="text-[#FF0000]" />
+                    <span>YouTube</span>
+                  </a>
+                  <a
+                    href="https://www.instagram.com/iveo.site"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="iveo on Instagram"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-2 hover:bg-surface border border-border text-[13px] font-medium text-ink transition-colors"
                   >
-                    {copy.nav.logIn}
-                  </Button>
-                  <Button
-                    as={Link}
-                    to="/signup"
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    onClick={closeMenu}
-                  >
-                    {copy.nav.getStarted}
-                  </Button>
-                </>
-              )}
+                    <Instagram size={15} strokeWidth={1.75} className="text-[#E4405F]" />
+                    <span>Instagram</span>
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </header>
   );

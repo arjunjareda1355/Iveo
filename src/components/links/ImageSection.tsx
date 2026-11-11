@@ -1,19 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { processImage, ImageProcessError } from '../../lib/image-processing';
-import { uploadLinkImage, removeLinkImage } from '../../data/storageApi';
+import { compressImageFile } from '../../lib/imageCompressor';
+import { removeLinkImage } from '../../data/storageApi';
 
 interface ImageSectionProps {
   userId: string;
+  blockId?: string;
   token?: string | null;
   thumbnailPath: string | null;
   thumbnailUrl: string | null;
-  onImageChanged: (newPath: string | null) => Promise<void>;
+  onImageChanged: (newPath: string | null, newUrl?: string | null) => Promise<void>;
 }
 
 export const ImageSection: React.FC<ImageSectionProps> = ({
   userId,
+  blockId,
   token,
   thumbnailPath,
   thumbnailUrl,
@@ -31,12 +33,42 @@ export const ImageSection: React.FC<ImageSectionProps> = ({
     setIsUploading(true);
 
     try {
-      const processed = await processImage(file);
-      const newPath = await uploadLinkImage(token, userId, processed.blob);
+      // 1. Fast client-side image compression
+      const compressed = await compressImageFile(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+        format: 'image/jpeg',
+        cropSquare: false,
+      });
+
+      let finalUrl = compressed.dataUrl;
+      const newPath = `${userId}/thumb_${Date.now()}.jpg`;
+
+      // 2. Upload to server for fast cached delivery
+      try {
+        const res = await fetch('/api/avatar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: userId,
+            blockId: blockId || `blk_${Date.now()}`,
+            dataUrl: compressed.dataUrl,
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.avatarUrl) {
+            finalUrl = json.avatarUrl;
+          }
+        }
+      } catch {
+        // Fallback to compressed data URL directly
+      }
 
       // Save immediately
       const oldPath = thumbnailPath;
-      await onImageChanged(newPath);
+      await onImageChanged(newPath, finalUrl);
 
       // Remove old image object if it existed (best effort)
       if (oldPath) {
@@ -44,27 +76,8 @@ export const ImageSection: React.FC<ImageSectionProps> = ({
       }
 
       setStatusMessage('Image added');
-    } catch (err: unknown) {
-      if (err instanceof ImageProcessError) {
-        switch (err.code) {
-          case 'unsupported':
-            setErrorMessage('Choose a PNG, JPG or WebP image.');
-            break;
-          case 'too_large_input':
-            setErrorMessage('Choose an image under 8 MB.');
-            break;
-          case 'too_small':
-            setErrorMessage('Choose an image at least 64 pixels wide.');
-            break;
-          case 'too_large_output':
-            setErrorMessage('This image is too large. Try a smaller one.');
-            break;
-          default:
-            setErrorMessage("We couldn't upload that. Try again.");
-        }
-      } else {
-        setErrorMessage("We couldn't upload that. Try again.");
-      }
+    } catch {
+      setErrorMessage("We couldn't upload that. Try another image.");
       setStatusMessage(null);
     } finally {
       setIsUploading(false);
@@ -78,7 +91,7 @@ export const ImageSection: React.FC<ImageSectionProps> = ({
     const oldPath = thumbnailPath;
     setErrorMessage(null);
     try {
-      await onImageChanged(null);
+      await onImageChanged(null, null);
       if (oldPath) {
         removeLinkImage(token, oldPath);
       }

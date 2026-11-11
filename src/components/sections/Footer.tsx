@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Mail } from 'lucide-react';
+import { Mail, Instagram, Youtube } from 'lucide-react';
 import { Container } from '../ui/Container';
 import { Logo } from '../ui/Logo';
 import { copy } from '../../content/copy';
@@ -29,6 +29,32 @@ export const Footer: React.FC = () => {
               <Mail size={16} strokeWidth={1.5} className="text-subtle shrink-0" />
               <span>{copy.brand.supportEmail}</span>
             </a>
+
+            {/* Iveo Social Media Accounts CTA */}
+            <div className="mt-5 flex items-center gap-3">
+              <a
+                href="https://youtube.com/@iveosite"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="iveo on YouTube"
+                title="iveo on YouTube (@iveosite)"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-surface-2 hover:bg-surface border border-border text-[13px] font-medium text-ink transition-all hover:scale-105"
+              >
+                <Youtube size={16} strokeWidth={1.75} className="text-[#FF0000]" />
+                <span>YouTube</span>
+              </a>
+              <a
+                href="https://www.instagram.com/iveo.site"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="iveo on Instagram"
+                title="iveo on Instagram (@iveo.site)"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-surface-2 hover:bg-surface border border-border text-[13px] font-medium text-ink transition-all hover:scale-105"
+              >
+                <Instagram size={16} strokeWidth={1.75} className="text-[#E4405F]" />
+                <span>Instagram</span>
+              </a>
+            </div>
           </div>
 
           {/* Product Column (spans 2) */}
