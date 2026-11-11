@@ -22,6 +22,8 @@ interface BlocksContextValue {
   addEmbed: (url: string, caption: string, provider: EmbedProvider) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
+  addCoffee: (title?: string, url?: string) => Promise<void>;
+  addInstagram: (title?: string, url?: string) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
   addVCard: (config: VCardConfig, title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
@@ -223,6 +225,44 @@ export const BlocksProvider: React.FC<{
     }
   };
 
+  const addCoffee = async (title: string = 'Buy Me a Coffee', url: string = 'https://buymeacoffee.com') => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'coffee',
+        title,
+        url,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Buy Me a Coffee block added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add coffee block. Try again.");
+      throw err;
+    }
+  };
+
+  const addInstagram = async (title: string = 'Instagram', url: string = 'https://instagram.com') => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'instagram',
+        title,
+        url,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Instagram showcase added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add Instagram block. Try again.");
+      throw err;
+    }
+  };
+
   const updateBlockFields = async (id: string, patch: Partial<Block>) => {
     const prev = [...blocks];
     setBlocks((b) => b.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -358,6 +398,8 @@ export const BlocksProvider: React.FC<{
         addEmbed,
         addSignupForm,
         addTipJar,
+        addCoffee,
+        addInstagram,
         addFaq,
         addVCard,
         addHeader,

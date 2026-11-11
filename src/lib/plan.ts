@@ -5,6 +5,7 @@ export const PRO_FEATURES = [
   'analytics_detail',
   'password_links',
   'contact_forms',
+  'backgrounds',
 ] as const;
 
 export type ProFeature = (typeof PRO_FEATURES)[number];
@@ -16,6 +17,7 @@ export const PRO_FEATURE_NAMES: Record<ProFeature, string> = {
   analytics_detail: 'Advanced analytics',
   password_links: 'Password-protected links',
   contact_forms: 'Email and phone collection',
+  backgrounds: 'Custom backgrounds & mesh styles',
 };
 
 export function getProFeatureName(feature: ProFeature): string {

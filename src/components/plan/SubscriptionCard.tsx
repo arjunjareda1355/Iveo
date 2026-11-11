@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { Sparkles, Check, Receipt, ChevronRight, FileDown } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -112,7 +113,6 @@ export const SubscriptionCard: React.FC = () => {
                   variant="primary"
                   size="sm"
                   fullWidth
-                  iconLeft={<FileDown size={14} />}
                   onClick={() => {
                     downloadInvoicePdf({
                       customerName: session.displayName || uname,
@@ -127,7 +127,10 @@ export const SubscriptionCard: React.FC = () => {
                     });
                   }}
                 >
-                  Download PDF Invoice
+                  <span className="flex items-center justify-center gap-1.5">
+                    <FileDown size={14} />
+                    <span>Download PDF Invoice</span>
+                  </span>
                 </Button>
               </div>
             </div>

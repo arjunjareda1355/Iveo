@@ -122,6 +122,8 @@ async function startServer() {
 
   // 4. Azure SQL & Backend Persistence Routes
   const dbHandlers = await import('./api/_lib/db-handlers.ts');
+  const dataHandlerModule = await import('./api/data.ts');
+  app.all('/api/data', (req, res) => dataHandlerModule.default(req, res));
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
   app.get('/api/public-page', dbHandlers.handleGetPublicPage);
   app.post('/api/claim-username', dbHandlers.handleClaimUsername);

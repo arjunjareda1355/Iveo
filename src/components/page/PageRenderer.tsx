@@ -104,7 +104,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const handleShareClick = async () => {
-    if (typeof navigator !== 'undefined' && navigator.share) {
+    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile && navigator.share) {
       try {
         await navigator.share({
           title: `${displayName} (@${displayHandle}) | iveo`,

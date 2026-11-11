@@ -4,6 +4,7 @@ import { HAS_CLERK_KEY } from '../lib/env';
 import { VibeId } from '../lib/vibes';
 import {
   ButtonShape,
+  BackgroundConfig,
   IveoPreferences,
   parsePreferences,
   DEFAULT_PREFERENCES,
@@ -477,6 +478,7 @@ function useClerkSession(): IveoSession {
     avatarType?: 'default' | 'uploaded';
     avatarId?: string | null;
     category?: string | null;
+    background?: BackgroundConfig | null;
   }): Promise<void> => {
     let finalAvatarUrl = profile.avatarUrl;
     let finalAvatarType = profile.avatarType;

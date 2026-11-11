@@ -94,6 +94,8 @@ const DashboardContent: React.FC = () => {
     avatarUrl: session.imageUrl,
     bio: session.bio || 'Your bio goes here.',
     socials: session.socials,
+    socialsPosition: session.socialsPosition,
+    background: session.background,
   };
 
   const buttonRadiusOverride = previewShape ? BUTTON_RADIUS_MAP[previewShape] : undefined;

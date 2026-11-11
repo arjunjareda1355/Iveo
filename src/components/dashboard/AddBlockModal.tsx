@@ -12,6 +12,8 @@ import {
   Minus,
   Sparkles,
   ChevronRight,
+  Coffee,
+  Instagram,
 } from 'lucide-react';
 import { ProBadge } from '../plan/ProBadge';
 import { Button } from '../ui/Button';
@@ -22,6 +24,8 @@ export type FeatureType =
   | 'vcard'
   | 'signup'
   | 'tip_jar'
+  | 'coffee'
+  | 'instagram'
   | 'faq'
   | 'header'
   | 'divider';
@@ -76,6 +80,15 @@ const FEATURES: FeatureOption[] = [
     iconColor: 'text-emerald-600',
     badge: 'New',
   },
+  {
+    id: 'instagram',
+    title: 'Instagram Card',
+    description: 'Showcase your Instagram profile or latest post with branded gradient card',
+    category: 'links',
+    icon: Instagram,
+    iconBg: 'bg-rose-50',
+    iconColor: 'text-rose-600',
+  },
 
   // Audience & Community
   {
@@ -99,6 +112,16 @@ const FEATURES: FeatureOption[] = [
   },
 
   // Monetization
+  {
+    id: 'coffee',
+    title: 'Buy Me a Coffee',
+    description: 'Allow supporters to buy you coffees ($3, $9, $15) with custom note and tipping link',
+    category: 'monetization',
+    icon: Coffee,
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-800',
+    badge: 'Popular',
+  },
   {
     id: 'tip_jar',
     title: 'Tip Jar & Support',

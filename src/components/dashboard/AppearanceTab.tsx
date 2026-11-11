@@ -4,10 +4,12 @@ import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { VibeTileGroup } from '../onboarding/VibeTileGroup';
 import { ProfilePhotoUploader } from '../profile/ProfilePhotoUploader';
+import { BackgroundSelectorCard } from './BackgroundSelectorCard';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { VibeId, VIBES } from '../../lib/vibes';
 import { ButtonShape } from '../../lib/preferences';
+import { BackgroundConfig } from '../../data/types';
 import { copy } from '../../content/copy';
 
 interface AppearanceTabProps {
@@ -115,6 +117,14 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     }
   };
 
+  const handleBackgroundChange = async (bg: BackgroundConfig | null) => {
+    try {
+      await session.updateProfile({ background: bg });
+    } catch {
+      showToast("Couldn't update background");
+    }
+  };
+
   const activeVibe = VIBES.find((v) => v.id === currentVibeId) || VIBES[0];
 
   return (
@@ -208,7 +218,14 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         </div>
       </Card>
 
-      {/* 3. Button Shape Card */}
+      {/* 3. Page Background Card */}
+      <BackgroundSelectorCard
+        currentBackground={session.background}
+        isPro={session.isPro}
+        onBackgroundChange={handleBackgroundChange}
+      />
+
+      {/* 4. Button Shape Card */}
       <Card className="flex flex-col gap-4">
         <div>
           <h3 className="text-[20px] font-semibold text-ink leading-tight">

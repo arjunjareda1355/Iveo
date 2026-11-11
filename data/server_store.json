@@ -82,13 +82,36 @@
       "hideFromSearch": false,
       "claimedAt": "2026-11-07T14:43:46.983Z",
       "updatedAt": "2026-11-07T14:43:46.983Z"
+    },
+    "testuser99": {
+      "userId": "usr_test_99",
+      "username": "testuser99",
+      "displayName": "Test Creator Updated",
+      "bio": "Bio with custom background",
+      "avatarUrl": null,
+      "avatarType": "default",
+      "avatarId": null,
+      "vibeId": "neon",
+      "socials": {},
+      "socialsPosition": "top",
+      "primaryEmail": null,
+      "plan": "free",
+      "background": {
+        "type": "preset",
+        "presetId": "aurora",
+        "blur": 8,
+        "opacity": 90
+      },
+      "claimedAt": "2026-11-11T04:00:46.019Z",
+      "updatedAt": "2026-11-11T04:00:46.267Z"
     }
   },
   "userToUsername": {
     "user_owner_1793417444376": "security_1793417444376",
     "user_3LBKDF78G1PGyFZbKXib4q0P1jO": "arjun",
     "user_alice_1794061456200": "alice-1794061456200",
-    "test_user_777": "testcreator777"
+    "test_user_777": "testcreator777",
+    "usr_test_99": "testuser99"
   },
   "claims": {
     "security_1793417444376": {
@@ -105,6 +128,11 @@
       "userId": "test_user_777",
       "username": "testcreator777",
       "claimedAt": "2026-11-07T14:43:46.983Z"
+    },
+    "testuser99": {
+      "userId": "usr_test_99",
+      "username": "testuser99",
+      "claimedAt": "2026-11-11T04:00:46.019Z"
     }
   },
   "blocks": {
@@ -386,6 +414,84 @@
       }
     ],
     "old-1794286612572": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794368998614": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794369013082": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794369062609": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "testuser99": [
+      {
+        "id": "blk_1",
+        "kind": "coffee",
+        "title": "Buy Me a Coffee",
+        "url": "https://buymeacoffee.com/testcreator",
+        "tipJar": {
+          "amounts": [
+            3,
+            5,
+            10
+          ],
+          "currency": "USD",
+          "message": "Support my work!"
+        },
+        "isActive": true,
+        "position": 0,
+        "isArchived": false
+      },
+      {
+        "id": "blk_2",
+        "kind": "instagram",
+        "title": "Latest Post on Instagram",
+        "url": "https://instagram.com/p/test12345",
+        "thumbnailUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400",
+        "isActive": true,
+        "position": 1,
+        "isArchived": false
+      }
+    ],
+    "old-1794369668778": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794369692842": [
+      {
+        "id": "b_initial",
+        "title": "My Work",
+        "isActive": true,
+        "isArchived": false
+      }
+    ],
+    "old-1794369712841": [
       {
         "id": "b_initial",
         "title": "My Work",

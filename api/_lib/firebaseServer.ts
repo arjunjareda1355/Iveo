@@ -275,6 +275,7 @@ export async function firebaseSaveProfile(
     plan: profileData.plan || 'free',
     hideFooter: Boolean(profileData.hideFooter),
     hideFromSearch: Boolean(profileData.hideFromSearch),
+    background: profileData.background || null,
     updatedAt: new Date().toISOString(),
   };
 

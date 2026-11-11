@@ -555,6 +555,7 @@ export async function dbClaimUsername(
     plan: isOwnerEmailMatch ? 'pro' : (profileData?.plan || store.profiles[clean]?.plan || 'free'),
     hideFooter: Boolean(profileData?.hideFooter ?? store.profiles[clean]?.hideFooter),
     hideFromSearch: Boolean(profileData?.hideFromSearch ?? store.profiles[clean]?.hideFromSearch),
+    background: profileData?.background || store.profiles[clean]?.background || null,
     claimedAt: store.profiles[clean]?.claimedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -582,6 +583,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         let socials: Record<string, string> = {};
         let socialsPosition: 'top' | 'bottom' = 'top';
         let primaryEmail: string | null = null;
+        let backgroundConfig: any = null;
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
@@ -589,6 +591,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
               socials = parsed.links || {};
               socialsPosition = parsed.position || 'top';
               primaryEmail = parsed.email || null;
+              backgroundConfig = parsed.background || null;
             } else if (parsed && typeof parsed === 'object') {
               socials = parsed;
             }
@@ -610,6 +613,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           plan: row.plan,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
+          background: backgroundConfig || (row as any).background || null,
           isPublished: Boolean(row.is_published),
         };
       }
@@ -684,6 +688,7 @@ export async function dbSaveProfile(profile: {
     links: profile.socials || {},
     position: profile.socialsPosition || 'top',
     email: profile.primaryEmail || null,
+    background: profile.background !== undefined ? profile.background : null,
   };
 
   const calculatedAvatarType = profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default'));
@@ -777,6 +782,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
         let socials: Record<string, string> = {};
         let socialsPosition: 'top' | 'bottom' = 'top';
         let primaryEmail: string | null = null;
+        let backgroundConfig: any = null;
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
@@ -784,6 +790,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
               socials = parsed.links || {};
               socialsPosition = parsed.position || 'top';
               primaryEmail = parsed.email || null;
+              backgroundConfig = parsed.background || null;
             } else if (parsed && typeof parsed === 'object') {
               socials = parsed;
             }
@@ -805,6 +812,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           plan: row.plan,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
+          background: backgroundConfig || (row as any).background || null,
           isPublished: Boolean(row.is_published),
         };
       }

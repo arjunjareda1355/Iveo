@@ -182,7 +182,6 @@ export const PaymentSuccessDialog: React.FC<PaymentSuccessDialogProps> = ({
             <Button
               variant="secondary"
               size="md"
-              iconLeft={<FileDown size={14} />}
               onClick={() => {
                 downloadInvoicePdf({
                   customerName: 'iveo Pro Member',
@@ -196,7 +195,10 @@ export const PaymentSuccessDialog: React.FC<PaymentSuccessDialogProps> = ({
                 });
               }}
             >
-              <span>Download PDF Invoice</span>
+              <span className="flex items-center justify-center gap-1.5">
+                <FileDown size={14} />
+                <span>Download PDF Invoice</span>
+              </span>
             </Button>
 
             <Button

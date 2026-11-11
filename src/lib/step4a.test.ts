@@ -190,6 +190,7 @@ test('plan: defines all pro features and labels', () => {
     'analytics_detail',
     'password_links',
     'contact_forms',
+    'backgrounds',
   ]);
   assert.equal(getProFeatureName('embeds'), 'Embeds');
   assert.equal(getProFeatureName('scheduling'), 'Scheduling');
@@ -197,4 +198,5 @@ test('plan: defines all pro features and labels', () => {
   assert.equal(getProFeatureName('analytics_detail'), 'Advanced analytics');
   assert.equal(getProFeatureName('password_links'), 'Password-protected links');
   assert.equal(getProFeatureName('contact_forms'), 'Email and phone collection');
+  assert.equal(getProFeatureName('backgrounds'), 'Custom backgrounds & mesh styles');
 });

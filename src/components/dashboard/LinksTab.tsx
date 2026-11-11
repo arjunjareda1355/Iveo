@@ -57,6 +57,8 @@ export const LinksTab: React.FC = () => {
     addEmbed,
     addSignupForm,
     addTipJar,
+    addCoffee,
+    addInstagram,
     addFaq,
     addVCard,
     addHeader,
@@ -1171,8 +1173,12 @@ export const LinksTab: React.FC = () => {
         onSelectFeature={async (type: FeatureType) => {
           if (type === 'divider') {
             await addDivider();
+          } else if (type === 'coffee') {
+            await addCoffee('Buy Me a Coffee', 'https://buymeacoffee.com');
+          } else if (type === 'instagram') {
+            await addInstagram('Instagram Profile', 'https://instagram.com');
           } else {
-            handleOpenComposer(type);
+            handleOpenComposer(type as any);
           }
         }}
         isPro={isPro}

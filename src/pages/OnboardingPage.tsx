@@ -171,6 +171,8 @@ export const OnboardingPage: React.FC = () => {
     avatarUrl,
     bio: bio.trim() || 'Your bio goes here.',
     socials: session.socials || {},
+    socialsPosition: session.socialsPosition || 'top',
+    background: session.background,
   };
 
   const previewBlocks: PageBlock[] = starterLinks

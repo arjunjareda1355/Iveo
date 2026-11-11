@@ -5,9 +5,11 @@ export interface InvoiceData {
   customerName: string;
   customerEmail?: string | null;
   username: string;
-  plan: 'pro' | 'free';
-  period: 'monthly' | 'yearly';
+  plan?: 'pro' | 'free' | string;
+  period?: 'monthly' | 'yearly' | string;
+  planType?: 'monthly' | 'yearly' | string;
   amount?: number;
+  amountInr?: number;
   currency?: 'INR' | 'USD' | string;
   paymentId?: string;
   orderId?: string;
@@ -22,20 +24,22 @@ export function generateInvoicePdf(data: InvoiceData): jsPDF {
     format: 'a4',
   });
 
+  const effectivePeriod = String(data.period || data.planType || 'yearly').toLowerCase();
   const currencySymbol = data.currency === 'USD' ? '$' : '₹';
-  const rawAmount = data.amount
-    ? data.amount > 1000 && data.amount % 100 === 0
-      ? data.amount / 100
-      : data.amount
+  const val = data.amount !== undefined ? data.amount : (data.amountInr !== undefined ? data.amountInr : undefined);
+  const rawAmount = val !== undefined
+    ? val > 1000 && val % 100 === 0
+      ? val / 100
+      : val
     : data.currency === 'USD'
-      ? data.period === 'yearly' ? 60 : 6
-      : data.period === 'yearly' ? 4999 : 499;
+      ? effectivePeriod === 'yearly' ? 60 : 6
+      : effectivePeriod === 'yearly' ? 4999 : 499;
 
   const basePrice = Math.round((rawAmount / 1.18) * 100) / 100;
   const taxAmount = Math.round((rawAmount - basePrice) * 100) / 100;
   const invNumber = data.invoiceNumber || `INV-IVEO-${Date.now().toString().slice(-6)}`;
   const dateStr = data.date ? new Date(data.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const expiresStr = data.expiresAt ? new Date(data.expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date(Date.now() + (data.period === 'yearly' ? 365 : 30) * 86400000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const expiresStr = data.expiresAt ? new Date(data.expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date(Date.now() + (effectivePeriod === 'yearly' ? 365 : 30) * 86400000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   // 1. Header Banner
   doc.setFillColor(15, 15, 15);
@@ -137,8 +141,8 @@ export function generateInvoicePdf(data: InvoiceData): jsPDF {
 
   doc.setTextColor(30, 30, 30);
   doc.setFontSize(9);
-  doc.text(data.period === 'yearly' ? '12 Months' : '1 Month', 95, rowY + 2);
-  doc.text(data.period.toUpperCase(), 125, rowY + 2);
+  doc.text(effectivePeriod === 'yearly' ? '12 Months' : '1 Month', 95, rowY + 2);
+  doc.text(effectivePeriod.toUpperCase(), 125, rowY + 2);
   doc.setFont('helvetica', 'bold');
   doc.text(`${currencySymbol}${basePrice.toFixed(2)}`, 186, rowY + 2, { align: 'right' });
 
