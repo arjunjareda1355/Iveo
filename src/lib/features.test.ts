@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { VIBES, VibeId } from './vibes';
 import { parsePreferences } from './preferences';
 import { generateInvoicePdf } from './invoicePdf';
+import { buildVCardString, sanitizeVCardFilename } from './vcard';
 
 test('vibes: all 12 themes exist and have complete color and style tokens', () => {
   assert.equal(VIBES.length, 12);
@@ -54,4 +55,18 @@ test('invoicePdf: generates valid jsPDF document instance', () => {
   assert.ok(doc, 'doc should be generated');
   const buffer = doc.output('arraybuffer');
   assert.ok(buffer.byteLength > 1000, 'PDF size should be > 1000 bytes');
+});
+
+test('businessCard: vCard format includes full name, url and note', () => {
+  const vcf = buildVCardString({
+    fullName: 'Maya Ellis',
+    url: 'https://iveo.site/maya',
+    note: 'Illustrator and designer',
+  });
+
+  assert.ok(vcf.includes('BEGIN:VCARD'));
+  assert.ok(vcf.includes('FN:Maya Ellis'));
+  assert.ok(vcf.includes('URL:https://iveo.site/maya'));
+  assert.ok(vcf.includes('END:VCARD'));
+  assert.equal(sanitizeVCardFilename('Maya Ellis'), 'maya_ellis.vcf');
 });

@@ -103,17 +103,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-  const handleShareClick = async () => {
-    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
-      try {
-        await navigator.share({
-          title: `${displayName} (@${displayHandle}) | iveo`,
-          url: window.location.href,
-        });
-        return;
-      } catch {}
-    }
+  const handleShareClick = () => {
     setIsShareModalOpen(true);
   };
 
@@ -832,46 +822,47 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       )}
 
       {/* Footer Area */}
+      {/* Footer Area - Refined, minimal iveo branding & subtle create page link */}
       <div
         className="w-full flex flex-col items-center justify-center shrink-0 pb-8 mt-auto"
         style={{
-          marginTop: `${Math.round(24 * scale)}px`,
-          gap: `${Math.round(10 * scale)}px`,
+          marginTop: `${Math.round(28 * scale)}px`,
+          gap: `${Math.round(8 * scale)}px`,
         }}
       >
-        {/* "Create your own page" Clean Action Pill */}
+        {/* Subtle, minimal "Create your page" action */}
         {isPublicPage && (
           <a
             href="https://iveo.site/signup"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-150 hover:opacity-100 hover:scale-105 active:scale-95 shadow-xs"
-            style={{
-              backgroundColor: tokens.buttonBg,
-              color: tokens.buttonText,
-              border: `1px solid ${tokens.buttonBorder || 'rgba(0,0,0,0.1)'}`,
-              opacity: 0.88,
-            }}
+            className="inline-flex items-center gap-1 text-[11px] font-normal transition-all duration-150 opacity-40 hover:opacity-85 hover:underline underline-offset-4 select-none"
+            style={{ color: tokens.muted }}
           >
-            <span>Create your iveo page</span>
-            <ArrowRight size={12} strokeWidth={2} />
+            <span>Create your page</span>
           </a>
         )}
 
-        {/* iveo mark and link */}
+        {/* Refined and very small iveo mark at the bottom */}
         {!hideFooterMark && (
           <a
             href="https://iveo.site"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity"
-            aria-label="Made with iveo"
+            className="inline-flex items-center gap-1.5 opacity-35 hover:opacity-80 transition-opacity duration-150 select-none group"
+            aria-label="iveo"
           >
-            <Logo
-              tone={vibe.id === 'midnight' ? 'dark' : 'light'}
-              size="sm"
-              isLink={false}
+            <img
+              src="https://i.postimg.cc/HkbTTdWH/File-Kit-1000252682-compress-image.jpg"
+              alt=""
+              className="h-3.5 w-auto rounded-[3px] object-contain transition-transform group-hover:scale-105"
             />
+            <span
+              className="font-semibold tracking-[-0.03em] text-[11px]"
+              style={{ color: tokens.text }}
+            >
+              iveo
+            </span>
           </a>
         )}
 
@@ -879,7 +870,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         {isPublicPage && displayHandle && (
           <a
             href={`mailto:help@iveo.site?subject=Report%20page%20iveo.site/${displayHandle}`}
-            className="text-[12px] opacity-50 hover:opacity-90 underline underline-offset-2 transition-opacity"
+            className="text-[10px] opacity-25 hover:opacity-70 underline underline-offset-2 transition-opacity"
             style={{ color: tokens.muted }}
           >
             Report this page
@@ -888,12 +879,15 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       </div>
       </div>
 
-      {/* Share Modal Dialog */}
+      {/* Enhanced Share Bottom Sheet Dialog with Business Card */}
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         username={displayHandle}
         displayName={displayName}
+        bio={displayBio}
+        avatarUrl={!avatarError && (profile?.avatarUrl ?? persona.avatarUrl) ? (profile?.avatarUrl ?? persona.avatarUrl) : null}
+        vibe={vibe}
       />
     </div>
   );

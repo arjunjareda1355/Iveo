@@ -46,6 +46,8 @@ export interface Vibe {
   isPro?: boolean;
 }
 
+export type VibeTheme = Vibe;
+
 export const VIBES: readonly Vibe[] = [
   {
     id: 'clean',
