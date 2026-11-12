@@ -7,6 +7,7 @@ import {
   deleteBlock as apiDeleteBlock,
   setBlockImage as apiSetBlockImage,
 } from './linksApi';
+import { storagePublicUrl } from './storageApi';
 import { useToast } from '../components/ui/Toast';
 import { useUpgradeDialog } from '../components/plan/UpgradeDialogProvider';
 import {

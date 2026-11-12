@@ -212,7 +212,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
 
           <Button
             type="button"
-            variant={showLibrary ? 'secondary' : 'outline'}
+            variant={showLibrary ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => setShowLibrary(!showLibrary)}
             disabled={isProcessing}

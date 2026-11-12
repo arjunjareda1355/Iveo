@@ -29,6 +29,7 @@ export interface UpdateBlockInput {
   url?: string | null;
   icon?: string | null;
   thumbnailPath?: string | null;
+  thumbnailUrl?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
   signup?: SignupConfig | null;

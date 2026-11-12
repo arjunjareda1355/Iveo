@@ -172,20 +172,22 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Menu Backdrop & Sheet */}
       {mobileMenuOpen && (
-        <>
-          {/* Tap-anywhere backdrop to auto-close menu on bottom screen click */}
-          <div
-            aria-hidden="true"
-            onClick={closeMenu}
-            className="md:hidden fixed inset-0 top-16 z-40 bg-black/40 backdrop-blur-xs transition-opacity duration-200 cursor-pointer"
-          />
-
+        <div
+          className="md:hidden fixed inset-0 top-16 z-50 flex flex-col justify-between"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeMenu();
+            }
+          }}
+        >
+          {/* Menu Drawer */}
           <div
             ref={menuRef}
             role="dialog"
             aria-modal="true"
             aria-label="Mobile Navigation"
-            className="md:hidden fixed top-16 left-0 right-0 bg-surface border-b border-border shadow-lg transition-all duration-200 z-50 overflow-y-auto max-h-[calc(100vh-64px)]"
+            className="w-full bg-surface border-b border-border shadow-lg transition-all duration-200 overflow-y-auto max-h-[calc(100vh-140px)] shrink-0"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-2 pb-6 flex flex-col">
               <nav className="flex flex-col divide-y divide-border">
@@ -279,7 +281,14 @@ export const Navbar: React.FC = () => {
               </div>
             </div>
           </div>
-        </>
+
+          {/* Bottom Screen Tap Area: clicking anywhere on bottom screen auto-closes menu */}
+          <div
+            aria-label="Close menu by tapping bottom screen"
+            onClick={closeMenu}
+            className="flex-1 w-full bg-black/40 backdrop-blur-xs transition-opacity duration-200 cursor-pointer min-h-[80px]"
+          />
+        </div>
       )}
     </header>
   );

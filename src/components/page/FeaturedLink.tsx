@@ -59,41 +59,39 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
               onError={() => setImageError(true)}
               className="w-full h-full object-cover block"
             />
+
+            {/* Badge if present */}
+            {block.badge && (
+              <div
+                className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm pointer-events-none z-10"
+                style={{
+                  backgroundColor: tokens.text,
+                  color: tokens.bg,
+                }}
+              >
+                {block.badge}
+              </div>
+            )}
+
+            {/* Protected chip in top-right corner (8px inset) */}
+            {isProtected && (
+              <div
+                className="absolute top-2 right-2 flex items-center justify-center rounded-full shadow-xs pointer-events-none"
+                style={{
+                  width: `${Math.round(28 * scale)}px`,
+                  height: `${Math.round(28 * scale)}px`,
+                  backgroundColor: `${tokens.bg}E6`, // 90% opacity
+                  border: `1px solid ${tokens.text}26`, // 15% opacity
+                  color: tokens.text,
+                }}
+                aria-hidden="true"
+              >
+                <Lock size={Math.round(14 * scale)} strokeWidth={1.5} />
+              </div>
+            )}
           </div>
         );
       })()}
-
-          {/* Badge if present */}
-          {block.badge && (
-            <div
-              className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm pointer-events-none z-10"
-              style={{
-                backgroundColor: tokens.text,
-                color: tokens.bg,
-              }}
-            >
-              {block.badge}
-            </div>
-          )}
-
-          {/* Protected chip in top-right corner (8px inset) */}
-          {isProtected && (
-            <div
-              className="absolute top-2 right-2 flex items-center justify-center rounded-full shadow-xs pointer-events-none"
-              style={{
-                width: `${Math.round(28 * scale)}px`,
-                height: `${Math.round(28 * scale)}px`,
-                backgroundColor: `${tokens.bg}E6`, // 90% opacity
-                border: `1px solid ${tokens.text}26`, // 15% opacity
-                color: tokens.text,
-              }}
-              aria-hidden="true"
-            >
-              <Lock size={Math.round(14 * scale)} strokeWidth={1.5} />
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Label row */}
       <div
