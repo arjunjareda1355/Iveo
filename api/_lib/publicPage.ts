@@ -10,6 +10,9 @@ export interface PublicPageServerData {
   avatarUrl: string | null;
   vibeId: string;
   hideFromSearch: boolean;
+  customSeoTitle?: string | null;
+  customSeoDescription?: string | null;
+  socials?: Record<string, string>;
 }
 
 export function isAllowedAvatarHost(url: string | null | undefined): boolean {
@@ -55,6 +58,9 @@ export async function loadPublicPage(
         avatarUrl: isAllowedAvatarHost(dbProf.avatarUrl) ? dbProf.avatarUrl : null,
         vibeId: dbProf.vibeId || 'clean',
         hideFromSearch: Boolean(dbProf.hideFromSearch),
+        customSeoTitle: dbProf.customSeoTitle || null,
+        customSeoDescription: dbProf.customSeoDescription || null,
+        socials: (dbProf.socials && typeof dbProf.socials === 'object') ? dbProf.socials : {},
       };
     }
   } catch {}
@@ -70,6 +76,9 @@ export async function loadPublicPage(
         avatarUrl: isAllowedAvatarHost(fbProf.avatarUrl) ? fbProf.avatarUrl : null,
         vibeId: fbProf.vibeId || 'clean',
         hideFromSearch: Boolean(fbProf.hideFromSearch),
+        customSeoTitle: fbProf.customSeoTitle || null,
+        customSeoDescription: fbProf.customSeoDescription || null,
+        socials: (fbProf.socials && typeof fbProf.socials === 'object') ? fbProf.socials : {},
       };
     }
   } catch {}
@@ -97,6 +106,9 @@ export async function loadPublicPage(
         avatarUrl: cleanAvatar,
         vibeId: p.vibe_id || 'clean',
         hideFromSearch: Boolean(p.hide_from_search),
+        customSeoTitle: null,
+        customSeoDescription: null,
+        socials: {},
       };
     }
   } catch {}
@@ -111,6 +123,9 @@ export async function loadPublicPage(
       avatarUrl: null,
       vibeId: personaVibe.id,
       hideFromSearch: false,
+      customSeoTitle: null,
+      customSeoDescription: null,
+      socials: {},
     };
   }
 

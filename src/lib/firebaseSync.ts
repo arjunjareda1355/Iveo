@@ -1,5 +1,5 @@
-import { doc, setDoc, deleteDoc, collection, writeBatch } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { doc, setDoc, updateDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { db } from './firebase';
 import type { Block } from '../data/types';
 
 /**
@@ -9,14 +9,17 @@ import type { Block } from '../data/types';
 
 export async function syncProfileToFirebase(userId: string, profileData: Record<string, any>): Promise<void> {
   if (!userId) return;
-  const path = `users/${userId}`;
   try {
     const cleanData = {
       userId,
       ...profileData,
       updatedAt: new Date().toISOString(),
     };
-    await setDoc(doc(db, 'users', userId), cleanData, { merge: true });
+    const userRef = doc(db, 'users', userId);
+    await setDoc(userRef, cleanData, { merge: true });
+    if (profileData.socials !== undefined) {
+      await updateDoc(userRef, { socials: profileData.socials || {} }).catch(() => {});
+    }
   } catch (err) {
     // Non-blocking background log
     console.warn('Firebase background profile sync notice:', err);
@@ -25,7 +28,6 @@ export async function syncProfileToFirebase(userId: string, profileData: Record<
 
 export async function syncBlockToFirebase(userId: string, block: Block): Promise<void> {
   if (!userId || !block?.id) return;
-  const path = `users/${userId}/blocks/${block.id}`;
   try {
     const cleanBlock: Record<string, any> = {
       id: block.id,
@@ -34,7 +36,9 @@ export async function syncBlockToFirebase(userId: string, block: Block): Promise
       title: block.title || '',
       url: block.url || null,
       isActive: block.isActive ?? true,
+      isArchived: block.isArchived ?? false,
       order: block.position ?? 0,
+      position: block.position ?? 0,
       layout: block.layout || 'classic',
       thumbnailUrl: block.thumbnailUrl || null,
       animation: block.animation || 'none',
@@ -60,7 +64,9 @@ export async function syncAllBlocksToFirebase(userId: string, blocks: Block[]): 
   if (!userId || !Array.isArray(blocks)) return;
   try {
     const batch = writeBatch(db);
+    const keepIds = new Set<string>();
     blocks.forEach((block) => {
+      keepIds.add(block.id);
       const docRef = doc(db, 'users', userId, 'blocks', block.id);
       batch.set(docRef, {
         ...block,
@@ -68,6 +74,14 @@ export async function syncAllBlocksToFirebase(userId: string, blocks: Block[]): 
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     });
+
+    const existingSnap = await getDocs(collection(db, 'users', userId, 'blocks'));
+    existingSnap.docs.forEach((docSnap) => {
+      if (!keepIds.has(docSnap.id)) {
+        batch.delete(docSnap.ref);
+      }
+    });
+
     await batch.commit();
   } catch (err) {
     console.warn('Firebase background batch sync notice:', err);

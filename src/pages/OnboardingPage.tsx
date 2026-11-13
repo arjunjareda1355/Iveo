@@ -21,6 +21,7 @@ import {
   USERNAME_MAX,
 } from '../lib/username-rules';
 import { checkUsernameAvailability } from '../lib/username';
+import { isOwnerEmail } from '../lib/plan';
 import { pageUrl } from '../lib/site';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { PageBlock } from '../data/types';
@@ -45,7 +46,7 @@ export const OnboardingPage: React.FC = () => {
 
   // Step 1 to 6
   const [currentStep, setCurrentStep] = useState<number>(() => {
-    if (!session.username || !validateUsername(session.username).ok) {
+    if (!session.username || !validateUsername(session.username, { allowReserved: isOwnerEmail(session.primaryEmail) }).ok) {
       return 1;
     }
     return 2;
@@ -132,7 +133,7 @@ export const OnboardingPage: React.FC = () => {
     setIsCheckingUsername(true);
 
     const timer = setTimeout(async () => {
-      const res = await checkUsernameAvailability(usernameInput);
+      const res = await checkUsernameAvailability(usernameInput, undefined, session.primaryEmail);
       if (!active) return;
       setIsCheckingUsername(false);
 
@@ -149,7 +150,7 @@ export const OnboardingPage: React.FC = () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [usernameInput, currentStep]);
+  }, [usernameInput, currentStep, session.primaryEmail]);
 
   // Update craft links suggestion when craft changes
   const handleSelectCraft = (craftId: string) => {
@@ -198,10 +199,10 @@ export const OnboardingPage: React.FC = () => {
   const handleUsernameNext = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const clean = normalizeUsername(usernameInput);
-    const valResult = validateUsername(clean);
+    const valResult = validateUsername(clean, { allowReserved: isOwnerEmail(session.primaryEmail) });
 
     if (!valResult.ok) {
-      setUsernameError('Use 3 to 24 letters, numbers or underscores.');
+      setUsernameError(valResult.message || 'Use 3 to 30 letters, numbers or hyphens.');
       return;
     }
 

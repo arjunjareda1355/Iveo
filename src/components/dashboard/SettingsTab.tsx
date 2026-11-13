@@ -88,7 +88,7 @@ export const SettingsTab: React.FC = () => {
       return;
     }
 
-    const syncValidation = validateUsernameSync(clean);
+    const syncValidation = validateUsernameSync(clean, { email: session.primaryEmail });
     if (syncValidation.status !== 'available') {
       setUsernameError(syncValidation.message);
       return;
@@ -98,7 +98,7 @@ export const SettingsTab: React.FC = () => {
     setUsernameError(null);
 
     try {
-      const avail = await checkUsernameAvailability(clean);
+      const avail = await checkUsernameAvailability(clean, undefined, session.primaryEmail);
       if (avail.status !== 'available') {
         setUsernameError(avail.message || "That name isn't available. Try another.");
         setIsCheckingUsername(false);

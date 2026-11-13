@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Ready when you are (animation)</title>
+</head>
+<body style="margin:0;background:#fafafa">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-ready so it can't affect the rest of your site.
+     Sizes are measured from your live mobile layout and scale with the section width.
+     --ir-umax caps the scale on wide screens (raise it if your desktop section is larger). */
+  .iveo-ready{
+    --ir-umax:5px;
+    --ir-bg:#0a0a0a;
+    --ir-text:#fff;
+    --ir-sub:#a3a3a3;
+    --ir-field-bg:#141414;
+    --ir-field-bd:#2b2b2b;
+    --ir-mono-text:#c4c4c4;
+    --ir-ph:#777;
+    --ir-note:#9d9d9d;
+    --ir-sans:inherit;                  /* set to your site's font stack if needed */
+    --ir-mono:"JetBrains Mono","Geist Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+
+    container-type:inline-size;
+    --u:min(1cqw, var(--ir-umax));      /* 1 unit = 1% of section width, capped */
+
+    box-sizing:border-box;
+    width:100%;
+    background:var(--ir-bg);
+    color:var(--ir-text);
+    font-family:var(--ir-sans);
+    text-align:center;
+    padding:calc(var(--u)*22.2) 0 calc(var(--u)*20.6);
+    display:flex;flex-direction:column;align-items:center;
+    position:relative;overflow:hidden;
+  }
+  .iveo-ready *{box-sizing:border-box}
+
+  .iveo-ready .ir-wrap{width:calc(var(--u)*100);max-width:100%;display:flex;flex-direction:column;align-items:center;padding:0 calc(var(--u)*6.6)}
+
+  .iveo-ready h2{
+    margin:0;font-weight:500;font-size:calc(var(--u)*9.3);line-height:calc(var(--u)*10.8);
+    letter-spacing:-.03em;color:var(--ir-text);
+  }
+  .iveo-ready .ir-sub{
+    margin:calc(var(--u)*4.4) 0 0;font-size:calc(var(--u)*4.4);line-height:calc(var(--u)*7.6);
+    color:var(--ir-sub);max-width:calc(var(--u)*88);
+  }
+
+  /* field */
+  .iveo-ready .ir-field{
+    position:relative;width:100%;height:calc(var(--u)*15.3);margin-top:calc(var(--u)*9.3);
+    display:flex;align-items:center;gap:calc(var(--u)*2.7);padding:0 calc(var(--u)*6.1);
+    background:var(--ir-field-bg);border:1px solid var(--ir-field-bd);border-radius:calc(var(--u)*4.4);
+    font-size:calc(var(--u)*4.4);text-align:left;
+  }
+  .iveo-ready .ir-field.is-focus{border-color:#555;box-shadow:0 0 0 calc(var(--u)*1.2) rgba(255,255,255,.06)}
+  .iveo-ready .ir-pre{font-family:var(--ir-mono);color:var(--ir-mono-text);white-space:nowrap}
+  .iveo-ready .ir-val{display:flex;align-items:center;color:var(--ir-text);white-space:nowrap}
+  .iveo-ready .ir-ph{color:var(--ir-ph)}
+  .iveo-ready .ir-field:not(.is-empty) .ir-ph{display:none}
+  .iveo-ready .ir-caret{width:1px;height:1.15em;margin-left:1px;background:var(--ir-text);opacity:0}
+  .iveo-ready .ir-field.is-focus .ir-caret{opacity:1;animation:ir-blink 1s steps(1) infinite}
+  .iveo-ready .ir-ok{
+    position:absolute;right:calc(var(--u)*5.6);top:50%;width:calc(var(--u)*5);height:calc(var(--u)*5);margin-top:calc(var(--u)*-2.5);
+    opacity:0;transform:scale(.7);transition:opacity .3s, transform .4s cubic-bezier(.2,.9,.3,1.4);
+  }
+  .iveo-ready .ir-ok path{stroke-dasharray:20;stroke-dashoffset:20;transition:stroke-dashoffset .4s .1s}
+  .iveo-ready .ir-field.is-ok .ir-ok{opacity:1;transform:none}
+  .iveo-ready .ir-field.is-ok .ir-ok path{stroke-dashoffset:0}
+
+  /* button */
+  .iveo-ready .ir-btn{
+    width:100%;height:calc(var(--u)*13.4);margin-top:calc(var(--u)*3.4);
+    display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*2.2);
+    background:#fff;color:#111;border-radius:calc(var(--u)*3.6);
+    font-size:calc(var(--u)*4.4);font-weight:500;
+  }
+  .iveo-ready .ir-btn.is-press{animation:ir-press .3s ease}
+  .iveo-ready .ir-btn svg{width:calc(var(--u)*4.8);height:calc(var(--u)*4.8);transition:transform .4s cubic-bezier(.2,.9,.3,1)}
+  .iveo-ready .ir-btn.is-go svg.ir-arrow{transform:translateX(calc(var(--u)*1.4))}
+  .iveo-ready .ir-btn svg.ir-tick{display:none}
+  .iveo-ready .ir-btn.is-done svg.ir-arrow{display:none}
+  .iveo-ready .ir-btn.is-done svg.ir-tick{display:block}
+
+  .iveo-ready .ir-note{margin:0;font-size:calc(var(--u)*3.8);line-height:calc(var(--u)*9.1);color:var(--ir-note)}
+  .iveo-ready .ir-note.first{margin-top:calc(var(--u)*1.1)}
+
+  /* entrance (resting look is the final state) */
+  .iveo-ready .ir-rise{
+    opacity:0;transform:translateY(calc(var(--u)*4));
+    transition:opacity .7s ease, transform .8s cubic-bezier(.2,.8,.2,1);
+    transition-delay:calc(var(--i,0) * 90ms);
+  }
+  .iveo-ready.is-in .ir-rise{opacity:1;transform:none}
+
+  /* cursor */
+  .iveo-ready .ir-cursor{
+    position:absolute;left:0;top:0;width:calc(var(--u)*6);height:calc(var(--u)*6);z-index:5;pointer-events:none;
+    transform:translate(var(--cx,110%),var(--cy,0px));
+    transition:transform .85s cubic-bezier(.4,0,.2,1), opacity .3s;
+    opacity:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));
+  }
+  .iveo-ready .ir-cursor.is-on{opacity:1}
+
+  @keyframes ir-blink{50%{opacity:0}}
+  @keyframes ir-press{0%{transform:scale(1)}50%{transform:scale(.97)}100%{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){
+    .iveo-ready *{animation:none!important;transition:none!important}
+    .iveo-ready .ir-rise{opacity:1;transform:none}
+  }
+</style>
+
+<section class="iveo-ready" id="iveoReady" aria-label="Ready when you are">
+  <div class="ir-wrap">
+    <h2 class="ir-rise" style="--i:0">Ready when<br>you are.</h2>
+    <p class="ir-sub ir-rise" style="--i:1">Claim your address and have a page live today.</p>
+
+    <div class="ir-field ir-rise is-empty" id="irField" style="--i:2">
+      <span class="ir-pre">iveo.site/</span>
+      <span class="ir-val"><span class="ir-ph">yourname</span><span class="ir-typed" id="irTyped"></span><span class="ir-caret"></span></span>
+      <svg class="ir-ok" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+    </div>
+
+    <div class="ir-btn ir-rise" id="irBtn" style="--i:3">
+      <span id="irLbl">Claim</span>
+      <svg class="ir-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <svg class="ir-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+    </div>
+
+    <p class="ir-note first ir-rise" style="--i:4">Use 3 to 30 letters, numbers or hyphens.</p>
+    <p class="ir-note ir-rise" style="--i:5">Free plan, no card needed.</p>
+  </div>
+
+  <svg class="ir-cursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 3l14 8-6 1.8L10.6 19z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>
+</section>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoReady');
+  if(!root) return;
+  var field = root.querySelector('#irField'), typed = root.querySelector('#irTyped');
+  var btn = root.querySelector('#irBtn'), lbl = root.querySelector('#irLbl');
+  var cursor = root.querySelector('.ir-cursor');
+  var NAME = 'maya';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var running = false, entered = false, timer;
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function aim(el, fx, fy){
+    var rr = root.getBoundingClientRect(), cr = el.getBoundingClientRect();
+    cursor.style.setProperty('--cx', (cr.left - rr.left + cr.width * fx) + 'px');
+    cursor.style.setProperty('--cy', (cr.top  - rr.top  + cr.height * fy) + 'px');
+  }
+  async function press(el){ el.classList.add('is-press'); await wait(320); el.classList.remove('is-press'); }
+
+  /* back to the exact resting look: placeholder visible, "Claim →" */
+  function rest(){
+    typed.textContent = '';
+    field.classList.add('is-empty'); field.classList.remove('is-focus','is-ok');
+    btn.classList.remove('is-go','is-done','is-press'); lbl.textContent = 'Claim';
+    cursor.classList.remove('is-on');
+    cursor.style.setProperty('--cx','110%');
+  }
+
+  async function demo(){
+    if(running) return; running = true;
+    rest();
+    await wait(entered ? 600 : 1500); entered = true;
+    while(running){
+      /* 1 — type a name into the field */
+      field.classList.add('is-focus'); field.classList.remove('is-empty');
+      await wait(450);
+      for(var k = 1; k <= NAME.length && running; k++){ typed.textContent = NAME.slice(0,k); await wait(150 + Math.random()*60); }
+      await wait(350);
+      field.classList.add('is-ok');                    await wait(900);
+      /* 2 — click Claim */
+      field.classList.remove('is-focus');
+      cursor.style.setProperty('--cx','90%'); cursor.style.setProperty('--cy','110%');
+      cursor.classList.add('is-on'); await wait(50);
+      aim(btn, .56, .58);                              await wait(1000);
+      btn.classList.add('is-go');
+      await press(btn);                                await wait(150);
+      btn.classList.remove('is-go'); btn.classList.add('is-done'); lbl.textContent = 'Claimed';
+      await wait(1700);
+      /* 3 — back to the resting state */
+      cursor.classList.remove('is-on');
+      btn.classList.remove('is-done'); lbl.textContent = 'Claim';
+      field.classList.remove('is-ok');
+      while(typed.textContent.length && running){ typed.textContent = typed.textContent.slice(0,-1); await wait(70); }
+      field.classList.add('is-empty');
+      await wait(3200);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); rest(); }
+
+  if(reduce){ root.classList.add('is-in'); return; }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ root.classList.add('is-in'); demo(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { root.classList.add('is-in'); demo(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

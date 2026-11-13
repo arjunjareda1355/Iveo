@@ -81,11 +81,11 @@ export async function syncBlocksToServer(userId: string, blocks: Block[]): Promi
   }
 }
 
-export function saveLocalBlocks(userId: string, blocks: Block[]) {
+export async function saveLocalBlocks(userId: string, blocks: Block[]): Promise<void> {
   try {
     localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocks));
   } catch {}
-  syncBlocksToServer(userId, blocks);
+  await syncBlocksToServer(userId, blocks);
 }
 
 export async function seedStarterLinks(
@@ -112,7 +112,7 @@ export async function seedStarterLinks(
       isArchived: false,
     }));
   const updated = [...existing, ...newBlocks];
-  saveLocalBlocks(userId, updated);
+  await saveLocalBlocks(userId, updated);
 }
 
 export async function listMyBlocks(token: string | null, userId: string): Promise<Block[]> {
@@ -120,11 +120,13 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
 
   // 1. Query server database first (Azure SQL / Server store)
   try {
-    const res = await fetch(`/api/blocks?username=${encodeURIComponent(cleanId)}`);
+    const res = await fetch(`/api/blocks?username=${encodeURIComponent(cleanId)}&_t=${Date.now()}`, {
+      cache: 'no-cache',
+    });
     if (res.ok) {
       const data = await res.json();
       const blocksArray = Array.isArray(data) ? data : (Array.isArray(data?.blocks) ? data.blocks : null);
-      if (blocksArray && blocksArray.length > 0) {
+      if (Array.isArray(blocksArray)) {
         try {
           localStorage.setItem(`iveo_blocks_${cleanId}`, JSON.stringify(blocksArray));
         } catch {}
@@ -135,10 +137,10 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
       }
     }
   } catch {
-    // Continue
+    // Continue to local/Supabase fallback
   }
 
-  // 2. Local fallback
+  // 2. Local fallback when server is unreachable
   if (!rawSupabaseUrl) {
     let local = getLocalBlocks(cleanId);
     // If cleanId has no local blocks, check if there are blocks stored under 'owner'
@@ -146,7 +148,7 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
       const ownerBlocks = getLocalBlocks('owner');
       if (ownerBlocks.length > 0) {
         local = ownerBlocks;
-        saveLocalBlocks(cleanId, local);
+        await saveLocalBlocks(cleanId, local);
       }
     }
 
@@ -157,7 +159,7 @@ export async function listMyBlocks(token: string | null, userId: string): Promis
 
     return local.map((b) => ({
       ...b,
-      thumbnailUrl: storagePublicUrl(b.thumbnailPath),
+      thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
     }));
   }
 
@@ -236,7 +238,7 @@ export async function createBlock(
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
     const updated = [newBlock, ...list];
-    saveLocalBlocks(userId, updated);
+    await saveLocalBlocks(userId, updated);
     return newBlock;
   }
 
@@ -312,7 +314,7 @@ export async function updateBlock(
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
     const updated = list.map((b) => (b.id === blockId ? { ...b, ...input } : b));
-    saveLocalBlocks(userId, updated);
+    await saveLocalBlocks(userId, updated);
     return;
   }
 
@@ -369,7 +371,7 @@ export async function deleteBlock(
 ): Promise<void> {
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
-    saveLocalBlocks(
+    await saveLocalBlocks(
       userId,
       list.filter((b) => b.id !== blockId)
     );
@@ -386,5 +388,20 @@ export async function deleteBlock(
 
   if (!response.ok) {
     throw new Error('Failed to delete block');
+  }
+}
+
+export async function saveOrderedBlocks(
+  token: string | null,
+  userId: string,
+  orderedBlocks: Block[]
+): Promise<void> {
+  if (!rawSupabaseUrl) {
+    await saveLocalBlocks(userId, orderedBlocks);
+    return;
+  }
+
+  for (let i = 0; i < orderedBlocks.length; i++) {
+    await updateBlock(token, userId, orderedBlocks[i].id, { position: i });
   }
 }

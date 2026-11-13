@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Schedule links (animation)</title>
+</head>
+<body style="margin:0;padding:24px;max-width:480px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-sched so it can't affect the rest of your site. */
+  .iveo-sched{
+    --is-bg:#f4f4f4;
+    --is-cell:#fafafa;
+    --is-border:#e6e6e6;
+    --is-text:#9a9a9a;
+    --is-on-bg:#111;
+    --is-on-text:#fff;
+    --is-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:232/90;
+    background:var(--is-bg);
+    border-radius:12px;
+    overflow:hidden;
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .iveo-sched *{box-sizing:border-box}
+
+  .iveo-sched .is-cal{
+    width:72cqw;display:grid;grid-template-columns:repeat(7,1fr);
+    column-gap:2cqw;row-gap:2.2cqw;font-family:var(--is-mono);
+  }
+  .iveo-sched .is-dow{
+    height:4cqw;margin-bottom:.2cqw;display:flex;align-items:center;justify-content:center;
+    font-size:2.8cqw;color:#8d8d8d;
+  }
+  .iveo-sched .is-day{
+    height:7.4cqw;display:flex;align-items:center;justify-content:center;
+    font-size:3.2cqw;color:var(--is-text);
+    background:var(--is-cell);border:1px solid var(--is-border);border-radius:1.8cqw;
+    transition:background .28s, color .28s, border-color .28s;
+  }
+  .iveo-sched .is-day.is-past{color:#6f6f6f}
+  .iveo-sched .is-day.is-on{
+    background:var(--is-on-bg);color:var(--is-on-text);border-color:var(--is-on-bg);
+    animation:is-pop .35s cubic-bezier(.2,.9,.3,1.3);
+  }
+
+  .iveo-sched .is-cursor{
+    position:absolute;left:0;top:0;width:5cqw;height:5cqw;z-index:5;pointer-events:none;
+    transform:translate(var(--cx,95cqw),var(--cy,40cqw));
+    transition:transform .8s cubic-bezier(.4,0,.2,1), opacity .3s;
+    opacity:0;filter:drop-shadow(0 .3cqw .5cqw rgba(0,0,0,.25));
+  }
+  .iveo-sched .is-cursor.is-on{opacity:1}
+
+  @keyframes is-pop{0%{transform:scale(.8)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){
+    .iveo-sched *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="iveo-sched" id="iveoSched" role="img" aria-label="Picking a start and end date for a link">
+  <div class="is-cal" id="isCal">
+    <span class="is-dow">M</span><span class="is-dow">T</span><span class="is-dow">W</span><span class="is-dow">T</span><span class="is-dow">F</span><span class="is-dow">S</span><span class="is-dow">S</span>
+    <span class="is-day is-past">10</span><span class="is-day is-past">11</span><span class="is-day is-past">12</span><span class="is-day">13</span><span class="is-day">14</span><span class="is-day">15</span><span class="is-day">16</span>
+    <span class="is-day">17</span><span class="is-day">18</span><span class="is-day">19</span><span class="is-day">20</span><span class="is-day">21</span><span class="is-day">22</span><span class="is-day">23</span>
+  </div>
+  <svg class="is-cursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 3l14 8-6 1.8L10.6 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoSched');
+  if(!root) return;
+  var days = [].slice.call(root.querySelectorAll('.is-day'));
+  var cursor = root.querySelector('.is-cursor');
+  var START = 3, END = 7;                    /* indexes: 3 = "13", 7 = "17" */
+  var running = false, timer;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function aim(i){                           /* measure the real cell so it always lines up */
+    var rr = root.getBoundingClientRect(), cr = days[i].getBoundingClientRect();
+    var u = rr.width / 100;
+    var x = (cr.left - rr.left + cr.width * .45) / u - 1;
+    var y = (cr.top  - rr.top  + cr.height * .45) / u - .7;
+    cursor.style.setProperty('--cx', x + 'cqw');
+    cursor.style.setProperty('--cy', y + 'cqw');
+  }
+  function on(i){ days[i].classList.add('is-on'); }
+  function off(i){ days[i].classList.remove('is-on'); }
+
+  async function loop(){
+    if(running) return; running = true;
+    while(running){
+      days.forEach(function(d,i){ off(i); });
+      cursor.classList.remove('is-on');
+      cursor.style.setProperty('--cx','95cqw'); cursor.style.setProperty('--cy','40cqw');
+      await wait(900);
+      /* 1 — pick the start date */
+      cursor.classList.add('is-on'); aim(START);       await wait(900);
+      on(START);                                       await wait(450);
+      /* 2 — drag to the end date, the range fills in */
+      aim(END);
+      for(var i = START + 1; i <= END && running; i++){ await wait(170); on(i); }
+      await wait(1900);
+      cursor.classList.remove('is-on');
+      /* 3 — the link expires: the range quietly switches off */
+      for(var j = START; j <= END && running; j++){ off(j); await wait(230); }
+      await wait(1300);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); }
+
+  if(reduce){ for(var k = START; k <= END; k++) on(k); return; }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

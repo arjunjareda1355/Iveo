@@ -6,29 +6,44 @@ import { PageRenderer } from '../components/page/PageRenderer';
 import { UnlockDialog } from '../components/public/UnlockDialog';
 import { SignupFormBlock } from '../components/public/SignupFormBlock';
 import { NotFound } from './NotFound';
-import { validateUsername, normalizeUsername } from '../lib/username-rules';
+import { PRIVATE_ROUTES, validateUsername, normalizeUsername } from '../lib/username-rules';
 import { fetchPublicPage } from '../data/publicPageApi';
 import { PublicPageData, PageBlock } from '../data/types';
 import { VIBES } from '../lib/vibes';
-import { pageUrl } from '../lib/site';
+import { pageUrl, SITE_ORIGIN } from '../lib/site';
 import { copy } from '../content/copy';
 import { useIveoSession } from '../auth/useIvioSession';
 import { setAnalyticsContext, trackView } from '../lib/analytics/track';
 import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
 import { normalizeGoogleAnalyticsId, normalizeMetaPixelId } from '../lib/integrations';
+import { formatExternalUrl } from '../lib/urls';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
 }
 
+function upsertMetaTag(attr: 'name' | 'property', key: string, content: string): HTMLMetaElement {
+  let el = document.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+  return el;
+}
+
 export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> = ({ usernameOverride }) => {
   const { username } = useParams<{ username: string }>();
   const rawUsername = (usernameOverride || username || '').trim();
-  const validation = validateUsername(rawUsername);
+  const cleanLower = rawUsername.toLowerCase();
+  const syntaxValidation = validateUsername(rawUsername, { allowReserved: true });
+  const publicValidation = validateUsername(rawUsername);
+  const isReservedName = !publicValidation.ok && publicValidation.reason === 'reserved';
 
-  // If reserved or invalid username format, render NotFound component directly
-  if (!validation.ok) {
+  // Block system private routes and syntactically invalid usernames immediately
+  if (PRIVATE_ROUTES.has(cleanLower) || !syntaxValidation.ok) {
     return <NotFound />;
   }
 
@@ -76,52 +91,134 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     };
   }, [loadData]);
 
-  // Set document title, SEO meta description, and canonical tag
+  // Sync full-viewport document background color with active vibe so overscroll matches theme
   useEffect(() => {
-    if (pageData?.profile) {
-      const titleText =
-        pageData.profile.customSeoTitle ||
-        `${pageData.profile.displayName} (@${clean}) | iveo`;
-      document.title = titleText;
+    if (!pageData?.profile) return;
+    const vibe = VIBES.find((v) => v.id === pageData.profile?.vibeId) || VIBES[0];
+    const prevBodyBg = document.body.style.backgroundColor;
+    const prevHtmlBg = document.documentElement.style.backgroundColor;
+    document.body.style.backgroundColor = vibe.tokens.bg;
+    document.documentElement.style.backgroundColor = vibe.tokens.bg;
+    return () => {
+      document.body.style.backgroundColor = prevBodyBg;
+      document.documentElement.style.backgroundColor = prevHtmlBg;
+    };
+  }, [pageData?.profile?.vibeId, pageData?.profile]);
 
-      const descText =
-        pageData.profile.customSeoDescription ||
-        pageData.profile.bio ||
-        `${pageData.profile.displayName} on iveo`;
-
-      let metaDesc = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-      if (!metaDesc) {
-        metaDesc = document.createElement('meta');
-        metaDesc.name = 'description';
-        document.head.appendChild(metaDesc);
-      }
-      metaDesc.content = descText;
-    } else {
-      document.title = `iveo.site/${clean}`;
-    }
-
+  // Set document title, robots, canonical, OpenGraph, Twitter, and Schema.org JSON-LD SEO metadata
+  useEffect(() => {
+    const canonicalHref = pageUrl(clean);
     let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) {
       canonical = document.createElement('link');
       canonical.rel = 'canonical';
       document.head.appendChild(canonical);
     }
-    canonical.href = pageUrl(clean);
+    const prevCanonicalHref = canonical.getAttribute('href');
+    canonical.href = canonicalHref;
+
+    if (pageData?.profile) {
+      const display = pageData.profile.displayName || `@${clean}`;
+      const titleText =
+        pageData.profile.customSeoTitle ||
+        `${display} (@${clean}) | iveo`;
+      document.title = titleText;
+
+      const descText =
+        pageData.profile.customSeoDescription ||
+        pageData.profile.bio ||
+        `Explore links & updates by ${display} (@${clean}) on iveo.`;
+
+      const robotsValue = pageData.profile.hideFromSearch ? 'noindex, nofollow' : 'index, follow';
+      const origin = typeof window !== 'undefined' ? window.location.origin : SITE_ORIGIN;
+      const ogImageUrl = pageData.profile.avatarUrl?.startsWith('http')
+        ? pageData.profile.avatarUrl
+        : `${origin}/api/og?u=${encodeURIComponent(clean)}`;
+
+      upsertMetaTag('name', 'description', descText);
+      upsertMetaTag('name', 'robots', robotsValue);
+      upsertMetaTag('property', 'og:type', 'profile');
+      upsertMetaTag('property', 'og:site_name', 'iveo');
+      upsertMetaTag('property', 'og:title', titleText);
+      upsertMetaTag('property', 'og:description', descText);
+      upsertMetaTag('property', 'og:url', canonicalHref);
+      upsertMetaTag('property', 'og:image', ogImageUrl);
+      upsertMetaTag('property', 'profile:username', clean);
+      upsertMetaTag('name', 'twitter:card', 'summary_large_image');
+      upsertMetaTag('name', 'twitter:title', titleText);
+      upsertMetaTag('name', 'twitter:description', descText);
+      upsertMetaTag('name', 'twitter:image', ogImageUrl);
+
+      const sameAs = Object.values(pageData.profile.socials || {})
+        .filter((val): val is string => typeof val === 'string' && val.trim().length > 0)
+        .map((val) => formatExternalUrl(val));
+
+      const mainEntity: Record<string, unknown> = {
+        '@type': 'Person',
+        name: display,
+        alternateName: `@${clean}`,
+        url: canonicalHref,
+      };
+      if (descText) mainEntity.description = descText;
+      if (pageData.profile.avatarUrl) {
+        mainEntity.image = pageData.profile.avatarUrl.startsWith('/')
+          ? `${origin}${pageData.profile.avatarUrl}`
+          : pageData.profile.avatarUrl;
+      }
+      if (sameAs.length > 0) {
+        mainEntity.sameAs = sameAs;
+      }
+
+      let ldScript = document.getElementById('iveo-profile-jsonld') as HTMLScriptElement | null;
+      if (!ldScript) {
+        ldScript = document.createElement('script');
+        ldScript.id = 'iveo-profile-jsonld';
+        ldScript.type = 'application/ld+json';
+        document.head.appendChild(ldScript);
+      }
+      ldScript.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        mainEntity,
+      });
+    } else {
+      document.title = `iveo.site/${clean}`;
+      upsertMetaTag('name', 'robots', 'noindex');
+    }
+
+    return () => {
+      const ldScript = document.getElementById('iveo-profile-jsonld');
+      if (ldScript) ldScript.remove();
+      if (canonical && prevCanonicalHref) {
+        canonical.href = prevCanonicalHref;
+      }
+    };
   }, [pageData, clean]);
 
   // Execute third-party integrations (Google Analytics 4 & Meta Pixel) when configured on public page
   useEffect(() => {
     const rawGaId = pageData?.profile?.googleAnalyticsId;
-    if (!rawGaId) return;
+    const scriptId = 'iveo-ga4-script';
+    const existing = document.getElementById(scriptId);
+
+    if (!rawGaId) {
+      if (existing) existing.remove();
+      return;
+    }
     const gaCheck = normalizeGoogleAnalyticsId(rawGaId);
-    if (!gaCheck.valid || !gaCheck.value) return;
+    if (!gaCheck.valid || !gaCheck.value) {
+      if (existing) existing.remove();
+      return;
+    }
 
     const measurementId = gaCheck.value;
-    const scriptId = 'iveo-ga4-script';
-    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
-    if (!existingScript) {
+    if (existing && (existing as HTMLScriptElement).dataset.gaId !== measurementId) {
+      existing.remove();
+    }
+    if (!document.getElementById(scriptId)) {
       const s = document.createElement('script');
       s.id = scriptId;
+      s.dataset.gaId = measurementId;
       s.async = true;
       s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
       document.head.appendChild(s);
@@ -139,6 +236,11 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       page_path: `/${clean}`,
       page_title: document.title,
     });
+
+    return () => {
+      const el = document.getElementById(scriptId);
+      if (el) el.remove();
+    };
   }, [pageData?.profile?.googleAnalyticsId, clean]);
 
   useEffect(() => {
@@ -160,6 +262,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       n.queue = [];
       w.fbq = n;
       const t = document.createElement('script');
+      t.id = 'iveo-meta-pixel-script';
       t.async = true;
       t.src = 'https://connect.facebook.net/en_US/fbevents.js';
       document.head.appendChild(t);
@@ -232,13 +335,18 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-6">
+      <div className="min-h-[100dvh] bg-bg flex items-center justify-center p-6">
         <div className="w-8 h-8 rounded-full border-2 border-ink border-t-transparent animate-spin" />
       </div>
     );
   }
 
-  // If page exists, render PageRenderer in live mode
+  // If reserved name is NOT claimed in the database, do not show "Claim this address" to public visitors
+  if (!pageData?.profile && isReservedName) {
+    return <NotFound />;
+  }
+
+  // If page exists, render full-viewport themed background + PageRenderer in live mode
   if (pageData && pageData.profile) {
     const vibe =
       VIBES.find((v) => v.id === pageData.profile?.vibeId) || VIBES[0];
@@ -265,19 +373,54 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     });
 
     const bgConfig = pageData.profile.background;
+    const hasCustomBg = Boolean(bgConfig && bgConfig.type && bgConfig.type !== 'none');
     const customBgStyle: React.CSSProperties = {
       backgroundColor: vibe.tokens.bg,
     };
-    if (bgConfig && (bgConfig.type === 'gradient' || bgConfig.type === 'mesh') && bgConfig.value) {
+    if (hasCustomBg && (bgConfig?.type === 'gradient' || bgConfig?.type === 'mesh') && bgConfig.value) {
       customBgStyle.background = bgConfig.value;
     }
 
     return (
       <div
-        className="min-h-screen w-full flex justify-center"
+        className="relative min-h-[100dvh] w-full flex justify-center overflow-x-hidden"
         style={customBgStyle}
       >
-        <div className="w-full max-w-[580px] min-h-screen flex flex-col">
+        {/* Full-Viewport Background Layer (solid vibe, gradient/mesh, wallpaper image, or pattern) */}
+        <div
+          className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
+          style={customBgStyle}
+          aria-hidden="true"
+        >
+          {hasCustomBg && bgConfig?.type === 'image' && bgConfig.value && (
+            <div
+              className="absolute inset-0 w-full h-full"
+              style={{
+                opacity: bgConfig.opacity ?? 0.85,
+                filter: bgConfig.blur ? `blur(${bgConfig.blur}px)` : 'none',
+                transform: bgConfig.blur ? 'scale(1.06)' : 'none',
+              }}
+            >
+              <img
+                src={bgConfig.value}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+
+          {hasCustomBg && bgConfig?.type === 'pattern' && (
+            <div
+              className="absolute inset-0 opacity-15"
+              style={{
+                backgroundImage: bgConfig.value || 'radial-gradient(#000 1px, transparent 1px)',
+                backgroundSize: '18px 18px',
+              }}
+            />
+          )}
+        </div>
+
+        <div className="relative z-10 w-full max-w-[580px] min-h-[100dvh] flex flex-col">
           <PageRenderer
             vibe={vibe}
             profile={{
@@ -336,7 +479,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
 
   // Otherwise, render placeholder/unclaimed page
   return (
-    <div className="min-h-screen bg-bg flex flex-col items-center justify-center p-6 text-center">
+    <div className="min-h-[100dvh] bg-bg flex flex-col items-center justify-center p-6 text-center">
       <div className="w-full max-w-md bg-surface border border-border rounded-[14px] p-8 shadow-[0_1px_2px_rgba(10,10,10,0.04)] flex flex-col items-center">
         <Logo tone="light" size="lg" />
 

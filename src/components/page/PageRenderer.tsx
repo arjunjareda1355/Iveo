@@ -114,13 +114,13 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   const hasCustomBg = Boolean(bgConfig && bgConfig.type && bgConfig.type !== 'none');
 
   const containerBgStyle: React.CSSProperties = {
-    backgroundColor: tokens.bg,
+    backgroundColor: isPublicPage ? 'transparent' : tokens.bg,
     color: tokens.text,
     fontFamily: vibe.fontFamily,
     padding: `${Math.round(32 * scale)}px ${Math.round(20 * scale)}px ${Math.round(24 * scale)}px`,
   };
 
-  if (hasCustomBg && (bgConfig?.type === 'gradient' || bgConfig?.type === 'mesh')) {
+  if (!isPublicPage && hasCustomBg && (bgConfig?.type === 'gradient' || bgConfig?.type === 'mesh')) {
     containerBgStyle.background = bgConfig.value || tokens.bg;
   }
 
@@ -129,8 +129,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       className="w-full flex-1 flex flex-col items-center select-none relative overflow-hidden"
       style={containerBgStyle}
     >
-      {/* Background Image Layer */}
-      {hasCustomBg && bgConfig?.type === 'image' && bgConfig.value && (
+      {/* Background Image Layer (for Dashboard/Onboarding phone preview; Public page renders full-viewport layer) */}
+      {!isPublicPage && hasCustomBg && bgConfig?.type === 'image' && bgConfig.value && (
         <div
           className="absolute inset-0 pointer-events-none overflow-hidden z-0"
           style={{
@@ -147,8 +147,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         </div>
       )}
 
-      {/* Background Pattern Layer */}
-      {hasCustomBg && bgConfig?.type === 'pattern' && (
+      {/* Background Pattern Layer (for phone preview) */}
+      {!isPublicPage && hasCustomBg && bgConfig?.type === 'pattern' && (
         <div
           className="absolute inset-0 pointer-events-none z-0 opacity-15"
           style={{
@@ -178,7 +178,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         </div>
       )}
 
-      <div className="w-full max-w-[540px] flex flex-col items-center relative z-10">
+      <div className="w-full max-w-[540px] flex-1 flex flex-col items-center relative z-10">
         {/* Avatar */}
       <div
         className="rounded-full overflow-hidden flex items-center justify-center shrink-0 font-medium"
@@ -916,7 +916,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       <div
         className="w-full flex flex-col items-center justify-center shrink-0 pb-8 mt-auto"
         style={{
-          marginTop: `${Math.round(28 * scale)}px`,
+          paddingTop: `${Math.round(28 * scale)}px`,
           gap: `${Math.round(8 * scale)}px`,
         }}
       >

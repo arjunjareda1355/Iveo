@@ -25,17 +25,26 @@ export function getProFeatureName(feature: ProFeature): string {
 }
 
 /**
- * Designated owner emails who automatically have full Pro privileges for free
+ * Designated owner emails who automatically have full Pro privileges for lifetime
+ * and can use reserved usernames. Any email ending with @iveo.site is also included.
  */
 export const OWNER_EMAILS = [
   'help@iveo.site',
   'arjunjareda2007@gmail.com',
-  'help@fanq.me',
+  'arjunjareda1355@gmail.com',
   'arjunjared1355@gmail.com',
+  'help@fanq.me',
 ] as const;
 
 export function isOwnerEmail(email: string | null | undefined): boolean {
   if (!email || typeof email !== 'string') return false;
   const clean = email.trim().toLowerCase();
+  if (!clean) return false;
+  if (/^[^@\s]+@iveo\.site$/i.test(clean)) return true;
   return OWNER_EMAILS.some((owner) => owner.toLowerCase() === clean);
 }
+
+export function canUseReservedUsername(email: string | null | undefined): boolean {
+  return isOwnerEmail(email);
+}
+

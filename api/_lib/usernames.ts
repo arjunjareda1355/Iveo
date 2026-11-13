@@ -67,7 +67,26 @@ export const RESERVED = new Set([
 export const PRIVATE_ROUTES = ['login', 'signup', 'dashboard', 'onboarding', 'account'];
 export const PUBLIC_INFO_ROUTES = ['privacy', 'terms', 'pricing', 'legal'];
 
-export function validateUsernameServer(input: string): { ok: boolean; reason?: string; message?: string } {
+export const OWNER_EMAILS_LIST = [
+  'help@iveo.site',
+  'arjunjareda2007@gmail.com',
+  'arjunjareda1355@gmail.com',
+  'arjunjared1355@gmail.com',
+  'help@fanq.me',
+];
+
+export function isPrivilegedEmailServer(email: string | null | undefined): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const clean = email.trim().toLowerCase();
+  if (!clean) return false;
+  if (/^[^@\s]+@iveo\.site$/i.test(clean)) return true;
+  return OWNER_EMAILS_LIST.includes(clean);
+}
+
+export function validateUsernameServer(
+  input: string,
+  options?: { allowReserved?: boolean }
+): { ok: boolean; reason?: string; message?: string } {
   const clean = (input || '').trim().toLowerCase();
   if (clean.length < USERNAME_MIN) {
     return { ok: false, reason: 'too_short', message: 'Use 3 to 30 characters.' };
@@ -87,7 +106,10 @@ export function validateUsernameServer(input: string): { ok: boolean; reason?: s
   if (!/^[a-z0-9-]+$/.test(clean)) {
     return { ok: false, reason: 'invalid_format', message: 'Only lowercase letters, numbers, and hyphens allowed.' };
   }
-  if (RESERVED.has(clean) || RESERVED.has(clean.replace(/-/g, ''))) {
+  if (PRIVATE_ROUTES.includes(clean)) {
+    return { ok: false, reason: 'reserved', message: 'That system route cannot be claimed.' };
+  }
+  if (!options?.allowReserved && (RESERVED.has(clean) || RESERVED.has(clean.replace(/-/g, '')))) {
     return { ok: false, reason: 'reserved', message: 'That name is reserved. Choose another.' };
   }
   return { ok: true };

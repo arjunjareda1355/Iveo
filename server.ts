@@ -196,6 +196,96 @@ async function startServer() {
     next();
   });
 
+  // 4.6 SEO: robots.txt and dynamic sitemap.xml
+  app.get('/robots.txt', (req, res) => {
+    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const host = req.get('host') || 'iveo.site';
+    const origin = host.includes('localhost') || host.startsWith('127.') ? `${protocol}://${host}` : 'https://iveo.site';
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(200).send(
+      [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /api/',
+        'Disallow: /dashboard',
+        'Disallow: /onboarding',
+        'Disallow: /account',
+        'Disallow: /login',
+        'Disallow: /signup',
+        '',
+        `Sitemap: ${origin}/sitemap.xml`,
+      ].join('\n')
+    );
+  });
+
+  app.get('/sitemap.xml', async (req, res) => {
+    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const host = req.get('host') || 'iveo.site';
+    const origin = host.includes('localhost') || host.startsWith('127.') ? `${protocol}://${host}` : 'https://iveo.site';
+    const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const urls = new Map<string, string>();
+    const today = new Date().toISOString().split('T')[0];
+    urls.set(`${origin}/`, today);
+    for (const staticPath of ['pricing', 'privacy', 'terms', 'legal']) {
+      urls.set(`${origin}/${staticPath}`, today);
+    }
+
+    try {
+      const { VIBES } = await import('./src/lib/vibes.ts');
+      for (const v of VIBES) {
+        if (v.persona?.handle) {
+          urls.set(`${origin}/${v.persona.handle}`, today);
+        }
+      }
+    } catch {}
+
+    try {
+      const storePath = path.resolve(__dirname, 'data', 'server_store.json');
+      if (fs.existsSync(storePath)) {
+        const parsed = JSON.parse(fs.readFileSync(storePath, 'utf-8'));
+        const profiles = parsed?.profiles || {};
+        for (const [uname, prof] of Object.entries<any>(profiles)) {
+          if (uname && !prof?.hideFromSearch) {
+            const lastmod = typeof prof?.updatedAt === 'string' && prof.updatedAt.length >= 10
+              ? prof.updatedAt.slice(0, 10)
+              : today;
+            urls.set(`${origin}/${encodeURIComponent(uname.toLowerCase())}`, lastmod);
+          }
+        }
+      }
+    } catch {}
+
+    const body = Array.from(urls.entries())
+      .map(
+        ([loc, lastmod]) =>
+          `  <url>\n    <loc>${escXml(loc)}</loc>\n    <lastmod>${escXml(lastmod)}</lastmod>\n    <changefreq>daily</changefreq>\n  </url>`
+      )
+      .join('\n');
+
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+    res.status(200).send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`
+    );
+  });
+
+  const { resolveSeoHeadForSegment } = await import('./api/page.ts');
+  const { injectHead } = await import('./api/_lib/html.ts');
+
+  const applySsrSeoTags = async (req: ExpressReq, html: string): Promise<string> => {
+    const cleanPath = (req.path || '/').replace(/^\/+|\/+$/g, '');
+    // Single path segment without dots (e.g. /maya, /arjun) -> inject user or route SEO tags
+    if (cleanPath && !cleanPath.includes('/') && !cleanPath.includes('.')) {
+      const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+      const host = req.get('host') || `localhost:${port}`;
+      const origin = `${protocol}://${host}`;
+      const { tags } = await resolveSeoHeadForSegment(origin, cleanPath);
+      return injectHead(html, tags);
+    }
+    return html;
+  };
+
   // 5. Vite Dev Server / Static SPA Fallback
   if (!isProd) {
     const { createServer } = await import('vite');
@@ -211,6 +301,7 @@ async function startServer() {
       try {
         let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
         template = await vite.transformIndexHtml(url, template);
+        template = await applySsrSeoTags(req, template);
         res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } catch (e: any) {
         vite.ssrFixStacktrace(e);
@@ -218,9 +309,15 @@ async function startServer() {
       }
     });
   } else {
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
+    app.use(express.static(distPath, { index: false }));
+    app.get('*', async (req, res) => {
+      try {
+        let template = fs.readFileSync(path.resolve(distPath, 'index.html'), 'utf-8');
+        template = await applySsrSeoTags(req, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).send(template);
+      } catch {
+        res.sendFile(path.resolve(distPath, 'index.html'));
+      }
     });
   }
 

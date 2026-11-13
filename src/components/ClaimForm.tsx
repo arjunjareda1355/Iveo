@@ -59,7 +59,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     setStatusState('checking');
 
     const timer = setTimeout(async () => {
-      const res = await checkUsernameAvailability(rawInput);
+      const res = await checkUsernameAvailability(rawInput, undefined, session.primaryEmail);
       if (!active) return;
       setIsChecking(false);
 
@@ -76,7 +76,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [rawInput]);
+  }, [rawInput, session.primaryEmail]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const clean = normalizeUsername(e.target.value);

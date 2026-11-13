@@ -297,7 +297,7 @@ export async function checkDatabaseReadiness(): Promise<{
 }
 
 // ============================================================================
-import { RESERVED } from './usernames.ts';
+import { isPrivilegedEmailServer, validateUsernameServer } from './usernames.ts';
 
 // ============================================================================
 // Server-Side Persistent Store Fallback (Ensures cross-browser functionality)
@@ -361,13 +361,6 @@ function writeServerStore(data: ServerStoreData): void {
 // Unified High-Level Operations (Azure SQL with automatic server-store fallback)
 // ============================================================================
 
-const OWNER_EMAILS_LIST = [
-  'help@iveo.site',
-  'arjunjareda2007@gmail.com',
-  'help@fanq.me',
-  'arjunjared1355@gmail.com',
-];
-
 export async function dbVerifyOwnership(
   username: string,
   userId?: string | null,
@@ -380,8 +373,8 @@ export async function dbVerifyOwnership(
   if (!userId) return false;
   if (profile.userId === userId) return true;
 
-  // Check admin emails list
-  if (primaryEmail && OWNER_EMAILS_LIST.includes(primaryEmail.toLowerCase().trim())) {
+  // Check admin / @iveo.site emails list
+  if (isPrivilegedEmailServer(primaryEmail)) {
     return true;
   }
   if (profile.primaryEmail && primaryEmail && profile.primaryEmail.toLowerCase().trim() === primaryEmail.toLowerCase().trim()) {
@@ -402,28 +395,16 @@ export async function dbClaimUsername(
   primaryEmail?: string | null
 ): Promise<{ ok: boolean; error?: string; message?: string; username?: string; profileUrl?: string }> {
   const clean = username.toLowerCase().trim();
-  if (!clean || clean.length < 3 || clean.length > 30) {
-    return { ok: false, error: 'invalid_format', message: 'Use 3 to 30 characters.' };
-  }
-  if (clean.includes('_') || clean.includes(' ')) {
-    return { ok: false, error: 'invalid_format', message: 'Use hyphens instead of underscores or spaces.' };
-  }
-  if (clean.startsWith('-') || clean.endsWith('-')) {
-    return { ok: false, error: 'invalid_format', message: 'Must start and end with a letter or number.' };
-  }
-  if (clean.includes('--')) {
-    return { ok: false, error: 'invalid_format', message: 'Cannot contain consecutive hyphens (--).' };
-  }
-  if (!/^[a-z0-9-]+$/.test(clean)) {
-    return { ok: false, error: 'invalid_format', message: 'Only lowercase letters, numbers, and hyphens allowed.' };
-  }
-  if (RESERVED.has(clean) || RESERVED.has(clean.replace(/-/g, ''))) {
-    return { ok: false, error: 'reserved', message: 'That name is reserved. Choose another.' };
-  }
+  const isOwnerEmailMatch = isPrivilegedEmailServer(primaryEmail);
 
-  const isOwnerEmailMatch = Boolean(
-    primaryEmail && OWNER_EMAILS_LIST.includes(primaryEmail.toLowerCase().trim())
-  );
+  const validation = validateUsernameServer(clean, { allowReserved: isOwnerEmailMatch });
+  if (!validation.ok) {
+    return {
+      ok: false,
+      error: validation.reason === 'reserved' ? 'reserved' : 'invalid_format',
+      message: validation.message || 'That name is unavailable.',
+    };
+  }
 
   const pool = await getAzureSqlPool();
   if (pool) {
@@ -630,7 +611,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           socials,
           socialsPosition,
           primaryEmail,
-          plan: row.plan,
+          plan: isPrivilegedEmailServer(primaryEmail || email) ? 'pro' : row.plan,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
@@ -653,14 +634,17 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
   // Direct userToUsername lookup
   if (userId && store.userToUsername[userId]) {
     const uname = store.userToUsername[userId];
-    if (store.profiles[uname]) return store.profiles[uname];
+    if (store.profiles[uname]) {
+      const found = store.profiles[uname];
+      return isPrivilegedEmailServer(found.primaryEmail || cleanEmail) ? { ...found, plan: 'pro' } : found;
+    }
   }
 
   // Scan profiles
   for (const [uname, p] of Object.entries(store.profiles)) {
     if (userId && p.userId === userId) {
       store.userToUsername[userId] = uname;
-      return p;
+      return isPrivilegedEmailServer(p.primaryEmail || cleanEmail) ? { ...p, plan: 'pro' } : p;
     }
     if (cleanEmail && p.primaryEmail && p.primaryEmail.toLowerCase().trim() === cleanEmail) {
       if (userId && (!p.userId || p.userId === 'owner')) {
@@ -668,7 +652,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         store.userToUsername[userId] = uname;
         writeServerStore(store);
       }
-      return p;
+      return isPrivilegedEmailServer(p.primaryEmail || cleanEmail) ? { ...p, plan: 'pro' } : p;
     }
   }
 
@@ -709,8 +693,7 @@ export async function dbSaveProfile(profile: {
   const pool = await getAzureSqlPool();
 
   const isOwner =
-    (profile.primaryEmail &&
-      OWNER_EMAILS_LIST.includes(profile.primaryEmail.toLowerCase().trim())) ||
+    isPrivilegedEmailServer(profile.primaryEmail) ||
     profile.plan === 'pro';
   const effectivePlan = isOwner ? 'pro' : profile.plan || 'free';
 
@@ -780,17 +763,26 @@ export async function dbSaveProfile(profile: {
   const store = readServerStore();
   const existingProf = store.profiles[cleanUsername];
   const finalUserId = (existingProf?.userId && existingProf.userId !== 'owner') ? existingProf.userId : (profile.userId || 'owner');
+  const resolvedEmail = profile.primaryEmail !== undefined ? profile.primaryEmail : (existingProf?.primaryEmail || null);
+  const finalPlan = (isPrivilegedEmailServer(resolvedEmail) || effectivePlan === 'pro') ? 'pro' : 'free';
 
   store.profiles[cleanUsername] = {
-    ...store.profiles[cleanUsername],
+    ...existingProf,
     ...profile,
     userId: finalUserId,
-    plan: effectivePlan,
+    primaryEmail: resolvedEmail,
+    plan: finalPlan,
     avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : (existingProf?.avatarUrl || null),
     avatarType: calculatedAvatarType,
     avatarId: profile.avatarId !== undefined ? profile.avatarId : (existingProf?.avatarId || null),
-    socials: profile.socials || {},
-    socialsPosition: profile.socialsPosition || 'top',
+    socials: profile.socials !== undefined ? (profile.socials || {}) : (existingProf?.socials || {}),
+    socialsPosition: profile.socialsPosition || existingProf?.socialsPosition || 'top',
+    background: profile.background !== undefined ? profile.background : (existingProf?.background ?? null),
+    googleAnalyticsId: profile.googleAnalyticsId !== undefined ? profile.googleAnalyticsId : (existingProf?.googleAnalyticsId ?? null),
+    metaPixelId: profile.metaPixelId !== undefined ? profile.metaPixelId : (existingProf?.metaPixelId ?? null),
+    whatsappNumber: profile.whatsappNumber !== undefined ? profile.whatsappNumber : (existingProf?.whatsappNumber ?? null),
+    customSeoTitle: profile.customSeoTitle !== undefined ? profile.customSeoTitle : (existingProf?.customSeoTitle ?? null),
+    customSeoDescription: profile.customSeoDescription !== undefined ? profile.customSeoDescription : (existingProf?.customSeoDescription ?? null),
     username: cleanUsername,
     updatedAt: new Date().toISOString(),
   };
@@ -848,7 +840,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           socials,
           socialsPosition,
           primaryEmail,
-          plan: row.plan,
+          plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : row.plan,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
@@ -870,6 +862,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
   if (!prof) return null;
   return {
     ...prof,
+    plan: isPrivilegedEmailServer(prof.primaryEmail) ? 'pro' : (prof.plan || 'free'),
     avatarType: prof.avatarType || (prof.avatarId ? 'default' : (prof.avatarUrl ? 'uploaded' : 'default')),
     avatarId: prof.avatarId || null,
   };

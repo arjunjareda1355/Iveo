@@ -1,3 +1,4 @@
+import { isOwnerEmail } from './plan.ts';
 import {
   USERNAME_MIN,
   USERNAME_MAX,
@@ -21,8 +22,12 @@ export type UsernameValidationResult =
   | { status: 'unavailable'; message: string }
   | { status: 'available'; message: string; username: string };
 
-export function validateUsernameSync(raw: string): UsernameValidationResult {
+export function validateUsernameSync(
+  raw: string,
+  options?: { allowReserved?: boolean; email?: string | null }
+): UsernameValidationResult {
   const lower = (raw || '').toLowerCase().trim();
+  const allowReserved = Boolean(options?.allowReserved || isOwnerEmail(options?.email));
 
   if (lower.length === 0) {
     return {
@@ -40,12 +45,12 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
     };
   }
 
-  const ruleResult = validateUsernameRule(lower);
+  const ruleResult = validateUsernameRule(lower, { allowReserved });
   if (
     !ruleResult.ok ||
     SIMULATED_TAKEN_USERNAMES_SET.has(sanitized) ||
-    RESERVED_USERNAMES_SET.has(sanitized) ||
-    RESERVED_USERNAMES_SET.has(lower)
+    (!allowReserved &&
+      (RESERVED_USERNAMES_SET.has(sanitized) || RESERVED_USERNAMES_SET.has(lower)))
   ) {
     return {
       status: 'unavailable',
@@ -65,21 +70,25 @@ export function validateUsernameSync(raw: string): UsernameValidationResult {
  */
 export async function checkUsernameAvailability(
   raw: string,
-  requestingUserId?: string
+  requestingUserId?: string,
+  email?: string | null
 ): Promise<UsernameValidationResult> {
-  const syncResult = validateUsernameSync(raw);
+  const allowReserved = isOwnerEmail(email);
+  const syncResult = validateUsernameSync(raw, { allowReserved, email });
   if (syncResult.status !== 'available') {
     return syncResult;
   }
 
   const clean = syncResult.username;
   const userParam = requestingUserId ? `&userId=${encodeURIComponent(requestingUserId)}` : '';
+  const emailParam = email ? `&email=${encodeURIComponent(email)}` : '';
 
   try {
-    const res = await fetch(`/api/check-username?u=${encodeURIComponent(clean)}${userParam}`, {
+    const res = await fetch(`/api/check-username?u=${encodeURIComponent(clean)}${userParam}${emailParam}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
+        ...(email ? { 'x-user-email': email } : {}),
       },
       signal: AbortSignal.timeout(3000),
     });

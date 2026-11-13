@@ -6,6 +6,7 @@ import {
   updateBlock,
   deleteBlock as apiDeleteBlock,
   setBlockImage as apiSetBlockImage,
+  saveOrderedBlocks,
 } from './linksApi';
 import { storagePublicUrl } from './storageApi';
 import { useToast } from '../components/ui/Toast';
@@ -344,11 +345,13 @@ export const BlocksProvider: React.FC<{
   const deleteBlockById = async (id: string) => {
     const target = blocks.find((b) => b.id === id);
     const prev = [...blocks];
-    setBlocks((b) => b.filter((item) => item.id !== id));
+    const next = prev.filter((item) => item.id !== id);
+    setBlocks(next);
 
     try {
       await apiDeleteBlock(token, userId, id);
-      deleteBlockFromFirebase(userId, id).catch(() => {});
+      await deleteBlockFromFirebase(userId, id).catch(() => {});
+      await syncAllBlocksToFirebase(userId, next).catch(() => {});
       showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
     } catch {
       setBlocks(prev);
@@ -368,6 +371,7 @@ export const BlocksProvider: React.FC<{
 
     try {
       await updateBlock(token, userId, id, { isArchived: nextArchived });
+      syncBlockToFirebase(userId, { ...target, isArchived: nextArchived }).catch(() => {});
       const isEmbed = target.kind === 'embed';
       if (nextArchived) {
         showToast(isEmbed ? 'Embed archived' : 'Link archived');
@@ -392,6 +396,7 @@ export const BlocksProvider: React.FC<{
 
     try {
       await updateBlock(token, userId, id, { isActive: nextActive });
+      syncBlockToFirebase(userId, { ...target, isActive: nextActive }).catch(() => {});
     } catch {
       setBlocks(prev);
       showToast("Couldn't update item. Try again.");
@@ -413,12 +418,8 @@ export const BlocksProvider: React.FC<{
     });
 
     setBlocks(reordered);
+    await saveOrderedBlocks(token, userId, reordered).catch(() => {});
     syncAllBlocksToFirebase(userId, reordered).catch(() => {});
-
-    // Save positions
-    for (let i = 0; i < orderedIds.length; i++) {
-      updateBlock(token, userId, orderedIds[i], { position: i }).catch(() => {});
-    }
   };
 
   const clearSchedule = async (id: string) => {

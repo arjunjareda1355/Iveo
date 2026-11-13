@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Add your links (animation)</title>
+</head>
+<body style="margin:0;padding:24px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-links so it can't affect the rest of your site. */
+  .iveo-links{
+    --il-bg:#f4f4f4;
+    --il-surface:#fff;
+    --il-border:#e4e4e4;
+    --il-text:#111;
+    --il-muted:#9a9a9a;
+    --il-dots:#b5b5b5;
+    --il-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:322/193;
+    background:var(--il-bg);
+    border-radius:14px;
+    overflow:hidden;
+    position:relative;
+  }
+  .iveo-links *{box-sizing:border-box}
+
+  .iveo-links .il-row{
+    position:absolute;left:9cqw;width:82cqw;top:0;height:13cqw;
+    display:flex;align-items:center;gap:3.5cqw;
+    padding:0 5cqw;
+    background:var(--il-surface);
+    border:1px solid var(--il-border);
+    border-radius:3cqw;
+    font-size:4.2cqw;color:var(--il-text);
+    box-shadow:0 1px 2px rgba(0,0,0,.04);
+    transform:translateY(var(--y,0cqw)) scale(var(--s,1));
+    transition:transform .55s cubic-bezier(.2,.8,.2,1), box-shadow .3s, opacity .4s;
+    z-index:1;
+    will-change:transform;
+  }
+  .iveo-links .il-row.is-hidden{opacity:0;--s:.96}
+  .iveo-links .il-row.is-drag{
+    --s:1.035;z-index:3;
+    box-shadow:0 2.4cqw 6cqw rgba(0,0,0,.14), 0 .4cqw 1.2cqw rgba(0,0,0,.08);
+  }
+
+  .iveo-links .il-grip{
+    display:grid;grid-template-columns:repeat(2,.8cqw);gap:.7cqw;flex:none;
+  }
+  .iveo-links .il-grip i{width:.8cqw;height:.8cqw;border-radius:50%;background:var(--il-dots)}
+
+  .iveo-links .il-title{white-space:nowrap;display:flex;align-items:center}
+  .iveo-links .il-title.is-url{font-family:var(--il-mono);font-size:3.6cqw;color:var(--il-muted)}
+  .iveo-links .il-caret{width:1px;height:1.2em;margin-left:1px;background:var(--il-text);opacity:0}
+  .iveo-links.is-typing .il-caret{opacity:1;animation:il-blink 1s steps(1) infinite}
+
+  .iveo-links .il-cursor{
+    position:absolute;left:0;top:0;width:5.5cqw;height:5.5cqw;z-index:5;pointer-events:none;
+    transform:translate(var(--cx,70cqw),var(--cy,56cqw));
+    transition:transform .6s cubic-bezier(.4,0,.2,1), opacity .3s;
+    opacity:0;filter:drop-shadow(0 .3cqw .5cqw rgba(0,0,0,.25));
+  }
+  .iveo-links .il-cursor.is-on{opacity:1}
+  .iveo-links .il-cursor.is-press{transition:transform .55s cubic-bezier(.2,.8,.2,1), opacity .3s}
+  .iveo-links.is-fade .il-row{opacity:0}
+
+  @keyframes il-blink{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    .iveo-links *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="iveo-links" id="iveoLinks" role="img" aria-label="Adding a link and dragging it into place">
+  <div class="il-row" data-id="portfolio"><span class="il-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="il-title">Portfolio</span></div>
+  <div class="il-row" data-id="shop"><span class="il-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="il-title">Shop prints</span></div>
+  <div class="il-row is-hidden" data-id="news"><span class="il-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="il-title"><span class="il-text"></span><span class="il-caret"></span></span></div>
+
+  <svg class="il-cursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 3l14 8-6 1.8L10.6 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoLinks');
+  if(!root) return;
+  var rows = {}, TOP = 7.5, PITCH = 16; /* cqw */
+  [].forEach.call(root.querySelectorAll('.il-row'), function(r){ rows[r.dataset.id] = r; });
+  var news = rows.news, titleEl = news.querySelector('.il-title'), textEl = news.querySelector('.il-text');
+  var cursor = root.querySelector('.il-cursor');
+  var running = false, timer;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function slot(el, n){ el.style.setProperty('--y', (TOP + n*PITCH) + 'cqw'); }
+  function layout(order){ order.forEach(function(id, n){ slot(rows[id], n); }); }
+  function moveCursor(x, y){ cursor.style.setProperty('--cx', x+'cqw'); cursor.style.setProperty('--cy', y+'cqw'); }
+
+  async function typeInto(txt, speed){
+    for(var k=1;k<=txt.length && running;k++){ textEl.textContent = txt.slice(0,k); await wait(speed + Math.random()*40); }
+  }
+
+  function reset(){
+    root.classList.remove('is-fade','is-typing');
+    Object.keys(rows).forEach(function(k){ rows[k].classList.remove('is-drag'); });
+    textEl.textContent = '';
+    titleEl.classList.remove('is-url');
+    cursor.classList.remove('is-on','is-press');
+    moveCursor(72, 58);
+    /* no transition while snapping back */
+    root.querySelectorAll('.il-row').forEach(function(r){ r.style.transition = 'none'; });
+    layout(['portfolio','shop','news']);
+    news.classList.add('is-hidden');
+    void root.offsetWidth;
+    root.querySelectorAll('.il-row').forEach(function(r){ r.style.transition = ''; });
+  }
+
+  async function loop(){
+    if(running) return; running = true;
+    while(running){
+      reset();                                         await wait(700);
+      /* 1 — a new link appears and a URL is pasted */
+      news.classList.remove('is-hidden');
+      titleEl.classList.add('is-url'); root.classList.add('is-typing');
+      await wait(350);                                 await typeInto('iveo.site/news', 55);
+      await wait(450);
+      /* 2 — give it a title */
+      textEl.textContent = ''; titleEl.classList.remove('is-url');
+      await typeInto('Newsletter', 85);
+      await wait(300); root.classList.remove('is-typing');
+      /* 3 — grab the handle */
+      cursor.classList.add('is-on');
+      moveCursor(13, TOP + 2*PITCH + 3.5);             await wait(750);
+      cursor.classList.add('is-press'); news.classList.add('is-drag');
+      await wait(250);
+      /* 4 — drag to the top, others shuffle down */
+      moveCursor(13, TOP + 3.5);
+      slot(news, 0); slot(rows.portfolio, 1); slot(rows.shop, 2);
+      await wait(800);
+      /* 5 — drop */
+      news.classList.remove('is-drag');
+      await wait(250);
+      moveCursor(60, 52); cursor.classList.remove('is-on');
+      await wait(2400);
+      root.classList.add('is-fade');                   await wait(600);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); }
+
+  if(reduce){
+    news.classList.remove('is-hidden'); textEl.textContent = 'Newsletter';
+    layout(['news','portfolio','shop']); return;
+  }
+  layout(['portfolio','shop','news']);
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

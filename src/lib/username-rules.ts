@@ -110,7 +110,12 @@ export type UsernameValidationResult =
       message?: string;
     };
 
-export function validateUsername(input: string): UsernameValidationResult {
+export const PRIVATE_ROUTES = new Set(['login', 'signup', 'dashboard', 'onboarding', 'account']);
+
+export function validateUsername(
+  input: string,
+  options?: { allowReserved?: boolean }
+): UsernameValidationResult {
   const lower = (input || '').toLowerCase().trim();
 
   if (lower.length < USERNAME_MIN) {
@@ -141,7 +146,14 @@ export function validateUsername(input: string): UsernameValidationResult {
     return { ok: false, reason: 'invalid_chars', message: 'Only lowercase letters, numbers, and hyphens allowed.' };
   }
 
-  if (RESERVED_USERNAMES_SET.has(lower) || RESERVED_USERNAMES_SET.has(lower.replace(/-/g, ''))) {
+  if (PRIVATE_ROUTES.has(lower)) {
+    return { ok: false, reason: 'reserved', message: 'That system route cannot be claimed.' };
+  }
+
+  if (
+    !options?.allowReserved &&
+    (RESERVED_USERNAMES_SET.has(lower) || RESERVED_USERNAMES_SET.has(lower.replace(/-/g, '')))
+  ) {
     return { ok: false, reason: 'reserved', message: 'That name is reserved. Choose another.' };
   }
 

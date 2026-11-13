@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Analytics that stay readable (animation)</title>
+</head>
+<body style="margin:0;padding:24px;max-width:480px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-stats so it can't affect the rest of your site. */
+  .iveo-stats{
+    --ist-bg:#f4f4f4;
+    --ist-bar:#d6d6d6;
+    --ist-ink:#111;
+    --ist-label:#555;
+    --ist-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:232/136;
+    background:var(--ist-bg);
+    border-radius:12px;
+    overflow:hidden;
+    position:relative;
+  }
+  .iveo-stats *{box-sizing:border-box}
+
+  .iveo-stats .ist-row{
+    position:absolute;left:6.5cqw;right:6.5cqw;top:7cqw;
+    display:flex;justify-content:space-between;
+    font-size:3.3cqw;color:var(--ist-label);font-variant-numeric:tabular-nums;
+  }
+  .iveo-stats .ist-row b{color:var(--ist-ink);font-weight:600;margin-left:.9cqw}
+
+  .iveo-stats .ist-bars{
+    position:absolute;left:6.5cqw;right:6.5cqw;bottom:11cqw;height:26cqw;
+    display:flex;align-items:flex-end;gap:2.5cqw;
+  }
+  .iveo-stats .ist-bar{
+    flex:1;height:0;background:var(--ist-bar);border-radius:.6cqw;
+    transition:height .8s cubic-bezier(.2,.9,.3,1), background .2s;
+    transition-delay:var(--d,0s), 0s;
+  }
+  .iveo-stats.is-grown .ist-bar{height:var(--h)}
+  .iveo-stats .ist-bar.is-last{background:var(--ist-ink)}
+  .iveo-stats.is-sweep .ist-bar.is-last{background:var(--ist-bar)}
+  .iveo-stats .ist-bar.is-active,
+  .iveo-stats.is-sweep .ist-bar.is-last.is-active{background:var(--ist-ink)}
+
+  .iveo-stats .ist-tip{
+    position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+    padding:1.1cqw 2.2cqw;border-radius:1.6cqw;background:var(--ist-ink);color:#fff;
+    font-family:var(--ist-mono);font-size:2.5cqw;white-space:nowrap;
+    opacity:0;transition:opacity .2s, left .22s ease, bottom .22s ease;
+    pointer-events:none;z-index:2;
+  }
+  .iveo-stats.is-sweep .ist-tip{opacity:1}
+
+  .iveo-stats .ist-note{
+    position:absolute;right:6.5cqw;bottom:4cqw;
+    font-family:var(--ist-mono);font-size:2.5cqw;color:#9a9a9a;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .iveo-stats *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="iveo-stats" id="iveoStats" role="img" aria-label="Analytics showing views, clicks and click-through rate with a bar chart">
+  <div class="ist-row">
+    <span>Views<b id="istViews">0</b></span>
+    <span>Clicks<b id="istClicks">0</b></span>
+    <span>CTR<b id="istCtr">0%</b></span>
+  </div>
+  <div class="ist-bars" id="istBars"><span class="ist-tip" id="istTip"></span></div>
+  <div class="ist-note">Sample data</div>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoStats');
+  if(!root) return;
+  var barsEl = root.querySelector('#istBars'), tip = root.querySelector('#istTip');
+  var vEl = root.querySelector('#istViews'), cEl = root.querySelector('#istClicks'), rEl = root.querySelector('#istCtr');
+  var DATA = [54,61,68,75,80,88,94,101,108,118,128,138,171];   /* sums to 1,284 views */
+  var MAXH = 26, bars = [];
+  var VIEWS = 1284, CLICKS = 392, CTR = 30.5;
+  var running = false, timer, raf;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  DATA.forEach(function(v, i){
+    var b = document.createElement('span');
+    b.className = 'ist-bar' + (i === DATA.length - 1 ? ' is-last' : '');
+    b.style.setProperty('--h', (v / 171 * MAXH).toFixed(2) + 'cqw');
+    b.style.setProperty('--d', (i * 55) + 'ms');
+    barsEl.insertBefore(b, tip); bars.push(b);
+  });
+
+  function fmt(n){ return Math.round(n).toLocaleString('en-US'); }
+  function setNums(p){
+    vEl.textContent = fmt(VIEWS * p);
+    cEl.textContent = fmt(CLICKS * p);
+    rEl.textContent = (CTR * p).toFixed(1) + '%';
+  }
+  function countUp(ms){
+    var t0 = performance.now();
+    cancelAnimationFrame(raf);
+    (function step(t){
+      var p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+      setNums(e);
+      if(p < 1) raf = requestAnimationFrame(step);
+    })(t0);
+  }
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+
+  function showTip(i){
+    var bar = bars[i], w = barsEl.clientWidth;
+    var cx = (bar.offsetLeft + bar.offsetWidth / 2) / w * 100;
+    cx = Math.max(11, Math.min(89, cx));
+    tip.style.left = cx + '%';
+    tip.style.bottom = 'calc(' + (DATA[i] / 171 * MAXH).toFixed(2) + 'cqw + 1.4cqw)';
+    tip.textContent = DATA[i] + ' views';
+  }
+  function activate(i){
+    bars.forEach(function(b, k){ b.classList.toggle('is-active', k === i); });
+    showTip(i);
+  }
+
+  function reset(){
+    root.classList.remove('is-grown','is-sweep');
+    bars.forEach(function(b){ b.classList.remove('is-active'); });
+    cancelAnimationFrame(raf); setNums(0);
+  }
+
+  async function loop(){
+    if(running) return; running = true;
+    while(running){
+      reset();                                         await wait(700);
+      /* 1 — numbers count up, bars grow */
+      root.classList.add('is-grown'); countUp(1500);   await wait(2100);
+      /* 2 — hover sweep across the days */
+      root.classList.add('is-sweep');
+      for(var i = 0; i < bars.length && running; i++){ activate(i); await wait(i === bars.length - 1 ? 0 : 210); }
+      await wait(2600);
+      /* 3 — settle back to the resting chart */
+      root.classList.remove('is-sweep'); bars.forEach(function(b){ b.classList.remove('is-active'); });
+      await wait(1600);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); cancelAnimationFrame(raf); }
+
+  if(reduce){ root.classList.add('is-grown'); setNums(1); return; }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

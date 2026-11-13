@@ -11,6 +11,8 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
   const clean = username.toLowerCase().trim();
   if (!clean) return null;
 
+  let serverRespondedNotFound = false;
+
   // 1. Unified server endpoint (Azure SQL Database / Server store)
   // Ensures published pages are accessible across any browser, device, or crawler with immediate real-time sync
   try {
@@ -34,10 +36,14 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       } catch {}
     }
 
+    if (res.status === 404) {
+      serverRespondedNotFound = true;
+    }
+
     if (res.ok) {
       const data = await res.json();
       if (data && data.profile) {
-        return {
+        const mappedResult: PublicPageData = {
           profile: {
             username: data.profile.username || clean,
             displayName: data.profile.displayName || data.profile.username || clean,
@@ -77,13 +83,32 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             badge: b.badge || null,
           })),
         };
+
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`iveo_profile_${clean}`, JSON.stringify(mappedResult.profile));
+            localStorage.setItem(`iveo_blocks_${clean}`, JSON.stringify(mappedResult.links));
+          } catch {}
+        }
+
+        return mappedResult;
       }
     }
   } catch {
-    // Continue to Supabase / local fallback
+    // Continue to Supabase / local fallback on network failure
   }
 
-  // 2. Check local client cache (instant fallback if user just claimed on this device)
+  if (serverRespondedNotFound) {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`iveo_profile_${clean}`);
+        localStorage.removeItem(`iveo_blocks_${clean}`);
+      } catch {}
+    }
+    return null;
+  }
+
+  // 2. Check local client cache ONLY if server endpoint was unreachable
   if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem(`iveo_profile_${clean}`);

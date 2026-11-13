@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   deleteDoc,
   collection,
   getDocs,
@@ -272,21 +273,24 @@ export async function firebaseSaveProfile(
     buttonShape: profileData.buttonShape || 'rounded',
     socials: profileData.socials || {},
     socialsPosition: profileData.socialsPosition || 'top',
+    primaryEmail: profileData.primaryEmail || null,
     plan: profileData.plan || 'free',
     hideFooter: Boolean(profileData.hideFooter),
     hideFromSearch: Boolean(profileData.hideFromSearch),
-    background: profileData.background || null,
-    googleAnalyticsId: profileData.googleAnalyticsId || null,
-    metaPixelId: profileData.metaPixelId || null,
-    whatsappNumber: profileData.whatsappNumber || null,
-    customSeoTitle: profileData.customSeoTitle || null,
-    customSeoDescription: profileData.customSeoDescription || null,
+    background: profileData.background ?? null,
+    googleAnalyticsId: profileData.googleAnalyticsId ?? null,
+    metaPixelId: profileData.metaPixelId ?? null,
+    whatsappNumber: profileData.whatsappNumber ?? null,
+    customSeoTitle: profileData.customSeoTitle ?? null,
+    customSeoDescription: profileData.customSeoDescription ?? null,
     updatedAt: new Date().toISOString(),
   };
 
   try {
-    // Save to users collection
-    await setDoc(doc(serverDb, 'users', clean), cleanProfile, { merge: true });
+    // Save to users collection and overwrite nested socials map so deleted icons stay deleted
+    const userRef = doc(serverDb, 'users', clean);
+    await setDoc(userRef, cleanProfile, { merge: true });
+    await updateDoc(userRef, { socials: cleanProfile.socials }).catch(() => {});
 
     // Also save claim registry record
     await setDoc(doc(serverDb, 'claims', clean), {
@@ -297,7 +301,9 @@ export async function firebaseSaveProfile(
 
     // If userId differs from username, mirror to users/{userId}
     if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
-      await setDoc(doc(serverDb, 'users', effectiveUserId), cleanProfile, { merge: true });
+      const mirrorRef = doc(serverDb, 'users', effectiveUserId);
+      await setDoc(mirrorRef, cleanProfile, { merge: true });
+      await updateDoc(mirrorRef, { socials: cleanProfile.socials }).catch(() => {});
     }
   } catch (err) {
     console.warn('[FirebaseServer] Background saveProfile notice:', err);
@@ -305,7 +311,7 @@ export async function firebaseSaveProfile(
 }
 
 /**
- * Background async save of blocks to Firebase
+ * Background async save of blocks to Firebase (removes deleted block docs)
  */
 export async function firebaseSaveBlocks(
   username: string,
@@ -318,9 +324,11 @@ export async function firebaseSaveBlocks(
 
   try {
     const batch = writeBatch(serverDb);
+    const keepIds = new Set<string>();
 
     blocks.forEach((b, index) => {
       const blockId = b.id || `b_${Date.now()}_${index}`;
+      keepIds.add(blockId);
       const cleanBlock = {
         id: blockId,
         userId: effectiveUserId,
@@ -345,6 +353,7 @@ export async function firebaseSaveBlocks(
         position: b.position ?? index,
         order: b.position ?? index,
         isActive: b.isActive ?? true,
+        isArchived: Boolean(b.isArchived),
         updatedAt: new Date().toISOString(),
       };
 
@@ -356,6 +365,23 @@ export async function firebaseSaveBlocks(
         batch.set(userRef, cleanBlock, { merge: true });
       }
     });
+
+    // Delete any existing Firestore block documents absent from current blocks array
+    const existingCleanSnap = await getDocs(collection(serverDb, 'users', clean, 'blocks'));
+    existingCleanSnap.docs.forEach((docSnap) => {
+      if (!keepIds.has(docSnap.id)) {
+        batch.delete(docSnap.ref);
+      }
+    });
+
+    if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
+      const existingUserSnap = await getDocs(collection(serverDb, 'users', effectiveUserId, 'blocks'));
+      existingUserSnap.docs.forEach((docSnap) => {
+        if (!keepIds.has(docSnap.id)) {
+          batch.delete(docSnap.ref);
+        }
+      });
+    }
 
     await batch.commit();
   } catch (err) {

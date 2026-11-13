@@ -144,19 +144,16 @@ export default async function handler(req: any, res?: any): Promise<Response | v
 }
 
 
-async function handleRequest(request: Request, isHead: boolean): Promise<Response> {
-  const origin = getSiteOrigin(request);
-  const url = new URL(request.url);
-  const rawSegment = url.searchParams.get('u') || '';
+export async function resolveSeoHeadForSegment(
+  origin: string,
+  rawSegment: string
+): Promise<{ tags: string; cacheControl: string; failed: boolean; foundProfile: boolean }> {
   const segmentKind = classifySegment(rawSegment);
-
-  const { template, isFallback } = await getShellTemplate(origin);
-
   let pageData: PublicPageServerData | null = null;
   let pageVersion = '1';
-  let supabaseFailed = false;
+  let failed = false;
 
-  if (segmentKind === 'username') {
+  if (segmentKind === 'username' || segmentKind === 'reserved') {
     const cleanUser = normalizeUsername(rawSegment);
     if (cleanUser) {
       try {
@@ -165,36 +162,47 @@ async function handleRequest(request: Request, isHead: boolean): Promise<Respons
           pageVersion = await version(pageData);
         }
       } catch {
-        supabaseFailed = true;
+        failed = true;
       }
     }
   }
 
-  let tags = '';
-  let cacheControl = 'public, s-maxage=300, stale-while-revalidate=3600';
-
   if (pageData) {
-    // 5.3 Found Public Page Case
     const name = pageData.displayName || `@${pageData.username}`;
-    const pageTitle = `${truncate(name, 60)} | iveo`;
-    const pageDescription = pageData.bio
+    const pageTitle = pageData.customSeoTitle
+      ? truncate(pageData.customSeoTitle, 70)
+      : `${truncate(name, 54)} (@${pageData.username}) | iveo`;
+    const pageDescription = pageData.customSeoDescription
+      ? truncate(pageData.customSeoDescription, 160)
+      : pageData.bio
       ? truncate(pageData.bio, 160)
-      : `Links by @${pageData.username} on iveo.`;
+      : `Explore links & updates by ${name} (@${pageData.username}) on iveo.`;
     const canonical = pageAddress(origin, pageData.username);
     const robots = pageData.hideFromSearch ? 'noindex, nofollow' : 'index, follow';
-    const ogImg = ogImageAddress(origin, pageData.username, pageVersion);
+    const ogImg = pageData.avatarUrl?.startsWith('http')
+      ? pageData.avatarUrl
+      : ogImageAddress(origin, pageData.username, pageVersion);
+
+    const sameAs = Object.values(pageData.socials || {})
+      .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+      .map((u) => (/^https?:\/\//i.test(u.trim()) ? u.trim() : `https://${u.trim()}`));
 
     const mainEntity: Record<string, unknown> = {
       '@type': 'Person',
-      name: name,
+      name,
       alternateName: `@${pageData.username}`,
       url: canonical,
     };
-    if (pageData.bio) {
-      mainEntity.description = pageData.bio;
+    if (pageDescription) {
+      mainEntity.description = pageDescription;
     }
     if (pageData.avatarUrl) {
-      mainEntity.image = pageData.avatarUrl;
+      mainEntity.image = pageData.avatarUrl.startsWith('/')
+        ? `${origin}${pageData.avatarUrl}`
+        : pageData.avatarUrl;
+    }
+    if (sameAs.length > 0) {
+      mainEntity.sameAs = sameAs;
     }
 
     const jsonLd = {
@@ -203,46 +211,50 @@ async function handleRequest(request: Request, isHead: boolean): Promise<Respons
       mainEntity,
     };
 
-    tags = `<title>${escapeHtml(pageTitle)}</title>
+    const tags = `<title>${escapeHtml(pageTitle)}</title>
     <meta name="description" content="${escapeHtml(pageDescription)}" />
     <meta name="robots" content="${escapeHtml(robots)}" />
     <link rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:type" content="profile" />
     <meta property="og:site_name" content="iveo" />
-    <meta property="og:title" content="${escapeHtml(name)}" />
+    <meta property="og:title" content="${escapeHtml(pageTitle)}" />
     <meta property="og:description" content="${escapeHtml(pageDescription)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
     <meta property="og:image" content="${escapeHtml(ogImg)}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content="${escapeHtml(name)}'s page on iveo" />
     <meta property="profile:username" content="${escapeHtml(pageData.username)}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${escapeHtml(name)}" />
+    <meta name="twitter:title" content="${escapeHtml(pageTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(pageDescription)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />
     <script type="application/ld+json">${safeJsonLd(jsonLd)}</script>`;
 
-    cacheControl = 'public, s-maxage=60, stale-while-revalidate=600';
-  } else {
-    // Generic / Route Cases
-    let robots = 'noindex';
-    let title = GENERIC_TITLE;
-    let canonical = '';
+    return {
+      tags,
+      cacheControl: 'public, s-maxage=60, stale-while-revalidate=600',
+      failed,
+      foundProfile: true,
+    };
+  }
 
-    if (segmentKind === 'private') {
-      const routeLabel = PRIVATE_ROUTE_LABELS[rawSegment.toLowerCase()] || 'Dashboard';
-      title = `${routeLabel} | iveo`;
-      robots = 'noindex, nofollow';
-    } else if (segmentKind === 'info') {
-      robots = 'index, follow';
-      canonical = `${origin}/`;
-    }
+  // Generic / Route Cases
+  let robots = rawSegment ? 'noindex' : 'index, follow';
+  let title = GENERIC_TITLE;
+  let canonical = rawSegment ? '' : `${origin}/`;
 
-    const ogImg = ogImageAddress(origin);
+  if (segmentKind === 'private') {
+    const routeLabel = PRIVATE_ROUTE_LABELS[rawSegment.toLowerCase()] || 'Dashboard';
+    title = `${routeLabel} | iveo`;
+    robots = 'noindex, nofollow';
+  } else if (segmentKind === 'info') {
+    robots = 'index, follow';
+    canonical = `${origin}/${rawSegment.toLowerCase()}`;
+  }
 
-    tags = `<title>${escapeHtml(title)}</title>
+  const ogImg = ogImageAddress(origin);
+  const tags = `<title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(GENERIC_DESCRIPTION)}" />
     <meta name="robots" content="${escapeHtml(robots)}" />
     ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}" />` : ''}
@@ -250,23 +262,32 @@ async function handleRequest(request: Request, isHead: boolean): Promise<Respons
     <meta property="og:site_name" content="iveo" />
     <meta property="og:title" content="${escapeHtml(title)}" />
     <meta property="og:description" content="${escapeHtml(GENERIC_DESCRIPTION)}" />
-    <meta property="og:url" content="${escapeHtml(origin)}/" />
+    <meta property="og:url" content="${escapeHtml(canonical || `${origin}/`)}" />
     <meta property="og:image" content="${escapeHtml(ogImg)}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content="iveo: one link for everything you make" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />
     <meta name="twitter:description" content="${escapeHtml(GENERIC_DESCRIPTION)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />`;
 
-    cacheControl = 'public, s-maxage=300, stale-while-revalidate=3600';
-  }
+  return {
+    tags,
+    cacheControl: 'public, s-maxage=300, stale-while-revalidate=3600',
+    failed,
+    foundProfile: false,
+  };
+}
 
-  if (isFallback || supabaseFailed) {
-    cacheControl = 'no-store';
-  }
+async function handleRequest(request: Request, isHead: boolean): Promise<Response> {
+  const origin = getSiteOrigin(request);
+  const url = new URL(request.url);
+  const rawSegment = url.searchParams.get('u') || '';
+
+  const { template, isFallback } = await getShellTemplate(origin);
+  const { tags, cacheControl: baseCacheControl, failed } = await resolveSeoHeadForSegment(origin, rawSegment);
+  const cacheControl = (isFallback || failed) ? 'no-store' : baseCacheControl;
 
   const finalHtml = injectHead(template, tags);
 

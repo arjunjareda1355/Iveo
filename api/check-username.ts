@@ -1,4 +1,4 @@
-import { validateUsernameServer } from './_lib/usernames.ts';
+import { validateUsernameServer, isPrivilegedEmailServer } from './_lib/usernames.ts';
 import { adminClient } from './_lib/supabase.ts';
 import { dbGetProfile } from './_lib/azureSql.ts';
 import { firebaseIsUsernameClaimed } from './_lib/firebaseServer.ts';
@@ -18,10 +18,12 @@ export const DEMO_TAKEN_USERNAMES = new Set([
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const raw = url.searchParams.get('u') || url.searchParams.get('username') || '';
-  const requestingUserId = (url.searchParams.get('userId') || '').trim();
+  const requestingUserId = (url.searchParams.get('userId') || request.headers.get('x-user-id') || '').trim();
+  const requestingEmail = (url.searchParams.get('email') || request.headers.get('x-user-email') || '').trim().toLowerCase();
   const clean = raw.trim().toLowerCase();
+  const allowReserved = isPrivilegedEmailServer(requestingEmail);
 
-  const validation = validateUsernameServer(clean);
+  const validation = validateUsernameServer(clean, { allowReserved });
   if (!validation.ok) {
     return Response.json({
       ok: true,

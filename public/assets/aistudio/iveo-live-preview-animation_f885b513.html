@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – See it as you edit (animation)</title>
+</head>
+<body style="margin:0;padding:24px;max-width:480px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-live so it can't affect the rest of your site. */
+  .iveo-live{
+    --ip-card:#fff;            /* must match the card background (used by the bottom fade) */
+    --ip-frame:#111;
+    --ip-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:232/150;
+    position:relative;
+    overflow:hidden;
+  }
+  .iveo-live *{box-sizing:border-box}
+
+  /* phone */
+  .iveo-live .ip-phone{
+    position:absolute;left:10cqw;top:6cqw;width:80cqw;height:140cqw;
+    border:1.2cqw solid var(--ip-frame);border-radius:12cqw 12cqw 0 0;
+    background:#fff;overflow:hidden;
+    box-shadow:0 4cqw 10cqw rgba(0,0,0,.08);
+  }
+  .iveo-live .ip-screen{
+    --bg:#fff;--fg:#111;--muted:#777;--btn-bg:#fff;--btn-bd:#111;--btn-sh:#111;
+    position:absolute;inset:0;background:var(--bg);color:var(--fg);
+    display:flex;flex-direction:column;align-items:center;
+    transition:background .6s, color .6s;
+  }
+  .iveo-live .ip-screen.is-dark{
+    --bg:#121212;--fg:#f2f2f2;--muted:#9a9a9a;--btn-bg:#1d1d1d;--btn-bd:#3a3a3a;--btn-sh:#000;
+  }
+
+  /* status bar */
+  .iveo-live .ip-status{
+    width:100%;height:7cqw;display:flex;align-items:center;justify-content:space-between;
+    padding:1.6cqw 6cqw 0 6cqw;font-size:2.7cqw;font-weight:600;position:relative;
+  }
+  .iveo-live .ip-notch{
+    position:absolute;left:50%;top:1.6cqw;width:17cqw;height:4.4cqw;margin-left:-8.5cqw;
+    background:#000;border-radius:3cqw;
+  }
+  .iveo-live .ip-icons{display:flex;align-items:center;gap:.9cqw}
+  .iveo-live .ip-bars{display:flex;align-items:flex-end;gap:.35cqw;height:2.2cqw}
+  .iveo-live .ip-bars i{display:block;width:.5cqw;background:currentColor;border-radius:.2cqw}
+  .iveo-live .ip-bars i:nth-child(1){height:.8cqw}.iveo-live .ip-bars i:nth-child(2){height:1.2cqw}
+  .iveo-live .ip-bars i:nth-child(3){height:1.7cqw}.iveo-live .ip-bars i:nth-child(4){height:2.2cqw}
+  .iveo-live .ip-batt{width:4.2cqw;height:2.1cqw;border:1px solid currentColor;border-radius:.7cqw;position:relative;opacity:.9}
+  .iveo-live .ip-batt::after{content:"";position:absolute;inset:.25cqw;background:currentColor;border-radius:.3cqw}
+
+  /* profile */
+  .iveo-live .ip-content{width:100%;display:flex;flex-direction:column;align-items:center;transition:opacity .5s}
+  .iveo-live .ip-content.is-out{opacity:0}
+  .iveo-live .ip-av{
+    width:11cqw;height:11cqw;border-radius:50%;margin-top:3.2cqw;overflow:hidden;
+    background:#ddd;flex:none;
+    opacity:0;transform:scale(.7);transition:opacity .4s, transform .5s cubic-bezier(.2,.9,.3,1.3);
+  }
+  .iveo-live .ip-av img,.iveo-live .ip-av svg{display:block;width:100%;height:100%;object-fit:cover}
+  .iveo-live.has-av .ip-av{opacity:1;transform:none}
+
+  .iveo-live .ip-name{
+    margin-top:2.2cqw;height:5.4cqw;font-size:4.2cqw;font-weight:600;letter-spacing:-.01em;
+    display:flex;align-items:center;white-space:nowrap;
+  }
+  .iveo-live .ip-caret{width:1px;height:1.1em;margin-left:1px;background:currentColor;opacity:0}
+  .iveo-live.is-typing .ip-caret{opacity:1;animation:ip-blink 1s steps(1) infinite}
+  .iveo-live .ip-handle{
+    font-family:var(--ip-mono);font-size:2.7cqw;color:var(--muted);margin-top:.4cqw;
+    opacity:0;transform:translateY(1cqw);transition:opacity .4s, transform .4s;
+  }
+  .iveo-live .ip-bio{
+    font-size:3cqw;color:var(--muted);margin-top:1.4cqw;
+    opacity:0;transform:translateY(1cqw);transition:opacity .4s .1s, transform .4s .1s;
+  }
+  .iveo-live .ip-links{width:100%;padding:0 7cqw;margin-top:4cqw;display:flex;flex-direction:column;gap:2.6cqw}
+  .iveo-live .ip-btn{
+    height:7.4cqw;border:1px solid var(--btn-bd);border-radius:2.4cqw;background:var(--btn-bg);
+    display:flex;align-items:center;justify-content:center;font-size:3.2cqw;font-weight:500;
+    box-shadow:.5cqw .7cqw 0 var(--btn-sh);
+    opacity:0;transform:translateY(3cqw);
+    transition:opacity .45s, transform .5s cubic-bezier(.2,.9,.3,1), background .6s, border-color .6s, box-shadow .6s;
+  }
+  .iveo-live.show-handle .ip-handle,.iveo-live.show-bio .ip-bio{opacity:1;transform:none}
+  .iveo-live.show-b1 .ip-btn:nth-child(1),
+  .iveo-live.show-b2 .ip-btn:nth-child(2){opacity:1;transform:none}
+
+  /* "updated" chip */
+  .iveo-live .ip-chip{
+    position:absolute;right:1.5cqw;top:1.5cqw;z-index:4;
+    display:flex;align-items:center;gap:1.4cqw;
+    padding:1.5cqw 3cqw;background:#fff;border:1px solid #e4e4e4;border-radius:3cqw;
+    font-size:2.8cqw;color:#111;box-shadow:0 .6cqw 2cqw rgba(0,0,0,.08);
+    opacity:0;transform:translateY(-1.5cqw) scale(.96);
+    transition:opacity .3s, transform .3s;
+  }
+  .iveo-live .ip-chip::before{content:"";width:1.4cqw;height:1.4cqw;border-radius:50%;background:#22a55a}
+  .iveo-live.chip-on .ip-chip{opacity:1;transform:none}
+
+  /* soft crop at the bottom, like the original card art */
+  .iveo-live .ip-fade{
+    position:absolute;left:0;right:0;bottom:0;height:16cqw;z-index:3;pointer-events:none;
+    background:linear-gradient(to bottom, rgba(255,255,255,0), var(--ip-card));
+  }
+
+  @keyframes ip-blink{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    .iveo-live *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="iveo-live" id="iveoLive" role="img" aria-label="A phone preview that updates live as the page is edited">
+  <div class="ip-chip">Updated just now</div>
+  <div class="ip-phone">
+    <div class="ip-screen" id="ipScreen">
+      <div class="ip-status">
+        <span>9:41</span><span class="ip-notch"></span>
+        <span class="ip-icons"><span class="ip-bars"><i></i><i></i><i></i><i></i></span><span class="ip-batt"></span></span>
+      </div>
+      <div class="ip-content" id="ipContent">
+        <!-- Swap this SVG for <img src="your-avatar.jpg" alt=""> to use a real photo -->
+        <div class="ip-av">
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <defs><linearGradient id="ipg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a8fb8"/><stop offset="1" stop-color="#2d2f4a"/></linearGradient></defs>
+            <rect width="40" height="40" fill="url(#ipg)"/>
+            <circle cx="20" cy="16" r="7" fill="#f2e3d5"/>
+            <path d="M6 40c1-9 7-14 14-14s13 5 14 14z" fill="#f2e3d5"/>
+          </svg>
+        </div>
+        <div class="ip-name"><span class="ip-text"></span><span class="ip-caret"></span></div>
+        <div class="ip-handle">@mayaellis</div>
+        <div class="ip-bio">Illustrator and zine maker.</div>
+        <div class="ip-links">
+          <div class="ip-btn">Portfolio</div>
+          <div class="ip-btn">Shop prints</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ip-fade"></div>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoLive');
+  if(!root) return;
+  var screen = root.querySelector('#ipScreen');
+  var content = root.querySelector('#ipContent');
+  var textEl = root.querySelector('.ip-text');
+  var FULL = 'Maya Ellis';
+  var running = false, timer;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function on(c){ root.classList.add(c); }
+  function off(c){ root.classList.remove(c); }
+  async function pulse(){ on('chip-on'); await wait(1100); off('chip-on'); await wait(200); }
+
+  function reset(){
+    ['has-av','is-typing','show-handle','show-bio','show-b1','show-b2','chip-on'].forEach(off);
+    screen.classList.remove('is-dark');
+    textEl.textContent = '';
+    content.classList.remove('is-out');
+  }
+
+  async function loop(){
+    if(running) return; running = true;
+    while(running){
+      reset();                                         await wait(700);
+      /* 1 — photo */
+      on('has-av');                                    await wait(600);   pulse();
+      /* 2 — name, typed live */
+      on('is-typing');
+      for(var k=1;k<=FULL.length && running;k++){ textEl.textContent = FULL.slice(0,k); await wait(95 + Math.random()*50); }
+      off('is-typing');                                await wait(200);   await pulse();
+      /* 3 — handle + bio */
+      on('show-handle'); on('show-bio');               await wait(700);   await pulse();
+      /* 4 — links, one by one */
+      on('show-b1');                                   await wait(500);   await pulse();
+      on('show-b2');                                   await wait(500);   await pulse();
+      /* 5 — change the vibe */
+      await wait(600);
+      screen.classList.add('is-dark');                 await wait(700);   await pulse();
+      await wait(1500);
+      screen.classList.remove('is-dark');              await wait(900);
+      await wait(900);
+      content.classList.add('is-out');                 await wait(700);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); }
+
+  if(reduce){
+    ['has-av','show-handle','show-bio','show-b1','show-b2'].forEach(on);
+    textEl.textContent = FULL; return;
+  }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

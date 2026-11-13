@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Choose a vibe (animation)</title>
+</head>
+<body style="margin:0;padding:24px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-vibe so it can't affect the rest of your site. */
+  .iveo-vibe{
+    --iv-bg:#f4f4f4;
+    --iv-ring:#111;
+    --iv-gap:#f4f4f4;       /* should match the stage background */
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:322/193;
+    background:var(--iv-bg);
+    border-radius:14px;
+    overflow:hidden;
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .iveo-vibe *{box-sizing:border-box}
+
+  .iveo-vibe .iv-tiles{display:flex;gap:2.8cqw}
+
+  .iveo-vibe .iv-tile{
+    width:20.5cqw;height:26.5cqw;
+    border-radius:3cqw;
+    border:1px solid var(--t-border);
+    background:var(--t-bg);
+    display:flex;flex-direction:column;align-items:center;
+    padding-top:5.2cqw;gap:2.2cqw;
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s;
+  }
+  .iveo-vibe .iv-tile.is-selected{
+    transform:scale(1.04);
+    box-shadow:0 0 0 .6cqw var(--iv-gap), 0 0 0 1.3cqw var(--iv-ring);
+  }
+  .iveo-vibe .iv-tile.is-press{transform:scale(.95)}
+
+  .iveo-vibe .iv-av{width:5.6cqw;height:5.6cqw;border-radius:50%;background:var(--t-av)}
+  .iveo-vibe .iv-bar{width:14.5cqw;height:2cqw;border-radius:1cqw;background:var(--t-bar)}
+  .iveo-vibe .iv-bar.is-line{
+    height:2.6cqw;background:transparent;border:1px solid var(--t-bar);border-radius:1.4cqw;
+  }
+
+  /* the four vibes */
+  .iveo-vibe .t-paper {--t-bg:#fff;   --t-border:#e4e4e4;--t-av:#e6e6e6;--t-bar:#111}
+  .iveo-vibe .t-night {--t-bg:#141414;--t-border:#141414;--t-av:#3a3a3a;--t-bar:#4a4a4a}
+  .iveo-vibe .t-cream {--t-bg:#f5f0e3;--t-border:#e3dcc8;--t-av:#dcd5c0;--t-bar:#8c8571}
+  .iveo-vibe .t-sage  {--t-bg:#e7ece3;--t-border:#d2dacc;--t-av:#cfd8c9;--t-bar:#7f8c78}
+
+  .iveo-vibe .iv-cursor{
+    position:absolute;left:0;top:0;width:5.5cqw;height:5.5cqw;z-index:5;pointer-events:none;
+    transform:translate(var(--cx,80cqw),var(--cy,52cqw));
+    transition:transform .7s cubic-bezier(.4,0,.2,1), opacity .3s;
+    opacity:0;filter:drop-shadow(0 .3cqw .5cqw rgba(0,0,0,.25));
+  }
+  .iveo-vibe .iv-cursor.is-on{opacity:1}
+
+  @media (prefers-reduced-motion:reduce){
+    .iveo-vibe *{transition:none!important;animation:none!important}
+  }
+</style>
+
+<div class="iveo-vibe" id="iveoVibe" role="img" aria-label="Choosing between four ready-made page styles">
+  <div class="iv-tiles">
+    <div class="iv-tile t-paper is-selected"><span class="iv-av"></span><span class="iv-bar"></span><span class="iv-bar"></span></div>
+    <div class="iv-tile t-night"><span class="iv-av"></span><span class="iv-bar"></span><span class="iv-bar"></span></div>
+    <div class="iv-tile t-cream"><span class="iv-av"></span><span class="iv-bar is-line"></span><span class="iv-bar is-line"></span></div>
+    <div class="iv-tile t-sage"><span class="iv-av"></span><span class="iv-bar is-line"></span><span class="iv-bar is-line"></span></div>
+  </div>
+  <svg class="iv-cursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 3l14 8-6 1.8L10.6 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoVibe');
+  if(!root) return;
+  var tiles = [].slice.call(root.querySelectorAll('.iv-tile'));
+  var cursor = root.querySelector('.iv-cursor');
+  var order = [1, 2, 3, 0];            /* tile indexes to click, in order */
+  var running = false, timer, current = 0;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function select(i){
+    tiles.forEach(function(t, k){ t.classList.toggle('is-selected', k === i); });
+    current = i;
+  }
+  /* cursor target = tile centre, slightly low so it reads as "pointing" */
+  function aim(i){
+    var x = 4.8 + i * 23.3 + 12, y = 16.75 + 17;
+    cursor.style.setProperty('--cx', x + 'cqw');
+    cursor.style.setProperty('--cy', y + 'cqw');
+  }
+
+  async function loop(){
+    if(running) return; running = true;
+    cursor.classList.add('is-on');
+    await wait(900);
+    while(running){
+      for(var n = 0; n < order.length && running; n++){
+        var i = order[n];
+        aim(i);                         await wait(800);
+        tiles[i].classList.add('is-press');   await wait(140);
+        tiles[i].classList.remove('is-press');
+        select(i);                      await wait(1500);
+      }
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); }
+
+  if(reduce){ select(1); return; }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

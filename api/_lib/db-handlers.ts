@@ -20,7 +20,7 @@ import {
   dbVerifyLinkPassword,
 } from './azureSql.ts';
 import { isAllowedAvatarHost } from './publicPage.ts';
-import { RESERVED } from './usernames.ts';
+import { RESERVED, isPrivilegedEmailServer } from './usernames.ts';
 import {
   firebaseGetProfile,
   firebaseGetProfileByUserId,
@@ -78,8 +78,10 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
 
   try {
     let profile = await dbGetProfile(clean);
+    let cameFromFirebase = false;
     if (!profile) {
       profile = await firebaseGetProfile(clean);
+      cameFromFirebase = Boolean(profile);
     }
 
     if (!profile) {
@@ -115,7 +117,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     }
 
     let allBlocks = await dbGetBlocks(clean);
-    if (!allBlocks || allBlocks.length === 0) {
+    if (cameFromFirebase && (!allBlocks || allBlocks.length === 0)) {
       const fbBlocks = await firebaseGetBlocks(clean);
       if (fbBlocks && fbBlocks.length > 0) {
         allBlocks = fbBlocks;
@@ -210,7 +212,15 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
 
     if (result.username) {
       // Sync claim and profile to Firebase in background
-      firebaseSaveProfile(result.username, profileData || {}, userId).catch(() => {});
+      firebaseSaveProfile(
+        result.username,
+        {
+          ...(profileData || {}),
+          primaryEmail,
+          plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : (profileData?.plan || 'free'),
+        },
+        userId
+      ).catch(() => {});
     }
 
     return res.status(200).json({
@@ -238,15 +248,21 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
 
   try {
     let profile = await dbGetProfileByUserId(userId, email);
+    let cameFromFirebase = false;
     if (!profile) {
       profile = await firebaseGetProfileByUserId(userId, email);
+      cameFromFirebase = Boolean(profile);
     }
     if (!profile) {
       return res.status(200).json({ ok: true, claimed: false });
     }
 
+    if (isPrivilegedEmailServer(email || profile.primaryEmail)) {
+      profile = { ...profile, plan: 'pro' };
+    }
+
     let blocks = await dbGetBlocks(profile.username);
-    if (!blocks || blocks.length === 0) {
+    if (cameFromFirebase && (!blocks || blocks.length === 0)) {
       blocks = await firebaseGetBlocks(profile.username);
     }
 
@@ -307,6 +323,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
+    const resolvedEmail = body.primaryEmail || req.headers['x-user-email'] as string || null;
+    const resolvedPlan = isPrivilegedEmailServer(resolvedEmail) ? 'pro' : body.plan;
     const saveResult = await dbSaveProfile({
       userId: body.userId || req.headers['x-user-id'] as string || 'owner',
       username,
@@ -319,8 +337,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       buttonShape: body.buttonShape,
       socials: body.socials,
       socialsPosition: body.socialsPosition,
-      primaryEmail: body.primaryEmail || req.headers['x-user-email'] as string || null,
-      plan: body.plan,
+      primaryEmail: resolvedEmail,
+      plan: resolvedPlan,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
       background: body.background,
@@ -339,7 +357,11 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     }
 
     // Sync to Firebase Cloud Database in background
-    firebaseSaveProfile(username, body, body.userId || req.headers['x-user-id'] as string || 'owner').catch(() => {});
+    firebaseSaveProfile(
+      username,
+      { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan },
+      body.userId || req.headers['x-user-id'] as string || 'owner'
+    ).catch(() => {});
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -393,7 +415,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
 
     const avatarUrl = `/api/avatar/${username}?v=${Date.now()}`;
 
-    // Update in database immediately
+    // Update in database immediately while preserving existing background and integrations
     await dbSaveProfile({
       userId: userId || existing?.userId || 'owner',
       username,
@@ -410,6 +432,12 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       plan: existing?.plan || 'free',
       hideFooter: existing?.hideFooter,
       hideFromSearch: existing?.hideFromSearch,
+      background: existing?.background ?? null,
+      googleAnalyticsId: existing?.googleAnalyticsId ?? null,
+      metaPixelId: existing?.metaPixelId ?? null,
+      whatsappNumber: existing?.whatsappNumber ?? null,
+      customSeoTitle: existing?.customSeoTitle ?? null,
+      customSeoDescription: existing?.customSeoDescription ?? null,
     });
 
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });

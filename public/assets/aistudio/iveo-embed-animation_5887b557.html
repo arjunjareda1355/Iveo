@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Embed what you make (animation)</title>
+</head>
+<body style="margin:0;padding:24px;max-width:480px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-embed so it can't affect the rest of your site. */
+  .iveo-embed{
+    --ie-bg:#f4f4f4;
+    --ie-surface:#fff;
+    --ie-border:#e6e6e6;
+    --ie-ink:#111;
+    --ie-soft:#d6d6d6;
+    --ie-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:232/140;
+    background:var(--ie-bg);
+    border-radius:12px;
+    overflow:hidden;
+    position:relative;
+  }
+  .iveo-embed *{box-sizing:border-box}
+
+  .iveo-embed .ie-item{
+    position:absolute;left:5cqw;width:90cqw;
+    opacity:0;transform:translateY(3cqw);
+    transition:opacity .5s, transform .55s cubic-bezier(.2,.9,.3,1);
+  }
+  .iveo-embed.show-v .ie-video, .iveo-embed.show-t .ie-track, .iveo-embed.show-w .ie-wave{opacity:1;transform:none}
+  .iveo-embed.is-out .ie-item{opacity:0;transition:opacity .5s}
+
+  /* tiny platform labels */
+  .iveo-embed .ie-tag{font-family:var(--ie-mono);font-size:2.3cqw;color:#9a9a9a;letter-spacing:.02em}
+
+  /* video */
+  .iveo-embed .ie-video{
+    top:5cqw;height:25cqw;background:var(--ie-surface);border:1px solid var(--ie-border);border-radius:3cqw;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;
+    box-shadow:0 1px 2px rgba(0,0,0,.04);
+  }
+  .iveo-embed .ie-video .ie-tag{position:absolute;left:3.2cqw;top:2.6cqw}
+  .iveo-embed .ie-play{width:8cqw;height:8cqw;position:relative;transition:transform .15s}
+  .iveo-embed .ie-play svg{position:absolute;inset:0;width:100%;height:100%;transition:opacity .2s}
+  .iveo-embed .ie-play .ie-pause{opacity:0}
+  .iveo-embed .ie-video.is-playing .ie-pause{opacity:1}
+  .iveo-embed .ie-video.is-playing .ie-tri{opacity:0}
+  .iveo-embed .ie-play.is-press{transform:scale(.86)}
+  .iveo-embed .ie-vbar{position:absolute;left:3cqw;right:3cqw;bottom:2.6cqw;height:.9cqw;border-radius:1cqw;background:#ececec;overflow:hidden}
+  .iveo-embed .ie-vbar i{display:block;height:100%;width:0;background:var(--ie-ink);border-radius:1cqw}
+  .iveo-embed .ie-video.is-playing .ie-vbar i{animation:ie-fill 3.2s linear forwards}
+
+  /* track */
+  .iveo-embed .ie-track{
+    top:33cqw;height:13cqw;display:flex;align-items:center;gap:3cqw;padding:0 3cqw;
+    background:var(--ie-surface);border:1px solid var(--ie-border);border-radius:2.6cqw;
+    box-shadow:0 1px 2px rgba(0,0,0,.04);
+  }
+  .iveo-embed .ie-thumb{
+    width:7.6cqw;height:7.6cqw;border-radius:1.6cqw;flex:none;background:#f1f1f1;border:1px solid var(--ie-border);
+    display:flex;align-items:flex-end;justify-content:center;gap:.7cqw;padding:1.7cqw 0;transition:transform .15s;
+  }
+  .iveo-embed .ie-thumb.is-press{transform:scale(.88)}
+  .iveo-embed .ie-thumb i{width:.9cqw;height:100%;background:var(--ie-ink);border-radius:.4cqw;transform:scaleY(.15);transform-origin:bottom;opacity:.0;transition:opacity .3s}
+  .iveo-embed .ie-track.is-playing .ie-thumb i{opacity:1;animation:ie-eq .8s ease-in-out infinite}
+  .iveo-embed .ie-track.is-playing .ie-thumb i:nth-child(2){animation-delay:-.3s}
+  .iveo-embed .ie-track.is-playing .ie-thumb i:nth-child(3){animation-delay:-.55s}
+  .iveo-embed .ie-lines{flex:1;display:flex;flex-direction:column;gap:1.4cqw}
+  .iveo-embed .ie-l1{height:1.9cqw;width:36cqw;border-radius:1cqw;background:var(--ie-ink)}
+  .iveo-embed .ie-l2{height:1.5cqw;width:22cqw;border-radius:1cqw;background:#d4d4d4}
+
+  /* waveform */
+  .iveo-embed .ie-wave{top:49cqw;height:7cqw;display:flex;align-items:center;justify-content:space-between}
+  .iveo-embed .ie-wave i{
+    display:block;width:1cqw;border-radius:.5cqw;background:var(--ie-soft);
+    transform:scaleY(0);transition:transform .4s cubic-bezier(.2,.9,.3,1.2), background .2s;
+  }
+  .iveo-embed.show-w .ie-wave i{transform:scaleY(1)}
+  .iveo-embed .ie-wave i.is-played{background:var(--ie-ink)}
+
+  /* cursor */
+  .iveo-embed .ie-cursor{
+    position:absolute;left:0;top:0;width:5cqw;height:5cqw;z-index:5;pointer-events:none;
+    transform:translate(var(--cx,95cqw),var(--cy,58cqw));
+    transition:transform .75s cubic-bezier(.4,0,.2,1), opacity .3s;
+    opacity:0;filter:drop-shadow(0 .3cqw .5cqw rgba(0,0,0,.25));
+  }
+  .iveo-embed .ie-cursor.is-on{opacity:1}
+
+  @keyframes ie-fill{from{width:0}to{width:100%}}
+  @keyframes ie-eq{0%,100%{transform:scaleY(.2)}50%{transform:scaleY(1)}}
+  @media (prefers-reduced-motion:reduce){
+    .iveo-embed *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="iveo-embed" id="iveoEmbed" role="img" aria-label="A video, a music track and a waveform embedded on a page and playing">
+  <div class="ie-item ie-video" id="ieVideo">
+    <span class="ie-tag">YouTube</span>
+    <span class="ie-play" id="iePlay">
+      <svg class="ie-tri" viewBox="0 0 24 24"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z" fill="#111" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <svg class="ie-pause" viewBox="0 0 24 24"><rect x="5" y="3.5" width="5" height="17" rx="1.4" fill="#111"/><rect x="14" y="3.5" width="5" height="17" rx="1.4" fill="#111"/></svg>
+    </span>
+    <span class="ie-vbar"><i></i></span>
+  </div>
+
+  <div class="ie-item ie-track" id="ieTrack">
+    <span class="ie-thumb" id="ieThumb"><i></i><i></i><i></i></span>
+    <span class="ie-lines"><span class="ie-l1"></span><span class="ie-l2"></span></span>
+    <span class="ie-tag">Spotify</span>
+  </div>
+
+  <div class="ie-item ie-wave" id="ieWave"></div>
+
+  <svg class="ie-cursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 3l14 8-6 1.8L10.6 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoEmbed');
+  if(!root) return;
+  var video = root.querySelector('#ieVideo'), play = root.querySelector('#iePlay');
+  var track = root.querySelector('#ieTrack'), thumb = root.querySelector('#ieThumb');
+  var wave = root.querySelector('#ieWave'), cursor = root.querySelector('.ie-cursor');
+  var N = 38, bars = [];
+  var running = false, timer;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* build the waveform (deterministic heights) */
+  for(var i = 0; i < N; i++){
+    var b = document.createElement('i');
+    var h = 2.2 + Math.abs(Math.sin(i * 1.7) * 3.2 + Math.sin(i * .6) * 1.6);
+    b.style.height = Math.min(h, 7) + 'cqw';
+    b.style.transitionDelay = (i * 18) + 'ms, 0s';
+    wave.appendChild(b); bars.push(b);
+  }
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function aim(el, fx, fy){
+    var rr = root.getBoundingClientRect(), cr = el.getBoundingClientRect(), u = rr.width / 100;
+    cursor.style.setProperty('--cx', ((cr.left - rr.left + cr.width * (fx||.5)) / u - 1) + 'cqw');
+    cursor.style.setProperty('--cy', ((cr.top  - rr.top  + cr.height * (fy||.5)) / u - .7) + 'cqw');
+  }
+  async function click(el){
+    el.classList.add('is-press'); await wait(150); el.classList.remove('is-press');
+  }
+  function reset(){
+    ['show-v','show-t','show-w','is-out'].forEach(function(c){ root.classList.remove(c); });
+    video.classList.remove('is-playing'); track.classList.remove('is-playing');
+    bars.forEach(function(b){ b.classList.remove('is-played'); });
+    cursor.classList.remove('is-on');
+    cursor.style.setProperty('--cx','95cqw'); cursor.style.setProperty('--cy','58cqw');
+  }
+
+  async function loop(){
+    if(running) return; running = true;
+    while(running){
+      reset();                                          await wait(700);
+      /* 1 — embeds appear one by one */
+      root.classList.add('show-v');                     await wait(550);
+      root.classList.add('show-t');                     await wait(550);
+      root.classList.add('show-w');                     await wait(1100);
+      /* 2 — play the video */
+      cursor.classList.add('is-on'); aim(play);         await wait(900);
+      await click(play); video.classList.add('is-playing');
+      await wait(2400);
+      /* 3 — switch to the music track + waveform */
+      aim(thumb);                                       await wait(850);
+      await click(thumb);
+      video.classList.remove('is-playing'); track.classList.add('is-playing');
+      for(var k = 0; k < N && running; k++){ bars[k].classList.add('is-played'); await wait(75); }
+      await wait(900);
+      cursor.classList.remove('is-on');
+      track.classList.remove('is-playing');             await wait(500);
+      root.classList.add('is-out');                     await wait(800);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); }
+
+  if(reduce){
+    root.classList.add('show-v','show-t','show-w');
+    for(var q = 0; q < 14; q++) bars[q].classList.add('is-played');
+    return;
+  }
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

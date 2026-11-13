@@ -101,6 +101,7 @@ function useClerkSession(): IveoSession {
 
   // Server-side profile data retrieved via /api/me for cross-browser synchronization
   const [serverProfile, setServerProfile] = useState<any | null>(null);
+  const [hasFetchedServerProfile, setHasFetchedServerProfile] = useState(false);
 
   useEffect(() => {
     const onSync = (e: Event) => {
@@ -117,6 +118,7 @@ function useClerkSession(): IveoSession {
   useEffect(() => {
     if (!activeUser?.id) {
       setServerProfile(null);
+      setHasFetchedServerProfile(false);
       return;
     }
 
@@ -150,7 +152,11 @@ function useClerkSession(): IveoSession {
             }
           }
         }
-      } catch {}
+      } catch {} finally {
+        if (isMounted) {
+          setHasFetchedServerProfile(true);
+        }
+      }
     };
 
     fetchServerProfile();
@@ -191,8 +197,9 @@ function useClerkSession(): IveoSession {
   const socials = serverProfile?.socials || preferences.socials || {};
 
   const primaryEmail = activeUser?.primaryEmailAddress?.emailAddress || null;
+  const isOwner = primaryEmail ? isOwnerEmail(primaryEmail) : false;
 
-  const isUsernameValid = username ? validateUsername(username).ok : false;
+  const isUsernameValid = username ? validateUsername(username, { allowReserved: isOwner }).ok : false;
   const isProfileSetup =
     isUsernameValid &&
     (preferences.onboardingComplete === true ||
@@ -205,7 +212,6 @@ function useClerkSession(): IveoSession {
       )));
   const onboardingComplete = Boolean(isProfileSetup);
 
-  const isOwner = primaryEmail ? isOwnerEmail(primaryEmail) : false;
   const plan: 'free' | 'pro' = isOwner || serverProfile?.plan === 'pro' ? 'pro' : preferences.plan;
   const isPro = isOwner || plan === 'pro';
   const hideFooter = serverProfile?.hideFooter ?? (preferences.hideIveoFooter || preferences.hideIvioFooter || false);
@@ -213,6 +219,8 @@ function useClerkSession(): IveoSession {
     serverProfile?.socialsPosition || preferences.socialsPosition || 'top';
   const vibeId = serverProfile?.vibeId || preferences.vibeId || DEFAULT_PREFERENCES.vibeId;
   const buttonShape = serverProfile?.buttonShape || preferences.buttonShape || DEFAULT_PREFERENCES.buttonShape;
+  const effectiveBackground =
+    serverProfile?.background !== undefined ? serverProfile.background : (preferences.background || null);
   const googleAnalyticsId =
     serverProfile?.googleAnalyticsId !== undefined
       ? serverProfile.googleAnalyticsId
@@ -291,9 +299,9 @@ function useClerkSession(): IveoSession {
     }
   }, [activeUser?.id, username, primaryEmail]);
 
-  // Automatic sync on session load to ensure Azure SQL and server store have current user profile
+  // Automatic sync after initial server profile hydration completes
   useEffect(() => {
-    if (activeUser?.id && username) {
+    if (hasFetchedServerProfile && activeUser?.id && username) {
       syncToServer({
         username,
         displayName: displayName || username,
@@ -303,6 +311,7 @@ function useClerkSession(): IveoSession {
         buttonShape,
         socials,
         socialsPosition,
+        background: effectiveBackground,
         googleAnalyticsId,
         metaPixelId,
         whatsappNumber,
@@ -314,6 +323,7 @@ function useClerkSession(): IveoSession {
       });
     }
   }, [
+    hasFetchedServerProfile,
     activeUser?.id,
     username,
     displayName,
@@ -321,7 +331,9 @@ function useClerkSession(): IveoSession {
     imageUrl,
     vibeId,
     buttonShape,
+    socials,
     socialsPosition,
+    effectiveBackground,
     googleAnalyticsId,
     metaPixelId,
     whatsappNumber,
@@ -452,9 +464,23 @@ function useClerkSession(): IveoSession {
       ...safePatch,
     };
 
+    // Strip oversized data-URL wallpapers before persisting to Clerk's 8KB unsafeMetadata
+    const clerkMerged: Record<string, unknown> = { ...merged };
+    if (
+      clerkMerged.background &&
+      typeof clerkMerged.background === 'object' &&
+      typeof (clerkMerged.background as any).value === 'string' &&
+      ((clerkMerged.background as any).value.startsWith('data:') || (clerkMerged.background as any).value.length > 600)
+    ) {
+      clerkMerged.background = {
+        ...(clerkMerged.background as any),
+        value: undefined,
+      };
+    }
+
     try {
       await currentUser.update({
-        unsafeMetadata: merged,
+        unsafeMetadata: clerkMerged,
       });
     } catch (metaErr) {
       console.warn('Clerk metadata update note:', metaErr);
@@ -466,7 +492,9 @@ function useClerkSession(): IveoSession {
       } catch {}
     }
 
-    // Mirror to localStorage for offline and public profile fallback
+    const nextBackground = merged.background !== undefined ? merged.background : effectiveBackground;
+
+    // Mirror to localStorage for offline fallback
     if (username) {
       try {
         const raw = localStorage.getItem(`iveo_profile_${username}`) || '{}';
@@ -477,7 +505,10 @@ function useClerkSession(): IveoSession {
             ...parsed,
             vibeId: merged.vibeId || parsed.vibeId,
             buttonShape: merged.buttonShape || parsed.buttonShape,
-            hideFooter: merged.hideIveoFooter || merged.hideIvioFooter || parsed.hideFooter,
+            hideFooter:
+              merged.hideIveoFooter !== undefined
+                ? Boolean(merged.hideIveoFooter)
+                : (merged.hideIvioFooter !== undefined ? Boolean(merged.hideIvioFooter) : parsed.hideFooter),
             displayName: merged.displayName !== undefined ? merged.displayName : parsed.displayName,
             bio: merged.bio !== undefined ? merged.bio : parsed.bio,
             avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : parsed.avatarUrl,
@@ -485,6 +516,7 @@ function useClerkSession(): IveoSession {
             avatarId: merged.avatarId !== undefined ? merged.avatarId : parsed.avatarId,
             socials: merged.socials !== undefined ? merged.socials : parsed.socials,
             socialsPosition: merged.socialsPosition || parsed.socialsPosition || 'top',
+            background: nextBackground,
             googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : parsed.googleAnalyticsId,
             metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : parsed.metaPixelId,
             whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : parsed.whatsappNumber,
@@ -506,6 +538,7 @@ function useClerkSession(): IveoSession {
         buttonShape: merged.buttonShape || preferences.buttonShape,
         socials: merged.socials !== undefined ? merged.socials : socials,
         socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
+        background: nextBackground,
         googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : googleAnalyticsId,
         metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : metaPixelId,
         whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
@@ -513,7 +546,10 @@ function useClerkSession(): IveoSession {
         customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
-        hideFooter: merged.hideIveoFooter || merged.hideIvioFooter || hideFooter,
+        hideFooter:
+          merged.hideIveoFooter !== undefined
+            ? Boolean(merged.hideIveoFooter)
+            : (merged.hideIvioFooter !== undefined ? Boolean(merged.hideIvioFooter) : hideFooter),
       });
 
       // Background Firestore persistence
@@ -529,6 +565,7 @@ function useClerkSession(): IveoSession {
           buttonShape: merged.buttonShape || preferences.buttonShape,
           socials: merged.socials !== undefined ? merged.socials : socials,
           socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
+          background: nextBackground,
           googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : googleAnalyticsId,
           metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : metaPixelId,
           whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
@@ -629,7 +666,7 @@ function useClerkSession(): IveoSession {
     buttonShape,
     socials,
     socialsPosition,
-    background: serverProfile?.background || preferences.background || null,
+    background: effectiveBackground,
     googleAnalyticsId,
     metaPixelId,
     whatsappNumber,

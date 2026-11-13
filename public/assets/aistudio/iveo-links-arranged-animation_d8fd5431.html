@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iveo – Links, arranged by hand (animation)</title>
+</head>
+<body style="margin:0;padding:24px;max-width:480px;font-family:system-ui,sans-serif;background:#fff">
+
+<!-- ============ COPY FROM HERE ============ -->
+<style>
+  /* Everything is scoped to .iveo-arrange so it can't affect the rest of your site. */
+  .iveo-arrange{
+    --ia-bg:#f4f4f4;
+    --ia-surface:#fafafa;
+    --ia-border:#e6e6e6;
+    --ia-text:#111;
+    --ia-muted:#a8a8a8;
+    --ia-dots:#b5b5b5;
+    --ia-on:#111;
+    --ia-off:#e3e3e3;
+
+    container-type:inline-size;
+    box-sizing:border-box;
+    width:100%;
+    aspect-ratio:232/187;
+    background:var(--ia-bg);
+    border-radius:12px;
+    overflow:hidden;
+    position:relative;
+  }
+  .iveo-arrange *{box-sizing:border-box}
+
+  .iveo-arrange .ia-row{
+    position:absolute;left:3.5cqw;width:93cqw;top:0;height:14.6cqw;
+    display:flex;align-items:center;gap:3.4cqw;
+    padding:0 4.5cqw 0 5cqw;
+    background:var(--ia-surface);
+    border:1px solid var(--ia-border);
+    border-radius:2.6cqw;
+    font-size:3.7cqw;font-weight:500;color:var(--ia-text);
+    transform:translateY(var(--y,0cqw)) scale(var(--s,1));
+    transition:transform .55s cubic-bezier(.2,.8,.2,1), box-shadow .3s, opacity .4s;
+    z-index:1;will-change:transform;
+  }
+  .iveo-arrange .ia-row.is-drag{
+    --s:1.03;z-index:3;background:#fff;
+    box-shadow:0 2.4cqw 6cqw rgba(0,0,0,.14), 0 .4cqw 1.2cqw rgba(0,0,0,.08);
+  }
+
+  .iveo-arrange .ia-grip{display:grid;grid-template-columns:repeat(2,.8cqw);gap:.65cqw;flex:none}
+  .iveo-arrange .ia-grip i{width:.8cqw;height:.8cqw;border-radius:50%;background:var(--ia-dots)}
+
+  .iveo-arrange .ia-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s}
+  .iveo-arrange .ia-row.is-off .ia-title{color:var(--ia-muted)}
+  .iveo-arrange .ia-row.is-off{background:#f7f7f7}
+
+  .iveo-arrange .ia-toggle{
+    width:10.5cqw;height:6cqw;border-radius:3cqw;flex:none;position:relative;
+    background:var(--ia-on);transition:background .3s, transform .15s;
+  }
+  .iveo-arrange .ia-toggle::after{
+    content:"";position:absolute;top:.8cqw;left:5.3cqw;width:4.4cqw;height:4.4cqw;border-radius:50%;
+    background:#fff;box-shadow:0 .2cqw .5cqw rgba(0,0,0,.2);
+    transition:left .3s cubic-bezier(.3,.8,.3,1);
+  }
+  .iveo-arrange .ia-row.is-off .ia-toggle{background:var(--ia-off)}
+  .iveo-arrange .ia-row.is-off .ia-toggle::after{left:.8cqw}
+  .iveo-arrange .ia-toggle.is-press{transform:scale(.88)}
+
+  .iveo-arrange .ia-cursor{
+    position:absolute;left:0;top:0;width:5.5cqw;height:5.5cqw;z-index:5;pointer-events:none;
+    transform:translate(var(--cx,80cqw),var(--cy,70cqw));
+    transition:transform .7s cubic-bezier(.4,0,.2,1), opacity .3s;
+    opacity:0;filter:drop-shadow(0 .3cqw .5cqw rgba(0,0,0,.25));
+  }
+  .iveo-arrange .ia-cursor.is-on{opacity:1}
+  .iveo-arrange.is-fade .ia-row{opacity:0}
+
+  @media (prefers-reduced-motion:reduce){
+    .iveo-arrange *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="iveo-arrange" id="iveoArrange" role="img" aria-label="Reordering links and switching them on or off">
+  <div class="ia-row" data-id="zine"><span class="ia-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ia-title">New zine, out now</span><span class="ia-toggle"></span></div>
+  <div class="ia-row" data-id="shop"><span class="ia-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ia-title">Shop prints</span><span class="ia-toggle"></span></div>
+  <div class="ia-row is-off" data-id="commission"><span class="ia-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ia-title">Commission waitlist</span><span class="ia-toggle"></span></div>
+  <div class="ia-row" data-id="portfolio"><span class="ia-grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ia-title">Portfolio</span><span class="ia-toggle"></span></div>
+
+  <svg class="ia-cursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 3l14 8-6 1.8L10.6 19z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('iveoArrange');
+  if(!root) return;
+  var TOP = 6.2, PITCH = 17.7;                 /* cqw */
+  var rows = {};
+  [].forEach.call(root.querySelectorAll('.ia-row'), function(r){ rows[r.dataset.id] = r; });
+  var cursor = root.querySelector('.ia-cursor');
+  var initial = ['zine','shop','commission','portfolio'];
+  var running = false, timer;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function wait(ms){ return new Promise(function(r){ timer = setTimeout(r, ms); }); }
+  function slot(el, n){ el.style.setProperty('--y', (TOP + n*PITCH) + 'cqw'); }
+  function layout(order){ order.forEach(function(id, n){ slot(rows[id], n); }); }
+  function aimToggle(n){ cursor.style.setProperty('--cx','86cqw'); cursor.style.setProperty('--cy',(TOP + n*PITCH + 6)+'cqw'); }
+  function aimGrip(n){ cursor.style.setProperty('--cx','8.5cqw'); cursor.style.setProperty('--cy',(TOP + n*PITCH + 6)+'cqw'); }
+
+  async function flip(id){
+    var t = rows[id].querySelector('.ia-toggle');
+    t.classList.add('is-press'); await wait(140);
+    t.classList.remove('is-press');
+    rows[id].classList.toggle('is-off');
+  }
+
+  function reset(){
+    root.classList.remove('is-fade');
+    cursor.classList.remove('is-on');
+    cursor.style.setProperty('--cx','80cqw'); cursor.style.setProperty('--cy','70cqw');
+    var all = root.querySelectorAll('.ia-row, .ia-toggle, .ia-toggle::after');
+    [].forEach.call(root.querySelectorAll('.ia-row'), function(r){ r.style.transition='none'; r.classList.remove('is-drag'); });
+    rows.zine.classList.remove('is-off'); rows.shop.classList.remove('is-off');
+    rows.commission.classList.add('is-off'); rows.portfolio.classList.remove('is-off');
+    layout(initial);
+    void root.offsetWidth;
+    [].forEach.call(root.querySelectorAll('.ia-row'), function(r){ r.style.transition=''; });
+  }
+
+  async function loop(){
+    if(running) return; running = true;
+    while(running){
+      reset();                                         await wait(900);
+      cursor.classList.add('is-on');
+      /* 1 — switch a link off without deleting it */
+      aimToggle(1);                                    await wait(850);
+      await flip('shop');                              await wait(700);
+      /* 2 — switch another one on */
+      aimToggle(2);                                    await wait(800);
+      await flip('commission');                        await wait(800);
+      /* 3 — drag Portfolio to the top */
+      aimGrip(3);                                      await wait(800);
+      rows.portfolio.classList.add('is-drag');         await wait(250);
+      aimGrip(0);
+      layout(['portfolio','zine','shop','commission']);
+      await wait(850);
+      rows.portfolio.classList.remove('is-drag');      await wait(300);
+      cursor.classList.remove('is-on');
+      await wait(2200);
+      root.classList.add('is-fade');                   await wait(600);
+    }
+  }
+  function stop(){ running = false; clearTimeout(timer); }
+
+  layout(initial);
+  if(reduce) return;
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){ loop(); } else { stop(); }
+    },{threshold:.35}).observe(root);
+  } else { loop(); }
+})();
+</script>
+<!-- ============ COPY TO HERE ============ -->
+
+</body>
+</html>

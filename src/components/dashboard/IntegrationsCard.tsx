@@ -98,6 +98,32 @@ export const IntegrationsCard: React.FC = () => {
     }
   };
 
+  const handleDisconnect = async (field: 'googleAnalyticsId' | 'metaPixelId' | 'whatsappNumber' | 'seo') => {
+    setError(null);
+    setIsSaving(true);
+    try {
+      if (field === 'googleAnalyticsId') {
+        await session.updatePreferences({ googleAnalyticsId: null });
+        setGaId('');
+      } else if (field === 'metaPixelId') {
+        await session.updatePreferences({ metaPixelId: null });
+        setPixelId('');
+      } else if (field === 'whatsappNumber') {
+        await session.updatePreferences({ whatsappNumber: null });
+        setWhatsapp('');
+      } else if (field === 'seo') {
+        await session.updatePreferences({ customSeoTitle: null, customSeoDescription: null });
+        setSeoTitle('');
+        setSeoDesc('');
+      }
+      showToast('Integration removed from your page');
+    } catch {
+      setError('Could not remove integration. Try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <Card className="flex flex-col gap-5">
       <div>
@@ -120,7 +146,17 @@ export const IntegrationsCard: React.FC = () => {
               <span>Google Analytics 4</span>
             </label>
             {session.googleAnalyticsId && (
-              <span className="text-[11px] font-medium text-emerald-700">Connected</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-emerald-700">Connected</span>
+                <button
+                  type="button"
+                  onClick={() => handleDisconnect('googleAnalyticsId')}
+                  disabled={isSaving}
+                  className="text-[11px] font-medium text-red-600 hover:underline cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
             )}
           </div>
           <input
@@ -152,7 +188,17 @@ export const IntegrationsCard: React.FC = () => {
               <span>Meta Pixel</span>
             </label>
             {session.metaPixelId && (
-              <span className="text-[11px] font-medium text-emerald-700">Connected</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-emerald-700">Connected</span>
+                <button
+                  type="button"
+                  onClick={() => handleDisconnect('metaPixelId')}
+                  disabled={isSaving}
+                  className="text-[11px] font-medium text-red-600 hover:underline cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
             )}
           </div>
           <input
@@ -182,7 +228,17 @@ export const IntegrationsCard: React.FC = () => {
               <span>WhatsApp Quick-Chat</span>
             </label>
             {session.whatsappNumber && (
-              <span className="text-[11px] font-medium text-emerald-700">Active on page</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-emerald-700">Active on page</span>
+                <button
+                  type="button"
+                  onClick={() => handleDisconnect('whatsappNumber')}
+                  disabled={isSaving}
+                  className="text-[11px] font-medium text-red-600 hover:underline cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
             )}
           </div>
           <input
@@ -210,6 +266,16 @@ export const IntegrationsCard: React.FC = () => {
               </span>
               <span>Custom SEO &amp; Search Preview</span>
             </span>
+            {(session.customSeoTitle || session.customSeoDescription) && (
+              <button
+                type="button"
+                onClick={() => handleDisconnect('seo')}
+                disabled={isSaving}
+                className="text-[11px] font-medium text-red-600 hover:underline cursor-pointer"
+              >
+                Reset to default
+              </button>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
