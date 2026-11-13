@@ -18,7 +18,7 @@ import { BlocksProvider, useBlocks } from '../data/BlocksContext';
 import { useIvioSession } from '../auth/useIvioSession';
 import { useProtectedLinkIds } from '../data/hooks/useProtectedLinkIds';
 import { VIBES, VibeId } from '../lib/vibes';
-import { ButtonShape } from '../lib/preferences';
+import { ButtonShape, LayoutSettings } from '../lib/preferences';
 import { FontSettings } from '../lib/fonts';
 import { ButtonColors } from '../lib/colors';
 import { useNow, isBlockVisibleNow } from '../lib/time';
@@ -47,6 +47,9 @@ const DashboardContent: React.FC = () => {
   const [previewButtonColors, setPreviewButtonColors] = useState<ButtonColors | null>(
     session.buttonColors ?? null
   );
+  const [previewLayoutSettings, setPreviewLayoutSettings] = useState<LayoutSettings | null>(
+    session.layoutSettings ?? null
+  );
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
 
@@ -56,7 +59,14 @@ const DashboardContent: React.FC = () => {
     setPreviewShape(session.buttonShape ?? null);
     setPreviewFontSettings(session.fontSettings ?? null);
     setPreviewButtonColors(session.buttonColors ?? null);
-  }, [session.vibeId, session.buttonShape, session.fontSettings, session.buttonColors]);
+    setPreviewLayoutSettings(session.layoutSettings ?? null);
+  }, [
+    session.vibeId,
+    session.buttonShape,
+    session.fontSettings,
+    session.buttonColors,
+    session.layoutSettings,
+  ]);
 
   // Determine active tab & document title
   const isAppearance = location.pathname.includes('/appearance');
@@ -109,6 +119,7 @@ const DashboardContent: React.FC = () => {
     background: session.background,
     fontSettings: previewFontSettings,
     buttonColors: previewButtonColors,
+    layoutSettings: previewLayoutSettings,
   };
 
   const buttonRadiusOverride = previewShape ? BUTTON_RADIUS_MAP[previewShape] : undefined;
@@ -285,6 +296,7 @@ const DashboardContent: React.FC = () => {
                     onPreviewShapeChange={(shape) => setPreviewShape(shape)}
                     onPreviewFontSettingsChange={(fonts) => setPreviewFontSettings(fonts)}
                     onPreviewButtonColorsChange={(colors) => setPreviewButtonColors(colors)}
+                    onPreviewLayoutChange={(layout) => setPreviewLayoutSettings(layout)}
                     onOpenPreview={() => setMobilePreviewOpen(true)}
                   />
                 )}

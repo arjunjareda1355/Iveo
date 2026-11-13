@@ -122,6 +122,8 @@ export function parseBusinessCardConfig(raw: unknown): BusinessCardConfig | null
   };
 }
 
+import { isLightHexColor } from './colors';
+
 export function mergeBusinessCardConfig(
   base?: BusinessCardConfig | null,
   patch?: Partial<BusinessCardConfig> | null
@@ -134,5 +136,99 @@ export function mergeBusinessCardConfig(
     showBio: (patch?.showBio ?? base?.showBio) !== false,
     showHandle: (patch?.showHandle ?? base?.showHandle) !== false,
     showQr: (patch?.showQr ?? base?.showQr) !== false,
+  };
+}
+
+export const CARD_BASE_WIDTH = 600;
+export const CARD_BASE_HEIGHT = 353; // exact 2040 / 3.4
+export const CARD_EXPORT_SCALE = 3.4; // 600*3.4 = 2040, 353*3.4 = 1200.2 -> 1200
+
+export interface ResolvedCardAppearance {
+  template: BusinessCardTemplate;
+  bgColor: string;
+  bgColor2: string | null;
+  accentColor: string;
+  textColor: string;
+  mutedColor: string;
+  borderColor: string;
+  isLight: boolean;
+  qrFg: string;
+  qrBg: string;
+  cornerRadius: number; // in 600x353 base coordinates
+  innerCornerRadius: number;
+  backgroundCssImage?: string;
+}
+
+export function resolveBusinessCardAppearance(
+  cfg: BusinessCardConfig,
+  vibeTheme?: {
+    bg?: string;
+    text?: string;
+    muted?: string;
+    accent?: string;
+    buttonBg?: string;
+  }
+): ResolvedCardAppearance {
+  const template: BusinessCardTemplate = cfg.template || 'classic';
+
+  let bgColor = cfg.bgColor || vibeTheme?.bg || '#0F172A';
+  let accentColor = cfg.accentColor || vibeTheme?.accent || vibeTheme?.buttonBg || '#4F46E5';
+  let textColor = cfg.textColor || vibeTheme?.text || '#FFFFFF';
+
+  if (template === 'gradient' && !cfg.bgColor) {
+    bgColor = '#0F172A';
+    accentColor = cfg.accentColor || '#38BDF8';
+    textColor = cfg.textColor || '#FFFFFF';
+  } else if (template === 'midnight') {
+    bgColor = cfg.bgColor || '#09090B';
+    textColor = cfg.textColor || '#FAFAFA';
+    accentColor = cfg.accentColor || '#A855F7';
+  } else if (template === 'executive' && !cfg.bgColor) {
+    bgColor = '#111827';
+    textColor = cfg.textColor || '#F9FAFB';
+    accentColor = cfg.accentColor || '#38BDF8';
+  } else if (template === 'editorial' && !cfg.bgColor) {
+    bgColor = '#FAF8F5';
+    textColor = cfg.textColor || '#1C1917';
+    accentColor = cfg.accentColor || '#B45309';
+  }
+
+  const isLight = isLightHexColor(bgColor);
+  if (!cfg.textColor && (template === 'classic' || !vibeTheme?.text)) {
+    textColor = vibeTheme?.text || (isLight ? '#0A0A0A' : '#FFFFFF');
+  }
+
+  const mutedColor = isLight ? 'rgba(15, 23, 42, 0.68)' : 'rgba(255, 255, 255, 0.72)';
+  const borderColor = isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.18)';
+
+  const cornerRadius =
+    cfg.cornerStyle === 'sharp' ? 5 : cfg.cornerStyle === 'pill' ? 32 : 20;
+  const innerCornerRadius = Math.max(3, cornerRadius - 7);
+
+  let backgroundCssImage: string | undefined;
+  const bgColor2 = cfg.bgColor2 || null;
+
+  if (cfg.bgColor && bgColor2) {
+    backgroundCssImage = `linear-gradient(135deg, ${cfg.bgColor} 0%, ${bgColor2} 100%)`;
+  } else if (template === 'gradient') {
+    backgroundCssImage = `linear-gradient(135deg, ${bgColor} 0%, ${bgColor2 || `${accentColor}44`} 100%)`;
+  } else if (template === 'midnight') {
+    backgroundCssImage = `radial-gradient(circle at 85% 15%, ${accentColor}3D 0%, transparent 56%)`;
+  }
+
+  return {
+    template,
+    bgColor,
+    bgColor2,
+    accentColor,
+    textColor,
+    mutedColor,
+    borderColor,
+    isLight,
+    qrFg: cfg.qrFgColor || '#0A0A0A',
+    qrBg: cfg.qrBgColor || '#FFFFFF',
+    cornerRadius,
+    innerCornerRadius,
+    backgroundCssImage,
   };
 }

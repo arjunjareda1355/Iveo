@@ -7,9 +7,7 @@ import {
   Calendar,
   Lock,
   Share2,
-  ArrowRight,
   Instagram,
-  Youtube,
   MessageCircle,
 } from 'lucide-react';
 import { Vibe } from '../../lib/vibes';
@@ -22,11 +20,21 @@ import { TipJarBlock } from '../public/TipJarBlock';
 import { FaqBlock } from '../public/FaqBlock';
 import { VCardBlock } from '../public/VCardBlock';
 import { ShareModal } from '../public/ShareModal';
+import {
+  YouTubeShowcaseCard,
+  ProductShowcaseCard,
+  BookingShowcaseCard,
+  CountdownShowcaseCard,
+  PromoShowcaseCard,
+  LocationShowcaseCard,
+  DownloadShowcaseCard,
+} from './ShowcaseBlocks';
 import { formatExternalUrl } from '../../lib/urls';
 import { storagePublicUrl } from '../../data/storageApi';
-import { Logo } from '../ui/Logo';
 import { getFontCssFamily, loadGoogleFonts } from '../../lib/fonts';
 import { resolveEffectiveTokens } from '../../lib/colors';
+import { DEFAULT_LAYOUT_SETTINGS } from '../../lib/preferences';
+import { getBackgroundPreset } from '../../lib/backgrounds';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -82,6 +90,96 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
   const effectiveRadius =
     buttonRadiusOverride !== undefined ? buttonRadiusOverride : tokens.buttonRadius;
+
+  const layout = {
+    avatarShape: profile?.layoutSettings?.avatarShape || DEFAULT_LAYOUT_SETTINGS.avatarShape,
+    headerAlign: profile?.layoutSettings?.headerAlign || DEFAULT_LAYOUT_SETTINGS.headerAlign,
+    buttonStyle: profile?.layoutSettings?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle,
+    linkSpacing: profile?.layoutSettings?.linkSpacing || DEFAULT_LAYOUT_SETTINGS.linkSpacing,
+    pageWidth: profile?.layoutSettings?.pageWidth || DEFAULT_LAYOUT_SETTINGS.pageWidth,
+  };
+
+  const avatarRadiusCss =
+    layout.avatarShape === 'squircle'
+      ? `${Math.round(20 * scale)}px`
+      : layout.avatarShape === 'rounded'
+        ? `${Math.round(12 * scale)}px`
+        : '9999px';
+
+  const avatarRingShadow =
+    layout.avatarShape === 'ring'
+      ? `0 0 0 ${Math.max(2, Math.round(2.5 * scale))}px ${tokens.bg}, 0 0 0 ${Math.max(4, Math.round(5 * scale))}px ${tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg}`
+      : undefined;
+
+  const linkGapPx =
+    layout.linkSpacing === 'compact'
+      ? Math.round(6 * scale)
+      : layout.linkSpacing === 'airy'
+        ? Math.round(16 * scale)
+        : Math.round(10 * scale);
+
+  const pageMaxWidthClass =
+    layout.pageWidth === 'compact'
+      ? 'max-w-[440px]'
+      : layout.pageWidth === 'wide'
+        ? 'max-w-[660px]'
+        : 'max-w-[540px]';
+
+  const getButtonSurfaceStyle = (overrideGlow?: string): React.CSSProperties => {
+    const baseBorder = tokens.buttonBorder
+      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+      : '1px solid rgba(0,0,0,0.08)';
+    switch (layout.buttonStyle) {
+      case 'outline':
+        return {
+          backgroundColor: 'transparent',
+          color: tokens.text,
+          border: `1.5px solid ${tokens.buttonBorder || tokens.text}`,
+          boxShadow: overrideGlow || 'none',
+        };
+      case 'soft':
+        return {
+          backgroundColor: `${tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg}20`,
+          color: tokens.text,
+          border: `1px solid ${tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg}33`,
+          boxShadow: overrideGlow || 'none',
+        };
+      case 'offset':
+        return {
+          backgroundColor: tokens.buttonBg,
+          color: tokens.buttonText,
+          border: `1.5px solid ${tokens.buttonBorder || tokens.text}`,
+          boxShadow: overrideGlow || `${Math.max(2, Math.round(3 * scale))}px ${Math.max(2, Math.round(3 * scale))}px 0px ${tokens.text}`,
+        };
+      case 'glass':
+        return {
+          backgroundColor: 'rgba(255, 255, 255, 0.16)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          color: tokens.text,
+          border: `1px solid ${tokens.text}28`,
+          boxShadow: overrideGlow || '0 4px 16px rgba(0, 0, 0, 0.08)',
+        };
+      case 'gradient':
+        return {
+          background: `linear-gradient(135deg, ${tokens.buttonBg === 'transparent' ? '#0A0A0A' : tokens.buttonBg} 0%, ${tokens.buttonBorder || '#6366F1'} 100%)`,
+          color: tokens.buttonText,
+          border: tokens.buttonBorder ? baseBorder : 'none',
+          boxShadow: overrideGlow || tokens.buttonShadow || '0 4px 14px rgba(0,0,0,0.12)',
+        };
+      case 'solid':
+      default:
+        return {
+          backgroundColor: tokens.buttonBg,
+          color: tokens.buttonText,
+          border: tokens.buttonBorder ? baseBorder : 'none',
+          boxShadow: overrideGlow || tokens.buttonShadow || 'none',
+        };
+    }
+  };
+
+  const buttonSurfaceStyle = getButtonSurfaceStyle();
+  const isLeftHeader = layout.headerAlign === 'left';
 
   const [activeEmbedId, setActiveEmbedId] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
@@ -189,15 +287,16 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         <div
           className="absolute inset-0 pointer-events-none z-0 opacity-15"
           style={{
-            backgroundImage: bgConfig.value || 'radial-gradient(#000 1px, transparent 1px)',
-            backgroundSize: '18px 18px',
+            backgroundImage: bgConfig.value || 'radial-gradient(currentColor 1.2px, transparent 1.2px)',
+            backgroundSize: getBackgroundPreset(bgConfig.presetId)?.patternSize || '18px 18px',
+            color: tokens.text,
           }}
         />
       )}
 
       {/* Minimal Top-Right Share Action on Public Page */}
       {isPublicPage && displayHandle && (
-        <div className="w-full max-w-[540px] flex justify-end mb-2 relative z-10">
+        <div className={`w-full ${pageMaxWidthClass} flex justify-end mb-2 relative z-10`}>
           <button
             type="button"
             onClick={handleShareClick}
@@ -216,84 +315,100 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         </div>
       )}
 
-      <div className="w-full max-w-[540px] flex-1 flex flex-col items-center relative z-10">
+      <div
+        className={`w-full ${pageMaxWidthClass} flex-1 flex flex-col relative z-10 ${
+          isLeftHeader ? 'items-start' : 'items-center'
+        }`}
+      >
         {/* Avatar */}
-      <div
-        className="rounded-full overflow-hidden flex items-center justify-center shrink-0 font-medium"
-        style={{
-          width: `${Math.round(72 * scale)}px`,
-          height: `${Math.round(72 * scale)}px`,
-          backgroundColor: tokens.avatarBg,
-          color: tokens.avatarText,
-          fontSize: `${Math.round(22 * scale)}px`,
-        }}
-      >
-        {(profile?.avatarUrl ?? persona.avatarUrl) && !avatarError ? (
-          <img
-            src={profile?.avatarUrl ?? persona.avatarUrl}
-            alt={displayName}
-            loading="eager"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            crossOrigin="anonymous"
-            onError={() => setAvatarError(true)}
-            className="w-full h-full object-cover block"
-          />
-        ) : (
-          <span>{displayInitials}</span>
-        )}
-      </div>
-
-      {/* Name & Handle */}
-      <div
-        className="w-full text-center flex flex-col items-center"
-        style={{
-          marginTop: `${Math.round(12 * scale)}px`,
-          gap: `${Math.round(2 * scale)}px`,
-        }}
-      >
-        <h1
-          className="font-medium tracking-tight leading-tight px-2 max-w-full truncate"
-          style={{
-            fontSize: `${Math.max(14, Math.round(17 * scale))}px`,
-            color: tokens.text,
-            fontFamily: nameFontFamily,
-          }}
-        >
-          {displayName}
-        </h1>
-
         <div
-          className="font-mono text-center tracking-tight truncate max-w-full px-2"
+          className="overflow-hidden flex items-center justify-center shrink-0 font-medium"
           style={{
-            fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
-            color: tokens.muted,
+            width: `${Math.round(72 * scale)}px`,
+            height: `${Math.round(72 * scale)}px`,
+            borderRadius: avatarRadiusCss,
+            boxShadow: avatarRingShadow,
+            backgroundColor: tokens.avatarBg,
+            color: tokens.avatarText,
+            fontSize: `${Math.round(22 * scale)}px`,
           }}
         >
-          @{displayHandle}
+          {(profile?.avatarUrl ?? persona.avatarUrl) && !avatarError ? (
+            <img
+              src={profile?.avatarUrl ?? persona.avatarUrl}
+              alt={displayName}
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+              onError={() => setAvatarError(true)}
+              className="w-full h-full object-cover block"
+            />
+          ) : (
+            <span>{displayInitials}</span>
+          )}
         </div>
-      </div>
 
-      {/* Bio */}
-      {displayBio && (
-        <p
-          className="text-center font-normal leading-relaxed max-w-[34ch] break-words"
+        {/* Name & Handle */}
+        <div
+          className={`w-full flex flex-col ${
+            isLeftHeader ? 'items-start text-left' : 'items-center text-center'
+          }`}
           style={{
-            marginTop: `${Math.round(8 * scale)}px`,
-            fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
-            color: tokens.muted,
-            fontFamily: bioFontFamily,
+            marginTop: `${Math.round(12 * scale)}px`,
+            gap: `${Math.round(2 * scale)}px`,
           }}
         >
-          {displayBio}
-        </p>
-      )}
+          <h1
+            className={`font-medium tracking-tight leading-tight max-w-full truncate ${
+              isLeftHeader ? '' : 'px-2'
+            }`}
+            style={{
+              fontSize: `${Math.max(14, Math.round(17 * scale))}px`,
+              color: tokens.text,
+              fontFamily: nameFontFamily,
+            }}
+          >
+            {displayName}
+          </h1>
+
+          <div
+            className={`font-mono tracking-tight truncate max-w-full ${
+              isLeftHeader ? 'text-left' : 'text-center px-2'
+            }`}
+            style={{
+              fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+              color: tokens.muted,
+            }}
+          >
+            @{displayHandle}
+          </div>
+        </div>
+
+        {/* Bio */}
+        {displayBio && (
+          <p
+            className={`${
+              isLeftHeader ? 'text-left' : 'text-center'
+            } font-normal leading-relaxed max-w-[34ch] break-words`}
+            style={{
+              marginTop: `${Math.round(8 * scale)}px`,
+              fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+              color: tokens.muted,
+              fontFamily: bioFontFamily,
+            }}
+          >
+            {displayBio}
+          </p>
+        )}
 
       {/* Top Socials placement if configured ('top' or 'both') */}
       {(profile?.socialsPosition === 'top' || profile?.socialsPosition === 'both' || !profile?.socialsPosition) &&
         activeSocialEntries.length > 0 && (
         <div
-          className="flex items-center justify-center flex-wrap shrink-0"
+          className={`flex items-center flex-wrap shrink-0 ${
+            isLeftHeader ? 'justify-start' : 'justify-center'
+          }`}
           style={{
             marginTop: `${Math.round(14 * scale)}px`,
             gap: `${Math.round(8 * scale)}px`,
@@ -351,7 +466,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               ? 18
               : 24) * scale
           )}px`,
-          gap: `${Math.round(10 * scale)}px`,
+          gap: `${linkGapPx}px`,
         }}
       >
         {displayBlocks.map((block, idx) => {
@@ -738,56 +853,120 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
           // 4g. YouTube Showcase Block
           if (block.kind === 'youtube') {
-            const ytUrl = block.url ? formatExternalUrl(block.url) : 'https://youtube.com';
             return (
-              <div
+              <YouTubeShowcaseCard
                 key={block.id}
-                className="w-full flex items-center justify-between transition-all duration-150 select-none"
-                style={{
-                  backgroundColor: tokens.buttonBg,
-                  color: tokens.buttonText,
-                  fontFamily: buttonFontFamily,
-                  borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-                  border: tokens.buttonBorder
-                    ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-                    : '1px solid rgba(0,0,0,0.08)',
-                  padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
-                  boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
-                }}
-              >
-                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs">
-                    <Youtube size={16} strokeWidth={2} />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span
-                      className="font-semibold truncate text-[13px] leading-tight"
-                      style={{ color: tokens.buttonText }}
-                    >
-                      {block.title || 'YouTube Channel'}
-                    </span>
-                    <span className="text-[11px] opacity-75 truncate">
-                      {block.badge || 'Subscribe for new videos'}
-                    </span>
-                  </div>
-                </div>
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
+            );
+          }
 
-                {isPublicPage ? (
-                  <a
-                    href={ytUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => onLinkClick?.(block)}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white transition-transform active:scale-95"
-                  >
-                    Subscribe
-                  </a>
-                ) : (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white">
-                    Subscribe
-                  </span>
-                )}
-              </div>
+          // 4h. Product / Merch Card
+          if (block.kind === 'product' && block.product) {
+            return (
+              <ProductShowcaseCard
+                key={block.id}
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
+            );
+          }
+
+          // 4i. 1:1 Booking Card
+          if (block.kind === 'booking' && block.booking) {
+            return (
+              <BookingShowcaseCard
+                key={block.id}
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
+            );
+          }
+
+          // 4j. Event / Drop Countdown
+          if (block.kind === 'countdown' && block.countdown) {
+            return (
+              <CountdownShowcaseCard
+                key={block.id}
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
+            );
+          }
+
+          // 4k. Promo / Coupon Code
+          if (block.kind === 'promo' && block.promo) {
+            return (
+              <PromoShowcaseCard
+                key={block.id}
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
+            );
+          }
+
+          // 4l. Studio / Store Location Card
+          if (block.kind === 'location' && block.location) {
+            return (
+              <LocationShowcaseCard
+                key={block.id}
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
+            );
+          }
+
+          // 4m. Download / Media Kit Card
+          if (block.kind === 'download' && block.download) {
+            return (
+              <DownloadShowcaseCard
+                key={block.id}
+                block={block}
+                tokens={tokens}
+                effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
+                scale={scale}
+                isPublicPage={isPublicPage}
+                onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
+              />
             );
           }
 
@@ -840,10 +1019,11 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               ? 'hover:animate-bounce'
               : '';
 
-          const glowShadow =
+          const glowOverride =
             block.animation === 'glow'
               ? `0 0 16px ${tokens.text}40`
-              : (tokens.buttonShadow || 'none');
+              : undefined;
+          const classicSurfaceStyle = getButtonSurfaceStyle(glowOverride);
 
           const innerButton = (
             <div
@@ -852,14 +1032,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 height: `${Math.round(44 * scale)}px`,
                 paddingLeft: `${sidePadding}px`,
                 paddingRight: `${sidePadding}px`,
-                backgroundColor: tokens.buttonBg,
-                color: tokens.buttonText,
+                ...classicSurfaceStyle,
                 fontFamily: buttonFontFamily,
                 borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-                border: tokens.buttonBorder
-                  ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-                  : 'none',
-                boxShadow: glowShadow,
                 fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
                 fontWeight: 500,
               }}

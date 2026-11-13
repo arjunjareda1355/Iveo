@@ -5,6 +5,7 @@ import { VibeId } from '../lib/vibes';
 import {
   ButtonShape,
   BackgroundConfig,
+  LayoutSettings,
   IveoPreferences,
   parsePreferences,
   DEFAULT_PREFERENCES,
@@ -41,6 +42,7 @@ export interface IveoSession {
   customSeoDescription?: string | null;
   fontSettings?: FontSettings | null;
   buttonColors?: ButtonColors | null;
+  layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
@@ -87,6 +89,7 @@ const FALLBACK_SESSION: IveoSession = {
   customSeoDescription: null,
   fontSettings: null,
   buttonColors: null,
+  layoutSettings: null,
   businessCard: null,
   onboardingComplete: false,
   plan: 'free',
@@ -261,6 +264,10 @@ function useClerkSession(): IveoSession {
     serverProfile?.buttonColors !== undefined
       ? serverProfile.buttonColors
       : (preferences.buttonColors || null);
+  const layoutSettings =
+    serverProfile?.layoutSettings !== undefined
+      ? serverProfile.layoutSettings
+      : (preferences.layoutSettings || null);
   const businessCard =
     serverProfile?.businessCard !== undefined
       ? serverProfile.businessCard
@@ -343,6 +350,7 @@ function useClerkSession(): IveoSession {
         customSeoDescription,
         fontSettings,
         buttonColors,
+        layoutSettings,
         businessCard,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
@@ -368,6 +376,7 @@ function useClerkSession(): IveoSession {
     customSeoDescription,
     fontSettings,
     buttonColors,
+    layoutSettings,
     businessCard,
     primaryEmail,
     isPro,
@@ -437,6 +446,7 @@ function useClerkSession(): IveoSession {
         socialsPosition: preferences.socialsPosition || 'top',
         fontSettings,
         buttonColors,
+        layoutSettings,
         businessCard,
         plan: isPro ? 'pro' : plan,
         hideFooter,
@@ -556,6 +566,8 @@ function useClerkSession(): IveoSession {
       merged.fontSettings !== undefined ? merged.fontSettings : fontSettings;
     const nextButtonColors =
       merged.buttonColors !== undefined ? merged.buttonColors : buttonColors;
+    const nextLayoutSettings =
+      merged.layoutSettings !== undefined ? merged.layoutSettings : layoutSettings;
     const nextBusinessCard =
       merged.businessCard !== undefined ? merged.businessCard : businessCard;
 
@@ -589,6 +601,7 @@ function useClerkSession(): IveoSession {
             customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : parsed.customSeoDescription,
             fontSettings: nextFontSettings,
             buttonColors: nextButtonColors,
+            layoutSettings: nextLayoutSettings,
             businessCard: nextBusinessCard,
           })
         );
@@ -614,6 +627,7 @@ function useClerkSession(): IveoSession {
         customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
         fontSettings: nextFontSettings,
         buttonColors: nextButtonColors,
+        layoutSettings: nextLayoutSettings,
         businessCard: nextBusinessCard,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
@@ -644,6 +658,7 @@ function useClerkSession(): IveoSession {
           customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
           fontSettings: nextFontSettings,
           buttonColors: nextButtonColors,
+          layoutSettings: nextLayoutSettings,
           businessCard: nextBusinessCard,
           primaryEmail,
           plan: isPro ? 'pro' : plan,
@@ -748,6 +763,7 @@ function useClerkSession(): IveoSession {
     customSeoDescription,
     fontSettings,
     buttonColors,
+    layoutSettings,
     businessCard,
     onboardingComplete,
     plan,
@@ -786,6 +802,7 @@ function useDemoSession(): IveoSession {
     customSeoDescription: string | null;
     fontSettings: FontSettings | null;
     buttonColors: ButtonColors | null;
+    layoutSettings: LayoutSettings | null;
     businessCard: BusinessCardConfig | null;
     hideFooter: boolean;
   }>(() => {
@@ -806,6 +823,7 @@ function useDemoSession(): IveoSession {
       customSeoDescription: null as string | null,
       fontSettings: null as FontSettings | null,
       buttonColors: null as ButtonColors | null,
+      layoutSettings: null as LayoutSettings | null,
       businessCard: null as BusinessCardConfig | null,
       hideFooter: false,
     };
@@ -867,6 +885,7 @@ function useDemoSession(): IveoSession {
     customSeoDescription: demoState.customSeoDescription,
     fontSettings: demoState.fontSettings,
     buttonColors: demoState.buttonColors,
+    layoutSettings: demoState.layoutSettings,
     businessCard: demoState.businessCard,
     isPro: true,
     plan: 'pro',
@@ -896,6 +915,7 @@ function useDemoSession(): IveoSession {
         ...(patch.customSeoDescription !== undefined ? { customSeoDescription: patch.customSeoDescription } : {}),
         ...(patch.fontSettings !== undefined ? { fontSettings: patch.fontSettings } : {}),
         ...(patch.buttonColors !== undefined ? { buttonColors: patch.buttonColors } : {}),
+        ...(patch.layoutSettings !== undefined ? { layoutSettings: patch.layoutSettings } : {}),
         ...(patch.businessCard !== undefined ? { businessCard: patch.businessCard } : {}),
         ...(patch.hideIveoFooter !== undefined || patch.hideIvioFooter !== undefined
           ? { hideFooter: Boolean(patch.hideIveoFooter ?? patch.hideIvioFooter) }

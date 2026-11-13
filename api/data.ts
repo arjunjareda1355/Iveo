@@ -16,6 +16,7 @@ import {
   handleRecordAnalyticsEvent,
   handleGetAnalytics,
   handleBuyMeACoffee,
+  handleYouTubeShowcase,
   handleDiscoverProfiles,
   handleSeoAdminOverview,
   handleSeoAdminRegenerate,
@@ -68,6 +69,8 @@ async function dispatchNode(action: string, req: any, res: any) {
       return method === 'POST' ? handleRecordAnalyticsEvent(req, res) : handleGetAnalytics(req, res);
     case 'buymeacoffee':
       return handleBuyMeACoffee(req, res);
+    case 'youtube':
+      return handleYouTubeShowcase(req, res);
     case 'discover':
       return handleDiscoverProfiles(req, res);
     case 'seo-overview':

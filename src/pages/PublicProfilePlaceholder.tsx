@@ -20,6 +20,7 @@ import { normalizeGoogleAnalyticsId, normalizeMetaPixelId } from '../lib/integra
 import { formatExternalUrl } from '../lib/urls';
 import { getFontCssFamily, loadGoogleFonts } from '../lib/fonts';
 import { resolveEffectiveTokens } from '../lib/colors';
+import { getBackgroundPreset } from '../lib/backgrounds';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -435,14 +436,23 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
             <div
               className="absolute inset-0 opacity-15"
               style={{
-                backgroundImage: bgConfig.value || 'radial-gradient(#000 1px, transparent 1px)',
-                backgroundSize: '18px 18px',
+                backgroundImage: bgConfig.value || 'radial-gradient(currentColor 1.2px, transparent 1.2px)',
+                backgroundSize: getBackgroundPreset(bgConfig.presetId)?.patternSize || '18px 18px',
+                color: vibe.tokens.text,
               }}
             />
           )}
         </div>
 
-        <div className="relative z-10 w-full max-w-[580px] min-h-[100dvh] flex flex-col">
+        <div
+          className={`relative z-10 w-full min-h-[100dvh] flex flex-col ${
+            pageData.profile.layoutSettings?.pageWidth === 'compact'
+              ? 'max-w-[460px]'
+              : pageData.profile.layoutSettings?.pageWidth === 'wide'
+                ? 'max-w-[680px]'
+                : 'max-w-[580px]'
+          }`}
+        >
           {(() => {
             const effectiveTokens = resolveEffectiveTokens(
               vibe.tokens,
@@ -470,6 +480,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                     background: pageData.profile.background,
                     fontSettings: pageData.profile.fontSettings,
                     buttonColors: pageData.profile.buttonColors,
+                    layoutSettings: pageData.profile.layoutSettings,
                     businessCard: pageData.profile.businessCard,
                   }}
                   blocks={effectiveBlocks}

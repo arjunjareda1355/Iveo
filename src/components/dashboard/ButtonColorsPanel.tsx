@@ -139,11 +139,11 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
     const err = errors[field];
 
     return (
-      <div className="p-4 rounded-xl border border-border bg-surface-2/60 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
+      <div className="p-3.5 sm:p-4 rounded-xl border border-border bg-surface-2/60 flex flex-col gap-3 w-full min-w-0 overflow-hidden">
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <div className="min-w-0">
             <h4 className="text-[14px] font-semibold text-ink">{title}</h4>
-            <p className="text-[12px] text-muted">{hint}</p>
+            <p className="text-[12px] text-muted leading-snug">{hint}</p>
           </div>
 
           {currentValue && (
@@ -158,9 +158,9 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
         </div>
 
         {/* Color Picker + Direct Hex Input */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 min-w-0 w-full">
           <label
-            className="relative w-11 h-11 rounded-xl border border-border overflow-hidden shrink-0 cursor-pointer shadow-2xs"
+            className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl border border-border overflow-hidden shrink-0 cursor-pointer shadow-2xs"
             title={`Pick ${title.toLowerCase()}`}
             style={{
               backgroundColor:
@@ -182,9 +182,9 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
             />
           </label>
 
-          <div className="flex-1 flex flex-col">
-            <div className="flex items-center h-11 rounded-xl border border-border bg-surface px-3 focus-within:border-ink transition-colors">
-              <span className="text-[13px] font-mono text-muted mr-1.5 select-none">HEX</span>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex items-center h-10 sm:h-11 w-full min-w-0 rounded-xl border border-border bg-surface px-2.5 sm:px-3 focus-within:border-ink transition-colors gap-1.5">
+              <span className="text-[12px] sm:text-[13px] font-mono text-muted select-none shrink-0">HEX</span>
               <input
                 type="text"
                 aria-label={`${title} hex color code`}
@@ -208,13 +208,13 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
                   }
                 }}
                 placeholder={defaultColor.startsWith('#') ? defaultColor : '#0A0A0A'}
-                className="flex-1 bg-transparent font-mono text-[13px] text-ink outline-none uppercase"
+                className="flex-1 min-w-0 w-full bg-transparent font-mono text-[13px] text-ink outline-none uppercase"
               />
               {inputVal && (
                 <button
                   type="button"
                   onClick={() => applyFieldColor(field, inputVal)}
-                  className="text-[11px] font-semibold px-2 py-1 rounded-md bg-ink text-surface hover:opacity-90 cursor-pointer"
+                  className="text-[11px] font-semibold px-2 py-1 rounded-md bg-ink text-surface hover:opacity-90 cursor-pointer shrink-0"
                 >
                   Apply
                 </button>
@@ -225,7 +225,7 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
         </div>
 
         {/* Curated Swatches */}
-        <div className="flex items-center flex-wrap gap-1.5">
+        <div className="flex items-center flex-wrap gap-1.5 w-full">
           {allowTransparent && (
             <button
               type="button"
@@ -276,18 +276,18 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4 sm:gap-5 w-full min-w-0 max-w-full overflow-hidden">
       {/* Live Interactive Button Preview */}
       <div
-        className="rounded-2xl border border-border p-5 flex flex-col items-center gap-3 transition-colors"
+        className="rounded-2xl border border-border p-4 sm:p-5 flex flex-col items-center gap-3 transition-colors w-full min-w-0 overflow-hidden"
         style={{
           backgroundColor: effectiveTokens.bg,
           color: effectiveTokens.text,
         }}
       >
-        <div className="w-full flex items-center justify-between text-[11px] font-mono opacity-65">
+        <div className="w-full flex flex-wrap items-center justify-between gap-1.5 text-[11px] font-mono opacity-65">
           <span>BUTTON COLOR PREVIEW</span>
-          <span>
+          <span className="truncate max-w-full">
             {effectiveTokens.buttonBg} · {effectiveTokens.buttonText}
           </span>
         </div>
@@ -309,16 +309,16 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
       </div>
 
       {/* Header bar */}
-      <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5">
-          <Palette size={13} />
-          <span>Custom Button Colors (Hex or Picker)</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5 min-w-0">
+          <Palette size={13} className="shrink-0" />
+          <span className="truncate">Custom Button Colors (Hex or Picker)</span>
         </span>
         {hasCustomColors && (
           <button
             type="button"
             onClick={handleResetAll}
-            className="text-[12px] text-muted hover:text-ink flex items-center gap-1 cursor-pointer"
+            className="text-[12px] text-muted hover:text-ink flex items-center gap-1 cursor-pointer shrink-0"
           >
             <RotateCcw size={12} />
             <span>Reset to Vibe default</span>

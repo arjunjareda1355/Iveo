@@ -13,6 +13,70 @@ export interface BackgroundConfig {
   presetId?: string;
 }
 
+export type AvatarShape = 'circle' | 'squircle' | 'rounded' | 'ring';
+export type HeaderAlign = 'center' | 'left';
+export type ButtonStyleEffect = 'solid' | 'soft' | 'offset' | 'glass' | 'gradient' | 'outline';
+export type LinkSpacing = 'compact' | 'normal' | 'airy';
+export type PageWidth = 'compact' | 'standard' | 'wide';
+
+export interface LayoutSettings {
+  avatarShape?: AvatarShape;
+  headerAlign?: HeaderAlign;
+  buttonStyle?: ButtonStyleEffect;
+  linkSpacing?: LinkSpacing;
+  pageWidth?: PageWidth;
+}
+
+export const DEFAULT_LAYOUT_SETTINGS: Required<LayoutSettings> = {
+  avatarShape: 'circle',
+  headerAlign: 'center',
+  buttonStyle: 'solid',
+  linkSpacing: 'normal',
+  pageWidth: 'standard',
+};
+
+const VALID_AVATAR_SHAPES = new Set<AvatarShape>(['circle', 'squircle', 'rounded', 'ring']);
+const VALID_HEADER_ALIGNS = new Set<HeaderAlign>(['center', 'left']);
+const VALID_BUTTON_STYLES = new Set<ButtonStyleEffect>(['solid', 'soft', 'offset', 'glass', 'gradient', 'outline']);
+const VALID_LINK_SPACINGS = new Set<LinkSpacing>(['compact', 'normal', 'airy']);
+const VALID_PAGE_WIDTHS = new Set<PageWidth>(['compact', 'standard', 'wide']);
+
+export function parseLayoutSettings(raw: unknown): LayoutSettings | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const avatarShape =
+    typeof r.avatarShape === 'string' && VALID_AVATAR_SHAPES.has(r.avatarShape as AvatarShape)
+      ? (r.avatarShape as AvatarShape)
+      : undefined;
+  const headerAlign =
+    typeof r.headerAlign === 'string' && VALID_HEADER_ALIGNS.has(r.headerAlign as HeaderAlign)
+      ? (r.headerAlign as HeaderAlign)
+      : undefined;
+  const buttonStyle =
+    typeof r.buttonStyle === 'string' && VALID_BUTTON_STYLES.has(r.buttonStyle as ButtonStyleEffect)
+      ? (r.buttonStyle as ButtonStyleEffect)
+      : undefined;
+  const linkSpacing =
+    typeof r.linkSpacing === 'string' && VALID_LINK_SPACINGS.has(r.linkSpacing as LinkSpacing)
+      ? (r.linkSpacing as LinkSpacing)
+      : undefined;
+  const pageWidth =
+    typeof r.pageWidth === 'string' && VALID_PAGE_WIDTHS.has(r.pageWidth as PageWidth)
+      ? (r.pageWidth as PageWidth)
+      : undefined;
+
+  if (!avatarShape && !headerAlign && !buttonStyle && !linkSpacing && !pageWidth) {
+    return null;
+  }
+  return {
+    avatarShape: avatarShape || 'circle',
+    headerAlign: headerAlign || 'center',
+    buttonStyle: buttonStyle || 'solid',
+    linkSpacing: linkSpacing || 'normal',
+    pageWidth: pageWidth || 'standard',
+  };
+}
+
 export interface IveoPreferences {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
@@ -37,6 +101,7 @@ export interface IveoPreferences {
   customSeoDescription?: string | null;
   fontSettings?: FontSettings | null;
   buttonColors?: ButtonColors | null;
+  layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
 }
 
@@ -64,6 +129,7 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   customSeoDescription: null,
   fontSettings: null,
   buttonColors: null,
+  layoutSettings: null,
   businessCard: null,
 };
 
@@ -184,6 +250,7 @@ export function parsePreferences(raw: unknown): IveoPreferences {
 
   const fontSettings = parseFontSettings(record.fontSettings);
   const buttonColors = parseButtonColors(record.buttonColors);
+  const layoutSettings = parseLayoutSettings(record.layoutSettings);
   const businessCard = parseBusinessCardConfig(record.businessCard);
 
   return {
@@ -208,6 +275,7 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     customSeoDescription,
     fontSettings,
     buttonColors,
+    layoutSettings,
     businessCard,
   };
 }

@@ -6,6 +6,7 @@ import {
   FontSettings,
   ButtonColors,
   BusinessCardConfig,
+  LayoutSettings,
 } from '../../data/types';
 import { PageRenderer } from '../page/PageRenderer';
 
@@ -22,6 +23,7 @@ export interface PhoneProfile {
   background?: BackgroundConfig | null;
   fontSettings?: FontSettings | null;
   buttonColors?: ButtonColors | null;
+  layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
 }
 

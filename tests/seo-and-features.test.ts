@@ -26,7 +26,20 @@ import { getHexContrastRatio } from '../src/lib/qr';
 import {
   parseBusinessCardConfig,
   mergeBusinessCardConfig,
+  resolveBusinessCardAppearance,
+  CARD_BASE_WIDTH,
+  CARD_BASE_HEIGHT,
+  CARD_EXPORT_SCALE,
 } from '../src/lib/businessCardConfig';
+import {
+  parseLayoutSettings,
+  DEFAULT_LAYOUT_SETTINGS,
+} from '../src/lib/preferences';
+import {
+  BACKGROUND_PRESETS,
+  isDarkBackgroundPreset,
+} from '../src/lib/backgrounds';
+import { parseYouTubeInput } from '../api/_lib/youtube';
 
 test('Main domain SEO metadata contains brand title, canonical, and JSON-LD', () => {
   assert.equal(MAIN_SEO_TITLE, 'Iveo – One Link for Everything You Create');
@@ -198,4 +211,70 @@ test('Business card config parser and merger preserve any-color QR and gradient 
   const merged = mergeBusinessCardConfig(parsed, { showHandle: false });
   assert.equal(merged.bgColor2, '#445566');
   assert.equal(merged.showHandle, false);
+});
+
+test('LayoutSettings parser enforces valid defaults and enums', () => {
+  assert.equal(DEFAULT_LAYOUT_SETTINGS.avatarShape, 'circle');
+  assert.equal(DEFAULT_LAYOUT_SETTINGS.buttonStyle, 'solid');
+  assert.equal(parseLayoutSettings({}), null);
+
+  const valid = parseLayoutSettings({
+    avatarShape: 'squircle',
+    headerAlign: 'left',
+    buttonStyle: 'glass',
+    linkSpacing: 'airy',
+    pageWidth: 'wide',
+  });
+  assert.deepEqual(valid, {
+    avatarShape: 'squircle',
+    headerAlign: 'left',
+    buttonStyle: 'glass',
+    linkSpacing: 'airy',
+    pageWidth: 'wide',
+  });
+
+  const partial = parseLayoutSettings({ buttonStyle: 'offset', avatarShape: 'invalid' });
+  assert.deepEqual(partial, {
+    avatarShape: 'circle',
+    headerAlign: 'center',
+    buttonStyle: 'offset',
+    linkSpacing: 'normal',
+    pageWidth: 'standard',
+  });
+});
+
+test('Background presets exclude legacy presets and classify dark themes accurately', () => {
+  assert.ok(BACKGROUND_PRESETS.length >= 16); // 'none' + 15 curated backdrops
+  const ids = new Set(BACKGROUND_PRESETS.map((p) => p.id));
+  assert.equal(ids.has('obsidian-silk'), true);
+  assert.equal(ids.has('northern-prism'), true);
+  assert.equal(ids.has('drafting-grid'), true);
+  assert.equal(isDarkBackgroundPreset('obsidian-silk'), true);
+  assert.equal(isDarkBackgroundPreset('warm-vellum'), false);
+});
+
+test('Business card 1:1 fidelity constants and resolved appearance match aspect ratio', () => {
+  assert.equal(CARD_BASE_WIDTH, 600);
+  assert.equal(CARD_BASE_HEIGHT, 353);
+  assert.equal(Math.round(CARD_BASE_WIDTH * CARD_EXPORT_SCALE), 2040);
+  assert.equal(Math.round(CARD_BASE_HEIGHT * CARD_EXPORT_SCALE), 1200);
+
+  const appearance = resolveBusinessCardAppearance({
+    template: 'classic',
+    bgColor: '#0A0A0A',
+    cornerStyle: 'pill',
+    qrFgColor: '#FFFFFF',
+    qrBgColor: '#0A0A0A',
+  });
+  assert.equal(appearance.bgColor, '#0A0A0A');
+  assert.equal(appearance.cornerRadius, 32);
+  assert.equal(appearance.qrFg, '#FFFFFF');
+});
+
+test('YouTube URL parser handles handles, channel IDs, watch URLs, and invalid domains', () => {
+  assert.equal(parseYouTubeInput('@iveosite')?.kind, 'handle');
+  assert.equal(parseYouTubeInput('@iveosite')?.canonicalUrl, 'https://www.youtube.com/@iveosite');
+  assert.equal(parseYouTubeInput('https://youtu.be/dQw4w9WgXcQ')?.value, 'dQw4w9WgXcQ');
+  assert.equal(parseYouTubeInput('UC1234567890123456789012')?.kind, 'channel_id');
+  assert.equal(parseYouTubeInput('https://evil.example.com/watch?v=123'), null);
 });

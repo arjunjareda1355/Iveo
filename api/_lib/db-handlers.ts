@@ -35,6 +35,12 @@ import {
 } from './firebaseServer.ts';
 import { fetchBuyMeACoffeeProfile } from './buymeacoffee.ts';
 import {
+  buildYouTubeOAuthUrl,
+  exchangeYouTubeOAuthCode,
+  fetchYouTubeShowcase,
+  parseRedirectUriFromState,
+} from './youtube.ts';
+import {
   evaluateProfileIndexability,
   getAllUnifiedProfiles,
   getSeoHealthReport,
@@ -170,6 +176,13 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         vcard: b.vcard || null,
         animation: b.animation || null,
         badge: b.badge || null,
+        youtube: b.youtube || null,
+        product: b.product || null,
+        booking: b.booking || null,
+        countdown: b.countdown || null,
+        promo: b.promo || null,
+        location: b.location || null,
+        download: b.download || null,
       }));
 
     return res.status(200).json({
@@ -195,6 +208,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         fontSettings: profile.fontSettings || null,
         buttonColors: profile.buttonColors || null,
         businessCard: profile.businessCard || null,
+        layoutSettings: profile.layoutSettings || null,
       },
       links: filteredBlocks,
     });
@@ -388,6 +402,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       fontSettings: body.fontSettings,
       buttonColors: body.buttonColors,
       businessCard: body.businessCard,
+      layoutSettings: body.layoutSettings,
     });
 
     if (saveResult && !saveResult.ok) {
@@ -484,6 +499,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       fontSettings: existing?.fontSettings ?? null,
       buttonColors: existing?.buttonColors ?? null,
       businessCard: existing?.businessCard ?? null,
+      layoutSettings: existing?.layoutSettings ?? null,
     });
 
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
@@ -843,6 +859,114 @@ export async function handleBuyMeACoffee(req: ExpressReq, res: ExpressRes) {
     return res.status(200).json({ ok: true, profile });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'bmc_fetch_failed', message: err?.message });
+  }
+}
+
+function getExpressRequestOrigin(req: ExpressReq): string {
+  const host = req.get?.('x-forwarded-host') || req.get?.('host') || req.headers?.host || 'iveo.site';
+  const protoHeader = (req.headers?.['x-forwarded-proto'] as string) || req.protocol || 'https';
+  const proto = String(protoHeader).split(',')[0].trim();
+  const effectiveProto = String(host).includes('localhost') || String(host).startsWith('127.') ? proto : 'https';
+  return `${effectiveProto}://${host}`;
+}
+
+/**
+ * GET /api/integrations/youtube?url=...
+ */
+export async function handleYouTubeShowcase(req: ExpressReq, res: ExpressRes) {
+  const rawUrl = String(req.query.url || req.query.channel || '').trim();
+  if (!rawUrl) {
+    return res.status(400).json({ ok: false, error: 'missing_url', message: 'Enter a YouTube channel or @handle.' });
+  }
+
+  try {
+    const channel = await fetchYouTubeShowcase(rawUrl);
+    if (!channel) {
+      return res.status(400).json({
+        ok: false,
+        error: 'invalid_youtube_url',
+        message: 'Enter a valid YouTube @handle, channel URL, or video URL.',
+      });
+    }
+    return res.status(200).json({ ok: true, channel });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'youtube_fetch_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/oauth/youtube/url?origin=...
+ * Builds Google OAuth URL pointing to /api/oauth/youtube/callback
+ */
+export async function handleYouTubeOAuthUrl(req: ExpressReq, res: ExpressRes) {
+  const clientOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
+  const origin = /^https?:\/\//i.test(clientOrigin) ? clientOrigin : getExpressRequestOrigin(req);
+  const built = buildYouTubeOAuthUrl(origin);
+  if (!built) {
+    return res.status(503).json({
+      ok: false,
+      error: 'oauth_not_configured',
+      message: 'Google YouTube OAuth is not configured on the server.',
+    });
+  }
+  return res.status(200).json({ ok: true, url: built.url, redirectUri: built.redirectUri });
+}
+
+/**
+ * GET /api/oauth/youtube/callback (and trailing slash)
+ * Exchanges Google OAuth code for tokens & returns lightweight popup HTML sending postMessage
+ */
+export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRes) {
+  const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
+  const oauthError = typeof req.query.error === 'string' ? req.query.error.trim() : '';
+  const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
+
+  const sendPopupHtml = (payload: Record<string, any>) => {
+    const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>YouTube Connection</title></head>
+<body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#111;">
+  <div style="text-align:center;padding:24px;">
+    <p style="font-size:15px;font-weight:600;margin:0 0 8px;">${payload.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' ? 'YouTube connected to Iveo' : 'Could not connect YouTube'}</p>
+    <p style="font-size:13px;color:#666;margin:0;">This window will close automatically.</p>
+  </div>
+  <script>
+    (function(){
+      var data = ${safeJson};
+      try {
+        if (window.opener) {
+          window.opener.postMessage(data, '*');
+        }
+      } catch (e) {}
+      setTimeout(function(){ window.close(); }, 350);
+    })();
+  </script>
+</body>
+</html>`);
+  };
+
+  if (oauthError || !code) {
+    return sendPopupHtml({
+      type: 'IVEO_YOUTUBE_OAUTH_ERROR',
+      error: oauthError || 'Authorization was cancelled.',
+    });
+  }
+
+  try {
+    const fallbackOrigin = getExpressRequestOrigin(req);
+    const redirectUri = parseRedirectUriFromState(stateParam, fallbackOrigin);
+    const channel = await exchangeYouTubeOAuthCode(code, redirectUri);
+    return sendPopupHtml({
+      type: 'IVEO_YOUTUBE_OAUTH_SUCCESS',
+      channel,
+    });
+  } catch (err: any) {
+    return sendPopupHtml({
+      type: 'IVEO_YOUTUBE_OAUTH_ERROR',
+      error: err?.message || 'Failed to read YouTube channel details.',
+    });
   }
 }
 

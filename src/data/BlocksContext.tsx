@@ -1,5 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem, VCardConfig, CoffeeData } from './types';
+import {
+  Block,
+  BlockLayout,
+  EmbedProvider,
+  SignupConfig,
+  TipJarConfig,
+  FaqItem,
+  VCardConfig,
+  CoffeeData,
+  YouTubeData,
+  ProductConfig,
+  BookingConfig,
+  CountdownConfig,
+  PromoConfig,
+  LocationConfig,
+  DownloadConfig,
+} from './types';
 import {
   listMyBlocks,
   createBlock,
@@ -26,7 +42,13 @@ interface BlocksContextValue {
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
   addCoffee: (title?: string, url?: string, badge?: string, coffee?: CoffeeData | null) => Promise<void>;
   addInstagram: (title?: string, url?: string, badge?: string) => Promise<void>;
-  addYouTube: (title?: string, url?: string, badge?: string) => Promise<void>;
+  addYouTube: (title?: string, url?: string, badge?: string, youtube?: YouTubeData | null) => Promise<void>;
+  addProduct: (title: string, url: string, product: ProductConfig) => Promise<void>;
+  addBooking: (title: string, url: string, booking: BookingConfig) => Promise<void>;
+  addCountdown: (title: string, url: string | null, countdown: CountdownConfig) => Promise<void>;
+  addPromo: (title: string, url: string | null, promo: PromoConfig) => Promise<void>;
+  addLocation: (title: string, url: string, location: LocationConfig) => Promise<void>;
+  addDownload: (title: string, url: string, download: DownloadConfig) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
   addVCard: (config: VCardConfig, title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
@@ -274,7 +296,12 @@ export const BlocksProvider: React.FC<{
     }
   };
 
-  const addYouTube = async (title: string = 'YouTube Channel', url: string = 'https://youtube.com', badge?: string) => {
+  const addYouTube = async (
+    title: string = 'YouTube Channel',
+    url: string = 'https://youtube.com',
+    badge?: string,
+    youtube?: YouTubeData | null
+  ) => {
     const prev = [...blocks];
     try {
       const newBlock = await createBlock(token, userId, {
@@ -282,6 +309,7 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         badge,
+        youtube: youtube || null,
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
@@ -290,6 +318,126 @@ export const BlocksProvider: React.FC<{
     } catch (err: unknown) {
       setBlocks(prev);
       showToast("Couldn't add YouTube block. Try again.");
+      throw err;
+    }
+  };
+
+  const addProduct = async (title: string, url: string, product: ProductConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'product',
+        title,
+        url,
+        product,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Product card added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add product card. Try again.");
+      throw err;
+    }
+  };
+
+  const addBooking = async (title: string, url: string, booking: BookingConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'booking',
+        title,
+        url,
+        booking,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Booking card added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add booking card. Try again.");
+      throw err;
+    }
+  };
+
+  const addCountdown = async (title: string, url: string | null, countdown: CountdownConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'countdown',
+        title,
+        url,
+        countdown,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Countdown added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add countdown. Try again.");
+      throw err;
+    }
+  };
+
+  const addPromo = async (title: string, url: string | null, promo: PromoConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'promo',
+        title,
+        url,
+        promo,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Promo code added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add promo code. Try again.");
+      throw err;
+    }
+  };
+
+  const addLocation = async (title: string, url: string, location: LocationConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'location',
+        title,
+        url,
+        location,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Location card added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add location card. Try again.");
+      throw err;
+    }
+  };
+
+  const addDownload = async (title: string, url: string, download: DownloadConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'download',
+        title,
+        url,
+        download,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('Download card added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add download card. Try again.");
       throw err;
     }
   };
@@ -445,6 +593,12 @@ export const BlocksProvider: React.FC<{
         addCoffee,
         addInstagram,
         addYouTube,
+        addProduct,
+        addBooking,
+        addCountdown,
+        addPromo,
+        addLocation,
+        addDownload,
         addFaq,
         addVCard,
         addHeader,

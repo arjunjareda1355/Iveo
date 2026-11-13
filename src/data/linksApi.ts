@@ -1,4 +1,22 @@
-import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig, LinkAnimation, TipJarConfig, FaqConfig, VCardConfig, CoffeeData } from './types';
+import {
+  Block,
+  BlockKind,
+  BlockLayout,
+  EmbedProvider,
+  SignupConfig,
+  LinkAnimation,
+  TipJarConfig,
+  FaqConfig,
+  VCardConfig,
+  CoffeeData,
+  YouTubeData,
+  ProductConfig,
+  BookingConfig,
+  CountdownConfig,
+  PromoConfig,
+  LocationConfig,
+  DownloadConfig,
+} from './types';
 import { storagePublicUrl } from './storageApi';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -17,6 +35,13 @@ export interface CreateBlockInput {
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
   coffee?: CoffeeData | null;
+  youtube?: YouTubeData | null;
+  product?: ProductConfig | null;
+  booking?: BookingConfig | null;
+  countdown?: CountdownConfig | null;
+  promo?: PromoConfig | null;
+  location?: LocationConfig | null;
+  download?: DownloadConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -38,6 +63,13 @@ export interface UpdateBlockInput {
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
   coffee?: CoffeeData | null;
+  youtube?: YouTubeData | null;
+  product?: ProductConfig | null;
+  booking?: BookingConfig | null;
+  countdown?: CountdownConfig | null;
+  promo?: PromoConfig | null;
+  location?: LocationConfig | null;
+  download?: DownloadConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -229,6 +261,13 @@ export async function createBlock(
     faq: input.faq || null,
     vcard: input.vcard || null,
     coffee: input.coffee || null,
+    youtube: input.youtube || null,
+    product: input.product || null,
+    booking: input.booking || null,
+    countdown: input.countdown || null,
+    promo: input.promo || null,
+    location: input.location || null,
+    download: input.download || null,
     animation: input.animation || null,
     badge: input.badge || null,
     startAt: input.startAt || null,

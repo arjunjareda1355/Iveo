@@ -223,6 +223,9 @@ async function startServer() {
   app.post('/api/analytics/event', dbHandlers.handleRecordAnalyticsEvent);
   app.get('/api/analytics', dbHandlers.handleGetAnalytics);
   app.get('/api/integrations/buymeacoffee', dbHandlers.handleBuyMeACoffee);
+  app.get('/api/integrations/youtube', dbHandlers.handleYouTubeShowcase);
+  app.get('/api/oauth/youtube/url', dbHandlers.handleYouTubeOAuthUrl);
+  app.get(['/api/oauth/youtube/callback', '/api/oauth/youtube/callback/'], dbHandlers.handleYouTubeOAuthCallback);
   app.get('/api/discover', dbHandlers.handleDiscoverProfiles);
   app.get('/api/seo/admin/overview', dbHandlers.handleSeoAdminOverview);
   app.post('/api/seo/admin/regenerate-sitemap', dbHandlers.handleSeoAdminRegenerate);

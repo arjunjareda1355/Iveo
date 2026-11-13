@@ -25,6 +25,12 @@ import {
   Instagram,
   Youtube,
   Coffee,
+  ShoppingBag,
+  CalendarClock,
+  Timer,
+  Ticket,
+  MapPin,
+  FileDown,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -45,6 +51,12 @@ import { VCardComposer } from '../links/VCardComposer';
 import { InstagramComposer } from '../links/InstagramComposer';
 import { CoffeeComposer } from '../links/CoffeeComposer';
 import { YouTubeCardComposer } from '../links/YouTubeCardComposer';
+import { ProductCardComposer } from '../links/ProductCardComposer';
+import { BookingCardComposer } from '../links/BookingCardComposer';
+import { CountdownComposer } from '../links/CountdownComposer';
+import { PromoCodeComposer } from '../links/PromoCodeComposer';
+import { LocationCardComposer } from '../links/LocationCardComposer';
+import { DownloadCardComposer } from '../links/DownloadCardComposer';
 import { AddBlockModal, FeatureType } from './AddBlockModal';
 import { AnimationControl } from '../links/AnimationControl';
 import { Block, BlockLayout, LinkAnimation } from '../../data/types';
@@ -66,6 +78,12 @@ export const LinksTab: React.FC = () => {
     addCoffee,
     addInstagram,
     addYouTube,
+    addProduct,
+    addBooking,
+    addCountdown,
+    addPromo,
+    addLocation,
+    addDownload,
     addFaq,
     addVCard,
     addHeader,
@@ -101,7 +119,13 @@ export const LinksTab: React.FC = () => {
     | 'vcard'
     | 'instagram'
     | 'coffee'
-    | 'youtube';
+    | 'youtube'
+    | 'product'
+    | 'booking'
+    | 'countdown'
+    | 'promo'
+    | 'location'
+    | 'download';
   const [activeComposer, setActiveComposer] = useState<ComposerType | null>(null);
 
   // Quick inputs for link/header composers
@@ -151,16 +175,22 @@ export const LinksTab: React.FC = () => {
       return b.kind === 'link';
     }
     if (filterCategory === 'media_forms') {
-      return (
-        b.kind === 'embed' ||
-        b.kind === 'signup' ||
-        b.kind === 'tip_jar' ||
-        b.kind === 'faq' ||
-        b.kind === 'vcard' ||
-        b.kind === 'instagram' ||
-        b.kind === 'coffee' ||
-        b.kind === 'youtube'
-      );
+      return [
+        'embed',
+        'signup',
+        'tip_jar',
+        'faq',
+        'vcard',
+        'instagram',
+        'coffee',
+        'youtube',
+        'product',
+        'booking',
+        'countdown',
+        'promo',
+        'location',
+        'download',
+      ].includes(b.kind);
     }
     if (filterCategory === 'headers') {
       return b.kind === 'header' || b.kind === 'divider';
@@ -426,7 +456,22 @@ export const LinksTab: React.FC = () => {
               >
                 Interactive ({
                   activeBlocks.filter((b) =>
-                    ['embed', 'signup', 'tip_jar', 'faq', 'vcard', 'instagram', 'coffee', 'youtube'].includes(b.kind)
+                    [
+                      'embed',
+                      'signup',
+                      'tip_jar',
+                      'faq',
+                      'vcard',
+                      'instagram',
+                      'coffee',
+                      'youtube',
+                      'product',
+                      'booking',
+                      'countdown',
+                      'promo',
+                      'location',
+                      'download',
+                    ].includes(b.kind)
                   ).length
                 })
               </button>
@@ -639,8 +684,68 @@ export const LinksTab: React.FC = () => {
 
       {activeComposer === 'youtube' && (
         <YouTubeCardComposer
-          onAdd={async ({ title, url, badge }) => {
-            await addYouTube(title, url, badge);
+          onAdd={async ({ title, url, badge, youtube }) => {
+            await addYouTube(title, url, badge, youtube || null);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'product' && (
+        <ProductCardComposer
+          onAdd={async ({ title, url, product }) => {
+            await addProduct(title, url, product);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'booking' && (
+        <BookingCardComposer
+          onAdd={async ({ title, url, booking }) => {
+            await addBooking(title, url, booking);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'countdown' && (
+        <CountdownComposer
+          onAdd={async ({ title, url, countdown }) => {
+            await addCountdown(title, url, countdown);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'promo' && (
+        <PromoCodeComposer
+          onAdd={async ({ title, url, promo }) => {
+            await addPromo(title, url, promo);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'location' && (
+        <LocationCardComposer
+          onAdd={async ({ title, url, location }) => {
+            await addLocation(title, url, location);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'download' && (
+        <DownloadCardComposer
+          onAdd={async ({ title, url, download }) => {
+            await addDownload(title, url, download);
             handleCloseComposer();
           }}
           onCancel={handleCloseComposer}
@@ -695,6 +800,12 @@ export const LinksTab: React.FC = () => {
             const isInstagram = block.kind === 'instagram';
             const isCoffee = block.kind === 'coffee';
             const isYouTube = block.kind === 'youtube';
+            const isProduct = block.kind === 'product';
+            const isBooking = block.kind === 'booking';
+            const isCountdown = block.kind === 'countdown';
+            const isPromo = block.kind === 'promo';
+            const isLocation = block.kind === 'location';
+            const isDownload = block.kind === 'download';
             const isLink = block.kind === 'link';
             const isProtected = isLink && (protectedIds.has(block.id) || block.isProtected === true);
 
@@ -742,6 +853,18 @@ export const LinksTab: React.FC = () => {
                           <Youtube size={18} className="text-red-600" strokeWidth={1.75} />
                         ) : isCoffee ? (
                           <Coffee size={18} className="text-amber-600" strokeWidth={1.75} />
+                        ) : isProduct ? (
+                          <ShoppingBag size={18} className="text-emerald-600" strokeWidth={1.75} />
+                        ) : isBooking ? (
+                          <CalendarClock size={18} className="text-indigo-600" strokeWidth={1.75} />
+                        ) : isCountdown ? (
+                          <Timer size={18} className="text-orange-600" strokeWidth={1.75} />
+                        ) : isPromo ? (
+                          <Ticket size={18} className="text-pink-600" strokeWidth={1.75} />
+                        ) : isLocation ? (
+                          <MapPin size={18} className="text-sky-600" strokeWidth={1.75} />
+                        ) : isDownload ? (
+                          <FileDown size={18} className="text-violet-600" strokeWidth={1.75} />
                         ) : isHeader ? (
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
@@ -855,6 +978,54 @@ export const LinksTab: React.FC = () => {
                             </div>
                           );
                         })()}
+                        {isProduct && block.product && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight truncate">
+                            <span>
+                              {block.product.price}
+                              {block.product.tag ? ` · ${block.product.tag}` : ''}
+                            </span>
+                          </div>
+                        )}
+                        {isBooking && block.booking && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight truncate">
+                            <span>
+                              {[block.booking.duration, block.booking.priceLabel, block.booking.platform]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </span>
+                          </div>
+                        )}
+                        {isCountdown && block.countdown && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight truncate">
+                            <span>
+                              Target: {new Date(block.countdown.targetAt).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        {isPromo && block.promo && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight truncate">
+                            <span>
+                              Code: <strong className="font-mono text-ink">{block.promo.code}</strong>
+                              {block.promo.discountLabel ? ` · ${block.promo.discountLabel}` : ''}
+                            </span>
+                          </div>
+                        )}
+                        {isLocation && block.location && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight truncate">
+                            <span>
+                              {block.location.address}
+                              {block.location.hours ? ` · ${block.location.hours}` : ''}
+                            </span>
+                          </div>
+                        )}
+                        {isDownload && block.download && (
+                          <div className="flex items-center text-[12px] text-muted leading-tight truncate">
+                            <span>
+                              {block.download.fileFormat}
+                              {block.download.fileSize ? ` · ${block.download.fileSize}` : ''}
+                            </span>
+                          </div>
+                        )}
                         {isLink && block.url && (() => {
                           const clicks = clickCounts.get(block.id) || 0;
                           const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
@@ -1078,14 +1249,100 @@ export const LinksTab: React.FC = () => {
                       title: block.title,
                       url: block.url || '',
                       badge: block.badge || undefined,
+                      youtube: block.youtube || undefined,
                     }}
                     isEditing
-                    onAdd={async ({ title, url, badge }) => {
+                    onAdd={async ({ title, url, badge, youtube }) => {
                       await updateBlock(block.id, {
                         title,
                         url,
                         badge: badge || null,
+                        youtube: youtube || null,
                       });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isProduct ? (
+                  <ProductCardComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      product: block.product || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, product }) => {
+                      await updateBlock(block.id, { title, url, product });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isBooking ? (
+                  <BookingCardComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      booking: block.booking || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, booking }) => {
+                      await updateBlock(block.id, { title, url, booking });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isCountdown ? (
+                  <CountdownComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      countdown: block.countdown || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, countdown }) => {
+                      await updateBlock(block.id, { title, url, countdown });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isPromo ? (
+                  <PromoCodeComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      promo: block.promo || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, promo }) => {
+                      await updateBlock(block.id, { title, url, promo });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isLocation ? (
+                  <LocationCardComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      location: block.location || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, location }) => {
+                      await updateBlock(block.id, { title, url, location });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isDownload ? (
+                  <DownloadCardComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      download: block.download || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, download }) => {
+                      await updateBlock(block.id, { title, url, download });
                       setEditingBlockId(null);
                     }}
                     onCancel={() => setEditingBlockId(null)}
@@ -1303,6 +1560,18 @@ export const LinksTab: React.FC = () => {
                 ? 'Delete this YouTube card?'
                 : deletingBlock.kind === 'coffee'
                 ? 'Delete this coffee block?'
+                : deletingBlock.kind === 'product'
+                ? 'Delete this product card?'
+                : deletingBlock.kind === 'booking'
+                ? 'Delete this booking card?'
+                : deletingBlock.kind === 'countdown'
+                ? 'Delete this countdown?'
+                : deletingBlock.kind === 'promo'
+                ? 'Delete this promo code?'
+                : deletingBlock.kind === 'location'
+                ? 'Delete this location card?'
+                : deletingBlock.kind === 'download'
+                ? 'Delete this download card?'
                 : 'Delete this link?'}
             </h3>
             <p className="mt-2 text-[14px] text-muted leading-relaxed">

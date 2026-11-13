@@ -109,9 +109,6 @@ export const SocialLinksCard: React.FC = () => {
           <h3 className="text-[18px] font-semibold text-ink leading-tight">
             Social icons
           </h3>
-          <p className="mt-1 text-[13px] text-muted max-w-[50ch]">
-            Add icons linking to your social accounts. Choose top, bottom, or both placement—hidden automatically when empty.
-          </p>
         </div>
 
         {!isAdding && !editingPlatform && (

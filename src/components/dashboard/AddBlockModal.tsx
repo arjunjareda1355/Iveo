@@ -10,14 +10,18 @@ import {
   HelpCircle,
   Heading,
   Minus,
-  Sparkles,
   ChevronRight,
   Coffee,
   Instagram,
   Youtube,
+  ShoppingBag,
+  CalendarClock,
+  Timer,
+  Ticket,
+  MapPin,
+  FileDown,
 } from 'lucide-react';
 import { ProBadge } from '../plan/ProBadge';
-import { Button } from '../ui/Button';
 
 export type FeatureType =
   | 'link'
@@ -28,6 +32,12 @@ export type FeatureType =
   | 'coffee'
   | 'instagram'
   | 'youtube'
+  | 'product'
+  | 'booking'
+  | 'countdown'
+  | 'promo'
+  | 'location'
+  | 'download'
   | 'faq'
   | 'header'
   | 'divider';
@@ -43,7 +53,7 @@ interface FeatureOption {
   id: FeatureType;
   title: string;
   description: string;
-  category: 'links' | 'monetization' | 'audience' | 'layout';
+  category: 'links' | 'commerce' | 'audience' | 'layout';
   icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
   iconBg: string;
   iconColor: string;
@@ -52,40 +62,30 @@ interface FeatureOption {
 }
 
 const FEATURES: FeatureOption[] = [
-  // Links & Media
+  // Core Links & Media
   {
     id: 'link',
     title: 'Standard Link',
-    description: 'Direct link to your website, store, portfolio, or socials with click tracking',
+    description: 'Direct button to your website, store, portfolio, or socials with click tracking',
     category: 'links',
     icon: Link2,
     iconBg: 'bg-blue-50',
     iconColor: 'text-blue-600',
   },
   {
-    id: 'embed',
-    title: 'Media Player Embed',
-    description: 'Embed playable YouTube videos, Spotify tracks, or SoundCloud songs right on your page',
+    id: 'youtube',
+    title: 'YouTube Showcase',
+    description: 'Connect via Google or paste a channel URL to show subscribers & latest videos',
     category: 'links',
-    icon: Play,
-    iconBg: 'bg-purple-50',
-    iconColor: 'text-purple-600',
-    proRequired: true,
-  },
-  {
-    id: 'vcard',
-    title: 'Digital Contact Card (.vcf)',
-    description: 'Allow visitors to download your contact info directly into their phone contacts',
-    category: 'links',
-    icon: UserCheck,
-    iconBg: 'bg-emerald-50',
-    iconColor: 'text-emerald-600',
-    badge: 'New',
+    icon: Youtube,
+    iconBg: 'bg-red-50',
+    iconColor: 'text-red-600',
+    badge: 'Enhanced',
   },
   {
     id: 'instagram',
     title: 'Instagram Card',
-    description: 'Showcase your Instagram profile or latest post with branded gradient card',
+    description: 'Showcase your Instagram profile or latest reel with a branded highlight card',
     category: 'links',
     icon: Instagram,
     iconBg: 'bg-rose-50',
@@ -93,21 +93,111 @@ const FEATURES: FeatureOption[] = [
     badge: 'Popular',
   },
   {
-    id: 'youtube',
-    title: 'YouTube Showcase',
-    description: 'Feature your YouTube channel with subscriber badge and direct subscribe action',
+    id: 'embed',
+    title: 'Media Player Embed',
+    description: 'Embed playable YouTube videos, Spotify tracks, or SoundCloud audio right on your page',
     category: 'links',
-    icon: Youtube,
-    iconBg: 'bg-red-50',
-    iconColor: 'text-red-600',
+    icon: Play,
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-purple-600',
+    proRequired: true,
+  },
+  {
+    id: 'download',
+    title: 'Download / Media Kit',
+    description: 'Share downloadable PDFs, rate cards, presets, or resumes with format & size tags',
+    category: 'links',
+    icon: FileDown,
+    iconBg: 'bg-violet-50',
+    iconColor: 'text-violet-600',
     badge: 'New',
   },
 
-  // Audience & Community
+  // Commerce & Monetization
+  {
+    id: 'product',
+    title: 'Product / Merch Card',
+    description: 'Highlight a digital product, course, print, or merch item with price & Buy CTA',
+    category: 'commerce',
+    icon: ShoppingBag,
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-600',
+    badge: 'New',
+  },
+  {
+    id: 'booking',
+    title: '1:1 Booking Card',
+    description: 'Let clients book coaching, consulting, or discovery calls with duration & rate details',
+    category: 'commerce',
+    icon: CalendarClock,
+    iconBg: 'bg-indigo-50',
+    iconColor: 'text-indigo-600',
+    badge: 'New',
+  },
+  {
+    id: 'coffee',
+    title: 'Buy Me a Coffee',
+    description: 'Connect your Buy Me a Coffee profile to show supporters, extras & tipping tiers',
+    category: 'commerce',
+    icon: Coffee,
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-800',
+    badge: 'Popular',
+  },
+  {
+    id: 'tip_jar',
+    title: 'Tip Jar & Support',
+    description: 'Accept tips and creator support with custom preset amounts via PayPal, UPI, or Stripe',
+    category: 'commerce',
+    icon: Heart,
+    iconBg: 'bg-rose-50',
+    iconColor: 'text-rose-600',
+  },
+  {
+    id: 'promo',
+    title: 'Promo / Coupon Code',
+    description: 'Display affiliate or store discount codes with one-tap copy functionality',
+    category: 'commerce',
+    icon: Ticket,
+    iconBg: 'bg-pink-50',
+    iconColor: 'text-pink-600',
+    badge: 'New',
+  },
+
+  // Audience & Utilities
+  {
+    id: 'vcard',
+    title: 'Digital Contact Card (.vcf)',
+    description: 'Allow visitors to save your name, email, phone & company straight to contacts',
+    category: 'audience',
+    icon: UserCheck,
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-600',
+  },
+  {
+    id: 'countdown',
+    title: 'Event / Drop Countdown',
+    description: 'Real-time ticking countdown clock for album drops, webinars, or product launches',
+    category: 'audience',
+    icon: Timer,
+    iconBg: 'bg-orange-50',
+    iconColor: 'text-orange-600',
+    badge: 'New',
+  },
+  {
+    id: 'location',
+    title: 'Location & Hours',
+    description: 'Share your studio, café, pop-up shop, or venue address with a 1-tap Maps link',
+    category: 'audience',
+    icon: MapPin,
+    iconBg: 'bg-sky-50',
+    iconColor: 'text-sky-600',
+    badge: 'New',
+  },
   {
     id: 'signup',
     title: 'Audience Signup Form',
-    description: 'Capture email addresses or mobile numbers to build your direct subscriber list',
+    description: 'Capture email addresses or phone numbers to grow your direct subscriber list',
     category: 'audience',
     icon: Mail,
     iconBg: 'bg-amber-50',
@@ -117,35 +207,14 @@ const FEATURES: FeatureOption[] = [
   {
     id: 'faq',
     title: 'FAQ Accordion',
-    description: 'Collapsible Q&A section to answer common questions, pricing, and policies',
+    description: 'Collapsible Q&A section to answer common questions, rates, and policies',
     category: 'audience',
     icon: HelpCircle,
     iconBg: 'bg-sky-50',
     iconColor: 'text-sky-600',
   },
 
-  // Monetization
-  {
-    id: 'coffee',
-    title: 'Buy Me a Coffee',
-    description: 'Allow supporters to buy you coffees ($3, $9, $15) with custom note and tipping link',
-    category: 'monetization',
-    icon: Coffee,
-    iconBg: 'bg-amber-100',
-    iconColor: 'text-amber-800',
-    badge: 'Popular',
-  },
-  {
-    id: 'tip_jar',
-    title: 'Tip Jar & Support',
-    description: 'Accept tips and coffee funds with custom preset amounts via PayPal, UPI, or Stripe',
-    category: 'monetization',
-    icon: Heart,
-    iconBg: 'bg-rose-50',
-    iconColor: 'text-rose-600',
-  },
-
-  // Layout & Organization
+  // Layout & Structure
   {
     id: 'header',
     title: 'Section Header',
@@ -167,10 +236,10 @@ const FEATURES: FeatureOption[] = [
 ];
 
 const CATEGORIES = [
-  { id: 'all', label: 'All Features' },
+  { id: 'all', label: `All (${FEATURES.length})` },
   { id: 'links', label: 'Links & Media' },
-  { id: 'monetization', label: 'Monetization' },
-  { id: 'audience', label: 'Audience & FAQ' },
+  { id: 'commerce', label: 'Commerce & Support' },
+  { id: 'audience', label: 'Audience & Utilities' },
   { id: 'layout', label: 'Layout' },
 ] as const;
 
@@ -186,9 +255,11 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
   if (!isOpen) return null;
 
   const filteredFeatures = FEATURES.filter((feat) => {
+    const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      feat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      feat.description.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      feat.title.toLowerCase().includes(q) ||
+      feat.description.toLowerCase().includes(q);
     const matchesCategory =
       activeCategory === 'all' || feat.category === activeCategory;
     return matchesSearch && matchesCategory;
@@ -213,13 +284,13 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
               </span>
             </h2>
             <p className="text-[13px] text-muted mt-0.5">
-              Select what you want to add to customize your link-in-bio page
+              Select a feature block to showcase links, products, bookings, or media
             </p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-ink/5 text-muted hover:text-ink transition-colors"
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-ink/5 text-muted hover:text-ink transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -235,7 +306,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             <input
               type="text"
               autoFocus
-              placeholder="Search features (e.g. video, tip, contact, faq)..."
+              placeholder="Search blocks (youtube, product, booking, countdown, coupon, maps)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-10 pl-9 pr-3 bg-surface border border-border rounded-xl text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
@@ -247,9 +318,9 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   activeCategory === cat.id
-                    ? 'bg-ink text-white'
+                    ? 'bg-ink text-surface'
                     : 'bg-ink/5 text-muted hover:text-ink hover:bg-ink/10'
                 }`}
               >

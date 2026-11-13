@@ -1,0 +1,748 @@
+import React, { useEffect, useState } from 'react';
+import {
+  ShoppingBag,
+  CalendarClock,
+  Timer,
+  Ticket,
+  Copy,
+  Check,
+  MapPin,
+  FileDown,
+  Youtube,
+  Play,
+  ExternalLink,
+} from 'lucide-react';
+import { PageBlock } from '../../data/types';
+import { VibeTokens } from '../../lib/vibes';
+import { formatExternalUrl } from '../../lib/urls';
+
+interface SharedBlockRenderProps {
+  block: PageBlock;
+  tokens: VibeTokens;
+  effectiveRadius: number;
+  fontFamily: string;
+  scale: number;
+  isPublicPage: boolean;
+  onLinkClick?: (block: PageBlock) => void;
+  surfaceStyle: React.CSSProperties;
+}
+
+function resolveCardPalette(surfaceStyle: React.CSSProperties, tokens: VibeTokens) {
+  const fg = String(surfaceStyle.color || tokens.buttonText || tokens.text || '#0A0A0A');
+  const isLightFg =
+    fg.toUpperCase() === '#FFFFFF' ||
+    fg.toUpperCase() === '#FAFAFA' ||
+    fg.toUpperCase() === '#F8FAFC' ||
+    fg.toUpperCase() === '#F5F5F5';
+  const pillBg = fg;
+  const pillText =
+    typeof surfaceStyle.backgroundColor === 'string' &&
+    surfaceStyle.backgroundColor.startsWith('#') &&
+    surfaceStyle.backgroundColor !== 'transparent'
+      ? surfaceStyle.backgroundColor
+      : isLightFg
+        ? '#0A0A0A'
+        : '#FFFFFF';
+  return { fg, pillBg, pillText };
+}
+
+export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const ytUrl = block.url ? formatExternalUrl(block.url) : 'https://youtube.com';
+  const yt = block.youtube;
+  const ctaLabel = yt?.buttonLabel?.trim() || 'Subscribe';
+  const videos = yt?.showLatestVideo && Array.isArray(yt.latestVideos) ? yt.latestVideos.slice(0, 3) : [];
+  const { fg } = resolveCardPalette(surfaceStyle, tokens);
+
+  return (
+    <div
+      className="w-full flex flex-col gap-2.5 transition-all duration-150 select-none"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(12 * scale)}px`,
+      }}
+    >
+      <div className="w-full flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0 pr-1">
+          {yt?.avatarUrl ? (
+            <img
+              src={yt.avatarUrl}
+              alt={block.title || 'YouTube'}
+              referrerPolicy="no-referrer"
+              className="rounded-full object-cover shrink-0 border border-current/20"
+              style={{
+                width: `${Math.round(36 * scale)}px`,
+                height: `${Math.round(36 * scale)}px`,
+              }}
+            />
+          ) : (
+            <div
+              className="rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs"
+              style={{
+                width: `${Math.round(34 * scale)}px`,
+                height: `${Math.round(34 * scale)}px`,
+              }}
+            >
+              <Youtube size={Math.round(16 * scale)} strokeWidth={2} />
+            </div>
+          )}
+
+          <div className="flex flex-col min-w-0 text-left">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="font-semibold truncate leading-tight"
+                style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px`, color: fg }}
+              >
+                {block.title || yt?.channelTitle || 'YouTube Channel'}
+              </span>
+              {yt?.subscriberText && (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-600/15 text-red-500 border border-red-500/20 shrink-0 whitespace-nowrap">
+                  {yt.subscriberText}
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] opacity-75 truncate">
+              {block.badge || yt?.handle || 'Subscribe for new videos'}
+            </span>
+          </div>
+        </div>
+
+        {isPublicPage ? (
+          <a
+            href={ytUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onLinkClick?.(block)}
+            className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white transition-transform active:scale-95"
+          >
+            {ctaLabel}
+          </a>
+        ) : (
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white">
+            {ctaLabel}
+          </span>
+        )}
+      </div>
+
+      {videos.length > 0 && (
+        <div
+          className={`grid gap-1.5 pt-1 border-t border-current/10 ${
+            videos.length === 1 ? 'grid-cols-1' : videos.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
+          }`}
+        >
+          {videos.map((vid, idx) => {
+            const vidUrl = formatExternalUrl(vid.url || ytUrl);
+            const cardInner = (
+              <div className="rounded-lg overflow-hidden border border-current/15 bg-black/5 flex flex-col">
+                <div className="relative aspect-video bg-black/20">
+                  {vid.thumbnailUrl && (
+                    <img
+                      src={vid.thumbnailUrl}
+                      alt={vid.title}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <div className="w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xs">
+                      <Play size={10} className="ml-0.5 fill-white" />
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className="px-1.5 py-1 font-medium line-clamp-1 text-left"
+                  style={{ fontSize: `${Math.max(10, Math.round(10.5 * scale))}px`, color: fg }}
+                >
+                  {vid.title}
+                </div>
+              </div>
+            );
+
+            return isPublicPage ? (
+              <a
+                key={vid.id || idx}
+                href={vidUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => onLinkClick?.(block)}
+                className="block transition-transform hover:scale-[1.02]"
+              >
+                {cardInner}
+              </a>
+            ) : (
+              <div key={vid.id || idx}>{cardInner}</div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const ProductShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const cfg = block.product;
+  if (!cfg) return null;
+  const href = block.url ? formatExternalUrl(block.url) : '#';
+  const cta = cfg.buttonLabel?.trim() || 'Buy Now';
+  const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+
+  const body = (
+    <div
+      className="w-full flex items-center justify-between gap-2.5 transition-all duration-150 select-none text-left"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+      }}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        {cfg.imageUrl ? (
+          <img
+            src={cfg.imageUrl}
+            alt={block.title}
+            referrerPolicy="no-referrer"
+            className="rounded-lg object-cover shrink-0 border border-current/15"
+            style={{
+              width: `${Math.round(42 * scale)}px`,
+              height: `${Math.round(42 * scale)}px`,
+            }}
+          />
+        ) : (
+          <div
+            className="rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              width: `${Math.round(38 * scale)}px`,
+              height: `${Math.round(38 * scale)}px`,
+              backgroundColor: `${fg}14`,
+              color: fg,
+            }}
+          >
+            <ShoppingBag size={Math.round(17 * scale)} />
+          </div>
+        )}
+        <div className="min-w-0">
+          {cfg.tag && (
+            <span className="text-[9px] font-bold uppercase tracking-wider opacity-75 block leading-none mb-0.5">
+              {cfg.tag}
+            </span>
+          )}
+          <div
+            className="font-semibold truncate leading-tight"
+            style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
+          >
+            {block.title}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5">
+            <span className="font-bold">{cfg.price}</span>
+            {cfg.compareAtPrice && (
+              <span className="line-through opacity-60">{cfg.compareAtPrice}</span>
+            )}
+            {cfg.description && <span className="opacity-75 truncate">· {cfg.description}</span>}
+          </div>
+        </div>
+      </div>
+
+      <span
+        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1"
+        style={{
+          backgroundColor: pillBg,
+          color: pillText,
+        }}
+      >
+        <span>{cta}</span>
+        <ExternalLink size={10} />
+      </span>
+    </div>
+  );
+
+  if (isPublicPage && block.url) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        onClick={() => onLinkClick?.(block)}
+        className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+      >
+        {body}
+      </a>
+    );
+  }
+  return body;
+};
+
+export const BookingShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const cfg = block.booking;
+  if (!cfg) return null;
+  const href = block.url ? formatExternalUrl(block.url) : '#';
+  const cta = cfg.buttonLabel?.trim() || 'Book Slot';
+  const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+
+  const body = (
+    <div
+      className="w-full flex items-center justify-between gap-2.5 transition-all duration-150 select-none text-left"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+      }}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div
+          className="rounded-lg flex items-center justify-center shrink-0"
+          style={{
+            width: `${Math.round(36 * scale)}px`,
+            height: `${Math.round(36 * scale)}px`,
+            backgroundColor: `${fg}14`,
+          }}
+        >
+          <CalendarClock size={Math.round(17 * scale)} />
+        </div>
+        <div className="min-w-0">
+          <div
+            className="font-semibold truncate leading-tight"
+            style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
+          >
+            {block.title}
+          </div>
+          <div className="text-[11px] opacity-80 truncate mt-0.5">
+            {[cfg.duration, cfg.priceLabel, cfg.platform].filter(Boolean).join(' · ')}
+          </div>
+          {cfg.description && (
+            <div className="text-[10px] opacity-65 truncate">{cfg.description}</div>
+          )}
+        </div>
+      </div>
+
+      <span
+        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0"
+        style={{
+          backgroundColor: pillBg,
+          color: pillText,
+        }}
+      >
+        {cta}
+      </span>
+    </div>
+  );
+
+  if (isPublicPage && block.url) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        onClick={() => onLinkClick?.(block)}
+        className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+      >
+        {body}
+      </a>
+    );
+  }
+  return body;
+};
+
+export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const cfg = block.countdown;
+  const [now, setNow] = useState(() => Date.now());
+  const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!cfg) return null;
+
+  const targetMs = new Date(cfg.targetAt).getTime();
+  const diff = Math.max(0, Number.isNaN(targetMs) ? 0 : targetMs - now);
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const mins = Math.floor((diff / (1000 * 60)) % 60);
+  const secs = Math.floor((diff / 1000) % 60);
+
+  return (
+    <div
+      className="w-full flex flex-col items-center text-center gap-2 select-none"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(13 * scale)}px`,
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <Timer size={Math.round(14 * scale)} className="opacity-80 shrink-0" />
+        <span
+          className="font-semibold leading-tight"
+          style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px` }}
+        >
+          {block.title}
+        </span>
+      </div>
+
+      {cfg.venueOrSubtitle && (
+        <span className="text-[11px] opacity-75 leading-tight">{cfg.venueOrSubtitle}</span>
+      )}
+
+      {diff > 0 ? (
+        <div className="grid grid-cols-4 gap-1.5 w-full max-w-[260px] my-0.5">
+          {[
+            { label: 'Days', val: days },
+            { label: 'Hrs', val: hours },
+            { label: 'Min', val: mins },
+            { label: 'Sec', val: secs },
+          ].map((u) => (
+            <div
+              key={u.label}
+              className="rounded-lg py-1.5 px-1 flex flex-col items-center border border-current/15"
+              style={{ backgroundColor: `${fg}10` }}
+            >
+              <span className="font-mono font-bold text-[15px] leading-none">
+                {String(u.val).padStart(2, '0')}
+              </span>
+              <span className="text-[9px] uppercase tracking-wider opacity-70 mt-0.5">
+                {u.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          className="px-3 py-1 rounded-full text-[12px] font-semibold"
+          style={{ backgroundColor: `${fg}18` }}
+        >
+          {cfg.expiredLabel || 'Live Now'}
+        </div>
+      )}
+
+      {block.url && cfg.buttonLabel && (
+        isPublicPage ? (
+          <a
+            href={formatExternalUrl(block.url)}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            onClick={() => onLinkClick?.(block)}
+            className="mt-0.5 px-4 py-1.5 rounded-full text-[12px] font-semibold transition-transform active:scale-95"
+            style={{
+              backgroundColor: pillBg,
+              color: pillText,
+            }}
+          >
+            {cfg.buttonLabel}
+          </a>
+        ) : (
+          <span
+            className="mt-0.5 px-4 py-1.5 rounded-full text-[12px] font-semibold"
+            style={{
+              backgroundColor: pillBg,
+              color: pillText,
+            }}
+          >
+            {cfg.buttonLabel}
+          </span>
+        )
+      )}
+    </div>
+  );
+};
+
+export const PromoShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const cfg = block.promo;
+  const [copied, setCopied] = useState(false);
+  if (!cfg) return null;
+  const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(cfg.code);
+      setCopied(true);
+      onLinkClick?.(block);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
+  };
+
+  return (
+    <div
+      className="w-full flex flex-col gap-2 select-none"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(12 * scale)}px ${Math.round(13 * scale)}px`,
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 text-left">
+          <Ticket size={Math.round(16 * scale)} className="shrink-0 opacity-85" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {cfg.discountLabel && (
+                <span
+                  className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0"
+                  style={{
+                    backgroundColor: pillBg,
+                    color: pillText,
+                  }}
+                >
+                  {cfg.discountLabel}
+                </span>
+              )}
+              <span
+                className="font-semibold truncate leading-tight"
+                style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
+              >
+                {block.title}
+              </span>
+            </div>
+            {(cfg.merchant || cfg.expiresLabel) && (
+              <div className="text-[10px] opacity-75 truncate mt-0.5">
+                {[cfg.merchant, cfg.expiresLabel].filter(Boolean).join(' · ')}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-current/45 font-mono text-[11px] font-bold shrink-0 cursor-pointer transition-transform active:scale-95"
+          style={{ backgroundColor: `${fg}12` }}
+        >
+          <span>{copied ? 'Copied!' : cfg.code}</span>
+          {copied ? <Check size={11} /> : <Copy size={11} />}
+        </button>
+      </div>
+
+      {isPublicPage && block.url && (
+        <a
+          href={formatExternalUrl(block.url)}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          onClick={() => onLinkClick?.(block)}
+          className="text-[11px] underline underline-offset-2 opacity-80 hover:opacity-100 self-end inline-flex items-center gap-1"
+        >
+          <span>Visit store</span>
+          <ExternalLink size={10} />
+        </a>
+      )}
+    </div>
+  );
+};
+
+export const LocationShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const cfg = block.location;
+  if (!cfg) return null;
+  const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const mapsUrl = block.url
+    ? formatExternalUrl(block.url)
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        `${cfg.placeName} ${cfg.address}`
+      )}`;
+
+  const inner = (
+    <div
+      className="w-full flex items-center justify-between gap-2.5 select-none text-left"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+      }}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div
+          className="rounded-lg flex items-center justify-center shrink-0"
+          style={{
+            width: `${Math.round(34 * scale)}px`,
+            height: `${Math.round(34 * scale)}px`,
+            backgroundColor: `${fg}14`,
+          }}
+        >
+          <MapPin size={Math.round(16 * scale)} />
+        </div>
+        <div className="min-w-0">
+          <div
+            className="font-semibold truncate leading-tight"
+            style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
+          >
+            {cfg.placeName || block.title}
+          </div>
+          <div className="text-[11px] opacity-80 truncate">{cfg.address}</div>
+          {cfg.hours && <div className="text-[10px] opacity-65 truncate">{cfg.hours}</div>}
+        </div>
+      </div>
+
+      <span
+        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1"
+        style={{
+          backgroundColor: pillBg,
+          color: pillText,
+        }}
+      >
+        <span>{cfg.buttonLabel || 'Maps'}</span>
+        <ExternalLink size={10} />
+      </span>
+    </div>
+  );
+
+  if (isPublicPage) {
+    return (
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        onClick={() => onLinkClick?.(block)}
+        className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+      >
+        {inner}
+      </a>
+    );
+  }
+  return inner;
+};
+
+export const DownloadShowcaseCard: React.FC<SharedBlockRenderProps> = ({
+  block,
+  tokens,
+  effectiveRadius,
+  fontFamily,
+  scale,
+  isPublicPage,
+  onLinkClick,
+  surfaceStyle,
+}) => {
+  const cfg = block.download;
+  if (!cfg) return null;
+  const href = block.url ? formatExternalUrl(block.url) : '#';
+  const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+
+  const inner = (
+    <div
+      className="w-full flex items-center justify-between gap-2.5 select-none text-left"
+      style={{
+        ...surfaceStyle,
+        color: fg,
+        fontFamily,
+        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+      }}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div
+          className="rounded-lg flex items-center justify-center shrink-0 font-mono text-[10px] font-bold"
+          style={{
+            width: `${Math.round(36 * scale)}px`,
+            height: `${Math.round(36 * scale)}px`,
+            backgroundColor: `${fg}14`,
+          }}
+        >
+          {(cfg.fileFormat || 'PDF').slice(0, 4).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <div
+            className="font-semibold truncate leading-tight"
+            style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
+          >
+            {block.title}
+          </div>
+          <div className="text-[11px] opacity-80 truncate">
+            {[cfg.fileSize, cfg.description].filter(Boolean).join(' · ') || 'Instant Download'}
+          </div>
+        </div>
+      </div>
+
+      <span
+        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1"
+        style={{
+          backgroundColor: pillBg,
+          color: pillText,
+        }}
+      >
+        <FileDown size={11} />
+        <span>{cfg.buttonLabel || 'Download'}</span>
+      </span>
+    </div>
+  );
+
+  if (isPublicPage && block.url) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        onClick={() => onLinkClick?.(block)}
+        className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+      >
+        {inner}
+      </a>
+    );
+  }
+  return inner;
+};

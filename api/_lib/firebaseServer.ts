@@ -288,6 +288,7 @@ export async function firebaseSaveProfile(
     fontSettings: profileData.fontSettings ?? null,
     buttonColors: profileData.buttonColors ?? null,
     businessCard: profileData.businessCard ?? null,
+    layoutSettings: profileData.layoutSettings ?? null,
     updatedAt: new Date().toISOString(),
   };
 
@@ -354,6 +355,13 @@ export async function firebaseSaveBlocks(
         vcard: b.vcard || null,
         animation: b.animation || null,
         badge: b.badge || null,
+        youtube: b.youtube || null,
+        product: b.product || null,
+        booking: b.booking || null,
+        countdown: b.countdown || null,
+        promo: b.promo || null,
+        location: b.location || null,
+        download: b.download || null,
         startAt: b.startAt || null,
         endAt: b.endAt || null,
         position: b.position ?? index,

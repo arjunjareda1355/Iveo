@@ -1,10 +1,16 @@
 import { VibeId } from '../lib/vibes';
-import { ButtonShape, BackgroundConfig } from '../lib/preferences';
+import { ButtonShape, BackgroundConfig, LayoutSettings } from '../lib/preferences';
 import type { FontSettings } from '../lib/fonts';
 import type { ButtonColors } from '../lib/colors';
 import type { BusinessCardConfig } from '../lib/businessCardConfig';
 
-export type { BackgroundConfig, FontSettings, ButtonColors, BusinessCardConfig };
+export type {
+  BackgroundConfig,
+  FontSettings,
+  ButtonColors,
+  BusinessCardConfig,
+  LayoutSettings,
+};
 
 export type BlockKind =
   | 'link'
@@ -17,7 +23,14 @@ export type BlockKind =
   | 'vcard'
   | 'coffee'
   | 'instagram'
-  | 'youtube';
+  | 'youtube'
+  | 'product'
+  | 'booking'
+  | 'countdown'
+  | 'promo'
+  | 'location'
+  | 'download';
+
 export type BlockLayout = 'classic' | 'featured';
 export type EmbedProvider = 'youtube' | 'spotify' | 'soundcloud';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
@@ -93,6 +106,75 @@ export interface CoffeeData {
   fetchedAt?: string | null;
 }
 
+export interface YouTubeVideoItem {
+  id: string;
+  title: string;
+  thumbnailUrl?: string | null;
+  url: string;
+  publishedAt?: string | null;
+}
+
+export interface YouTubeData {
+  channelId?: string | null;
+  handle?: string | null;
+  channelTitle?: string | null;
+  description?: string | null;
+  avatarUrl?: string | null;
+  subscriberText?: string | null;
+  subscriberCount?: number | null;
+  videoCount?: number | null;
+  latestVideos?: YouTubeVideoItem[];
+  showLatestVideo?: boolean;
+  connectedViaOAuth?: boolean;
+  buttonLabel?: string | null;
+  fetchedAt?: string | null;
+}
+
+export interface ProductConfig {
+  price: string;
+  compareAtPrice?: string | null;
+  description?: string | null;
+  imageUrl?: string | null;
+  buttonLabel?: string | null;
+  tag?: string | null;
+}
+
+export interface BookingConfig {
+  duration: string;
+  priceLabel?: string | null;
+  platform?: string | null;
+  description?: string | null;
+  buttonLabel?: string | null;
+}
+
+export interface CountdownConfig {
+  targetAt: string;
+  venueOrSubtitle?: string | null;
+  expiredLabel?: string | null;
+  buttonLabel?: string | null;
+}
+
+export interface PromoConfig {
+  code: string;
+  discountLabel?: string | null;
+  merchant?: string | null;
+  expiresLabel?: string | null;
+}
+
+export interface LocationConfig {
+  placeName: string;
+  address: string;
+  hours?: string | null;
+  buttonLabel?: string | null;
+}
+
+export interface DownloadConfig {
+  fileFormat: string;
+  fileSize?: string | null;
+  description?: string | null;
+  buttonLabel?: string | null;
+}
+
 export interface Block {
   id: string;
   kind: BlockKind;
@@ -108,6 +190,13 @@ export interface Block {
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
   coffee?: CoffeeData | null;
+  youtube?: YouTubeData | null;
+  product?: ProductConfig | null;
+  booking?: BookingConfig | null;
+  countdown?: CountdownConfig | null;
+  promo?: PromoConfig | null;
+  location?: LocationConfig | null;
+  download?: DownloadConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   isProtected?: boolean;
@@ -134,6 +223,13 @@ export interface PublicBlock {
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
   coffee?: CoffeeData | null;
+  youtube?: YouTubeData | null;
+  product?: ProductConfig | null;
+  booking?: BookingConfig | null;
+  countdown?: CountdownConfig | null;
+  promo?: PromoConfig | null;
+  location?: LocationConfig | null;
+  download?: DownloadConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
 }
@@ -154,6 +250,13 @@ export interface PageBlock {
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
   coffee?: CoffeeData | null;
+  youtube?: YouTubeData | null;
+  product?: ProductConfig | null;
+  booking?: BookingConfig | null;
+  countdown?: CountdownConfig | null;
+  promo?: PromoConfig | null;
+  location?: LocationConfig | null;
+  download?: DownloadConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -199,6 +302,7 @@ export interface Profile {
   customSeoDescription?: string | null;
   fontSettings?: FontSettings | null;
   buttonColors?: ButtonColors | null;
+  layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
 }
 
@@ -223,6 +327,7 @@ export interface PublicProfileData {
   customSeoDescription?: string | null;
   fontSettings?: FontSettings | null;
   buttonColors?: ButtonColors | null;
+  layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
 }
 

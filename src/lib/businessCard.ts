@@ -2,10 +2,14 @@ import QRCode from 'qrcode';
 import { buildVCardString, sanitizeVCardFilename } from './vcard';
 import {
   BusinessCardConfig,
+  CARD_BASE_HEIGHT,
+  CARD_BASE_WIDTH,
+  CARD_EXPORT_SCALE,
   DEFAULT_BUSINESS_CARD_CONFIG,
   parseBusinessCardConfig,
+  resolveBusinessCardAppearance,
 } from './businessCardConfig';
-import { getCanvasFontName, loadGoogleFonts } from './fonts';
+import { ensureCanvasFontLoaded } from './fonts';
 import { isLightHexColor } from './colors';
 
 export interface BusinessCardData {
@@ -120,16 +124,78 @@ async function loadCanvasSafeAvatar(src: string): Promise<HTMLImageElement | nul
   return tryLoad(src, true);
 }
 
+function drawVectorIcon(
+  ctx: CanvasRenderingContext2D,
+  kind: 'pin' | 'mail' | 'phone',
+  x: number,
+  y: number,
+  size: number,
+  color: string
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  const s = size / 24;
+  ctx.scale(s, s);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (kind === 'pin') {
+    ctx.beginPath();
+    ctx.moveTo(20, 10);
+    ctx.bezierCurveTo(20, 16, 12, 22, 12, 22);
+    ctx.bezierCurveTo(12, 22, 4, 16, 4, 10);
+    ctx.arc(12, 10, 8, Math.PI, 0, false);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(12, 10, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (kind === 'mail') {
+    ctx.beginPath();
+    ctx.roundRect(2, 4, 20, 16, 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(22, 7);
+    ctx.lineTo(13.03, 12.7);
+    ctx.quadraticCurveTo(12, 13.3, 10.97, 12.7);
+    ctx.lineTo(2, 7);
+    ctx.stroke();
+  } else if (kind === 'phone') {
+    ctx.beginPath();
+    ctx.moveTo(22, 16.92);
+    ctx.lineTo(22, 19.92);
+    ctx.quadraticCurveTo(22, 21.8, 19.98, 22);
+    ctx.bezierCurveTo(12, 21.2, 2.8, 12, 2, 4.02);
+    ctx.quadraticCurveTo(2.2, 2, 4.08, 2);
+    ctx.lineTo(7.08, 2);
+    ctx.quadraticCurveTo(8.5, 2, 8.9, 3.4);
+    ctx.lineTo(9.8, 6.2);
+    ctx.quadraticCurveTo(10, 7.2, 9.2, 8);
+    ctx.lineTo(7.8, 9.4);
+    ctx.bezierCurveTo(9.1, 12.2, 11.8, 14.9, 14.6, 16.2);
+    ctx.lineTo(16, 14.8);
+    ctx.quadraticCurveTo(16.8, 14, 17.8, 14.2);
+    ctx.lineTo(20.6, 15.1);
+    ctx.quadraticCurveTo(22, 15.5, 22, 16.92);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /**
- * Generates an ultra-high-resolution PNG (2040x1200, 1.7:1) pixel-identical to BusinessCardPreview.
+ * Generates an ultra-high-resolution PNG (2040x1200, 1.7:1) pixel-identical to BusinessCardPreview
+ * by drawing in the exact 600x353 canonical layout coordinate space scaled 3.4x.
  */
 export async function generateBusinessCardPng(data: BusinessCardData): Promise<string> {
-  const width = 2040;
-  const height = 1200;
+  const canvasWidth = 2040;
+  const canvasHeight = 1200;
+  const W = CARD_BASE_WIDTH;
+  const H = CARD_BASE_HEIGHT;
 
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
   const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) throw new Error('Canvas 2D context not available');
 
@@ -138,61 +204,22 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
     ...(parseBusinessCardConfig(data.cardConfig) || {}),
   };
 
-  if (cfg.fontId) {
-    loadGoogleFonts([cfg.fontId]);
-    try {
-      if (typeof document !== 'undefined' && document.fonts) {
-        await Promise.race([
-          document.fonts.ready,
-          new Promise((r) => setTimeout(r, 1500)),
-        ]);
-      }
-    } catch {}
-  }
-
-  const fontPrimary = getCanvasFontName(cfg.fontId, 'Inter, system-ui, sans-serif');
-  const template = cfg.template || 'classic';
-
-  let bgColor = cfg.bgColor || data.theme?.bg || '#0F172A';
-  let accentColor = cfg.accentColor || data.theme?.accent || data.theme?.buttonBg || '#4F46E5';
-  let textColor = cfg.textColor || data.theme?.text || '#FFFFFF';
-
-  if (template === 'gradient' && !cfg.bgColor) {
-    bgColor = '#0F172A';
-    accentColor = cfg.accentColor || '#38BDF8';
-    textColor = cfg.textColor || '#FFFFFF';
-  } else if (template === 'midnight') {
-    bgColor = cfg.bgColor || '#09090B';
-    textColor = cfg.textColor || '#FAFAFA';
-    accentColor = cfg.accentColor || '#A855F7';
-  } else if (template === 'executive' && !cfg.bgColor) {
-    bgColor = '#111827';
-    textColor = cfg.textColor || '#F9FAFB';
-    accentColor = cfg.accentColor || '#38BDF8';
-  } else if (template === 'editorial' && !cfg.bgColor) {
-    bgColor = '#FAF8F5';
-    textColor = cfg.textColor || '#1C1917';
-    accentColor = cfg.accentColor || '#B45309';
-  }
-
-  const bgIsLight = isLightColor(bgColor);
-  if (!cfg.textColor && (template === 'classic' || !data.theme?.text)) {
-    textColor = data.theme?.text || (bgIsLight ? '#0A0A0A' : '#FFFFFF');
-  }
-  const mutedColor = bgIsLight ? 'rgba(15, 23, 42, 0.68)' : 'rgba(255, 255, 255, 0.72)';
-  const borderStroke = bgIsLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.18)';
-
-  const qrFg = cfg.qrFgColor || '#0A0A0A';
-  const qrBg = cfg.qrBgColor || '#FFFFFF';
+  // Preload Google Font weights 400/500/600/700 for Canvas
+  const fontPrimary = await ensureCanvasFontLoaded(cfg.fontId, 'Inter, system-ui, sans-serif');
+  const monoFont = 'ui-monospace, "SF Mono", Menlo, monospace';
+  const app = resolveBusinessCardAppearance(cfg, data.theme);
 
   let qrDataUrl = data.qrDataUrl;
   try {
-    qrDataUrl = await QRCode.toDataURL(data.pageUrl, {
-      width: 1024,
-      margin: 2,
-      errorCorrectionLevel: 'H',
-      color: { dark: qrFg, light: qrBg },
-    });
+    qrDataUrl = await QRCode.toDataURL(
+      data.pageUrl.includes('src=qr') ? data.pageUrl : `${data.pageUrl}?src=qr`,
+      {
+        width: 1024,
+        margin: 2,
+        errorCorrectionLevel: 'H',
+        color: { dark: app.qrFg, light: app.qrBg },
+      }
+    );
   } catch {}
   const qrImg = qrDataUrl ? await loadCanvasSafeAvatar(qrDataUrl) : null;
 
@@ -204,75 +231,78 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
   const cleanUsername = (data.username || 'creator').toLowerCase().trim();
   const initials = (data.displayName || cleanUsername).slice(0, 2).toUpperCase();
 
-  const cardRadius =
-    cfg.cornerStyle === 'sharp' ? 16 : cfg.cornerStyle === 'pill' ? 112 : 72;
-
   const renderCard = (includeAvatarImage: boolean) => {
     ctx.save();
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    ctx.scale(CARD_EXPORT_SCALE, CARD_EXPORT_SCALE);
 
+    // Clip card shape
     ctx.beginPath();
-    ctx.roundRect(0, 0, width, height, cardRadius);
+    ctx.roundRect(0, 0, W, H, app.cornerRadius);
     ctx.clip();
 
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, width, height);
+    // Base fill & template gradients
+    ctx.fillStyle = app.bgColor;
+    ctx.fillRect(0, 0, W, H);
 
-    if (cfg.bgColor && cfg.bgColor2) {
-      const grad = ctx.createLinearGradient(0, 0, width, height);
+    if (cfg.bgColor && app.bgColor2) {
+      const grad = ctx.createLinearGradient(0, 0, W, H);
       grad.addColorStop(0, cfg.bgColor);
-      grad.addColorStop(1, cfg.bgColor2);
+      grad.addColorStop(1, app.bgColor2);
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, width, height);
-    } else if (template === 'gradient') {
-      const grad = ctx.createLinearGradient(0, 0, width, height);
-      grad.addColorStop(0, bgColor);
-      grad.addColorStop(1, cfg.bgColor2 || `${accentColor}44`);
+      ctx.fillRect(0, 0, W, H);
+    } else if (app.template === 'gradient') {
+      const grad = ctx.createLinearGradient(0, 0, W, H);
+      grad.addColorStop(0, app.bgColor);
+      grad.addColorStop(1, app.bgColor2 || `${app.accentColor}44`);
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, width, height);
-    } else if (template === 'midnight') {
-      const rad = ctx.createRadialGradient(width * 0.85, height * 0.15, 10, width * 0.85, height * 0.15, width * 0.6);
-      rad.addColorStop(0, `${accentColor}45`);
+      ctx.fillRect(0, 0, W, H);
+    } else if (app.template === 'midnight') {
+      const rad = ctx.createRadialGradient(W * 0.85, H * 0.15, 3, W * 0.85, H * 0.15, W * 0.56);
+      rad.addColorStop(0, `${app.accentColor}3D`);
       rad.addColorStop(1, 'transparent');
       ctx.fillStyle = rad;
-      ctx.fillRect(0, 0, width, height);
-    } else if (template === 'classic') {
+      ctx.fillRect(0, 0, W, H);
+    } else if (app.template === 'classic' && !app.bgColor2) {
       ctx.save();
-      ctx.fillStyle = accentColor;
-      ctx.globalAlpha = bgIsLight ? 0.09 : 0.18;
+      ctx.fillStyle = app.accentColor;
+      ctx.globalAlpha = app.isLight ? 0.09 : 0.17;
       ctx.beginPath();
-      if (bgIsLight) {
-        ctx.arc(160, height - 120, 420, 0, Math.PI * 2);
+      if (app.isLight) {
+        ctx.arc(48, H - 34, 110, 0, Math.PI * 2);
       } else {
-        ctx.arc(width - 200, 140, 400, 0, Math.PI * 2);
+        ctx.arc(W - 58, 42, 110, 0, Math.PI * 2);
       }
       ctx.fill();
       ctx.restore();
-    } else if (template === 'executive') {
-      ctx.fillStyle = accentColor;
-      ctx.fillRect(0, 0, 24, height);
-    } else if (template === 'editorial') {
-      ctx.strokeStyle = `${accentColor}55`;
-      ctx.lineWidth = 4;
+    } else if (app.template === 'executive') {
+      ctx.fillStyle = app.accentColor;
+      ctx.fillRect(0, 0, 8, H);
+    } else if (app.template === 'editorial') {
+      ctx.strokeStyle = `${app.accentColor}4D`;
+      ctx.lineWidth = 1.25;
       ctx.beginPath();
-      ctx.roundRect(42, 42, width - 84, height - 84, Math.max(8, cardRadius - 24));
+      ctx.roundRect(13, 13, W - 26, H - 26, app.innerCornerRadius);
       ctx.stroke();
     }
 
-    ctx.strokeStyle = borderStroke;
-    ctx.lineWidth = 4;
+    // Card outer hairline border matching DOM
+    ctx.strokeStyle = app.borderColor;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(2, 2, width - 4, height - 4, cardRadius);
+    ctx.roundRect(0.75, 0.75, W - 1.5, H - 1.5, app.cornerRadius);
     ctx.stroke();
 
-    const padX = 110;
-    const topY = 104;
+    const padX = 34 + (app.template === 'executive' ? 4 : 0);
+    const padRight = 34;
+    const padY = 30;
     let textStartX = padX;
 
+    // Avatar
     if (cfg.showAvatar !== false) {
-      const avatarSize = 200;
+      const avatarSize = 62;
       const cx = padX + avatarSize / 2;
-      const cy = topY + avatarSize / 2;
+      const cy = padY + avatarSize / 2;
 
       if (includeAvatarImage && avatarImg) {
         ctx.save();
@@ -285,145 +315,226 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
         ctx.drawImage(avatarImg, cx - dw / 2, cy - dh / 2, dw, dh);
         ctx.restore();
 
-        ctx.strokeStyle = accentColor;
-        ctx.lineWidth = 8;
+        ctx.strokeStyle = app.accentColor;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.arc(cx, cy, avatarSize / 2, 0, Math.PI * 2);
         ctx.stroke();
       } else {
-        ctx.fillStyle = accentColor;
+        ctx.fillStyle = app.accentColor;
         ctx.beginPath();
         ctx.arc(cx, cy, avatarSize / 2, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = borderStroke;
-        ctx.lineWidth = 6;
+        ctx.strokeStyle = app.borderColor;
+        ctx.lineWidth = 2;
         ctx.stroke();
 
-        ctx.fillStyle = isLightColor(accentColor) ? '#0A0A0A' : '#FFFFFF';
-        ctx.font = `700 78px ${fontPrimary}, system-ui, sans-serif`;
+        ctx.fillStyle = isLightColor(app.accentColor) ? '#0A0A0A' : '#FFFFFF';
+        ctx.font = `700 23px ${fontPrimary}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(initials, cx, cy + 4);
+        ctx.fillText(initials, cx, cy + 1);
       }
 
-      textStartX = padX + avatarSize + 48;
+      textStartX = padX + avatarSize + 15;
     }
 
-    const qrBoxSize = 240;
-    const qrBoxX = width - padX - qrBoxSize;
-    const qrBoxY = topY;
-    const maxIdentityRight = cfg.showQr !== false ? qrBoxX - 48 : width - padX;
+    // QR Code Top-Right
+    const qrBoxSize = 72;
+    const qrBoxX = W - padRight - qrBoxSize;
+    const qrBoxY = padY;
+    const maxIdentityRight = cfg.showQr !== false ? qrBoxX - 16 : W - padRight;
 
     if (cfg.showQr !== false && qrImg) {
       ctx.save();
-      ctx.fillStyle = qrBg;
+      ctx.fillStyle = app.qrBg;
       ctx.beginPath();
-      ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 28);
+      ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 10);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.drawImage(qrImg, qrBoxX + 18, qrBoxY + 18, qrBoxSize - 36, qrBoxSize - 36);
+      ctx.drawImage(qrImg, qrBoxX + 5, qrBoxY + 5, qrBoxSize - 10, qrBoxSize - 10);
       ctx.restore();
     }
 
+    // Identity Text
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    let curY = topY + 4;
+    let curY = cfg.badgeText ? padY : padY + 6;
+    const maxNameWidth = Math.max(120, maxIdentityRight - textStartX);
 
     if (cfg.badgeText) {
-      ctx.font = `700 30px ${fontPrimary}, system-ui, sans-serif`;
+      ctx.font = `700 9.5px ${fontPrimary}`;
       const badgeLabel = cfg.badgeText.toUpperCase();
-      const badgeW = Math.min(ctx.measureText(badgeLabel).width + 52, maxIdentityRight - textStartX);
+      const textW = ctx.measureText(badgeLabel).width;
+      const badgeW = Math.min(textW + 18, maxNameWidth);
+      const badgeH = 18;
       ctx.save();
-      ctx.fillStyle = `${accentColor}26`;
+      ctx.fillStyle = `${app.accentColor}24`;
       ctx.beginPath();
-      ctx.roundRect(textStartX, curY, badgeW, 54, 999);
+      ctx.roundRect(textStartX, curY, badgeW, badgeH, 999);
       ctx.fill();
-      ctx.strokeStyle = `${accentColor}55`;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = `${app.accentColor}4D`;
+      ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.fillStyle = accentColor;
+      ctx.fillStyle = app.accentColor;
       ctx.textBaseline = 'middle';
-      ctx.fillText(badgeLabel, textStartX + 26, curY + 28, badgeW - 52);
+      ctx.fillText(badgeLabel, textStartX + 9, curY + badgeH / 2 + 0.5, badgeW - 18);
       ctx.restore();
-      curY += 72;
+      curY += badgeH + 6;
     }
 
     ctx.textBaseline = 'top';
-    ctx.fillStyle = textColor;
-    ctx.font = `700 72px ${fontPrimary}, system-ui, sans-serif`;
+    ctx.fillStyle = app.textColor;
+    ctx.font = `700 22px ${fontPrimary}`;
     let fittedName = data.displayName || cleanUsername;
-    const maxNameWidth = maxIdentityRight - textStartX;
     while (fittedName.length > 3 && ctx.measureText(fittedName).width > maxNameWidth) {
       fittedName = `${fittedName.slice(0, -2)}…`;
     }
     ctx.fillText(fittedName, textStartX, curY);
-    curY += 86;
+    curY += 29;
 
-    const subParts: string[] = [];
-    if (cfg.role) subParts.push(cfg.role);
-    if (cfg.showHandle !== false) subParts.push(`@${cleanUsername}`);
-    if (cfg.companyOrLocation) subParts.push(cfg.companyOrLocation);
-    const subLine = subParts.join(' · ');
-    if (subLine) {
-      ctx.font = `500 40px ${fontPrimary}, system-ui, sans-serif`;
-      ctx.fillStyle = cfg.role ? accentColor : mutedColor;
-      ctx.fillText(subLine, textStartX, curY, maxNameWidth);
+    // Subtitle Row (Role · @handle · Location)
+    let subX = textStartX;
+    let subY = curY;
+    const drawInlineSubPart = (
+      text: string,
+      color: string,
+      fontSpec: string,
+      pinIcon = false
+    ) => {
+      ctx.font = fontSpec;
+      const w = ctx.measureText(text).width + (pinIcon ? 14 : 0);
+      if (subX > textStartX && subX + w > textStartX + maxNameWidth) {
+        subX = textStartX;
+        subY += 16;
+      }
+      if (pinIcon) {
+        drawVectorIcon(ctx, 'pin', subX, subY + 1.5, 11, color);
+        subX += 14;
+      }
+      ctx.fillStyle = color;
+      ctx.fillText(text, subX, subY, maxNameWidth - (subX - textStartX));
+      subX += Math.min(ctx.measureText(text).width, maxNameWidth) + 6;
+    };
+
+    const showRole = Boolean(cfg.role);
+    const showHandle = cfg.showHandle !== false;
+    const showLoc = Boolean(cfg.companyOrLocation);
+
+    if (showRole && cfg.role) {
+      drawInlineSubPart(cfg.role, app.accentColor, `600 12px ${fontPrimary}`);
+    }
+    if (showRole && showHandle) {
+      drawInlineSubPart('·', app.mutedColor, `500 12px ${fontPrimary}`);
+    }
+    if (showHandle) {
+      drawInlineSubPart(`@${cleanUsername}`, app.mutedColor, `400 12px ${monoFont}`);
+    }
+    if ((showRole || showHandle) && showLoc) {
+      drawInlineSubPart('·', app.mutedColor, `500 12px ${fontPrimary}`);
+    }
+    if (showLoc && cfg.companyOrLocation) {
+      drawInlineSubPart(cfg.companyOrLocation, app.mutedColor, `400 12px ${fontPrimary}`, true);
     }
 
-    let midY = Math.max(curY + 95, 450);
-    if (cfg.showBio !== false && data.bio) {
-      ctx.fillStyle = mutedColor;
-      ctx.font = `400 42px ${fontPrimary}, system-ui, sans-serif`;
-      const maxBioWidth = width - padX * 2;
+    // Middle Row: Bio & Contact (centered vertically in space above footer)
+    const footerTopY = H - padY - 30; // ~293
+    const middleAreaTop = Math.max(padY + (cfg.showAvatar !== false ? 70 : 62), subY + 22);
+    const hasBio = cfg.showBio !== false && Boolean(data.bio?.trim());
+    const hasContact = Boolean(cfg.contactEmail || cfg.contactPhone);
+
+    const bioLines: string[] = [];
+    if (hasBio && data.bio) {
+      ctx.font = `400 13px ${fontPrimary}`;
+      const maxBioWidth = W - padX - padRight;
       const words = data.bio.trim().split(/\s+/);
       let line = '';
-      let linesDrawn = 0;
-
-      for (let i = 0; i < words.length && linesDrawn < 3; i++) {
+      for (let i = 0; i < words.length; i++) {
         const testLine = `${line}${words[i]} `;
-        if (ctx.measureText(testLine).width > maxBioWidth && i > 0) {
-          ctx.fillText(line.trim(), padX, midY);
+        if (ctx.measureText(testLine.trim()).width > maxBioWidth && line.length > 0) {
+          if (bioLines.length === 1) {
+            let trimmed = line.trim();
+            while (trimmed.length > 3 && ctx.measureText(`${trimmed}…`).width > maxBioWidth) {
+              trimmed = trimmed.slice(0, -1);
+            }
+            bioLines.push(`${trimmed}…`);
+            line = '';
+            break;
+          }
+          bioLines.push(line.trim());
           line = `${words[i]} `;
-          midY += 62;
-          linesDrawn++;
         } else {
           line = testLine;
         }
       }
-      if (line.trim() && linesDrawn < 3) {
-        ctx.fillText(line.trim(), padX, midY);
-        midY += 76;
+      if (line.trim() && bioLines.length < 2) {
+        bioLines.push(line.trim());
       }
     }
 
-    if (cfg.contactEmail || cfg.contactPhone) {
-      const contactParts = [cfg.contactEmail, cfg.contactPhone].filter(Boolean).join('   ·   ');
-      ctx.font = `500 36px ${fontPrimary}, system-ui, sans-serif`;
-      ctx.fillStyle = textColor;
-      ctx.fillText(contactParts, padX, Math.min(midY + 12, height - 290), width - padX * 2);
+    const bioHeight = bioLines.length * 19;
+    const contactHeight = hasContact ? 18 : 0;
+    const gapBetween = bioLines.length > 0 && hasContact ? 8 : 0;
+    const totalMidHeight = bioHeight + gapBetween + contactHeight;
+    let midY = middleAreaTop + Math.max(0, (footerTopY - middleAreaTop - totalMidHeight) / 2);
+
+    if (bioLines.length > 0) {
+      ctx.fillStyle = app.mutedColor;
+      ctx.font = `400 13px ${fontPrimary}`;
+      ctx.textBaseline = 'top';
+      for (const l of bioLines) {
+        ctx.fillText(l, padX, midY);
+        midY += 19;
+      }
+      if (hasContact) midY += 8;
     }
 
-    const footerY = height - 180;
-    ctx.strokeStyle = borderStroke;
-    ctx.lineWidth = 3;
+    if (hasContact) {
+      let cx = padX;
+      ctx.font = `400 11.5px ${fontPrimary}`;
+      ctx.textBaseline = 'top';
+      if (cfg.contactEmail) {
+        drawVectorIcon(ctx, 'mail', cx, midY + 1.5, 11.5, app.accentColor);
+        cx += 16.5;
+        ctx.fillStyle = app.textColor;
+        ctx.fillText(cfg.contactEmail, cx, midY);
+        cx += ctx.measureText(cfg.contactEmail).width + 14;
+      }
+      if (cfg.contactPhone) {
+        drawVectorIcon(ctx, 'phone', cx, midY + 1.5, 11.5, app.accentColor);
+        cx += 16.5;
+        ctx.fillStyle = app.textColor;
+        ctx.fillText(cfg.contactPhone, cx, midY);
+      }
+    }
+
+    // Bottom Footer Bar
+    ctx.strokeStyle = app.borderColor;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(padX, footerY);
-    ctx.lineTo(width - padX, footerY);
+    ctx.moveTo(padX, footerTopY);
+    ctx.lineTo(W - padRight, footerTopY);
     ctx.stroke();
 
+    const footerTextY = footerTopY + 18;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillStyle = textColor;
-    ctx.font = `700 44px ${fontPrimary}, system-ui, sans-serif`;
-    ctx.fillText('iveo', padX, footerY + 82);
+    ctx.fillStyle = app.textColor;
+    ctx.font = `700 13.5px ${fontPrimary}`;
+    ctx.fillText('iveo', padX, footerTextY);
 
     ctx.textAlign = 'right';
-    ctx.fillStyle = mutedColor;
-    ctx.font = '500 38px ui-monospace, "SF Mono", Menlo, monospace';
-    ctx.fillText(cfg.websiteUrl || `iveo.site/${cleanUsername}`, width - padX, footerY + 82);
+    ctx.fillStyle = app.mutedColor;
+    ctx.font = `400 11.5px ${monoFont}`;
+    ctx.fillText(
+      cfg.websiteUrl || `iveo.site/${cleanUsername}`,
+      W - padRight,
+      footerTextY,
+      420
+    );
 
     ctx.restore();
   };

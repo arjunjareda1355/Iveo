@@ -1,5 +1,6 @@
 import type { VibeTokens } from './vibes';
 import type { BackgroundConfig } from './preferences';
+import { isDarkBackgroundPreset } from './backgrounds';
 
 export interface ButtonColors {
   bg?: string | null;
@@ -110,15 +111,13 @@ export function parseButtonColors(raw: unknown): ButtonColors | null {
   return { bg, text, border };
 }
 
-const DARK_BG_PRESETS = new Set(['aurora', 'cyber', 'cosmic', 'emerald']);
-
 /**
  * Determines whether a configured page background is dark so light-theme vibes
  * maintain readable heading, bio, and footer text automatically.
  */
 export function isDarkBackgroundConfig(bg?: BackgroundConfig | null): boolean {
   if (!bg || !bg.type || bg.type === 'none') return false;
-  if (bg.presetId && DARK_BG_PRESETS.has(bg.presetId)) return true;
+  if (isDarkBackgroundPreset(bg.presetId)) return true;
   if (bg.type === 'image' && bg.value) return true;
   return false;
 }

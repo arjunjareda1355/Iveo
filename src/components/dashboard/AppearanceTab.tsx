@@ -17,22 +17,26 @@ import { ProfilePhotoUploader } from '../profile/ProfilePhotoUploader';
 import { BackgroundSelectorCard } from './BackgroundSelectorCard';
 import { FontSelectorPanel } from './FontSelectorPanel';
 import { ButtonColorsPanel } from './ButtonColorsPanel';
+import { LayoutEffectsPanel } from './LayoutEffectsPanel';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { VibeId, VIBES } from '../../lib/vibes';
-import { ButtonShape } from '../../lib/preferences';
+import { ButtonShape, DEFAULT_LAYOUT_SETTINGS, LayoutSettings } from '../../lib/preferences';
 import { FontSettings, getFontOption, loadGoogleFonts } from '../../lib/fonts';
 import { ButtonColors, resolveEffectiveTokens } from '../../lib/colors';
+import { getBackgroundPreset } from '../../lib/backgrounds';
 import { BackgroundConfig } from '../../data/types';
 import { copy } from '../../content/copy';
+import { Layers } from 'lucide-react';
 
-type AppearancePanel = 'hub' | 'vibe' | 'background' | 'fonts' | 'shape' | 'colors';
+type AppearancePanel = 'hub' | 'vibe' | 'background' | 'fonts' | 'shape' | 'colors' | 'layout';
 
 interface AppearanceTabProps {
   onPreviewVibeChange?: (vibeId: VibeId) => void;
   onPreviewShapeChange?: (shape: ButtonShape | null) => void;
   onPreviewFontSettingsChange?: (fonts: FontSettings | null) => void;
   onPreviewButtonColorsChange?: (colors: ButtonColors | null) => void;
+  onPreviewLayoutChange?: (layout: LayoutSettings | null) => void;
   onOpenPreview?: () => void;
 }
 
@@ -66,6 +70,10 @@ const PANEL_META: Record<
     title: 'Button Colors',
     subtitle: 'Pick colors or enter #RRGGBB hex codes for button fill, text, and border.',
   },
+  layout: {
+    title: 'Layout & Effects',
+    subtitle: 'Customize avatar frame, header alignment, button finish, spacing & width.',
+  },
 };
 
 const getNativeShape = (vibeId: VibeId): ButtonShape => {
@@ -78,6 +86,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   onPreviewShapeChange,
   onPreviewFontSettingsChange,
   onPreviewButtonColorsChange,
+  onPreviewLayoutChange,
   onOpenPreview,
 }) => {
   const session = useIvioSession();
@@ -93,6 +102,9 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   );
   const [currentButtonColors, setCurrentButtonColors] = useState<ButtonColors | null>(
     session.buttonColors || null
+  );
+  const [currentLayout, setCurrentLayout] = useState<LayoutSettings | null>(
+    session.layoutSettings || null
   );
 
   // Profile fields state
@@ -131,6 +143,10 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   useEffect(() => {
     setCurrentButtonColors(session.buttonColors || null);
   }, [session.buttonColors]);
+
+  useEffect(() => {
+    setCurrentLayout(session.layoutSettings || null);
+  }, [session.layoutSettings]);
 
   const handleSelectVibe = async (id: VibeId) => {
     const previous = currentVibeId;
@@ -205,6 +221,19 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     }
   };
 
+  const handleSaveLayout = async (nextLayout: LayoutSettings | null) => {
+    const previous = currentLayout;
+    setCurrentLayout(nextLayout);
+    onPreviewLayoutChange?.(nextLayout);
+    try {
+      await session.updatePreferences({ layoutSettings: nextLayout });
+    } catch (err) {
+      setCurrentLayout(previous);
+      onPreviewLayoutChange?.(previous);
+      throw err;
+    }
+  };
+
   const handleAvatarChange = async (url: string | null) => {
     try {
       await session.updateProfile({ avatarUrl: url });
@@ -265,6 +294,8 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     if (!bg || bg.type === 'none') return 'Theme Default';
     if (bg.type === 'image') return 'Custom Photo';
     if (bg.presetId) {
+      const preset = getBackgroundPreset(bg.presetId);
+      if (preset) return preset.name;
       return bg.presetId
         .replace(/^pattern-/, '')
         .replace(/-/g, ' ')
@@ -290,12 +321,15 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 
   const buttonColorsSummary = currentButtonColors?.bg || effectiveTokens.buttonBg;
 
+  const layoutStyle = currentLayout?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle;
+  const layoutSummary = `${layoutStyle.charAt(0).toUpperCase()}${layoutStyle.slice(1)}`;
+
   // ── Dedicated Sub-Screen View ───────────────────────────────────────────────
   if (activePanel !== 'hub') {
     const meta = PANEL_META[activePanel];
     return (
-      <div className="flex flex-col gap-5">
-        {/* Sub-screen Header with Back + Preview */}
+      <div className="flex flex-col gap-5 w-full min-w-0">
+        {/* Sub-screen Header with Back button only (no duplicate top Preview) */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -314,18 +348,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
               <p className="text-[13px] text-muted truncate">{meta.subtitle}</p>
             </div>
           </div>
-
-          {onOpenPreview && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onOpenPreview}
-              aria-label="Preview live page"
-            >
-              <Eye size={15} />
-              <span>Preview</span>
-            </Button>
-          )}
         </div>
 
         {/* Sub-screen Body */}
@@ -473,7 +495,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         )}
 
         {activePanel === 'colors' && (
-          <Card>
+          <Card className="w-full min-w-0 overflow-hidden">
             <ButtonColorsPanel
               currentColors={currentButtonColors}
               activeVibe={activeVibe}
@@ -482,6 +504,22 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
               onPreviewColorsChange={(next) => {
                 setCurrentButtonColors(next);
                 onPreviewButtonColorsChange?.(next);
+              }}
+            />
+          </Card>
+        )}
+
+        {activePanel === 'layout' && (
+          <Card className="w-full min-w-0 overflow-hidden">
+            <LayoutEffectsPanel
+              currentLayout={currentLayout}
+              activeVibe={activeVibe}
+              buttonColors={currentButtonColors}
+              background={session.background}
+              onLayoutChange={handleSaveLayout}
+              onPreviewLayoutChange={(next) => {
+                setCurrentLayout(next);
+                onPreviewLayoutChange?.(next);
               }}
             />
           </Card>
@@ -581,32 +619,31 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         </div>
       ),
     },
+    {
+      id: 'layout',
+      label: 'Layout & Effects',
+      description: 'Avatar frame, button finish, spacing & width',
+      summary: layoutSummary,
+      icon: <Layers size={18} strokeWidth={1.75} />,
+      accessory: (
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 border border-border text-ink">
+          {layoutSummary}
+        </span>
+      ),
+    },
   ];
 
   return (
     <div className="flex flex-col gap-6">
       {/* 1. Profile Photo & Info Card */}
       <Card className="flex flex-col gap-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-[20px] font-semibold text-ink leading-tight">
-              Profile &amp; Photo
-            </h3>
-            <p className="mt-1 text-[14px] text-muted">
-              Customize how your avatar, name, and bio appear to visitors.
-            </p>
-          </div>
-          {onOpenPreview && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onOpenPreview}
-              aria-label="Preview live page"
-            >
-              <Eye size={15} />
-              <span>Preview</span>
-            </Button>
-          )}
+        <div>
+          <h3 className="text-[20px] font-semibold text-ink leading-tight">
+            Profile &amp; Photo
+          </h3>
+          <p className="mt-1 text-[14px] text-muted">
+            Customize how your avatar, name, and bio appear to visitors.
+          </p>
         </div>
 
         {/* Photo Uploader */}

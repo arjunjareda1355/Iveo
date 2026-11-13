@@ -528,6 +528,7 @@ export async function dbClaimUsername(
           fontSettings: profileData?.fontSettings || null,
           buttonColors: profileData?.buttonColors || null,
           businessCard: profileData?.businessCard || null,
+          layoutSettings: profileData?.layoutSettings || null,
         },
       }));
       insReq.input('plan', sql.NVarChar(32), effectivePlan);
@@ -672,6 +673,7 @@ export async function dbClaimUsername(
     fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (basePrev?.fontSettings || null),
     buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (basePrev?.buttonColors || null),
     businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (basePrev?.businessCard || null),
+    layoutSettings: profileData?.layoutSettings !== undefined ? profileData.layoutSettings : (basePrev?.layoutSettings || null),
     claimedAt: basePrev?.claimedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -747,6 +749,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           fontSettings: appearance.fontSettings || null,
           buttonColors: appearance.buttonColors || null,
           businessCard: appearance.businessCard || null,
+          layoutSettings: appearance.layoutSettings || null,
           isPublished: Boolean(row.is_published),
         };
       }
@@ -813,6 +816,7 @@ export async function dbSaveProfile(profile: {
   fontSettings?: any;
   buttonColors?: any;
   businessCard?: any;
+  layoutSettings?: any;
 }): Promise<{ ok: boolean; error?: string }> {
   const cleanUsername = profile.username.toLowerCase().trim();
 
@@ -847,6 +851,7 @@ export async function dbSaveProfile(profile: {
       fontSettings: profile.fontSettings ?? null,
       buttonColors: profile.buttonColors ?? null,
       businessCard: profile.businessCard ?? null,
+      layoutSettings: profile.layoutSettings ?? null,
     },
   };
 
@@ -926,6 +931,7 @@ export async function dbSaveProfile(profile: {
     fontSettings: profile.fontSettings !== undefined ? profile.fontSettings : (existingProf?.fontSettings ?? null),
     buttonColors: profile.buttonColors !== undefined ? profile.buttonColors : (existingProf?.buttonColors ?? null),
     businessCard: profile.businessCard !== undefined ? profile.businessCard : (existingProf?.businessCard ?? null),
+    layoutSettings: profile.layoutSettings !== undefined ? profile.layoutSettings : (existingProf?.layoutSettings ?? null),
     username: cleanUsername,
     updatedAt: new Date().toISOString(),
   };
@@ -1000,6 +1006,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           fontSettings: appearance.fontSettings || null,
           buttonColors: appearance.buttonColors || null,
           businessCard: appearance.businessCard || null,
+          layoutSettings: appearance.layoutSettings || null,
           isPublished: Boolean(row.is_published),
           updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         };
@@ -1068,6 +1075,13 @@ export async function dbSaveBlocks(
           vcard: b.vcard || null,
           animation: b.animation || null,
           badge: b.badge || null,
+          youtube: b.youtube || null,
+          product: b.product || null,
+          booking: b.booking || null,
+          countdown: b.countdown || null,
+          promo: b.promo || null,
+          location: b.location || null,
+          download: b.download || null,
         };
         insReq.input('signupJson', sql.NVarChar(sql.MAX), JSON.stringify(extraPayload));
         insReq.input('isProtected', sql.Bit, b.isProtected ? 1 : 0);
@@ -1126,12 +1140,32 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
         let vcard = null;
         let animation = null;
         let badge = null;
+        let youtube = null;
+        let product = null;
+        let booking = null;
+        let countdown = null;
+        let promo = null;
+        let location = null;
+        let download = null;
 
         try {
           if (r.signup_config_json) {
             const parsed = JSON.parse(r.signup_config_json);
             if (parsed && typeof parsed === 'object') {
-              if ('signup' in parsed || 'tipJar' in parsed || 'coffee' in parsed || 'faq' in parsed || 'vcard' in parsed) {
+              if (
+                'signup' in parsed ||
+                'tipJar' in parsed ||
+                'coffee' in parsed ||
+                'faq' in parsed ||
+                'vcard' in parsed ||
+                'youtube' in parsed ||
+                'product' in parsed ||
+                'booking' in parsed ||
+                'countdown' in parsed ||
+                'promo' in parsed ||
+                'location' in parsed ||
+                'download' in parsed
+              ) {
                 signup = parsed.signup || null;
                 tipJar = parsed.tipJar || null;
                 coffee = parsed.coffee || null;
@@ -1139,6 +1173,13 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
                 vcard = parsed.vcard || null;
                 animation = parsed.animation || null;
                 badge = parsed.badge || null;
+                youtube = parsed.youtube || null;
+                product = parsed.product || null;
+                booking = parsed.booking || null;
+                countdown = parsed.countdown || null;
+                promo = parsed.promo || null;
+                location = parsed.location || null;
+                download = parsed.download || null;
               } else {
                 signup = parsed;
               }
@@ -1164,6 +1205,13 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           vcard,
           animation,
           badge,
+          youtube,
+          product,
+          booking,
+          countdown,
+          promo,
+          location,
+          download,
           isProtected: Boolean(r.is_protected),
           startAt: r.start_at,
           endAt: r.end_at,

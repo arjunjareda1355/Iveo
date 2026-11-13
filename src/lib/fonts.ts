@@ -218,14 +218,50 @@ export function getFontCssFamily(
 }
 
 /**
- * Extracts the primary font name (without quotes or fallback list) for Canvas 2D ctx.font.
+ * Resolves a literal font-family stack safe for Canvas 2D ctx.font (never CSS var(...)).
  */
 export function getCanvasFontName(
   fontId: string | null | undefined,
-  fallbackCssFamily: string
+  fallbackCssFamily: string = 'Inter, system-ui, sans-serif'
 ): string {
-  const css = getFontCssFamily(fontId, fallbackCssFamily);
-  return css;
+  const opt = getFontOption(fontId);
+  const raw = opt ? opt.cssFamily : fallbackCssFamily;
+  // Strip CSS var(...) expressions since HTML5 Canvas ctx.font ignores CSS custom properties
+  const cleaned = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part && !part.startsWith('var('))
+    .join(', ');
+  return cleaned || 'Inter, system-ui, sans-serif';
+}
+
+export async function ensureCanvasFontLoaded(
+  fontId: string | null | undefined,
+  fallbackCssFamily: string = 'Inter, system-ui, sans-serif'
+): Promise<string> {
+  if (fontId) {
+    loadGoogleFonts([fontId]);
+  }
+  const familyStack = getCanvasFontName(fontId, fallbackCssFamily);
+  if (typeof document === 'undefined' || !document.fonts) {
+    return familyStack;
+  }
+
+  try {
+    const primaryFace = familyStack.split(',')[0]?.trim() || 'Inter';
+    await Promise.race([
+      Promise.allSettled([
+        document.fonts.load(`400 16px ${primaryFace}`),
+        document.fonts.load(`500 16px ${primaryFace}`),
+        document.fonts.load(`600 16px ${primaryFace}`),
+        document.fonts.load(`700 16px ${primaryFace}`),
+        document.fonts.ready,
+      ]),
+      new Promise((r) => setTimeout(r, 2000)),
+    ]);
+  } catch {}
+
+  return familyStack;
 }
 
 export function parseFontSettings(raw: unknown): FontSettings | null {
