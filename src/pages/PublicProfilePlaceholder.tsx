@@ -16,6 +16,7 @@ import { useIveoSession } from '../auth/useIvioSession';
 import { setAnalyticsContext, trackView } from '../lib/analytics/track';
 import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
+import { normalizeGoogleAnalyticsId, normalizeMetaPixelId } from '../lib/integrations';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -75,10 +76,26 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     };
   }, [loadData]);
 
-  // Set document title and canonical tag
+  // Set document title, SEO meta description, and canonical tag
   useEffect(() => {
     if (pageData?.profile) {
-      document.title = `${pageData.profile.displayName} (@${clean}) | iveo`;
+      const titleText =
+        pageData.profile.customSeoTitle ||
+        `${pageData.profile.displayName} (@${clean}) | iveo`;
+      document.title = titleText;
+
+      const descText =
+        pageData.profile.customSeoDescription ||
+        pageData.profile.bio ||
+        `${pageData.profile.displayName} on iveo`;
+
+      let metaDesc = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+      if (!metaDesc) {
+        metaDesc = document.createElement('meta');
+        metaDesc.name = 'description';
+        document.head.appendChild(metaDesc);
+      }
+      metaDesc.content = descText;
     } else {
       document.title = `iveo.site/${clean}`;
     }
@@ -91,6 +108,65 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     }
     canonical.href = pageUrl(clean);
   }, [pageData, clean]);
+
+  // Execute third-party integrations (Google Analytics 4 & Meta Pixel) when configured on public page
+  useEffect(() => {
+    const rawGaId = pageData?.profile?.googleAnalyticsId;
+    if (!rawGaId) return;
+    const gaCheck = normalizeGoogleAnalyticsId(rawGaId);
+    if (!gaCheck.valid || !gaCheck.value) return;
+
+    const measurementId = gaCheck.value;
+    const scriptId = 'iveo-ga4-script';
+    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (!existingScript) {
+      const s = document.createElement('script');
+      s.id = scriptId;
+      s.async = true;
+      s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
+      document.head.appendChild(s);
+    }
+
+    const w = window as any;
+    w.dataLayer = w.dataLayer || [];
+    if (typeof w.gtag !== 'function') {
+      w.gtag = function gtag() {
+        w.dataLayer.push(arguments);
+      };
+    }
+    w.gtag('js', new Date());
+    w.gtag('config', measurementId, {
+      page_path: `/${clean}`,
+      page_title: document.title,
+    });
+  }, [pageData?.profile?.googleAnalyticsId, clean]);
+
+  useEffect(() => {
+    const rawPixelId = pageData?.profile?.metaPixelId;
+    if (!rawPixelId) return;
+    const pixelCheck = normalizeMetaPixelId(rawPixelId);
+    if (!pixelCheck.valid || !pixelCheck.value) return;
+
+    const pixelId = pixelCheck.value;
+    const w = window as any;
+    if (!w.fbq) {
+      const n: any = function () {
+        n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+      };
+      if (!w._fbq) w._fbq = n;
+      n.push = n;
+      n.loaded = true;
+      n.version = '2.0';
+      n.queue = [];
+      w.fbq = n;
+      const t = document.createElement('script');
+      t.async = true;
+      t.src = 'https://connect.facebook.net/en_US/fbevents.js';
+      document.head.appendChild(t);
+    }
+    w.fbq('init', pixelId);
+    w.fbq('track', 'PageView');
+  }, [pageData?.profile?.metaPixelId]);
 
   // Analytics tracking & owner exclusion logic (Section 5.4 & 7)
   useEffect(() => {
@@ -211,6 +287,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
               avatarUrl: pageData.profile.avatarUrl,
               socials: pageData.profile.socials,
               socialsPosition: pageData.profile.socialsPosition || 'top',
+              whatsappNumber: pageData.profile.whatsappNumber || null,
               background: pageData.profile.background,
             }}
             blocks={effectiveBlocks}
@@ -218,7 +295,17 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
             hideFooterMark={pageData.profile.hideFooter}
             embedMode="live"
             isPublicPage={true}
-            onLinkClick={trackLinkClick}
+            onLinkClick={(block) => {
+              trackLinkClick(block);
+              const w = window as any;
+              if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
+                w.gtag('event', 'link_click', {
+                  link_title: block.title,
+                  link_url: block.url || '',
+                  creator: clean,
+                });
+              }
+            }}
             onUnlock={(block) => setUnlockBlock(block)}
             renderSignupForm={(block) => (
               <SignupFormBlock

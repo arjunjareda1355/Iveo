@@ -29,8 +29,13 @@ export interface IveoSession {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
-  socialsPosition: 'top' | 'bottom';
+  socialsPosition: 'top' | 'bottom' | 'both';
   background?: BackgroundConfig | null;
+  googleAnalyticsId?: string | null;
+  metaPixelId?: string | null;
+  whatsappNumber?: string | null;
+  customSeoTitle?: string | null;
+  customSeoDescription?: string | null;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
@@ -69,6 +74,11 @@ const FALLBACK_SESSION: IveoSession = {
   socials: {},
   socialsPosition: 'top',
   background: null,
+  googleAnalyticsId: null,
+  metaPixelId: null,
+  whatsappNumber: null,
+  customSeoTitle: null,
+  customSeoDescription: null,
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
@@ -91,6 +101,17 @@ function useClerkSession(): IveoSession {
 
   // Server-side profile data retrieved via /api/me for cross-browser synchronization
   const [serverProfile, setServerProfile] = useState<any | null>(null);
+
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail === 'object') {
+        setServerProfile((prev: any) => ({ ...(prev || {}), ...detail }));
+      }
+    };
+    window.addEventListener('iveo-server-profile-sync', onSync);
+    return () => window.removeEventListener('iveo-server-profile-sync', onSync);
+  }, []);
 
   // Fetch claimed profile from database whenever activeUser loads
   useEffect(() => {
@@ -188,9 +209,30 @@ function useClerkSession(): IveoSession {
   const plan: 'free' | 'pro' = isOwner || serverProfile?.plan === 'pro' ? 'pro' : preferences.plan;
   const isPro = isOwner || plan === 'pro';
   const hideFooter = serverProfile?.hideFooter ?? (preferences.hideIveoFooter || preferences.hideIvioFooter || false);
-  const socialsPosition = serverProfile?.socialsPosition || preferences.socialsPosition || 'top';
+  const socialsPosition: 'top' | 'bottom' | 'both' =
+    serverProfile?.socialsPosition || preferences.socialsPosition || 'top';
   const vibeId = serverProfile?.vibeId || preferences.vibeId || DEFAULT_PREFERENCES.vibeId;
   const buttonShape = serverProfile?.buttonShape || preferences.buttonShape || DEFAULT_PREFERENCES.buttonShape;
+  const googleAnalyticsId =
+    serverProfile?.googleAnalyticsId !== undefined
+      ? serverProfile.googleAnalyticsId
+      : (preferences.googleAnalyticsId || null);
+  const metaPixelId =
+    serverProfile?.metaPixelId !== undefined
+      ? serverProfile.metaPixelId
+      : (preferences.metaPixelId || null);
+  const whatsappNumber =
+    serverProfile?.whatsappNumber !== undefined
+      ? serverProfile.whatsappNumber
+      : (preferences.whatsappNumber || null);
+  const customSeoTitle =
+    serverProfile?.customSeoTitle !== undefined
+      ? serverProfile.customSeoTitle
+      : (preferences.customSeoTitle || null);
+  const customSeoDescription =
+    serverProfile?.customSeoDescription !== undefined
+      ? serverProfile.customSeoDescription
+      : (preferences.customSeoDescription || null);
 
   const syncToServer = async (payload: Record<string, unknown>) => {
     if (!activeUser?.id) return;
@@ -261,6 +303,11 @@ function useClerkSession(): IveoSession {
         buttonShape,
         socials,
         socialsPosition,
+        googleAnalyticsId,
+        metaPixelId,
+        whatsappNumber,
+        customSeoTitle,
+        customSeoDescription,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
         hideFooter,
@@ -275,6 +322,11 @@ function useClerkSession(): IveoSession {
     vibeId,
     buttonShape,
     socialsPosition,
+    googleAnalyticsId,
+    metaPixelId,
+    whatsappNumber,
+    customSeoTitle,
+    customSeoDescription,
     primaryEmail,
     isPro,
     plan,
@@ -386,11 +438,14 @@ function useClerkSession(): IveoSession {
 
     const { plan: _ignoredPlan, ...safePatch } = patch as any;
 
-    // 1. Immediately update serverProfile React state for immediate UI consistency
+    // 1. Immediately update serverProfile React state for immediate UI consistency across all hooks
     setServerProfile((prev: any) => ({
       ...(prev || {}),
       ...safePatch,
     }));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('iveo-server-profile-sync', { detail: safePatch }));
+    }
 
     const merged = {
       ...currentMeta,
@@ -430,6 +485,11 @@ function useClerkSession(): IveoSession {
             avatarId: merged.avatarId !== undefined ? merged.avatarId : parsed.avatarId,
             socials: merged.socials !== undefined ? merged.socials : parsed.socials,
             socialsPosition: merged.socialsPosition || parsed.socialsPosition || 'top',
+            googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : parsed.googleAnalyticsId,
+            metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : parsed.metaPixelId,
+            whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : parsed.whatsappNumber,
+            customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : parsed.customSeoTitle,
+            customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : parsed.customSeoDescription,
           })
         );
       } catch {}
@@ -445,7 +505,12 @@ function useClerkSession(): IveoSession {
         vibeId: merged.vibeId || preferences.vibeId,
         buttonShape: merged.buttonShape || preferences.buttonShape,
         socials: merged.socials !== undefined ? merged.socials : socials,
-        socialsPosition: (merged.socialsPosition as any) || preferences.socialsPosition || 'top',
+        socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
+        googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : googleAnalyticsId,
+        metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : metaPixelId,
+        whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
+        customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : customSeoTitle,
+        customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
         hideFooter: merged.hideIveoFooter || merged.hideIvioFooter || hideFooter,
@@ -463,7 +528,12 @@ function useClerkSession(): IveoSession {
           vibeId: merged.vibeId || preferences.vibeId,
           buttonShape: merged.buttonShape || preferences.buttonShape,
           socials: merged.socials !== undefined ? merged.socials : socials,
-          socialsPosition: (merged.socialsPosition as any) || preferences.socialsPosition || 'top',
+          socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
+          googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : googleAnalyticsId,
+          metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : metaPixelId,
+          whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
+          customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : customSeoTitle,
+          customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
           primaryEmail,
           plan: isPro ? 'pro' : plan,
         }).catch(() => {});
@@ -555,11 +625,16 @@ function useClerkSession(): IveoSession {
     avatarId: serverProfile?.avatarId || null,
     category,
     primaryEmail,
-    vibeId: preferences.vibeId,
-    buttonShape: preferences.buttonShape,
+    vibeId,
+    buttonShape,
     socials,
-    socialsPosition: preferences.socialsPosition || 'top',
+    socialsPosition,
     background: serverProfile?.background || preferences.background || null,
+    googleAnalyticsId,
+    metaPixelId,
+    whatsappNumber,
+    customSeoTitle,
+    customSeoDescription,
     onboardingComplete,
     plan,
     isPro,
@@ -575,20 +650,150 @@ function useClerkSession(): IveoSession {
   };
 }
 
+const DEMO_AVATAR_URL =
+  'https://i.postimg.cc/Rh5vdyVb/file-0000000002448211a254292ad6932ab5.png';
+const DEMO_STORAGE_KEY = 'iveo_demo_session_maya';
+
+function useDemoSession(): IveoSession {
+  const [demoState, setDemoState] = useState<{
+    username: string;
+    displayName: string;
+    bio: string;
+    imageUrl: string | null;
+    vibeId: VibeId;
+    buttonShape: ButtonShape | null;
+    socials: Record<string, string>;
+    socialsPosition: 'top' | 'bottom' | 'both';
+    background: BackgroundConfig | null;
+    googleAnalyticsId: string | null;
+    metaPixelId: string | null;
+    whatsappNumber: string | null;
+    customSeoTitle: string | null;
+    customSeoDescription: string | null;
+    hideFooter: boolean;
+  }>(() => {
+    const defaults = {
+      username: 'maya',
+      displayName: 'Maya Ellis',
+      bio: 'Illustrator and writer. Zines, prints and the occasional essay.',
+      imageUrl: DEMO_AVATAR_URL,
+      vibeId: DEFAULT_PREFERENCES.vibeId,
+      buttonShape: DEFAULT_PREFERENCES.buttonShape,
+      socials: {} as Record<string, string>,
+      socialsPosition: 'top' as 'top' | 'bottom' | 'both',
+      background: null as BackgroundConfig | null,
+      googleAnalyticsId: null as string | null,
+      metaPixelId: null as string | null,
+      whatsappNumber: null as string | null,
+      customSeoTitle: null as string | null,
+      customSeoDescription: null as string | null,
+      hideFooter: false,
+    };
+
+    if (typeof window === 'undefined') return defaults;
+    try {
+      const saved = localStorage.getItem(DEMO_STORAGE_KEY);
+      if (saved) {
+        return { ...defaults, ...JSON.parse(saved) };
+      }
+    } catch {}
+    return defaults;
+  });
+
+  useEffect(() => {
+    const onDemoSync = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail === 'object') {
+        setDemoState(detail);
+      }
+    };
+    window.addEventListener('iveo-demo-session-sync', onDemoSync);
+    return () => window.removeEventListener('iveo-demo-session-sync', onDemoSync);
+  }, []);
+
+  const persistDemo = (updater: (prev: typeof demoState) => typeof demoState) => {
+    setDemoState((prev) => {
+      const next = updater(prev);
+      try {
+        localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      if (typeof window !== 'undefined') {
+        queueMicrotask(() => {
+          window.dispatchEvent(new CustomEvent('iveo-demo-session-sync', { detail: next }));
+        });
+      }
+      return next;
+    });
+  };
+
+  return {
+    ...FALLBACK_SESSION,
+    isLoaded: true,
+    isSignedIn: true,
+    onboardingComplete: true,
+    username: demoState.username,
+    displayName: demoState.displayName,
+    bio: demoState.bio,
+    imageUrl: demoState.imageUrl,
+    vibeId: demoState.vibeId,
+    buttonShape: demoState.buttonShape,
+    socials: demoState.socials,
+    socialsPosition: demoState.socialsPosition,
+    background: demoState.background,
+    googleAnalyticsId: demoState.googleAnalyticsId,
+    metaPixelId: demoState.metaPixelId,
+    whatsappNumber: demoState.whatsappNumber,
+    customSeoTitle: demoState.customSeoTitle,
+    customSeoDescription: demoState.customSeoDescription,
+    isPro: true,
+    plan: 'pro',
+    hideIveoFooter: demoState.hideFooter,
+    hideIvioFooter: demoState.hideFooter,
+    updateUsername: async (newUsername: string) => {
+      const clean = normalizeUsername(newUsername);
+      if (clean) {
+        persistDemo((prev) => ({ ...prev, username: clean }));
+      }
+    },
+    updatePreferences: async (patch) => {
+      persistDemo((prev) => ({
+        ...prev,
+        ...(patch.vibeId !== undefined ? { vibeId: patch.vibeId } : {}),
+        ...(patch.buttonShape !== undefined ? { buttonShape: patch.buttonShape } : {}),
+        ...(patch.socials !== undefined ? { socials: patch.socials } : {}),
+        ...(patch.socialsPosition !== undefined ? { socialsPosition: patch.socialsPosition } : {}),
+        ...(patch.background !== undefined ? { background: patch.background } : {}),
+        ...(patch.googleAnalyticsId !== undefined ? { googleAnalyticsId: patch.googleAnalyticsId } : {}),
+        ...(patch.metaPixelId !== undefined ? { metaPixelId: patch.metaPixelId } : {}),
+        ...(patch.whatsappNumber !== undefined ? { whatsappNumber: patch.whatsappNumber } : {}),
+        ...(patch.customSeoTitle !== undefined ? { customSeoTitle: patch.customSeoTitle } : {}),
+        ...(patch.customSeoDescription !== undefined ? { customSeoDescription: patch.customSeoDescription } : {}),
+        ...(patch.hideIveoFooter !== undefined || patch.hideIvioFooter !== undefined
+          ? { hideFooter: Boolean(patch.hideIveoFooter ?? patch.hideIvioFooter) }
+          : {}),
+      }));
+    },
+    updateProfile: async (profile) => {
+      persistDemo((prev) => ({
+        ...prev,
+        ...(profile.displayName !== undefined ? { displayName: profile.displayName } : {}),
+        ...(profile.bio !== undefined ? { bio: profile.bio } : {}),
+        ...(profile.avatarUrl !== undefined ? { imageUrl: profile.avatarUrl } : {}),
+        ...(profile.background !== undefined ? { background: profile.background } : {}),
+      }));
+    },
+    updateSocials: async (newSocials) => {
+      persistDemo((prev) => ({ ...prev, socials: newSocials }));
+    },
+  };
+}
+
 export function useIveoSession(): IveoSession {
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
     if (params.get('demo') === '1' || params.get('autostart') === '1') {
-      return {
-        ...FALLBACK_SESSION,
-        isSignedIn: true,
-        onboardingComplete: true,
-        username: 'maya',
-        displayName: 'Maya Ellis',
-        bio: 'Illustrator and writer. Zines, prints and the occasional essay.',
-        isPro: true,
-        plan: 'pro',
-      };
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      return useDemoSession();
     }
   }
 

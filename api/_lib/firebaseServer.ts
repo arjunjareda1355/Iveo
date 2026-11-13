@@ -276,6 +276,11 @@ export async function firebaseSaveProfile(
     hideFooter: Boolean(profileData.hideFooter),
     hideFromSearch: Boolean(profileData.hideFromSearch),
     background: profileData.background || null,
+    googleAnalyticsId: profileData.googleAnalyticsId || null,
+    metaPixelId: profileData.metaPixelId || null,
+    whatsappNumber: profileData.whatsappNumber || null,
+    customSeoTitle: profileData.customSeoTitle || null,
+    customSeoDescription: profileData.customSeoDescription || null,
     updatedAt: new Date().toISOString(),
   };
 

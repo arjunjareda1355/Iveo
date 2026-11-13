@@ -13,7 +13,8 @@ export type BlockKind =
   | 'faq'
   | 'vcard'
   | 'coffee'
-  | 'instagram';
+  | 'instagram'
+  | 'youtube';
 export type BlockLayout = 'classic' | 'featured';
 export type EmbedProvider = 'youtube' | 'spotify' | 'soundcloud';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
@@ -143,7 +144,7 @@ export interface Profile {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
-  socialsPosition?: 'top' | 'bottom';
+  socialsPosition?: 'top' | 'bottom' | 'both';
   isPublished: boolean;
   hideFromSearch: boolean;
   onboardingComplete: boolean;
@@ -151,6 +152,11 @@ export interface Profile {
   hideIveoFooter: boolean;
   hideIvioFooter: boolean;
   background?: BackgroundConfig | null;
+  googleAnalyticsId?: string | null;
+  metaPixelId?: string | null;
+  whatsappNumber?: string | null;
+  customSeoTitle?: string | null;
+  customSeoDescription?: string | null;
 }
 
 export interface PublicProfileData {
@@ -163,10 +169,15 @@ export interface PublicProfileData {
   vibeId: VibeId;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
-  socialsPosition?: 'top' | 'bottom';
+  socialsPosition?: 'top' | 'bottom' | 'both';
   hideFromSearch: boolean;
   hideFooter: boolean;
   background?: BackgroundConfig | null;
+  googleAnalyticsId?: string | null;
+  metaPixelId?: string | null;
+  whatsappNumber?: string | null;
+  customSeoTitle?: string | null;
+  customSeoDescription?: string | null;
 }
 
 export interface PublicPageData {

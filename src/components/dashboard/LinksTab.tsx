@@ -22,6 +22,9 @@ import {
   Sparkles,
   UserCheck,
   Search,
+  Instagram,
+  Youtube,
+  Coffee,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -39,6 +42,9 @@ import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
 import { FaqComposer } from '../links/FaqComposer';
 import { VCardComposer } from '../links/VCardComposer';
+import { InstagramComposer } from '../links/InstagramComposer';
+import { CoffeeComposer } from '../links/CoffeeComposer';
+import { YouTubeCardComposer } from '../links/YouTubeCardComposer';
 import { AddBlockModal, FeatureType } from './AddBlockModal';
 import { AnimationControl } from '../links/AnimationControl';
 import { Block, BlockLayout, LinkAnimation } from '../../data/types';
@@ -59,6 +65,7 @@ export const LinksTab: React.FC = () => {
     addTipJar,
     addCoffee,
     addInstagram,
+    addYouTube,
     addFaq,
     addVCard,
     addHeader,
@@ -83,10 +90,19 @@ export const LinksTab: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<'all' | 'links' | 'media_forms' | 'headers'>('all');
 
-  // Active composer: null | 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard'
-  const [activeComposer, setActiveComposer] = useState<
-    'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard' | null
-  >(null);
+  // Active composer
+  type ComposerType =
+    | 'link'
+    | 'embed'
+    | 'signup'
+    | 'header'
+    | 'tip_jar'
+    | 'faq'
+    | 'vcard'
+    | 'instagram'
+    | 'coffee'
+    | 'youtube';
+  const [activeComposer, setActiveComposer] = useState<ComposerType | null>(null);
 
   // Quick inputs for link/header composers
   const [newLinkTitle, setNewLinkTitle] = useState('');
@@ -135,7 +151,16 @@ export const LinksTab: React.FC = () => {
       return b.kind === 'link';
     }
     if (filterCategory === 'media_forms') {
-      return b.kind === 'embed' || b.kind === 'signup' || b.kind === 'tip_jar' || b.kind === 'faq' || b.kind === 'vcard';
+      return (
+        b.kind === 'embed' ||
+        b.kind === 'signup' ||
+        b.kind === 'tip_jar' ||
+        b.kind === 'faq' ||
+        b.kind === 'vcard' ||
+        b.kind === 'instagram' ||
+        b.kind === 'coffee' ||
+        b.kind === 'youtube'
+      );
     }
     if (filterCategory === 'headers') {
       return b.kind === 'header' || b.kind === 'divider';
@@ -145,7 +170,7 @@ export const LinksTab: React.FC = () => {
   });
 
   // Composer opening handlers
-  const handleOpenComposer = (type: 'link' | 'embed' | 'signup' | 'header' | 'tip_jar' | 'faq' | 'vcard') => {
+  const handleOpenComposer = (type: ComposerType) => {
     setEditingBlockId(null);
     if (type === 'embed' && !isPro) {
       openUpgrade('embeds');
@@ -298,7 +323,9 @@ export const LinksTab: React.FC = () => {
     }
   };
 
-  const moveBlock = (index: number, direction: 'up' | 'down') => {
+  const moveBlock = (blockId: string, direction: 'up' | 'down') => {
+    const index = activeBlocks.findIndex((b) => b.id === blockId);
+    if (index === -1) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= activeBlocks.length) return;
 
@@ -399,7 +426,7 @@ export const LinksTab: React.FC = () => {
               >
                 Interactive ({
                   activeBlocks.filter((b) =>
-                    ['embed', 'signup', 'tip_jar', 'faq', 'vcard'].includes(b.kind)
+                    ['embed', 'signup', 'tip_jar', 'faq', 'vcard', 'instagram', 'coffee', 'youtube'].includes(b.kind)
                   ).length
                 })
               </button>
@@ -590,6 +617,36 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
+      {activeComposer === 'instagram' && (
+        <InstagramComposer
+          onAdd={async ({ title, url, badge }) => {
+            await addInstagram(title, url, badge);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'coffee' && (
+        <CoffeeComposer
+          onAdd={async ({ title, url, badge }) => {
+            await addCoffee(title, url, badge);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
+      {activeComposer === 'youtube' && (
+        <YouTubeCardComposer
+          onAdd={async ({ title, url, badge }) => {
+            await addYouTube(title, url, badge);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
       {/* 3. Items List */}
       {activeBlocks.length === 0 ? (
         !activeComposer ? (
@@ -625,7 +682,8 @@ export const LinksTab: React.FC = () => {
         </Card>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {filteredActiveBlocks.map((block, idx) => {
+          {filteredActiveBlocks.map((block) => {
+            const actualIndex = activeBlocks.findIndex((b) => b.id === block.id);
             const isEditing = editingBlockId === block.id;
             const isEmbed = block.kind === 'embed';
             const isHeader = block.kind === 'header';
@@ -634,6 +692,9 @@ export const LinksTab: React.FC = () => {
             const isTipJar = block.kind === 'tip_jar';
             const isFaq = block.kind === 'faq';
             const isVCard = block.kind === 'vcard';
+            const isInstagram = block.kind === 'instagram';
+            const isCoffee = block.kind === 'coffee';
+            const isYouTube = block.kind === 'youtube';
             const isLink = block.kind === 'link';
             const isProtected = isLink && (protectedIds.has(block.id) || block.isProtected === true);
 
@@ -675,6 +736,12 @@ export const LinksTab: React.FC = () => {
                           <HelpCircle size={18} className="text-blue-500" strokeWidth={1.5} />
                         ) : isVCard ? (
                           <UserCheck size={18} className="text-emerald-600" strokeWidth={1.5} />
+                        ) : isInstagram ? (
+                          <Instagram size={18} className="text-rose-500" strokeWidth={1.75} />
+                        ) : isYouTube ? (
+                          <Youtube size={18} className="text-red-600" strokeWidth={1.75} />
+                        ) : isCoffee ? (
+                          <Coffee size={18} className="text-amber-600" strokeWidth={1.75} />
                         ) : isHeader ? (
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
@@ -704,8 +771,8 @@ export const LinksTab: React.FC = () => {
                               ? (block.vcard?.fullName ? `Contact: ${block.vcard.fullName}` : block.title || 'Contact Card')
                               : block.title || (isEmbed ? 'Embed' : 'Untitled')}
                           </span>
-                          {block.badge && (
-                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-neutral-200 dark:bg-neutral-800 text-ink uppercase">
+                          {block.badge && !isInstagram && !isYouTube && !isCoffee && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-neutral-200 dark:bg-neutral-800 text-ink uppercase max-w-[120px] truncate shrink-0">
                               {block.badge}
                             </span>
                           )}
@@ -762,6 +829,25 @@ export const LinksTab: React.FC = () => {
                                 <span
                                   title={copy.dashboard.analytics.linksTab.titleTooltip}
                                   className="shrink-0 whitespace-nowrap ml-1"
+                                >
+                                  · {clickText}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {(isInstagram || isYouTube || isCoffee) && block.url && (() => {
+                          const clicks = clickCounts.get(block.id) || 0;
+                          const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
+                          return (
+                            <div className="flex items-center text-[12px] text-muted leading-tight overflow-hidden gap-1">
+                              <span className="truncate shrink min-w-0">
+                                {block.badge ? `${block.badge} · ${block.url}` : block.url}
+                              </span>
+                              {clicks > 0 && (
+                                <span
+                                  title={copy.dashboard.analytics.linksTab.titleTooltip}
+                                  className="shrink-0 whitespace-nowrap"
                                 >
                                   · {clickText}
                                 </span>
@@ -834,19 +920,19 @@ export const LinksTab: React.FC = () => {
                       <div className="flex flex-col">
                         <button
                           type="button"
-                          disabled={idx === 0}
-                          onClick={() => moveBlock(idx, 'up')}
+                          disabled={actualIndex <= 0}
+                          onClick={() => moveBlock(block.id, 'up')}
                           aria-label="Move up"
-                          className="text-muted hover:text-ink disabled:opacity-30 disabled:hover:text-muted p-0.5"
+                          className="text-muted hover:text-ink disabled:opacity-30 disabled:hover:text-muted p-0.5 cursor-pointer"
                         >
                           <ChevronUp size={14} />
                         </button>
                         <button
                           type="button"
-                          disabled={idx === activeBlocks.length - 1}
-                          onClick={() => moveBlock(idx, 'down')}
+                          disabled={actualIndex === -1 || actualIndex >= activeBlocks.length - 1}
+                          onClick={() => moveBlock(block.id, 'down')}
                           aria-label="Move down"
-                          className="text-muted hover:text-ink disabled:opacity-30 disabled:hover:text-muted p-0.5"
+                          className="text-muted hover:text-ink disabled:opacity-30 disabled:hover:text-muted p-0.5 cursor-pointer"
                         >
                           <ChevronDown size={14} />
                         </button>
@@ -929,6 +1015,74 @@ export const LinksTab: React.FC = () => {
                       await updateBlock(block.id, {
                         title,
                         faq: { items },
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isVCard ? (
+                  <VCardComposer
+                    initialConfig={block.vcard || undefined}
+                    onSave={async (cfg, title) => {
+                      await updateBlock(block.id, {
+                        title: title || cfg.fullName,
+                        vcard: cfg,
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                    defaultFullName={displayName || username || ''}
+                    defaultEmail={primaryEmail || ''}
+                  />
+                ) : isInstagram ? (
+                  <InstagramComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      badge: block.badge || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, badge }) => {
+                      await updateBlock(block.id, {
+                        title,
+                        url,
+                        badge: badge || null,
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isCoffee ? (
+                  <CoffeeComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      badge: block.badge || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, badge }) => {
+                      await updateBlock(block.id, {
+                        title,
+                        url,
+                        badge: badge || null,
+                      });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                ) : isYouTube ? (
+                  <YouTubeCardComposer
+                    initialValues={{
+                      title: block.title,
+                      url: block.url || '',
+                      badge: block.badge || undefined,
+                    }}
+                    isEditing
+                    onAdd={async ({ title, url, badge }) => {
+                      await updateBlock(block.id, {
+                        title,
+                        url,
+                        badge: badge || null,
                       });
                       setEditingBlockId(null);
                     }}
@@ -1135,6 +1289,18 @@ export const LinksTab: React.FC = () => {
                 ? 'Delete this embed?'
                 : deletingBlock.kind === 'header'
                 ? 'Delete this header?'
+                : deletingBlock.kind === 'vcard'
+                ? 'Delete this contact card?'
+                : deletingBlock.kind === 'faq'
+                ? 'Delete this FAQ block?'
+                : deletingBlock.kind === 'tip_jar'
+                ? 'Delete this tip jar?'
+                : deletingBlock.kind === 'instagram'
+                ? 'Delete this Instagram card?'
+                : deletingBlock.kind === 'youtube'
+                ? 'Delete this YouTube card?'
+                : deletingBlock.kind === 'coffee'
+                ? 'Delete this coffee block?'
                 : 'Delete this link?'}
             </h3>
             <p className="mt-2 text-[14px] text-muted leading-relaxed">
@@ -1174,12 +1340,8 @@ export const LinksTab: React.FC = () => {
         onSelectFeature={async (type: FeatureType) => {
           if (type === 'divider') {
             await addDivider();
-          } else if (type === 'coffee') {
-            await addCoffee('Buy Me a Coffee', 'https://buymeacoffee.com');
-          } else if (type === 'instagram') {
-            await addInstagram('Instagram Profile', 'https://instagram.com');
           } else {
-            handleOpenComposer(type as any);
+            handleOpenComposer(type as ComposerType);
           }
         }}
         isPro={isPro}

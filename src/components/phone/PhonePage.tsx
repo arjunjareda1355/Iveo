@@ -11,7 +11,8 @@ export interface PhoneProfile {
   initials?: string;
   links?: readonly string[];
   socials?: Record<string, string>;
-  socialsPosition?: 'top' | 'bottom';
+  socialsPosition?: 'top' | 'bottom' | 'both';
+  whatsappNumber?: string | null;
   background?: BackgroundConfig | null;
 }
 

@@ -1,15 +1,23 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Share2, X } from 'lucide-react';
+import { Share2, X, QrCode, IdCard, Download, Contact, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
-import { pageUrl, SITE_ORIGIN } from '../../lib/site';
+import { pageUrl } from '../../lib/site';
 import {
   makeQrSvg,
   makeQrPngDataUrl,
   downloadPng,
   downloadSvg,
 } from '../../lib/qr';
+import {
+  downloadVCard,
+  downloadBusinessCardPng,
+  generateBusinessCardPng,
+  dataUrlToBlob,
+  isLightColor,
+} from '../../lib/businessCard';
+import { VIBES } from '../../lib/vibes';
 import { TrackedLinkSection } from './TrackedLinkSection';
 import { LinkPreviewSection } from './LinkPreviewSection';
 
@@ -44,7 +52,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   isPublished = true,
 }) => {
   const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
   const [copied, setCopied] = useState(false);
+  const [copiedCard, setCopiedCard] = useState(false);
+  const [isDownloadingCard, setIsDownloadingCard] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#0A0A0A');
   const [showBrandedFrame, setShowBrandedFrame] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
@@ -58,6 +69,15 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const fullUrl = pageUrl(username);
   const qrUrl = pageUrl(username, { src: 'qr' });
   const displayAddress = `iveo.site/${username}`;
+  const activeVibe = VIBES.find((v) => v.id === vibeId) || VIBES[0];
+  const cardTheme = {
+    bg: activeVibe.tokens.bg,
+    text: activeVibe.tokens.text,
+    muted: activeVibe.tokens.muted,
+    accent: activeVibe.tokens.buttonBg,
+    buttonBg: activeVibe.tokens.buttonBg,
+  };
+  const cardBgIsLight = isLightColor(cardTheme.bg);
 
   // Generate QR lazily when opened or when color changes
   useEffect(() => {
@@ -185,6 +205,80 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     }
   };
 
+  const handleSaveContactVcf = () => {
+    downloadVCard({
+      displayName: displayName || username,
+      username,
+      bio,
+      pageUrl: fullUrl,
+      avatarUrl,
+    });
+    showToast('Contact card (.vcf) downloaded');
+  };
+
+  const handleDownloadBusinessCard = async () => {
+    setIsDownloadingCard(true);
+    try {
+      await downloadBusinessCardPng({
+        displayName: displayName || username,
+        username,
+        bio,
+        pageUrl: fullUrl,
+        avatarUrl,
+        qrDataUrl: qrPngDataUrl,
+        theme: cardTheme,
+      });
+      showToast('Business card (1920×1080 PNG) downloaded');
+    } catch {
+      showToast('Could not generate card PNG. Try downloading the QR or .vcf.');
+    } finally {
+      setIsDownloadingCard(false);
+    }
+  };
+
+  const handleShareCard = async () => {
+    const cardText = `Digital Business Card: ${displayName || username} (@${username})\n${bio ? `${bio}\n` : ''}Connect: ${fullUrl}`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        const pngDataUrl = await generateBusinessCardPng({
+          displayName: displayName || username,
+          username,
+          bio,
+          pageUrl: fullUrl,
+          avatarUrl,
+          qrDataUrl: qrPngDataUrl,
+          theme: cardTheme,
+        });
+        const blob = dataUrlToBlob(pngDataUrl);
+        const file = new File([blob], `iveo-card-${username}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `${displayName || username}'s Business Card`,
+            text: cardText,
+            files: [file],
+          });
+          return;
+        }
+      } catch {}
+
+      try {
+        await navigator.share({
+          title: `${displayName || username}'s Business Card`,
+          text: cardText,
+          url: fullUrl,
+        });
+        return;
+      } catch {}
+    }
+
+    try {
+      await navigator.clipboard.writeText(cardText);
+      setCopiedCard(true);
+      showToast('Business card info copied');
+      setTimeout(() => setCopiedCard(false), 1800);
+    } catch {}
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -221,6 +315,128 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
           </button>
         </div>
 
+        <div className="mt-4 p-1 bg-surface-2 rounded-[10px] border border-border flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('share')}
+            className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'share'
+                ? 'bg-surface text-ink shadow-2xs border border-border/60'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            <QrCode size={14} />
+            <span>Share &amp; QR</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('card')}
+            className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'card'
+                ? 'bg-surface text-ink shadow-2xs border border-border/60'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            <IdCard size={14} />
+            <span>Business Card</span>
+          </button>
+        </div>
+
+        {activeTab === 'card' ? (
+          <div className="mt-5 flex flex-col gap-4">
+            <div
+              className={`w-full rounded-[16px] p-5 shadow-md relative overflow-hidden flex flex-col justify-between aspect-[1.7/1] select-none border ${
+                cardBgIsLight ? 'border-black/10' : 'border-white/15'
+              }`}
+              style={{
+                backgroundColor: cardTheme.bg,
+                color: cardTheme.text,
+              }}
+            >
+              <div
+                className={`absolute w-40 h-40 rounded-full pointer-events-none blur-2xl ${
+                  cardBgIsLight ? '-bottom-16 -left-16 opacity-[0.06]' : '-top-14 -right-14 opacity-20'
+                }`}
+                style={{ backgroundColor: cardTheme.accent }}
+              />
+              <div className="flex items-start justify-between gap-3 relative z-10">
+                <div className="flex items-center gap-3 min-w-0">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName || username}
+                      className={`w-12 h-12 rounded-full object-cover border-2 shrink-0 ${
+                        cardBgIsLight ? 'border-black/10' : 'border-white/25'
+                      }`}
+                    />
+                  ) : (
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-[18px] shrink-0 border ${
+                        cardBgIsLight ? 'bg-black/5 border-black/10' : 'bg-white/15 border-white/20'
+                      }`}
+                    >
+                      {(displayName || username).slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <h4 className="text-[16px] font-bold leading-tight truncate">
+                      {displayName || username}
+                    </h4>
+                    <span className="text-[12px] opacity-75 font-mono">@{username}</span>
+                  </div>
+                </div>
+                {qrPngDataUrl && (
+                  <div className="w-12 h-12 bg-white p-0.5 rounded-lg shrink-0 shadow-xs border border-black/5">
+                    <img src={qrPngDataUrl} alt="" className="w-full h-full object-contain rounded" />
+                  </div>
+                )}
+              </div>
+
+              {bio && (
+                <p className="text-[12px] opacity-80 line-clamp-2 leading-relaxed my-2 relative z-10">
+                  {bio}
+                </p>
+              )}
+
+              <div
+                className={`pt-2 border-t flex items-center justify-between text-[11px] opacity-70 font-mono relative z-10 ${
+                  cardBgIsLight ? 'border-black/10' : 'border-white/15'
+                }`}
+              >
+                <span>iveo</span>
+                <span>{displayAddress}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleDownloadBusinessCard}
+                disabled={isDownloadingCard}
+                fullWidth
+              >
+                <Download size={15} />
+                <span>{isDownloadingCard ? 'Rendering 1920×1080 PNG...' : 'Download HD Business Card (.png)'}</span>
+              </Button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" size="md" onClick={handleSaveContactVcf} fullWidth>
+                  <Contact size={15} />
+                  <span>Contact (.vcf)</span>
+                </Button>
+                <Button variant="secondary" size="md" onClick={handleShareCard} fullWidth>
+                  {copiedCard ? <Check size={15} className="text-emerald-600" /> : <Share2 size={15} />}
+                  <span>{copiedCard ? 'Copied!' : 'Share Card'}</span>
+                </Button>
+              </div>
+            </div>
+
+            <p className="text-center text-[12px] text-muted leading-relaxed">
+              Full HD 1920×1080 business card matched to your active Vibe with an embedded scannable QR code.
+            </p>
+          </div>
+        ) : (
         <div className="mt-5 flex flex-col gap-5">
           {/* 1. Link row */}
           <div className="flex items-center gap-2">
@@ -248,7 +464,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
               fullWidth
             >
               <Share2 size={16} strokeWidth={1.5} />
-              <span>Share...</span>
+              <span>More sharing options...</span>
             </Button>
           )}
 
@@ -429,6 +645,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

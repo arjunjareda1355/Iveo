@@ -94,16 +94,56 @@ async function startServer() {
   app.get('/api/check-username', adaptWebHandler(checkUsernameModule.GET));
   app.post('/api/check-username', adaptWebHandler(checkUsernameModule.POST));
 
-  // 2. OpenGraph dynamic image (with graceful SVG fallback in Node ESM dev)
+  // 2. OpenGraph dynamic image (fast Node-native SVG banner styled to user's active Vibe)
   app.get('/api/og', async (req, res) => {
+    const escapeXml = (str: string) =>
+      String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+
     try {
-      const ogModule = await import('./api/og.ts');
-      const handler = adaptWebHandler(ogModule.GET);
-      return handler(req, res);
+      const { normalizeUsername } = await import('./api/_lib/usernames.ts');
+      const { loadPublicPage } = await import('./api/_lib/publicPage.ts');
+      const { getServerVibe } = await import('./api/_lib/vibes.ts');
+
+      const rawUser = typeof req.query.u === 'string' ? req.query.u : '';
+      const username = normalizeUsername(rawUser);
+      const page = username ? await loadPublicPage(username) : null;
+
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+
+      if (!page) {
+        return res.status(200).send(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FAFAFA"/><text x="96" y="290" font-family="Inter,system-ui,sans-serif" font-size="112" font-weight="700" letter-spacing="-4" fill="#0A0A0A">iveo</text><text x="96" y="365" font-family="Inter,system-ui,sans-serif" font-size="38" fill="#666666">One link for everything you make.</text></svg>`
+        );
+      }
+
+      const vibe = getServerVibe(page.vibeId);
+      const safeName = escapeXml((page.displayName || `@${page.username}`).slice(0, 36));
+      const safeHandle = escapeXml(`@${page.username}`);
+      const safeBio = escapeXml((page.bio || `Links & projects by @${page.username}`).slice(0, 88));
+      const initials = escapeXml((page.displayName || page.username).slice(0, 2).toUpperCase());
+
+      return res.status(200).send(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+          <rect width="1200" height="630" fill="${escapeXml(vibe.bg)}"/>
+          <circle cx="176" cy="216" r="88" fill="${escapeXml(vibe.avatarBg)}"/>
+          <text x="176" y="236" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="60" font-weight="700" fill="${escapeXml(vibe.text)}">${initials}</text>
+          <text x="304" y="198" font-family="Inter,system-ui,sans-serif" font-size="60" font-weight="700" fill="${escapeXml(vibe.text)}">${safeName}</text>
+          <text x="304" y="252" font-family="ui-monospace,monospace" font-size="30" fill="${escapeXml(vibe.muted)}">${safeHandle}</text>
+          <text x="96" y="395" font-family="Inter,system-ui,sans-serif" font-size="30" fill="${escapeXml(vibe.muted)}">${safeBio}</text>
+          <line x1="96" y1="496" x2="1104" y2="496" stroke="${escapeXml(vibe.muted)}" stroke-opacity="0.22" stroke-width="2"/>
+          <text x="96" y="556" font-family="ui-monospace,monospace" font-size="26" fill="${escapeXml(vibe.muted)}">iveo.site/${escapeXml(page.username)}</text>
+          <text x="1104" y="556" text-anchor="end" font-family="Inter,system-ui,sans-serif" font-size="36" font-weight="700" letter-spacing="-1.5" fill="${escapeXml(vibe.text)}">iveo</text>
+        </svg>`
+      );
     } catch {
-      // In dev environment where @vercel/og wasm requires Edge, fallback to clean svg banner
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.send(
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      return res.status(200).send(
         `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FAFAFA"/><text x="100" y="300" font-family="sans-serif" font-size="72" font-weight="bold" fill="#0A0A0A">iveo</text><text x="100" y="380" font-family="sans-serif" font-size="36" fill="#666666">One link for everything you make.</text></svg>`
       );
     }

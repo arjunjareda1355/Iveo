@@ -476,7 +476,19 @@ export async function dbClaimUsername(
       insReq.input('avatarId', sql.NVarChar(64), profileData?.avatarId || null);
       insReq.input('vibeId', sql.NVarChar(32), profileData?.vibeId || 'clean');
       insReq.input('buttonShape', sql.NVarChar(32), profileData?.buttonShape || 'rounded');
-      insReq.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify({ links: profileData?.socials || {}, position: profileData?.socialsPosition || 'top' }));
+      insReq.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify({
+        links: profileData?.socials || {},
+        position: profileData?.socialsPosition || 'top',
+        email: primaryEmail || null,
+        background: profileData?.background || null,
+        integrations: {
+          googleAnalyticsId: profileData?.googleAnalyticsId || null,
+          metaPixelId: profileData?.metaPixelId || null,
+          whatsappNumber: profileData?.whatsappNumber || null,
+          customSeoTitle: profileData?.customSeoTitle || null,
+          customSeoDescription: profileData?.customSeoDescription || null,
+        },
+      }));
       insReq.input('plan', sql.NVarChar(32), effectivePlan);
 
       await insReq.query(`
@@ -587,17 +599,19 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
       if (res.recordset.length > 0) {
         const row = res.recordset[0];
         let socials: Record<string, string> = {};
-        let socialsPosition: 'top' | 'bottom' = 'top';
+        let socialsPosition: 'top' | 'bottom' | 'both' = 'top';
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
+        let integrations: Record<string, any> = {};
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
             if (parsed && typeof parsed === 'object' && 'links' in parsed) {
               socials = parsed.links || {};
-              socialsPosition = parsed.position || 'top';
+              socialsPosition = parsed.position === 'bottom' ? 'bottom' : parsed.position === 'both' ? 'both' : 'top';
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
+              integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
             } else if (parsed && typeof parsed === 'object') {
               socials = parsed;
             }
@@ -620,6 +634,11 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
+          googleAnalyticsId: integrations.googleAnalyticsId || null,
+          metaPixelId: integrations.metaPixelId || null,
+          whatsappNumber: integrations.whatsappNumber || null,
+          customSeoTitle: integrations.customSeoTitle || null,
+          customSeoDescription: integrations.customSeoDescription || null,
           isPublished: Boolean(row.is_published),
         };
       }
@@ -667,12 +686,17 @@ export async function dbSaveProfile(profile: {
   vibeId?: string;
   buttonShape?: string | null;
   socials?: Record<string, string>;
-  socialsPosition?: 'top' | 'bottom';
+  socialsPosition?: 'top' | 'bottom' | 'both';
   primaryEmail?: string | null;
   plan?: string;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
   background?: any;
+  googleAnalyticsId?: string | null;
+  metaPixelId?: string | null;
+  whatsappNumber?: string | null;
+  customSeoTitle?: string | null;
+  customSeoDescription?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const cleanUsername = profile.username.toLowerCase().trim();
 
@@ -695,6 +719,13 @@ export async function dbSaveProfile(profile: {
     position: profile.socialsPosition || 'top',
     email: profile.primaryEmail || null,
     background: profile.background !== undefined ? profile.background : null,
+    integrations: {
+      googleAnalyticsId: profile.googleAnalyticsId ?? null,
+      metaPixelId: profile.metaPixelId ?? null,
+      whatsappNumber: profile.whatsappNumber ?? null,
+      customSeoTitle: profile.customSeoTitle ?? null,
+      customSeoDescription: profile.customSeoDescription ?? null,
+    },
   };
 
   const calculatedAvatarType = profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default'));
@@ -786,17 +817,19 @@ export async function dbGetProfile(username: string): Promise<any | null> {
       if (res.recordset.length > 0) {
         const row = res.recordset[0];
         let socials: Record<string, string> = {};
-        let socialsPosition: 'top' | 'bottom' = 'top';
+        let socialsPosition: 'top' | 'bottom' | 'both' = 'top';
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
+        let integrations: Record<string, any> = {};
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
             if (parsed && typeof parsed === 'object' && 'links' in parsed) {
               socials = parsed.links || {};
-              socialsPosition = parsed.position || 'top';
+              socialsPosition = parsed.position === 'bottom' ? 'bottom' : parsed.position === 'both' ? 'both' : 'top';
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
+              integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
             } else if (parsed && typeof parsed === 'object') {
               socials = parsed;
             }
@@ -819,6 +852,11 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
+          googleAnalyticsId: integrations.googleAnalyticsId || null,
+          metaPixelId: integrations.metaPixelId || null,
+          whatsappNumber: integrations.whatsappNumber || null,
+          customSeoTitle: integrations.customSeoTitle || null,
+          customSeoDescription: integrations.customSeoDescription || null,
           isPublished: Boolean(row.is_published),
         };
       }

@@ -25,8 +25,13 @@ export interface IveoPreferences {
   avatarId?: string | null;
   category?: string | null;
   socials?: Record<string, string>;
-  socialsPosition?: 'top' | 'bottom';
+  socialsPosition?: 'top' | 'bottom' | 'both';
   background?: BackgroundConfig | null;
+  googleAnalyticsId?: string | null;
+  metaPixelId?: string | null;
+  whatsappNumber?: string | null;
+  customSeoTitle?: string | null;
+  customSeoDescription?: string | null;
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -46,6 +51,11 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   socials: {},
   socialsPosition: 'top',
   background: null,
+  googleAnalyticsId: null,
+  metaPixelId: null,
+  whatsappNumber: null,
+  customSeoTitle: null,
+  customSeoDescription: null,
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -126,11 +136,41 @@ export function parsePreferences(raw: unknown): IveoPreferences {
       ? (record.socials as Record<string, string>)
       : {};
 
-  const socialsPosition = record.socialsPosition === 'bottom' ? 'bottom' : 'top';
+  const socialsPosition =
+    record.socialsPosition === 'bottom'
+      ? 'bottom'
+      : record.socialsPosition === 'both'
+        ? 'both'
+        : 'top';
 
   const background =
     record.background && typeof record.background === 'object'
       ? (record.background as BackgroundConfig)
+      : null;
+
+  const googleAnalyticsId =
+    typeof record.googleAnalyticsId === 'string' && record.googleAnalyticsId.trim().length > 0
+      ? record.googleAnalyticsId.trim().toUpperCase()
+      : null;
+
+  const metaPixelId =
+    typeof record.metaPixelId === 'string' && record.metaPixelId.trim().length > 0
+      ? record.metaPixelId.trim()
+      : null;
+
+  const whatsappNumber =
+    typeof record.whatsappNumber === 'string' && record.whatsappNumber.trim().length > 0
+      ? record.whatsappNumber.trim()
+      : null;
+
+  const customSeoTitle =
+    typeof record.customSeoTitle === 'string' && record.customSeoTitle.trim().length > 0
+      ? record.customSeoTitle.trim()
+      : null;
+
+  const customSeoDescription =
+    typeof record.customSeoDescription === 'string' && record.customSeoDescription.trim().length > 0
+      ? record.customSeoDescription.trim()
       : null;
 
   return {
@@ -148,5 +188,10 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     socials,
     socialsPosition,
     background,
+    googleAnalyticsId,
+    metaPixelId,
+    whatsappNumber,
+    customSeoTitle,
+    customSeoDescription,
   };
 }

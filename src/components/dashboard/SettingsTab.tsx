@@ -7,6 +7,7 @@ import { ProBadge } from '../plan/ProBadge';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { ShareDialog } from '../share/ShareDialog';
 import { SubscriptionCard } from '../plan/SubscriptionCard';
+import { IntegrationsCard } from './IntegrationsCard';
 import { ExportDataCard } from '../account/ExportDataCard';
 import { DeleteAccountCard } from '../account/DeleteAccountCard';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -340,7 +341,10 @@ export const SettingsTab: React.FC = () => {
         </div>
       </Card>
 
-      {/* 3. Your Data Card */}
+      {/* 3. Apps & Integrations Card (Google Analytics, Meta Pixel, WhatsApp, SEO) */}
+      <IntegrationsCard />
+
+      {/* 4. Your Data Card */}
       <ExportDataCard />
 
       {/* 4. Session Card */}
@@ -369,6 +373,9 @@ export const SettingsTab: React.FC = () => {
           onClose={() => setIsShareOpen(false)}
           username={session.username}
           displayName={session.displayName}
+          bio={session.bio}
+          avatarUrl={session.imageUrl}
+          vibeId={session.vibeId}
           isPublished={true}
         />
       )}

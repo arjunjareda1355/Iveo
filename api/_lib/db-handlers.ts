@@ -165,6 +165,11 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         hideFromSearch: Boolean(profile.hideFromSearch),
         hideFooter: Boolean(profile.hideFooter),
         background: profile.background || null,
+        googleAnalyticsId: profile.googleAnalyticsId || null,
+        metaPixelId: profile.metaPixelId || null,
+        whatsappNumber: profile.whatsappNumber || null,
+        customSeoTitle: profile.customSeoTitle || null,
+        customSeoDescription: profile.customSeoDescription || null,
       },
       links: filteredBlocks,
     });
@@ -319,6 +324,11 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
       background: body.background,
+      googleAnalyticsId: body.googleAnalyticsId,
+      metaPixelId: body.metaPixelId,
+      whatsappNumber: body.whatsappNumber,
+      customSeoTitle: body.customSeoTitle,
+      customSeoDescription: body.customSeoDescription,
     });
 
     if (saveResult && !saveResult.ok) {

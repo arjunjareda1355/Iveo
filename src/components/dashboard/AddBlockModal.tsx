@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Coffee,
   Instagram,
+  Youtube,
 } from 'lucide-react';
 import { ProBadge } from '../plan/ProBadge';
 import { Button } from '../ui/Button';
@@ -26,6 +27,7 @@ export type FeatureType =
   | 'tip_jar'
   | 'coffee'
   | 'instagram'
+  | 'youtube'
   | 'faq'
   | 'header'
   | 'divider';
@@ -88,6 +90,17 @@ const FEATURES: FeatureOption[] = [
     icon: Instagram,
     iconBg: 'bg-rose-50',
     iconColor: 'text-rose-600',
+    badge: 'Popular',
+  },
+  {
+    id: 'youtube',
+    title: 'YouTube Showcase',
+    description: 'Feature your YouTube channel with subscriber badge and direct subscribe action',
+    category: 'links',
+    icon: Youtube,
+    iconBg: 'bg-red-50',
+    iconColor: 'text-red-600',
+    badge: 'New',
   },
 
   // Audience & Community

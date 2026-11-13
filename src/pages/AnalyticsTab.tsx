@@ -191,6 +191,9 @@ export const AnalyticsTab: React.FC = () => {
           onClose={() => setIsShareOpen(false)}
           username={session.username}
           displayName={session.displayName}
+          bio={session.bio}
+          avatarUrl={session.imageUrl}
+          vibeId={session.vibeId}
           isPublished={true}
         />
       )}

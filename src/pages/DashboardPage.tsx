@@ -95,6 +95,7 @@ const DashboardContent: React.FC = () => {
     bio: session.bio || 'Your bio goes here.',
     socials: session.socials,
     socialsPosition: session.socialsPosition,
+    whatsappNumber: session.whatsappNumber,
     background: session.background,
   };
 
@@ -351,6 +352,9 @@ const DashboardContent: React.FC = () => {
           onClose={() => setIsShareOpen(false)}
           username={session.username}
           displayName={session.displayName}
+          bio={session.bio}
+          avatarUrl={session.imageUrl}
+          vibeId={previewVibeId}
           isPublished={true}
         />
       )}

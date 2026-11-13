@@ -9,6 +9,8 @@ import {
   Share2,
   ArrowRight,
   Instagram,
+  Youtube,
+  MessageCircle,
 } from 'lucide-react';
 import { Vibe } from '../../lib/vibes';
 import { PageBlock } from '../../data/types';
@@ -247,19 +249,28 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         </p>
       )}
 
-      {/* Top Socials placement if configured or default */}
-      {(profile?.socialsPosition === 'top' || !profile?.socialsPosition) && activeSocialEntries.length > 0 && (
+      {/* Top Socials placement if configured ('top' or 'both') */}
+      {(profile?.socialsPosition === 'top' || profile?.socialsPosition === 'both' || !profile?.socialsPosition) &&
+        activeSocialEntries.length > 0 && (
         <div
           className="flex items-center justify-center flex-wrap shrink-0"
           style={{
             marginTop: `${Math.round(14 * scale)}px`,
-            gap: `${Math.round(14 * scale)}px`,
-            color: tokens.text,
-            opacity: 0.85,
+            gap: `${Math.round(8 * scale)}px`,
           }}
         >
           {activeSocialEntries.map(([platform, url]) => {
             const cleanUrl = formatExternalUrl(url);
+            const btnStyle: React.CSSProperties = {
+              width: `${Math.round(36 * scale)}px`,
+              height: `${Math.round(36 * scale)}px`,
+              backgroundColor: tokens.buttonBg,
+              color: tokens.buttonText,
+              border: tokens.buttonBorder
+                ? `1px solid ${tokens.buttonBorder}`
+                : `1px solid ${tokens.text}1A`,
+              boxShadow: tokens.buttonShadow || '0 1px 2px rgba(0,0,0,0.04)',
+            };
             if (isPublicPage) {
               return (
                 <a
@@ -268,10 +279,11 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   target="_blank"
                   rel="noopener noreferrer nofollow"
                   aria-label={platform}
-                  className="transition-transform duration-120 hover:scale-110 active:scale-95"
-                  style={{ color: tokens.text }}
+                  title={platform.charAt(0).toUpperCase() + platform.slice(1)}
+                  className="rounded-full flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
+                  style={btnStyle}
                 >
-                  <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+                  <SocialIcon platform={platform} size={Math.round(16 * scale)} />
                 </a>
               );
             }
@@ -279,9 +291,10 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <span
                 key={platform}
                 title={`${platform}: ${url}`}
-                className="opacity-80 hover:opacity-100 transition-opacity"
+                className="rounded-full flex items-center justify-center transition-transform hover:scale-105"
+                style={btnStyle}
               >
-                <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+                <SocialIcon platform={platform} size={Math.round(16 * scale)} />
               </span>
             );
           })}
@@ -292,7 +305,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       <div
         className="w-full flex flex-col"
         style={{
-          marginTop: `${Math.round((activeSocialEntries.length > 0 && (profile?.socialsPosition === 'top' || !profile?.socialsPosition) ? 16 : 24) * scale)}px`,
+          marginTop: `${Math.round(
+            (activeSocialEntries.length > 0 &&
+            (profile?.socialsPosition === 'top' || profile?.socialsPosition === 'both' || !profile?.socialsPosition)
+              ? 18
+              : 24) * scale
+          )}px`,
           gap: `${Math.round(10 * scale)}px`,
         }}
       >
@@ -494,8 +512,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[20px]">☕</span>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[18px]">☕</span>
                   <span
                     className="font-semibold leading-tight"
                     style={{ fontSize: `${Math.max(13, Math.round(15 * scale))}px` }}
@@ -503,7 +521,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                     {block.title || 'Buy Me a Coffee'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 my-2.5">
+                {block.badge && (
+                  <p className="text-[11px] opacity-75 text-center leading-snug mb-1">
+                    {block.badge}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 my-2">
                   {[1, 3, 5].map((count) => (
                     <a
                       key={count}
@@ -511,7 +534,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       target={isPublicPage ? '_blank' : undefined}
                       rel={isPublicPage ? 'noopener noreferrer' : undefined}
                       onClick={isPublicPage ? () => onLinkClick?.(block) : undefined}
-                      className="px-2.5 py-1 rounded-full text-[12px] font-medium border border-current/20 hover:border-current/60 transition-colors cursor-pointer"
+                      className="px-2.5 py-1 rounded-full text-[11px] font-medium border border-current/20 hover:border-current/60 transition-colors cursor-pointer"
                       style={{ color: tokens.buttonText }}
                     >
                       {count} ☕ (${count * 3})
@@ -526,21 +549,21 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                     onClick={() => onLinkClick?.(block)}
                     className="mt-1 w-full py-2 px-3 text-center rounded-[10px] text-[13px] font-semibold transition-transform active:scale-[0.98]"
                     style={{
-                      backgroundColor: tokens.text,
-                      color: tokens.bg,
+                      backgroundColor: tokens.buttonText,
+                      color: tokens.buttonBg,
                     }}
                   >
-                    Support with a Coffee ☕
+                    Support with a Coffee
                   </a>
                 ) : (
                   <div
                     className="mt-1 w-full py-2 px-3 text-center rounded-[10px] text-[13px] font-semibold"
                     style={{
-                      backgroundColor: tokens.text,
-                      color: tokens.bg,
+                      backgroundColor: tokens.buttonText,
+                      color: tokens.buttonBg,
                     }}
                   >
-                    Support with a Coffee ☕
+                    Support with a Coffee
                   </div>
                 )}
               </div>
@@ -561,23 +584,23 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   border: tokens.buttonBorder
                     ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
                     : '1px solid rgba(0,0,0,0.08)',
-                  padding: `${Math.round(12 * scale)}px ${Math.round(16 * scale)}px`,
+                  padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
                   boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
-                <div className="flex items-center gap-3 min-w-0 pr-2">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-xs">
-                    <Instagram size={18} strokeWidth={2} />
+                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                    <Instagram size={16} strokeWidth={2} />
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span
-                      className="font-semibold truncate text-[14px] leading-tight"
+                      className="font-semibold truncate text-[13px] leading-tight"
                       style={{ color: tokens.buttonText }}
                     >
                       {block.title || 'Instagram'}
                     </span>
-                    <span className="text-[11px] opacity-70 truncate">
-                      Follow for stories & updates
+                    <span className="text-[11px] opacity-75 truncate">
+                      {block.badge || 'Follow for stories & updates'}
                     </span>
                   </div>
                 </div>
@@ -588,23 +611,77 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => onLinkClick?.(block)}
-                    className="px-3 py-1.5 rounded-full text-[12px] font-semibold shrink-0 transition-transform active:scale-95"
+                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-transform active:scale-95"
                     style={{
-                      backgroundColor: tokens.text,
-                      color: tokens.bg,
+                      backgroundColor: tokens.buttonText,
+                      color: tokens.buttonBg,
                     }}
                   >
                     Follow
                   </a>
                 ) : (
                   <span
-                    className="px-3 py-1.5 rounded-full text-[12px] font-semibold shrink-0"
+                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0"
                     style={{
-                      backgroundColor: tokens.text,
-                      color: tokens.bg,
+                      backgroundColor: tokens.buttonText,
+                      color: tokens.buttonBg,
                     }}
                   >
                     Follow
+                  </span>
+                )}
+              </div>
+            );
+          }
+
+          // 4g. YouTube Showcase Block
+          if (block.kind === 'youtube') {
+            const ytUrl = block.url ? formatExternalUrl(block.url) : 'https://youtube.com';
+            return (
+              <div
+                key={block.id}
+                className="w-full flex items-center justify-between transition-all duration-150 select-none"
+                style={{
+                  backgroundColor: tokens.buttonBg,
+                  color: tokens.buttonText,
+                  borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+                  border: tokens.buttonBorder
+                    ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+                    : '1px solid rgba(0,0,0,0.08)',
+                  padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
+                  boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                  <div className="w-8 h-8 rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                    <Youtube size={16} strokeWidth={2} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      className="font-semibold truncate text-[13px] leading-tight"
+                      style={{ color: tokens.buttonText }}
+                    >
+                      {block.title || 'YouTube Channel'}
+                    </span>
+                    <span className="text-[11px] opacity-75 truncate">
+                      {block.badge || 'Subscribe for new videos'}
+                    </span>
+                  </div>
+                </div>
+
+                {isPublicPage ? (
+                  <a
+                    href={ytUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => onLinkClick?.(block)}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white transition-transform active:scale-95"
+                  >
+                    Subscribe
+                  </a>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white">
+                    Subscribe
                   </span>
                 )}
               </div>
@@ -782,19 +859,28 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         })}
       </div>
 
-      {/* Social Row: Rendered at bottom if user configured bottom placement */}
-      {profile?.socialsPosition === 'bottom' && activeSocialEntries.length > 0 && (
+      {/* Social Row: Rendered at bottom if user configured bottom or both placement */}
+      {(profile?.socialsPosition === 'bottom' || profile?.socialsPosition === 'both') &&
+        activeSocialEntries.length > 0 && (
         <div
           className="flex items-center justify-center flex-wrap shrink-0"
           style={{
             marginTop: `${Math.round(20 * scale)}px`,
-            gap: `${Math.round(14 * scale)}px`,
-            color: tokens.text,
-            opacity: 0.85,
+            gap: `${Math.round(8 * scale)}px`,
           }}
         >
           {activeSocialEntries.map(([platform, url]) => {
             const cleanUrl = formatExternalUrl(url);
+            const btnStyle: React.CSSProperties = {
+              width: `${Math.round(36 * scale)}px`,
+              height: `${Math.round(36 * scale)}px`,
+              backgroundColor: tokens.buttonBg,
+              color: tokens.buttonText,
+              border: tokens.buttonBorder
+                ? `1px solid ${tokens.buttonBorder}`
+                : `1px solid ${tokens.text}1A`,
+              boxShadow: tokens.buttonShadow || '0 1px 2px rgba(0,0,0,0.04)',
+            };
             if (isPublicPage) {
               return (
                 <a
@@ -803,10 +889,11 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   target="_blank"
                   rel="noopener noreferrer nofollow"
                   aria-label={platform}
-                  className="transition-transform duration-120 hover:scale-110 active:scale-95"
-                  style={{ color: tokens.text }}
+                  title={platform.charAt(0).toUpperCase() + platform.slice(1)}
+                  className="rounded-full flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
+                  style={btnStyle}
                 >
-                  <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+                  <SocialIcon platform={platform} size={Math.round(16 * scale)} />
                 </a>
               );
             }
@@ -814,9 +901,10 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <span
                 key={platform}
                 title={`${platform}: ${url}`}
-                className="opacity-80 hover:opacity-100 transition-opacity"
+                className="rounded-full flex items-center justify-center transition-transform hover:scale-105"
+                style={btnStyle}
               >
-                <SocialIcon platform={platform} size={Math.round(18 * scale)} />
+                <SocialIcon platform={platform} size={Math.round(16 * scale)} />
               </span>
             );
           })}
@@ -880,6 +968,24 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         )}
       </div>
       </div>
+
+      {/* WhatsApp Direct Chat Floating Widget (when configured in Integrations) */}
+      {isPublicPage && profile?.whatsappNumber && (() => {
+        const cleanDigits = profile.whatsappNumber.replace(/[^\d]/g, '');
+        if (cleanDigits.length < 7) return null;
+        return (
+          <a
+            href={`https://wa.me/${cleanDigits}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Chat on WhatsApp"
+            className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#25D366] text-white font-semibold text-[13px] shadow-lg hover:scale-105 active:scale-95 transition-transform"
+          >
+            <MessageCircle size={18} strokeWidth={2.2} />
+            <span className="hidden sm:inline">WhatsApp</span>
+          </a>
+        );
+      })()}
 
       {/* Enhanced Share Bottom Sheet Dialog with Business Card */}
       <ShareModal

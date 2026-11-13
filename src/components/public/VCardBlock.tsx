@@ -41,7 +41,7 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     setDownloaded(true);
     setTimeout(() => setDownloaded(false), 3000);

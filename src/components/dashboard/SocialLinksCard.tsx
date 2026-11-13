@@ -7,7 +7,7 @@ import {
   SUPPORTED_SOCIAL_PLATFORMS,
   SocialIcon,
 } from '../phone/SocialIcons';
-import { formatExternalUrl } from '../../lib/urls';
+import { formatExternalUrl, normalizeSocialUrl } from '../../lib/urls';
 
 export const SocialLinksCard: React.FC = () => {
   const session = useIveoSession();
@@ -67,14 +67,7 @@ export const SocialLinksCard: React.FC = () => {
       return;
     }
 
-    let finalUrl = clean;
-    if (platform === 'mail' || platform === 'email') {
-      if (!clean.startsWith('mailto:') && clean.includes('@')) {
-        finalUrl = `mailto:${clean}`;
-      }
-    } else {
-      finalUrl = formatExternalUrl(clean);
-    }
+    const finalUrl = normalizeSocialUrl(platform, clean);
 
     setIsSaving(true);
     setErrorMessage(null);
@@ -117,7 +110,7 @@ export const SocialLinksCard: React.FC = () => {
             Social icons
           </h3>
           <p className="mt-1 text-[13px] text-muted max-w-[50ch]">
-            Add icons linking to your social accounts. They appear neatly below your links and stay completely hidden if you haven't added any.
+            Add icons linking to your social accounts. Choose top, bottom, or both placement—hidden automatically when empty.
           </p>
         </div>
 
@@ -139,28 +132,39 @@ export const SocialLinksCard: React.FC = () => {
           <span className="text-[13px] font-semibold text-ink block">Icon placement</span>
           <span className="text-[12px] text-muted block">Choose where social icons appear on your public page</span>
         </div>
-        <div className="inline-flex p-1 bg-surface border border-border rounded-[8px] self-start sm:self-auto">
+        <div className="inline-flex p-1 bg-surface border border-border rounded-[8px] self-start sm:self-auto shrink-0">
           <button
             type="button"
             onClick={() => updatePreferences({ socialsPosition: 'top' })}
-            className={`px-3 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
+            className={`px-2.5 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
               socialsPosition === 'top'
                 ? 'bg-ink text-surface shadow-xs font-semibold'
                 : 'text-muted hover:text-ink'
             }`}
           >
-            Top (under bio)
+            Top
           </button>
           <button
             type="button"
             onClick={() => updatePreferences({ socialsPosition: 'bottom' })}
-            className={`px-3 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
+            className={`px-2.5 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
               socialsPosition === 'bottom'
                 ? 'bg-ink text-surface shadow-xs font-semibold'
                 : 'text-muted hover:text-ink'
             }`}
           >
-            Bottom (under links)
+            Bottom
+          </button>
+          <button
+            type="button"
+            onClick={() => updatePreferences({ socialsPosition: 'both' })}
+            className={`px-2.5 py-1 text-[12px] font-medium rounded-[6px] transition-all cursor-pointer ${
+              socialsPosition === 'both'
+                ? 'bg-ink text-surface shadow-xs font-semibold'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            Both
           </button>
         </div>
       </div>

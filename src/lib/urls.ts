@@ -22,3 +22,65 @@ export function isSafeHref(url: string | null | undefined): boolean {
   }
   return /^(https?:\/\/|mailto:|tel:)/i.test(trimmed);
 }
+
+export function normalizeYouTubeUrl(raw: string): string {
+  const clean = (raw || '').trim();
+  if (!clean) return '';
+  if (/^https?:\/\//i.test(clean)) return clean;
+  if (/^(youtube\.com|www\.youtube\.com|youtu\.be|m\.youtube\.com)\b/i.test(clean)) {
+    return `https://${clean}`;
+  }
+  const handle = clean.replace(/^@/, '').replace(/^\/+/, '');
+  if (!handle.includes('/') && !handle.includes('.')) {
+    return `https://www.youtube.com/@${handle}`;
+  }
+  return clean.startsWith('@')
+    ? `https://www.youtube.com/${clean}`
+    : `https://${clean}`;
+}
+
+const SOCIAL_BASE_URLS: Record<string, string> = {
+  instagram: 'https://instagram.com/',
+  youtube: 'https://youtube.com/@',
+  twitter: 'https://x.com/',
+  x: 'https://x.com/',
+  tiktok: 'https://tiktok.com/@',
+  threads: 'https://threads.net/@',
+  github: 'https://github.com/',
+  linkedin: 'https://linkedin.com/in/',
+  twitch: 'https://twitch.tv/',
+  telegram: 'https://t.me/',
+  patreon: 'https://patreon.com/',
+  substack: 'https://substack.com/@',
+};
+
+export function normalizeSocialUrl(platform: string, raw: string): string {
+  const clean = (raw || '').trim();
+  if (!clean) return '';
+
+  if (platform === 'mail' || platform === 'email') {
+    if (!clean.startsWith('mailto:') && clean.includes('@')) {
+      return `mailto:${clean}`;
+    }
+    return clean;
+  }
+
+  if (/^https?:\/\//i.test(clean)) return clean;
+
+  if (platform === 'whatsapp') {
+    const digits = clean.replace(/[^\d]/g, '');
+    if (digits && !clean.includes('.')) {
+      return `https://wa.me/${digits}`;
+    }
+  }
+
+  const base = SOCIAL_BASE_URLS[platform];
+  if (base) {
+    const isHandle = clean.startsWith('@') || (!clean.includes('.') && !clean.includes('/'));
+    if (isHandle) {
+      return `${base}${clean.replace(/^@/, '')}`;
+    }
+  }
+
+  return formatExternalUrl(clean);
+}

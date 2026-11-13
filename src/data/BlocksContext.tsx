@@ -23,8 +23,9 @@ interface BlocksContextValue {
   addEmbed: (url: string, caption: string, provider: EmbedProvider) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
-  addCoffee: (title?: string, url?: string) => Promise<void>;
-  addInstagram: (title?: string, url?: string) => Promise<void>;
+  addCoffee: (title?: string, url?: string, badge?: string) => Promise<void>;
+  addInstagram: (title?: string, url?: string, badge?: string) => Promise<void>;
+  addYouTube: (title?: string, url?: string, badge?: string) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
   addVCard: (config: VCardConfig, title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
@@ -226,13 +227,14 @@ export const BlocksProvider: React.FC<{
     }
   };
 
-  const addCoffee = async (title: string = 'Buy Me a Coffee', url: string = 'https://buymeacoffee.com') => {
+  const addCoffee = async (title: string = 'Buy Me a Coffee', url: string = 'https://buymeacoffee.com', badge?: string) => {
     const prev = [...blocks];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'coffee',
         title,
         url,
+        badge,
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
@@ -245,13 +247,14 @@ export const BlocksProvider: React.FC<{
     }
   };
 
-  const addInstagram = async (title: string = 'Instagram', url: string = 'https://instagram.com') => {
+  const addInstagram = async (title: string = 'Instagram', url: string = 'https://instagram.com', badge?: string) => {
     const prev = [...blocks];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'instagram',
         title,
         url,
+        badge,
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);
@@ -260,6 +263,26 @@ export const BlocksProvider: React.FC<{
     } catch (err: unknown) {
       setBlocks(prev);
       showToast("Couldn't add Instagram block. Try again.");
+      throw err;
+    }
+  };
+
+  const addYouTube = async (title: string = 'YouTube Channel', url: string = 'https://youtube.com', badge?: string) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'youtube',
+        title,
+        url,
+        badge,
+        position: blocks.length,
+      });
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      showToast('YouTube showcase added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add YouTube block. Try again.");
       throw err;
     }
   };
@@ -414,6 +437,7 @@ export const BlocksProvider: React.FC<{
         addTipJar,
         addCoffee,
         addInstagram,
+        addYouTube,
         addFaq,
         addVCard,
         addHeader,
