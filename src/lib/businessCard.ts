@@ -30,9 +30,13 @@ export interface BusinessCardData {
  */
 export function downloadVCard(data: BusinessCardData): void {
   const cfg = parseBusinessCardConfig(data.cardConfig);
+  const effectiveUrl = cfg?.websiteUrl
+    ? (cfg.websiteUrl.startsWith('http') ? cfg.websiteUrl : `https://${cfg.websiteUrl}`)
+    : data.pageUrl;
+
   const vcfContent = buildVCardString({
     fullName: data.displayName || data.username,
-    url: data.pageUrl,
+    url: effectiveUrl,
     email: cfg?.contactEmail || undefined,
     phone: cfg?.contactPhone || undefined,
     organization: cfg?.companyOrLocation || undefined,
@@ -54,16 +58,10 @@ export function downloadVCard(data: BusinessCardData): void {
   }, 1000);
 }
 
-/**
- * Determines whether a CSS hex color is perceptually light (for high-contrast borders/overlays).
- */
 export function isLightColor(color?: string): boolean {
   return isLightHexColor(color);
 }
 
-/**
- * Converts a base64 Data URL into a binary Blob for reliable browser & mobile file downloads.
- */
 export function dataUrlToBlob(dataUrl: string): Blob {
   const parts = dataUrl.split(',');
   const mimeMatch = parts[0]?.match(/:(.*?);/);
@@ -77,10 +75,6 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
-/**
- * Loads an image safely with timeout and CORS, routing external URLs through /api/proxy-image
- * so external avatars (Clerk, postimg, Google, etc.) draw onto HTML5 Canvas without tainting it.
- */
 async function loadCanvasSafeAvatar(src: string): Promise<HTMLImageElement | null> {
   if (!src) return null;
 
@@ -115,12 +109,10 @@ async function loadCanvasSafeAvatar(src: string): Promise<HTMLImageElement | nul
       img.src = url;
     });
 
-  // Relative or data URLs can load directly from same origin
   if (src.startsWith('data:') || src.startsWith('/')) {
     return tryLoad(src, false);
   }
 
-  // External HTTP/HTTPS URL -> try same-origin CORS proxy first, then direct CORS fallback
   const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(src)}`;
   const proxiedImg = await tryLoad(proxyUrl, false);
   if (proxiedImg) return proxiedImg;
@@ -129,8 +121,7 @@ async function loadCanvasSafeAvatar(src: string): Promise<HTMLImageElement | nul
 }
 
 /**
- * Generates an ultra-high-resolution PNG (2040x1200, exact 1.7:1 ratio matching the card preview!)
- * pixel-identical to BusinessCardPreview.
+ * Generates an ultra-high-resolution PNG (2040x1200, 1.7:1) pixel-identical to BusinessCardPreview.
  */
 export async function generateBusinessCardPng(data: BusinessCardData): Promise<string> {
   const width = 2040;
@@ -147,7 +138,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
     ...(parseBusinessCardConfig(data.cardConfig) || {}),
   };
 
-  // Ensure card Google Font is loaded & ready before Canvas text draw calls
   if (cfg.fontId) {
     loadGoogleFonts([cfg.fontId]);
     try {
@@ -163,7 +153,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
   const fontPrimary = getCanvasFontName(cfg.fontId, 'Inter, system-ui, sans-serif');
   const template = cfg.template || 'classic';
 
-  // Resolve template palette identically to BusinessCardPreview
   let bgColor = cfg.bgColor || data.theme?.bg || '#0F172A';
   let accentColor = cfg.accentColor || data.theme?.accent || data.theme?.buttonBg || '#4F46E5';
   let textColor = cfg.textColor || data.theme?.text || '#FFFFFF';
@@ -193,19 +182,20 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
   const mutedColor = bgIsLight ? 'rgba(15, 23, 42, 0.68)' : 'rgba(255, 255, 255, 0.72)';
   const borderStroke = bgIsLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.18)';
 
-  // 1. Crisp 1024px QR code locally
+  const qrFg = cfg.qrFgColor || '#0A0A0A';
+  const qrBg = cfg.qrBgColor || '#FFFFFF';
+
   let qrDataUrl = data.qrDataUrl;
   try {
     qrDataUrl = await QRCode.toDataURL(data.pageUrl, {
       width: 1024,
       margin: 2,
       errorCorrectionLevel: 'H',
-      color: { dark: '#0A0A0A', light: '#FFFFFF' },
+      color: { dark: qrFg, light: qrBg },
     });
   } catch {}
   const qrImg = qrDataUrl ? await loadCanvasSafeAvatar(qrDataUrl) : null;
 
-  // 2. Load avatar via same-origin proxy when external
   const avatarImg =
     cfg.showAvatar !== false && data.avatarUrl
       ? await loadCanvasSafeAvatar(data.avatarUrl)
@@ -221,20 +211,23 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
     ctx.save();
     ctx.clearRect(0, 0, width, height);
 
-    // Clip to card outer radius before filling so outer corners stay transparent
     ctx.beginPath();
     ctx.roundRect(0, 0, width, height, cardRadius);
     ctx.clip();
 
-    // Base fill
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
 
-    // Template-specific backdrop layer matching BusinessCardPreview
-    if (template === 'gradient') {
+    if (cfg.bgColor && cfg.bgColor2) {
+      const grad = ctx.createLinearGradient(0, 0, width, height);
+      grad.addColorStop(0, cfg.bgColor);
+      grad.addColorStop(1, cfg.bgColor2);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+    } else if (template === 'gradient') {
       const grad = ctx.createLinearGradient(0, 0, width, height);
       grad.addColorStop(0, bgColor);
-      grad.addColorStop(1, `${accentColor}44`);
+      grad.addColorStop(1, cfg.bgColor2 || `${accentColor}44`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
     } else if (template === 'midnight') {
@@ -266,7 +259,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
       ctx.stroke();
     }
 
-    // Subtle outer border
     ctx.strokeStyle = borderStroke;
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -277,7 +269,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
     const topY = 104;
     let textStartX = padX;
 
-    // 3. Avatar or Initials Monogram (when showAvatar !== false)
     if (cfg.showAvatar !== false) {
       const avatarSize = 200;
       const cx = padX + avatarSize / 2;
@@ -288,7 +279,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
         ctx.beginPath();
         ctx.arc(cx, cy, avatarSize / 2, 0, Math.PI * 2);
         ctx.clip();
-        // Cover fit
         const scale = Math.max(avatarSize / avatarImg.width, avatarSize / avatarImg.height);
         const dw = avatarImg.width * scale;
         const dh = avatarImg.height * scale;
@@ -320,7 +310,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
       textStartX = padX + avatarSize + 48;
     }
 
-    // 4. Right QR box (when showQr !== false)
     const qrBoxSize = 240;
     const qrBoxX = width - padX - qrBoxSize;
     const qrBoxY = topY;
@@ -328,7 +317,7 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
 
     if (cfg.showQr !== false && qrImg) {
       ctx.save();
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = qrBg;
       ctx.beginPath();
       ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 28);
       ctx.fill();
@@ -339,7 +328,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
       ctx.restore();
     }
 
-    // 5. Badge pill + Display Name + Role/Handle/Location
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     let curY = topY + 4;
@@ -374,16 +362,19 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
     ctx.fillText(fittedName, textStartX, curY);
     curY += 86;
 
-    const subLine = cfg.role
-      ? [cfg.role, cfg.companyOrLocation].filter(Boolean).join(' · ')
-      : `@${cleanUsername}${cfg.companyOrLocation ? ` · ${cfg.companyOrLocation}` : ''}`;
-    ctx.font = `500 40px ${fontPrimary}, system-ui, sans-serif`;
-    ctx.fillStyle = cfg.role ? accentColor : mutedColor;
-    ctx.fillText(subLine, textStartX, curY, maxNameWidth);
+    const subParts: string[] = [];
+    if (cfg.role) subParts.push(cfg.role);
+    if (cfg.showHandle !== false) subParts.push(`@${cleanUsername}`);
+    if (cfg.companyOrLocation) subParts.push(cfg.companyOrLocation);
+    const subLine = subParts.join(' · ');
+    if (subLine) {
+      ctx.font = `500 40px ${fontPrimary}, system-ui, sans-serif`;
+      ctx.fillStyle = cfg.role ? accentColor : mutedColor;
+      ctx.fillText(subLine, textStartX, curY, maxNameWidth);
+    }
 
-    // 6. Middle Section: Bio + Contact Line
     let midY = Math.max(curY + 95, 450);
-    if (data.bio) {
+    if (cfg.showBio !== false && data.bio) {
       ctx.fillStyle = mutedColor;
       ctx.font = `400 42px ${fontPrimary}, system-ui, sans-serif`;
       const maxBioWidth = width - padX * 2;
@@ -415,7 +406,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
       ctx.fillText(contactParts, padX, Math.min(midY + 12, height - 290), width - padX * 2);
     }
 
-    // 7. Bottom Footer Bar matching preview
     const footerY = height - 180;
     ctx.strokeStyle = borderStroke;
     ctx.lineWidth = 3;
@@ -433,7 +423,7 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
     ctx.textAlign = 'right';
     ctx.fillStyle = mutedColor;
     ctx.font = '500 38px ui-monospace, "SF Mono", Menlo, monospace';
-    ctx.fillText(`iveo.site/${cleanUsername}`, width - padX, footerY + 82);
+    ctx.fillText(cfg.websiteUrl || `iveo.site/${cleanUsername}`, width - padX, footerY + 82);
 
     ctx.restore();
   };
@@ -447,10 +437,6 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
   }
 }
 
-/**
- * Generates an ultra-crisp 2040x1200 (1.7:1) business card PNG matching the preview
- * and triggers browser download via Blob URL.
- */
 export async function downloadBusinessCardPng(
   data: BusinessCardData
 ): Promise<{ dataUrl: string; blob: Blob }> {

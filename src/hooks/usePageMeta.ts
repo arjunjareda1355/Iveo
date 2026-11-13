@@ -4,60 +4,99 @@ interface PageMetaOptions {
   title?: string;
   description?: string;
   robots?: string;
+  canonical?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+}
+
+function setOrCreateMeta(attr: 'name' | 'property', key: string, content: string): {
+  el: HTMLMetaElement;
+  prev: string | null;
+} {
+  let el = document.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+  let prev: string | null = null;
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  } else {
+    prev = el.getAttribute('content');
+  }
+  el.setAttribute('content', content);
+  return { el, prev };
 }
 
 export function usePageMeta(options: PageMetaOptions | string) {
   const title = typeof options === 'string' ? options : options.title;
   const description = typeof options === 'object' ? options.description : undefined;
   const robots = typeof options === 'object' ? options.robots : undefined;
+  const canonical = typeof options === 'object' ? options.canonical : undefined;
+  const ogTitle = typeof options === 'object' ? options.ogTitle : undefined;
+  const ogDescription = typeof options === 'object' ? options.ogDescription : undefined;
 
   useEffect(() => {
-    // 1. Title
     const prevTitle = document.title;
     if (title) {
       document.title = title;
     }
 
-    // 2. Description
-    let prevDesc: string | null = null;
-    let descMeta: HTMLMetaElement | null = null;
+    let descState: { el: HTMLMetaElement; prev: string | null } | null = null;
     if (description) {
-      descMeta = document.querySelector('meta[name="description"]');
-      if (descMeta) {
-        prevDesc = descMeta.getAttribute('content');
-        descMeta.setAttribute('content', description);
-      }
+      descState = setOrCreateMeta('name', 'description', description);
     }
 
-    // 3. Robots
-    let prevRobots: string | null = null;
-    let robotsMeta: HTMLMetaElement | null = null;
+    let robotsState: { el: HTMLMetaElement; prev: string | null } | null = null;
     if (robots) {
-      robotsMeta = document.querySelector('meta[name="robots"]');
-      if (!robotsMeta) {
-        robotsMeta = document.createElement('meta');
-        robotsMeta.name = 'robots';
-        document.head.appendChild(robotsMeta);
+      robotsState = setOrCreateMeta('name', 'robots', robots);
+    }
+
+    let ogTitleState: { el: HTMLMetaElement; prev: string | null } | null = null;
+    if (ogTitle || title) {
+      ogTitleState = setOrCreateMeta('property', 'og:title', ogTitle || title || '');
+    }
+
+    let ogDescState: { el: HTMLMetaElement; prev: string | null } | null = null;
+    if (ogDescription || description) {
+      ogDescState = setOrCreateMeta(
+        'property',
+        'og:description',
+        ogDescription || description || ''
+      );
+    }
+
+    let canonicalEl: HTMLLinkElement | null = null;
+    let prevCanonical: string | null = null;
+    if (canonical) {
+      canonicalEl = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+      if (!canonicalEl) {
+        canonicalEl = document.createElement('link');
+        canonicalEl.rel = 'canonical';
+        document.head.appendChild(canonicalEl);
       } else {
-        prevRobots = robotsMeta.getAttribute('content');
+        prevCanonical = canonicalEl.getAttribute('href');
       }
-      robotsMeta.setAttribute('content', robots);
+      canonicalEl.href = canonical;
     }
 
     return () => {
       if (title) {
         document.title = prevTitle;
       }
-      if (descMeta && prevDesc !== null) {
-        descMeta.setAttribute('content', prevDesc);
+      if (descState && descState.prev !== null) {
+        descState.el.setAttribute('content', descState.prev);
       }
-      if (robotsMeta) {
-        if (prevRobots !== null) {
-          robotsMeta.setAttribute('content', prevRobots);
-        } else {
-          robotsMeta.setAttribute('content', 'index, follow');
-        }
+      if (robotsState) {
+        robotsState.el.setAttribute('content', robotsState.prev ?? 'index, follow');
+      }
+      if (ogTitleState && ogTitleState.prev !== null) {
+        ogTitleState.el.setAttribute('content', ogTitleState.prev);
+      }
+      if (ogDescState && ogDescState.prev !== null) {
+        ogDescState.el.setAttribute('content', ogDescState.prev);
+      }
+      if (canonicalEl && prevCanonical !== null) {
+        canonicalEl.href = prevCanonical;
       }
     };
-  }, [title, description, robots]);
+  }, [title, description, robots, canonical, ogTitle, ogDescription]);
 }

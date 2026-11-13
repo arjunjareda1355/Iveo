@@ -1,5 +1,5 @@
 import { publicRpc } from './supabase.ts';
-import { dbGetProfile } from './azureSql.ts';
+import { dbGetProfile, dbGetRedirectTarget } from './azureSql.ts';
 import { firebaseGetProfile } from './firebaseServer.ts';
 import { VIBES } from '../../src/lib/vibes.ts';
 
@@ -10,6 +10,9 @@ export interface PublicPageServerData {
   avatarUrl: string | null;
   vibeId: string;
   hideFromSearch: boolean;
+  isPublished?: boolean;
+  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  updatedAt?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
   socials?: Record<string, string>;
@@ -51,6 +54,10 @@ export async function loadPublicPage(
   try {
     const dbProf = await dbGetProfile(clean);
     if (dbProf && dbProf.username) {
+      const status = dbProf.status || (dbProf.isPublished === false ? 'unpublished' : 'active');
+      if (status === 'deleted' || status === 'suspended') {
+        return null;
+      }
       return {
         username: dbProf.username.toLowerCase(),
         displayName: dbProf.displayName || `@${dbProf.username}`,
@@ -58,6 +65,9 @@ export async function loadPublicPage(
         avatarUrl: isAllowedAvatarHost(dbProf.avatarUrl) ? dbProf.avatarUrl : null,
         vibeId: dbProf.vibeId || 'clean',
         hideFromSearch: Boolean(dbProf.hideFromSearch),
+        isPublished: dbProf.isPublished !== false,
+        status,
+        updatedAt: dbProf.updatedAt || null,
         customSeoTitle: dbProf.customSeoTitle || null,
         customSeoDescription: dbProf.customSeoDescription || null,
         socials: (dbProf.socials && typeof dbProf.socials === 'object') ? dbProf.socials : {},
@@ -65,10 +75,22 @@ export async function loadPublicPage(
     }
   } catch {}
 
+  // If this handle was explicitly renamed and remains unclaimed locally, preserve redirect precedence
+  try {
+    const activeRedirect = await dbGetRedirectTarget(clean);
+    if (activeRedirect) {
+      return null;
+    }
+  } catch {}
+
   // 1.5 Check Firebase Cloud database
   try {
     const fbProf = await firebaseGetProfile(clean);
     if (fbProf && fbProf.username) {
+      const status = fbProf.status || (fbProf.isPublished === false ? 'unpublished' : 'active');
+      if (status === 'deleted' || status === 'suspended') {
+        return null;
+      }
       return {
         username: fbProf.username.toLowerCase(),
         displayName: fbProf.displayName || `@${fbProf.username}`,
@@ -76,6 +98,9 @@ export async function loadPublicPage(
         avatarUrl: isAllowedAvatarHost(fbProf.avatarUrl) ? fbProf.avatarUrl : null,
         vibeId: fbProf.vibeId || 'clean',
         hideFromSearch: Boolean(fbProf.hideFromSearch),
+        isPublished: fbProf.isPublished !== false,
+        status,
+        updatedAt: fbProf.updatedAt || null,
         customSeoTitle: fbProf.customSeoTitle || null,
         customSeoDescription: fbProf.customSeoDescription || null,
         socials: (fbProf.socials && typeof fbProf.socials === 'object') ? fbProf.socials : {},
@@ -106,6 +131,9 @@ export async function loadPublicPage(
         avatarUrl: cleanAvatar,
         vibeId: p.vibe_id || 'clean',
         hideFromSearch: Boolean(p.hide_from_search),
+        isPublished: true,
+        status: 'active',
+        updatedAt: null,
         customSeoTitle: null,
         customSeoDescription: null,
         socials: {},
@@ -123,6 +151,9 @@ export async function loadPublicPage(
       avatarUrl: null,
       vibeId: personaVibe.id,
       hideFromSearch: false,
+      isPublished: true,
+      status: 'active',
+      updatedAt: null,
       customSeoTitle: null,
       customSeoDescription: null,
       socials: {},

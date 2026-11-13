@@ -7,6 +7,7 @@ export interface ListContactsParams {
   page: number;
   pageSize: number;
   search?: string;
+  username?: string | null;
 }
 
 export interface ListContactsResult {
@@ -44,14 +45,21 @@ export async function listContacts(
   token: string | null,
   params: ListContactsParams
 ): Promise<ListContactsResult> {
-  const { page, pageSize, search } = params;
+  const { page, pageSize, search, username } = params;
+  const cleanUser = (username || '').trim().toLowerCase();
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
   const sanitizedTerm = sanitizeSearchTerm(search || '');
 
   if (!rawSupabaseUrl) {
     try {
-      const res = await fetch(`/api/contacts?search=${encodeURIComponent(sanitizedTerm)}&page=${page}&pageSize=${pageSize}`);
+      const qs = new URLSearchParams({
+        username: cleanUser,
+        search: sanitizedTerm,
+        page: String(page),
+        pageSize: String(pageSize),
+      });
+      const res = await fetch(`/api/contacts?${qs.toString()}`);
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.rows)) {
@@ -129,10 +137,14 @@ export async function listContacts(
 
 export async function deleteContact(
   token: string | null,
-  id: string
+  id: string,
+  username?: string | null
 ): Promise<void> {
+  const cleanUser = (username || '').trim().toLowerCase();
   try {
-    await fetch(`/api/contacts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const qs = new URLSearchParams({ id });
+    if (cleanUser) qs.set('username', cleanUser);
+    await fetch(`/api/contacts?${qs.toString()}`, { method: 'DELETE' });
   } catch {}
 
   if (!rawSupabaseUrl) {
@@ -154,9 +166,15 @@ export async function deleteContact(
   }
 }
 
-export async function deleteAllContacts(token: string | null): Promise<void> {
+export async function deleteAllContacts(
+  token: string | null,
+  username?: string | null
+): Promise<void> {
+  const cleanUser = (username || '').trim().toLowerCase();
   try {
-    await fetch('/api/contacts?all=true', { method: 'DELETE' });
+    const qs = new URLSearchParams({ all: 'true' });
+    if (cleanUser) qs.set('username', cleanUser);
+    await fetch(`/api/contacts?${qs.toString()}`, { method: 'DELETE' });
   } catch {}
 
   if (!rawSupabaseUrl) {
@@ -177,8 +195,26 @@ export async function deleteAllContacts(token: string | null): Promise<void> {
   }
 }
 
-export async function fetchContactsForExport(token: string | null): Promise<Contact[]> {
+export async function fetchContactsForExport(
+  token: string | null,
+  username?: string | null
+): Promise<Contact[]> {
+  const cleanUser = (username || '').trim().toLowerCase();
   if (!rawSupabaseUrl) {
+    try {
+      const qs = new URLSearchParams({
+        username: cleanUser,
+        page: '1',
+        pageSize: '20000',
+      });
+      const res = await fetch(`/api/contacts?${qs.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.rows)) {
+          return data.rows;
+        }
+      }
+    } catch {}
     return getLocalContacts();
   }
 

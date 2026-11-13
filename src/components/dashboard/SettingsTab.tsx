@@ -13,6 +13,7 @@ import { DeleteAccountCard } from '../account/DeleteAccountCard';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { pageUrl } from '../../lib/site';
+import { isOwnerEmail } from '../../lib/plan';
 import {
   sanitizeUsername,
   validateUsernameSync,
@@ -343,6 +344,23 @@ export const SettingsTab: React.FC = () => {
 
       {/* 3. Apps & Integrations Card (Google Analytics, Meta Pixel, WhatsApp, SEO) */}
       <IntegrationsCard />
+
+      {/* 3b. Platform SEO Health Console (Admin / Owner emails only) */}
+      {isOwnerEmail(session.primaryEmail) && (
+        <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-[18px] font-semibold text-ink leading-tight">
+              SEO Health &amp; Search Console
+            </h3>
+            <p className="mt-1 text-[13px] text-muted max-w-[46ch]">
+              Monitor profile indexability, inspect URLs, regenerate XML sitemaps, and submit updates to Google &amp; Bing.
+            </p>
+          </div>
+          <Button as={Link} to="/admin/seo" variant="secondary" size="md" className="shrink-0">
+            Open SEO Console
+          </Button>
+        </Card>
+      )}
 
       {/* 4. Your Data Card */}
       <ExportDataCard />

@@ -85,6 +85,7 @@ export async function unlockLink(
 export interface SubmitContactArgs {
   username: string;
   linkId: string;
+  formTitle?: string;
   email?: string | null;
   phone?: string | null;
   consent: boolean;
@@ -117,6 +118,7 @@ export async function submitContact(args: SubmitContactArgs): Promise<SubmitCont
       body: JSON.stringify({
         username: args.username,
         linkId: args.linkId,
+        formTitle: args.formTitle || undefined,
         email: args.email || null,
         phone: args.phone || null,
         consent: args.consent,

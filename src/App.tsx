@@ -19,6 +19,8 @@ const PublicProfilePlaceholder = lazy(
   () => import('./pages/PublicProfilePlaceholder')
 );
 const SSOCallbackPage = lazy(() => import('./pages/SSOCallbackPage'));
+const DiscoverPage = lazy(() => import('./pages/DiscoverPage'));
+const SeoAdminPage = lazy(() => import('./pages/SeoAdminPage'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Scroll to top on route change
@@ -135,15 +137,19 @@ export default function App() {
           {/* 5. Account (Signed in) */}
           <Route path="/account/*" element={<AccountPage />} />
 
-          {/* 6. Legal Pages */}
+          {/* 6. Public Creator Directory & Legal Pages */}
+          <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/legal" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
           <Route path="/terms" element={<Legal />} />
 
-          {/* 7. Public Profile Placeholder (after all static routes) */}
+          {/* 7. Protected SEO Admin Console */}
+          <Route path="/admin/seo" element={<SeoAdminPage />} />
+
+          {/* 8. Public Profile Placeholder (after all static routes) */}
           <Route path="/:username" element={<PublicProfilePlaceholder />} />
 
-          {/* 8. Fallback 404 */}
+          {/* 9. Fallback 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 type ExpressReq = express.Request;
 type ExpressRes = express.Response;
@@ -94,7 +95,7 @@ async function startServer() {
   app.get('/api/check-username', adaptWebHandler(checkUsernameModule.GET));
   app.post('/api/check-username', adaptWebHandler(checkUsernameModule.POST));
 
-  // 2. OpenGraph dynamic image (fast Node-native SVG banner styled to user's active Vibe)
+  // 2. OpenGraph dynamic image (SVG banner styled to user's Vibe + embedded real avatar)
   app.get('/api/og', async (req, res) => {
     const escapeXml = (str: string) =>
       String(str || '')
@@ -103,6 +104,44 @@ async function startServer() {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&apos;');
+
+    const loadAvatarDataUri = async (avatarUrl: string | null, username: string): Promise<string | null> => {
+      if (!avatarUrl) return null;
+      if (avatarUrl.startsWith('data:image/') && avatarUrl.length < 1_500_000) {
+        return avatarUrl;
+      }
+      if (avatarUrl.startsWith('/api/avatar/')) {
+        try {
+          const avatarFile = path.resolve(process.cwd(), 'data', 'avatars', `${username}.jpg`);
+          if (fs.existsSync(avatarFile)) {
+            const buf = fs.readFileSync(avatarFile);
+            if (buf.byteLength < 1_200_000) {
+              return `data:image/jpeg;base64,${buf.toString('base64')}`;
+            }
+          }
+        } catch {}
+      }
+      if (/^https?:\/\//i.test(avatarUrl)) {
+        try {
+          const parsed = new URL(avatarUrl);
+          const hn = parsed.hostname.toLowerCase();
+          if (hn === 'localhost' || hn.startsWith('127.') || hn.startsWith('10.') || hn.startsWith('192.168.') || hn.startsWith('169.254.')) {
+            return null;
+          }
+          const imgRes = await fetch(parsed.toString(), { signal: AbortSignal.timeout(2500) });
+          if (!imgRes.ok) return null;
+          const ct = (imgRes.headers.get('content-type') || '').toLowerCase();
+          if (!ct.startsWith('image/')) return null;
+          const buf = Buffer.from(await imgRes.arrayBuffer());
+          if (buf.byteLength > 1_200_000) return null;
+          const mime = ct.split(';')[0] || 'image/jpeg';
+          return `data:${mime};base64,${buf.toString('base64')}`;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
 
     try {
       const { normalizeUsername } = await import('./api/_lib/usernames.ts');
@@ -114,11 +153,11 @@ async function startServer() {
       const page = username ? await loadPublicPage(username) : null;
 
       res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+      res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=3600');
 
       if (!page) {
         return res.status(200).send(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FAFAFA"/><text x="96" y="290" font-family="Inter,system-ui,sans-serif" font-size="112" font-weight="700" letter-spacing="-4" fill="#0A0A0A">iveo</text><text x="96" y="365" font-family="Inter,system-ui,sans-serif" font-size="38" fill="#666666">One link for everything you make.</text></svg>`
+          `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FAFAFA"/><text x="96" y="290" font-family="Inter,system-ui,sans-serif" font-size="112" font-weight="700" letter-spacing="-4" fill="#0A0A0A">iveo</text><text x="96" y="365" font-family="Inter,system-ui,sans-serif" font-size="38" fill="#666666">One link for everything you create.</text></svg>`
         );
       }
 
@@ -127,12 +166,16 @@ async function startServer() {
       const safeHandle = escapeXml(`@${page.username}`);
       const safeBio = escapeXml((page.bio || `Links & projects by @${page.username}`).slice(0, 88));
       const initials = escapeXml((page.displayName || page.username).slice(0, 2).toUpperCase());
+      const avatarDataUri = await loadAvatarDataUri(page.avatarUrl, page.username);
+
+      const avatarMarkup = avatarDataUri
+        ? `<defs><clipPath id="ogAvatarClip"><circle cx="176" cy="216" r="88"/></clipPath></defs><circle cx="176" cy="216" r="90" fill="${escapeXml(vibe.avatarBg)}"/><image href="${escapeXml(avatarDataUri)}" x="88" y="128" width="176" height="176" clip-path="url(#ogAvatarClip)" preserveAspectRatio="xMidYMid slice"/>`
+        : `<circle cx="176" cy="216" r="88" fill="${escapeXml(vibe.avatarBg)}"/><text x="176" y="236" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="60" font-weight="700" fill="${escapeXml(vibe.text)}">${initials}</text>`;
 
       return res.status(200).send(
         `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
           <rect width="1200" height="630" fill="${escapeXml(vibe.bg)}"/>
-          <circle cx="176" cy="216" r="88" fill="${escapeXml(vibe.avatarBg)}"/>
-          <text x="176" y="236" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="60" font-weight="700" fill="${escapeXml(vibe.text)}">${initials}</text>
+          ${avatarMarkup}
           <text x="304" y="198" font-family="Inter,system-ui,sans-serif" font-size="60" font-weight="700" fill="${escapeXml(vibe.text)}">${safeName}</text>
           <text x="304" y="252" font-family="ui-monospace,monospace" font-size="30" fill="${escapeXml(vibe.muted)}">${safeHandle}</text>
           <text x="96" y="395" font-family="Inter,system-ui,sans-serif" font-size="30" fill="${escapeXml(vibe.muted)}">${safeBio}</text>
@@ -144,7 +187,7 @@ async function startServer() {
     } catch {
       res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
       return res.status(200).send(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FAFAFA"/><text x="100" y="300" font-family="sans-serif" font-size="72" font-weight="bold" fill="#0A0A0A">iveo</text><text x="100" y="380" font-family="sans-serif" font-size="36" fill="#666666">One link for everything you make.</text></svg>`
+        `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FAFAFA"/><text x="100" y="300" font-family="sans-serif" font-size="72" font-weight="bold" fill="#0A0A0A">iveo</text><text x="100" y="380" font-family="sans-serif" font-size="36" fill="#666666">One link for everything you create.</text></svg>`
       );
     }
   });
@@ -177,6 +220,14 @@ async function startServer() {
   app.post('/api/contacts', dbHandlers.handleSaveContact);
   app.get('/api/contacts', dbHandlers.handleGetContacts);
   app.delete('/api/contacts', dbHandlers.handleDeleteContacts);
+  app.post('/api/analytics/event', dbHandlers.handleRecordAnalyticsEvent);
+  app.get('/api/analytics', dbHandlers.handleGetAnalytics);
+  app.get('/api/integrations/buymeacoffee', dbHandlers.handleBuyMeACoffee);
+  app.get('/api/discover', dbHandlers.handleDiscoverProfiles);
+  app.get('/api/seo/admin/overview', dbHandlers.handleSeoAdminOverview);
+  app.post('/api/seo/admin/regenerate-sitemap', dbHandlers.handleSeoAdminRegenerate);
+  app.get('/api/seo/admin/validate', dbHandlers.handleSeoAdminValidate);
+  app.post('/api/seo/admin/inspect', dbHandlers.handleSeoAdminInspect);
   app.post('/api/unlock-link', dbHandlers.handleUnlockLink);
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
   app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
@@ -262,83 +313,68 @@ async function startServer() {
     next();
   });
 
-  // 4.6 SEO: robots.txt and dynamic sitemap.xml
-  app.get('/robots.txt', (req, res) => {
-    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+  // 4.6 SEO: robots.txt, paginated sitemaps, and IndexNow verification file
+  const { getCanonicalSiteOrigin, getIndexNowKey } = await import('./api/_lib/env.ts');
+  const { buildRobotsTxt, generateSitemapXml, generateSitemapPageXml } = await import('./api/_lib/seoService.ts');
+
+  const resolveRequestOrigin = (req: ExpressReq) => {
     const host = req.get('host') || 'iveo.site';
-    const origin = host.includes('localhost') || host.startsWith('127.') ? `${protocol}://${host}` : 'https://iveo.site';
+    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    if (host.includes('localhost') || host.startsWith('127.')) {
+      return `${protocol}://${host}`;
+    }
+    return getCanonicalSiteOrigin();
+  };
+
+  app.get('/robots.txt', (req, res) => {
+    const origin = resolveRequestOrigin(req);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(200).send(
-      [
-        'User-agent: *',
-        'Allow: /',
-        'Disallow: /api/',
-        'Disallow: /dashboard',
-        'Disallow: /onboarding',
-        'Disallow: /account',
-        'Disallow: /login',
-        'Disallow: /signup',
-        '',
-        `Sitemap: ${origin}/sitemap.xml`,
-      ].join('\n')
-    );
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+    res.status(200).send(buildRobotsTxt(origin));
   });
 
   app.get('/sitemap.xml', async (req, res) => {
-    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-    const host = req.get('host') || 'iveo.site';
-    const origin = host.includes('localhost') || host.startsWith('127.') ? `${protocol}://${host}` : 'https://iveo.site';
-    const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    const urls = new Map<string, string>();
-    const today = new Date().toISOString().split('T')[0];
-    urls.set(`${origin}/`, today);
-    for (const staticPath of ['pricing', 'privacy', 'terms', 'legal']) {
-      urls.set(`${origin}/${staticPath}`, today);
+    try {
+      const origin = resolveRequestOrigin(req);
+      const { xml } = await generateSitemapXml(origin);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      res.status(200).send(xml);
+    } catch {
+      res.status(500).send('Sitemap generation error');
     }
+  });
 
+  app.get('/sitemap-:page.xml', async (req, res) => {
+    const pageNum = parseInt(req.params.page, 10);
+    if (!Number.isFinite(pageNum) || pageNum < 1) {
+      return res.status(404).send('Not found');
+    }
     try {
-      const { VIBES } = await import('./src/lib/vibes.ts');
-      for (const v of VIBES) {
-        if (v.persona?.handle) {
-          urls.set(`${origin}/${v.persona.handle}`, today);
-        }
+      const origin = resolveRequestOrigin(req);
+      const { xml, found } = await generateSitemapPageXml(origin, pageNum);
+      if (!found) {
+        return res.status(404).send('Sitemap page not found');
       }
-    } catch {}
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    } catch {
+      return res.status(500).send('Sitemap page error');
+    }
+  });
 
-    try {
-      const storePath = path.resolve(__dirname, 'data', 'server_store.json');
-      if (fs.existsSync(storePath)) {
-        const parsed = JSON.parse(fs.readFileSync(storePath, 'utf-8'));
-        const profiles = parsed?.profiles || {};
-        for (const [uname, prof] of Object.entries<any>(profiles)) {
-          if (uname && !prof?.hideFromSearch) {
-            const lastmod = typeof prof?.updatedAt === 'string' && prof.updatedAt.length >= 10
-              ? prof.updatedAt.slice(0, 10)
-              : today;
-            urls.set(`${origin}/${encodeURIComponent(uname.toLowerCase())}`, lastmod);
-          }
-        }
-      }
-    } catch {}
-
-    const body = Array.from(urls.entries())
-      .map(
-        ([loc, lastmod]) =>
-          `  <url>\n    <loc>${escXml(loc)}</loc>\n    <lastmod>${escXml(lastmod)}</lastmod>\n    <changefreq>daily</changefreq>\n  </url>`
-      )
-      .join('\n');
-
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
-    res.status(200).send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`
-    );
+  app.get('/:verificationKey.txt', (req, res, next) => {
+    const configuredKey = getIndexNowKey();
+    if (configuredKey && req.params.verificationKey === configuredKey) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(200).send(configuredKey);
+    }
+    return next();
   });
 
   const { resolveSeoHeadForSegment } = await import('./api/page.ts');
-  const { injectHead } = await import('./api/_lib/html.ts');
-
+  const { injectHead, injectRootSsr } = await import('./api/_lib/html.ts');
   const { isUserPageLocation } = await import('./src/lib/intro.ts');
 
   const stripSiteIntroMarkup = (html: string): string => {
@@ -348,7 +384,10 @@ async function startServer() {
       .replace(/<script id="iveo-intro-js">[\s\S]*?<\/script>/i, '');
   };
 
-  const applySsrSeoTags = async (req: ExpressReq, html: string): Promise<string> => {
+  const applySsrSeoTags = async (
+    req: ExpressReq,
+    html: string
+  ): Promise<{ html: string; status: number; redirectLocation?: string }> => {
     const cleanPath = (req.path || '/').replace(/^\/+|\/+$/g, '');
     const host = (req.get('host') || '').toLowerCase();
     const qIndex = req.originalUrl.indexOf('?');
@@ -364,18 +403,30 @@ async function startServer() {
       resultHtml = stripSiteIntroMarkup(resultHtml);
     }
 
-    // Single path segment without dots (e.g. /maya, /arjun) -> inject user or route SEO tags
-    if (cleanPath && !cleanPath.includes('/') && !cleanPath.includes('.')) {
-      const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
-      const reqHost = req.get('host') || `localhost:${port}`;
-      const origin = `${protocol}://${reqHost}`;
-      const { tags, foundProfile } = await resolveSeoHeadForSegment(origin, cleanPath);
-      if (foundProfile) {
-        resultHtml = stripSiteIntroMarkup(resultHtml);
-      }
-      return injectHead(resultHtml, tags);
+    // Ignore static asset requests containing file extensions (e.g. .svg, .js, .css, .png)
+    if (cleanPath && cleanPath.includes('.')) {
+      return { html: resultHtml, status: 200 };
     }
-    return resultHtml;
+
+    const origin = resolveRequestOrigin(req);
+    const resolved = await resolveSeoHeadForSegment(origin, cleanPath);
+
+    if (resolved.httpStatus === 301 && resolved.redirectLocation) {
+      return { html: resultHtml, status: 301, redirectLocation: resolved.redirectLocation };
+    }
+
+    if (resolved.foundProfile || resolved.httpStatus === 404 || cleanPath.startsWith('admin') || cleanPath === 'discover') {
+      resultHtml = stripSiteIntroMarkup(resultHtml);
+    }
+
+    if (resolved.tags) {
+      resultHtml = injectHead(resultHtml, resolved.tags);
+    }
+    if (resolved.ssrBodyHtml) {
+      resultHtml = injectRootSsr(resultHtml, resolved.ssrBodyHtml);
+    }
+
+    return { html: resultHtml, status: resolved.httpStatus };
   };
 
   // 5. Vite Dev Server / Static SPA Fallback
@@ -393,8 +444,11 @@ async function startServer() {
       try {
         let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
         template = await vite.transformIndexHtml(url, template);
-        template = await applySsrSeoTags(req, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        const ssr = await applySsrSeoTags(req, template);
+        if (ssr.status === 301 && ssr.redirectLocation) {
+          return res.redirect(301, ssr.redirectLocation);
+        }
+        return res.status(ssr.status).set({ 'Content-Type': 'text/html' }).end(ssr.html);
       } catch (e: any) {
         vite.ssrFixStacktrace(e);
         next(e);
@@ -405,10 +459,13 @@ async function startServer() {
     app.get('*', async (req, res) => {
       try {
         let template = fs.readFileSync(path.resolve(distPath, 'index.html'), 'utf-8');
-        template = await applySsrSeoTags(req, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).send(template);
+        const ssr = await applySsrSeoTags(req, template);
+        if (ssr.status === 301 && ssr.redirectLocation) {
+          return res.redirect(301, ssr.redirectLocation);
+        }
+        return res.status(ssr.status).set({ 'Content-Type': 'text/html' }).send(ssr.html);
       } catch {
-        res.sendFile(path.resolve(distPath, 'index.html'));
+        return res.sendFile(path.resolve(distPath, 'index.html'));
       }
     });
   }

@@ -1,4 +1,4 @@
-import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig, LinkAnimation, TipJarConfig, FaqConfig, VCardConfig } from './types';
+import { Block, BlockKind, BlockLayout, EmbedProvider, SignupConfig, LinkAnimation, TipJarConfig, FaqConfig, VCardConfig, CoffeeData } from './types';
 import { storagePublicUrl } from './storageApi';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -16,6 +16,7 @@ export interface CreateBlockInput {
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
+  coffee?: CoffeeData | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -36,6 +37,7 @@ export interface UpdateBlockInput {
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
+  coffee?: CoffeeData | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -226,6 +228,7 @@ export async function createBlock(
     tipJar: input.tipJar || null,
     faq: input.faq || null,
     vcard: input.vcard || null,
+    coffee: input.coffee || null,
     animation: input.animation || null,
     badge: input.badge || null,
     startAt: input.startAt || null,

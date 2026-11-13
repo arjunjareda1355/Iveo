@@ -543,6 +543,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           // 4e. Buy Me a Coffee Block
           if (block.kind === 'coffee') {
             const coffeeUrl = block.url ? formatExternalUrl(block.url) : 'https://buymeacoffee.com';
+            const coffeeMeta = block.coffee;
+            const ctaLabel = coffeeMeta?.buttonLabel?.trim() || 'Support with a Coffee';
             return (
               <div
                 key={block.id}
@@ -559,21 +561,39 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[18px]">☕</span>
+                <div className="flex items-center gap-2.5 mb-1 max-w-full">
+                  {coffeeMeta?.avatarUrl ? (
+                    <img
+                      src={coffeeMeta.avatarUrl}
+                      alt={coffeeMeta.creatorName || block.title || 'Creator'}
+                      className="w-7 h-7 rounded-full object-cover border border-current/20 shrink-0"
+                    />
+                  ) : (
+                    <span className="text-[18px] leading-none">☕</span>
+                  )}
                   <span
-                    className="font-semibold leading-tight"
+                    className="font-semibold leading-tight truncate"
                     style={{ fontSize: `${Math.max(13, Math.round(15 * scale))}px` }}
                   >
-                    {block.title || 'Buy Me a Coffee'}
+                    {block.title || coffeeMeta?.creatorName || 'Buy Me a Coffee'}
                   </span>
+                  {typeof coffeeMeta?.supportersCount === 'number' && coffeeMeta.supportersCount > 0 && (
+                    <span
+                      className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-current/25 shrink-0"
+                      style={{ opacity: 0.9 }}
+                    >
+                      {coffeeMeta.supportersCount} supporters
+                    </span>
+                  )}
                 </div>
-                {block.badge && (
-                  <p className="text-[11px] opacity-75 text-center leading-snug mb-1">
-                    {block.badge}
+
+                {(block.badge || coffeeMeta?.bio) && (
+                  <p className="text-[11px] opacity-80 text-center leading-snug mb-1.5 max-w-[36ch]">
+                    {block.badge || coffeeMeta?.bio}
                   </p>
                 )}
-                <div className="flex items-center gap-2 my-2">
+
+                <div className="flex items-center flex-wrap justify-center gap-1.5 my-1.5">
                   {[1, 3, 5].map((count) => (
                     <a
                       key={count}
@@ -588,6 +608,40 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                     </a>
                   ))}
                 </div>
+
+                {coffeeMeta?.recentSupporters && coffeeMeta.recentSupporters.length > 0 && (
+                  <div className="w-full mt-1 mb-1.5 px-2.5 py-1.5 rounded-lg border border-current/15 text-[11px] opacity-85 text-center truncate">
+                    ☕ Latest:{' '}
+                    <strong>
+                      {coffeeMeta.recentSupporters[0].supporterName ||
+                        (coffeeMeta.recentSupporters[0] as any).name ||
+                        'Supporter'}
+                    </strong>{' '}
+                    ({coffeeMeta.recentSupporters[0].coffees}×)
+                    {coffeeMeta.recentSupporters[0].note
+                      ? ` · "${coffeeMeta.recentSupporters[0].note.slice(0, 42)}"`
+                      : ''}
+                  </div>
+                )}
+
+                {coffeeMeta?.extras && coffeeMeta.extras.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 mb-1.5">
+                    {coffeeMeta.extras.slice(0, 2).map((extra, idx) => (
+                      <a
+                        key={`${extra.title}-${idx}`}
+                        href={isPublicPage ? extra.url || coffeeUrl : undefined}
+                        target={isPublicPage ? '_blank' : undefined}
+                        rel={isPublicPage ? 'noopener noreferrer' : undefined}
+                        className="px-2 py-0.5 rounded-md border border-current/20 text-[10px] font-medium opacity-90 hover:opacity-100"
+                        style={{ color: tokens.buttonText }}
+                      >
+                        ★ {extra.title}
+                        {extra.price ? ` · ${extra.price}` : ''}
+                      </a>
+                    ))}
+                  </div>
+                )}
+
                 {isPublicPage ? (
                   <a
                     href={coffeeUrl}
@@ -600,7 +654,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       color: tokens.buttonBg,
                     }}
                   >
-                    Support with a Coffee
+                    {ctaLabel}
                   </a>
                 ) : (
                   <div
@@ -610,7 +664,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       color: tokens.buttonBg,
                     }}
                   >
-                    Support with a Coffee
+                    {ctaLabel}
                   </div>
                 )}
               </div>

@@ -64,7 +64,7 @@ export const ContactsTab: React.FC = () => {
 
     try {
       const token = await getToken({ template: 'supabase' }).catch(() => null);
-      const allContacts = await fetchContactsForExport(token);
+      const allContacts = await fetchContactsForExport(token, username);
 
       if (allContacts.length >= 20000) {
         showToast(copy.contacts.toasts.csvCap);

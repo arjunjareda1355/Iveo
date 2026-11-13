@@ -59,6 +59,40 @@ export interface VCardConfig {
   note?: string;
 }
 
+export interface CoffeeSupporter {
+  id: string;
+  supporterName: string;
+  coffees: number;
+  note?: string | null;
+  createdAt?: string | null;
+}
+
+export interface CoffeeExtra {
+  id: string;
+  title: string;
+  price?: string | null;
+  description?: string | null;
+  image?: string | null;
+  url?: string | null;
+}
+
+export interface CoffeeData {
+  slug?: string;
+  creatorName?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
+  coffeePrice?: string | null;
+  supportersCount?: number | null;
+  supportersLabel?: string | null;
+  extrasCount?: number;
+  recentSupporters?: CoffeeSupporter[];
+  extras?: CoffeeExtra[];
+  buttonLabel?: string | null;
+  notePlaceholder?: string | null;
+  fetchedAt?: string | null;
+}
+
 export interface Block {
   id: string;
   kind: BlockKind;
@@ -73,6 +107,7 @@ export interface Block {
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
+  coffee?: CoffeeData | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   isProtected?: boolean;
@@ -98,6 +133,7 @@ export interface PublicBlock {
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
+  coffee?: CoffeeData | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
 }
@@ -117,6 +153,7 @@ export interface PageBlock {
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
   vcard?: VCardConfig | null;
+  coffee?: CoffeeData | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;

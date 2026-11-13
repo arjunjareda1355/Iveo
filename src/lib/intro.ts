@@ -5,6 +5,8 @@ const SITE_APP_ROOT_SEGMENTS = new Set([
   'legal',
   'privacy',
   'terms',
+  'discover',
+  'admin',
   'login',
   'signup',
   'sso-callback',

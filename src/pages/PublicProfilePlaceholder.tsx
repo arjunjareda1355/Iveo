@@ -132,28 +132,32 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       const display = pageData.profile.displayName || `@${clean}`;
       const titleText =
         pageData.profile.customSeoTitle ||
-        `${display} (@${clean}) | iveo`;
+        `${display} – Links, Projects & Social Profiles | Iveo`;
       document.title = titleText;
 
+      const bioClean = pageData.profile.bio?.trim() || '';
       const descText =
         pageData.profile.customSeoDescription ||
-        pageData.profile.bio ||
-        `Explore links & updates by ${display} (@${clean}) on iveo.`;
+        (bioClean
+          ? `${bioClean} — Discover ${display} (@${clean}) on Iveo.`
+          : `Discover ${display} on Iveo. Explore their projects, websites, social media links and latest work.`);
 
       const robotsValue = pageData.profile.hideFromSearch ? 'noindex, nofollow' : 'index, follow';
       const origin = typeof window !== 'undefined' ? window.location.origin : SITE_ORIGIN;
-      const ogImageUrl = pageData.profile.avatarUrl?.startsWith('http')
-        ? pageData.profile.avatarUrl
-        : `${origin}/api/og?u=${encodeURIComponent(clean)}`;
+      const usesDynamicOg = !pageData.profile.avatarUrl?.startsWith('http');
+      const ogImageUrl = usesDynamicOg
+        ? `${origin}/api/og?u=${encodeURIComponent(clean)}`
+        : pageData.profile.avatarUrl!;
 
       upsertMetaTag('name', 'description', descText);
       upsertMetaTag('name', 'robots', robotsValue);
       upsertMetaTag('property', 'og:type', 'profile');
-      upsertMetaTag('property', 'og:site_name', 'iveo');
+      upsertMetaTag('property', 'og:site_name', 'Iveo');
       upsertMetaTag('property', 'og:title', titleText);
       upsertMetaTag('property', 'og:description', descText);
       upsertMetaTag('property', 'og:url', canonicalHref);
       upsertMetaTag('property', 'og:image', ogImageUrl);
+      upsertMetaTag('property', 'og:image:type', usesDynamicOg ? 'image/svg+xml' : 'image/jpeg');
       upsertMetaTag('property', 'profile:username', clean);
       upsertMetaTag('name', 'twitter:card', 'summary_large_image');
       upsertMetaTag('name', 'twitter:title', titleText);
@@ -166,8 +170,10 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
 
       const mainEntity: Record<string, unknown> = {
         '@type': 'Person',
+        '@id': `${canonicalHref}#person`,
         name: display,
         alternateName: `@${clean}`,
+        identifier: clean,
         url: canonicalHref,
       };
       if (descText) mainEntity.description = descText;
@@ -190,11 +196,16 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       ldScript.textContent = JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'ProfilePage',
+        url: canonicalHref,
+        mainEntityOfPage: {
+          '@type': 'WebPage',
+          '@id': canonicalHref,
+        },
         mainEntity,
       });
     } else {
-      document.title = `iveo.site/${clean}`;
-      upsertMetaTag('name', 'robots', 'noindex');
+      document.title = `Page not found (@${clean}) | Iveo`;
+      upsertMetaTag('name', 'robots', 'noindex, nofollow');
     }
 
     return () => {

@@ -12,8 +12,6 @@ import {
   Download,
   Contact,
   IdCard,
-  QrCode,
-  Sparkles,
 } from 'lucide-react';
 import { makeQrPngDataUrl } from '../../lib/qr';
 import {
@@ -57,6 +55,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [copiedCard, setCopiedCard] = useState(false);
   const [downloadedCard, setDownloadedCard] = useState(false);
   const [qrPngUrl, setQrPngUrl] = useState<string | null>(null);
+  const [qrFgColor, setQrFgColor] = useState<string>(vibe?.tokens?.text || '#0A0A0A');
+  const [qrBgColor, setQrBgColor] = useState<string>('#FFFFFF');
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [cardError, setCardError] = useState<string | null>(null);
   const [cardConfig, setCardConfig] = useState<BusinessCardConfig>(() => ({
@@ -71,36 +71,37 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     });
   }, [businessCard]);
 
+  useEffect(() => {
+    if (vibe?.tokens?.text) {
+      setQrFgColor(vibe.tokens.text);
+    }
+  }, [vibe?.tokens?.text]);
+
   const cleanUsername = (username || '').toLowerCase().trim();
   const pageUrl = buildCanonicalPageUrl(cleanUsername);
-
+  const qrUrl = buildCanonicalPageUrl(cleanUsername, { src: 'qr' });
   const shareText = `Check out ${displayName || cleanUsername}'s page on iveo`;
 
-  // Generate QR code on mount/open
   useEffect(() => {
     if (!isOpen || !cleanUsername) return;
     let isMounted = true;
 
-    makeQrPngDataUrl(pageUrl, {
-      darkColor: vibe?.tokens?.text || '#0A0A0A',
-      lightColor: '#FFFFFF',
+    makeQrPngDataUrl(qrUrl, {
+      darkColor: qrFgColor,
+      lightColor: qrBgColor,
     })
       .then((dataUrl) => {
         if (isMounted) setQrPngUrl(dataUrl);
       })
       .catch(() => {
-        // Fallback to external reliable QR image
-        if (isMounted) {
-          setQrPngUrl(`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(pageUrl)}&margin=8`);
-        }
+        if (isMounted) setQrPngUrl(null);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, cleanUsername, pageUrl, vibe]);
+  }, [isOpen, cleanUsername, qrUrl, qrFgColor, qrBgColor]);
 
-  // Lock body scroll while sheet is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -286,10 +287,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         className="w-full sm:max-w-[480px] bg-surface border-t sm:border border-border rounded-t-[28px] sm:rounded-b-[28px] shadow-2xl p-5 sm:p-6 flex flex-col max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-250 select-none pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Mobile drag handle indicator */}
         <div className="w-10 h-1.5 rounded-full bg-border mx-auto -mt-1 mb-3 shrink-0" />
 
-        {/* Header */}
         <div className="flex items-center justify-between pb-3.5 border-b border-border/70">
           <div className="flex items-center gap-3">
             {avatarUrl ? (
@@ -321,7 +320,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Switcher: Share Page vs Business Card */}
         <div className="mt-3.5 p-1 bg-surface-2 rounded-xl flex items-center gap-1 border border-border/50">
           <button
             type="button"
@@ -349,10 +347,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </button>
         </div>
 
-        {/* TAB 1: SHARE PAGE */}
         {activeTab === 'share' && (
           <div className="mt-4 flex flex-col gap-4">
-            {/* Link Copy Bar */}
             <div className="flex items-center gap-2 p-1.5 pl-3.5 bg-surface-2 border border-border rounded-xl">
               <span className="text-[13px] font-mono text-ink truncate flex-1 select-all">
                 {pageUrl}
@@ -380,7 +376,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </button>
             </div>
 
-            {/* Social Share Grid */}
             <div>
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted block mb-2">
                 Share directly via
@@ -404,7 +399,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </div>
             </div>
 
-            {/* Native Share button if supported */}
             {typeof navigator !== 'undefined' && 'share' in navigator && (
               <button
                 type="button"
@@ -416,9 +410,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </button>
             )}
 
-            {/* QR Code Container */}
             <div className="p-3.5 bg-surface-2 border border-border rounded-2xl flex items-center gap-4">
-              <div className="w-24 h-24 bg-white p-1 rounded-xl border border-border/80 shadow-2xs shrink-0 flex items-center justify-center">
+              <div
+                className="w-24 h-24 p-1 rounded-xl border border-border/80 shadow-2xs shrink-0 flex items-center justify-center"
+                style={{ backgroundColor: qrBgColor }}
+              >
                 {qrPngUrl ? (
                   <img
                     src={qrPngUrl}
@@ -429,18 +425,37 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   <div className="w-full h-full bg-stone-100 rounded-lg animate-pulse" />
                 )}
               </div>
-              <div className="flex-1 flex flex-col justify-center">
+              <div className="flex-1 flex flex-col justify-center gap-1.5">
                 <span className="text-[13px] font-semibold text-ink leading-snug">
                   Scannable QR Code
                 </span>
-                <span className="text-[11px] text-muted mt-0.5">
-                  Point camera to open iveo.site/{cleanUsername}
-                </span>
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1 text-[11px] text-muted cursor-pointer">
+                    <input
+                      type="color"
+                      aria-label="QR color"
+                      value={qrFgColor}
+                      onChange={(e) => setQrFgColor(e.target.value.toUpperCase())}
+                      className="w-4 h-4 rounded border-0 bg-transparent p-0 cursor-pointer"
+                    />
+                    <span>Dots</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-[11px] text-muted cursor-pointer">
+                    <input
+                      type="color"
+                      aria-label="QR background color"
+                      value={qrBgColor}
+                      onChange={(e) => setQrBgColor(e.target.value.toUpperCase())}
+                      className="w-4 h-4 rounded border-0 bg-transparent p-0 cursor-pointer"
+                    />
+                    <span>BG</span>
+                  </label>
+                </div>
                 <button
                   type="button"
                   onClick={handleDownloadQr}
                   disabled={!qrPngUrl}
-                  className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] font-medium text-ink hover:opacity-80 transition-opacity cursor-pointer disabled:opacity-40"
+                  className="mt-1 inline-flex items-center gap-1.5 text-[12px] font-medium text-ink hover:opacity-80 transition-opacity cursor-pointer disabled:opacity-40"
                 >
                   <Download size={13} />
                   <span>Download QR image</span>
@@ -450,10 +465,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </div>
         )}
 
-        {/* TAB 2: DIGITAL BUSINESS CARD */}
         {activeTab === 'card' && (
           <div className="mt-4 flex flex-col gap-4">
-            {/* Visual Card Preview matching PNG output */}
             <BusinessCardPreview
               username={cleanUsername}
               displayName={displayName || cleanUsername}
@@ -464,15 +477,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               config={cardConfig}
             />
 
-            {/* Optional visitor personalization before downloading */}
             <BusinessCardCustomizer
               value={cardConfig}
               onChange={setCardConfig}
             />
 
-            {/* Business Card Actions */}
             <div className="flex flex-col gap-2">
-              {/* 1. Save Contact to Phone (.vcf) */}
               <button
                 type="button"
                 onClick={handleSaveContact}
@@ -483,7 +493,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </button>
 
               <div className="grid grid-cols-2 gap-2">
-                {/* 2. Download Card Image (PNG 2040x1200) */}
                 <button
                   type="button"
                   onClick={handleDownloadCardPng}
@@ -503,7 +512,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   )}
                 </button>
 
-                {/* 3. Share Card Details / Image */}
                 <button
                   type="button"
                   onClick={handleShareBusinessCard}

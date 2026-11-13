@@ -3,11 +3,22 @@ import { Link, useLocation } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
 import { Container } from '../components/ui/Container';
+import { usePageMeta } from '../hooks/usePageMeta';
+import { SITE_ORIGIN } from '../lib/site';
 import { copy } from '../content/copy';
 
 export const Legal: React.FC = () => {
   const location = useLocation();
   const isTerms = location.pathname.includes('terms');
+
+  usePageMeta({
+    title: isTerms ? 'Terms of Service | Iveo' : 'Privacy Policy | Iveo',
+    description: isTerms
+      ? 'Terms of Service governing access to Iveo creator profiles, dashboards, and tools.'
+      : 'Privacy Policy detailing how Iveo handles creator profile data and privacy-first visitor analytics.',
+    canonical: `${SITE_ORIGIN}/${isTerms ? 'terms' : 'privacy'}`,
+    robots: 'index, follow',
+  });
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col">

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem, VCardConfig } from './types';
+import { Block, BlockLayout, EmbedProvider, SignupConfig, TipJarConfig, FaqItem, VCardConfig, CoffeeData } from './types';
 import {
   listMyBlocks,
   createBlock,
@@ -24,7 +24,7 @@ interface BlocksContextValue {
   addEmbed: (url: string, caption: string, provider: EmbedProvider) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
-  addCoffee: (title?: string, url?: string, badge?: string) => Promise<void>;
+  addCoffee: (title?: string, url?: string, badge?: string, coffee?: CoffeeData | null) => Promise<void>;
   addInstagram: (title?: string, url?: string, badge?: string) => Promise<void>;
   addYouTube: (title?: string, url?: string, badge?: string) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
@@ -228,7 +228,12 @@ export const BlocksProvider: React.FC<{
     }
   };
 
-  const addCoffee = async (title: string = 'Buy Me a Coffee', url: string = 'https://buymeacoffee.com', badge?: string) => {
+  const addCoffee = async (
+    title: string = 'Buy Me a Coffee',
+    url: string = 'https://buymeacoffee.com',
+    badge?: string,
+    coffee?: CoffeeData | null
+  ) => {
     const prev = [...blocks];
     try {
       const newBlock = await createBlock(token, userId, {
@@ -236,6 +241,7 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         badge,
+        coffee: coffee || null,
         position: blocks.length,
       });
       setBlocks((b) => [newBlock, ...b]);

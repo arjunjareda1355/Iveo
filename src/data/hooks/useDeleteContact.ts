@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@clerk/react';
 import { deleteContact as apiDeleteContact } from '../contactsApi';
+import { useIveoSession } from '../../auth/useIvioSession';
 
 export function useDeleteContact(): {
   deleteContact: (id: string) => Promise<void>;
@@ -8,6 +9,7 @@ export function useDeleteContact(): {
   error: Error | null;
 } {
   const { getToken } = useAuth();
+  const { username } = useIveoSession();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -17,7 +19,7 @@ export function useDeleteContact(): {
       setError(null);
       try {
         const token = await getToken({ template: 'supabase' }).catch(() => null);
-        await apiDeleteContact(token, id);
+        await apiDeleteContact(token, id, username);
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
         setError(e);
@@ -26,7 +28,7 @@ export function useDeleteContact(): {
         setIsLoading(false);
       }
     },
-    [getToken]
+    [getToken, username]
   );
 
   return {

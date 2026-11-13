@@ -28,6 +28,8 @@ export const RESERVED = new Set([
   'discover',
   'docs',
   'explore',
+  'healthz',
+  '_health',
   'help',
   'home',
   'iveo',
@@ -40,11 +42,16 @@ export const RESERVED = new Set([
   'pay',
   'pricing',
   'privacy',
+  'robots',
+  'robots.txt',
   'root',
+  'seo',
   'settings',
   'signin',
   'signout',
   'signup',
+  'sitemap',
+  'sitemap.xml',
   'sso-callback',
   'ssocallback',
   'staging',
@@ -64,8 +71,8 @@ export const RESERVED = new Set([
   'undefined',
 ]);
 
-export const PRIVATE_ROUTES = ['login', 'signup', 'dashboard', 'onboarding', 'account'];
-export const PUBLIC_INFO_ROUTES = ['privacy', 'terms', 'pricing', 'legal'];
+export const PRIVATE_ROUTES = ['login', 'signup', 'dashboard', 'onboarding', 'account', 'admin'];
+export const PUBLIC_INFO_ROUTES = ['privacy', 'terms', 'pricing', 'legal', 'discover'];
 
 export const OWNER_EMAILS_LIST = [
   'help@iveo.site',

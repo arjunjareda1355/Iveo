@@ -7,6 +7,7 @@ import {
 } from '../../lib/businessCardConfig';
 import { getFontCssFamily, loadGoogleFonts } from '../../lib/fonts';
 import { isLightHexColor } from '../../lib/colors';
+import { makeQrPngDataUrl } from '../../lib/qr';
 
 export interface BusinessCardPreviewProps {
   username: string;
@@ -33,6 +34,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
   config,
 }) => {
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [customQrUrl, setCustomQrUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setAvatarFailed(false);
@@ -49,21 +51,44 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
     }
   }, [resolved.fontId]);
 
+  const cleanUsername = (username || 'creator').toLowerCase().trim();
+  const qrFg = resolved.qrFgColor || '#0A0A0A';
+  const qrBg = resolved.qrBgColor || '#FFFFFF';
+
+  useEffect(() => {
+    if (!resolved.showQr) return;
+    if (!resolved.qrFgColor && !resolved.qrBgColor && qrDataUrl) {
+      setCustomQrUrl(null);
+      return;
+    }
+    let mounted = true;
+    const targetUrl = `https://iveo.site/${cleanUsername}?src=qr`;
+    makeQrPngDataUrl(targetUrl, { darkColor: qrFg, lightColor: qrBg, margin: 2 })
+      .then((url) => {
+        if (mounted) setCustomQrUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [cleanUsername, qrFg, qrBg, resolved.showQr, resolved.qrFgColor, resolved.qrBgColor, qrDataUrl]);
+
   const template = resolved.template || 'classic';
 
-  // Resolve surface colors identically to generateBusinessCardPng
   let bg = resolved.bgColor || vibeTheme.bg;
   let accent = resolved.accentColor || vibeTheme.accent;
   let text = resolved.textColor || vibeTheme.text;
   let backgroundImage: string | undefined;
 
-  if (template === 'gradient' && !resolved.bgColor) {
+  if (resolved.bgColor && resolved.bgColor2) {
+    backgroundImage = `linear-gradient(135deg, ${resolved.bgColor} 0%, ${resolved.bgColor2} 100%)`;
+  } else if (template === 'gradient' && !resolved.bgColor) {
     bg = '#0F172A';
     accent = resolved.accentColor || '#38BDF8';
     text = resolved.textColor || '#FFFFFF';
-    backgroundImage = `linear-gradient(135deg, ${bg} 0%, ${accent}44 100%)`;
+    backgroundImage = `linear-gradient(135deg, ${bg} 0%, ${resolved.bgColor2 || `${accent}44`} 100%)`;
   } else if (template === 'gradient' && resolved.bgColor) {
-    backgroundImage = `linear-gradient(135deg, ${bg} 0%, ${accent}44 100%)`;
+    backgroundImage = `linear-gradient(135deg, ${bg} 0%, ${resolved.bgColor2 || `${accent}44`} 100%)`;
   } else if (template === 'midnight') {
     bg = resolved.bgColor || '#09090B';
     text = resolved.textColor || '#FAFAFA';
@@ -91,8 +116,9 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
         ? 'rounded-[28px]'
         : 'rounded-[18px]';
 
-  const cleanUsername = (username || 'creator').toLowerCase().trim();
   const initials = (displayName || cleanUsername).slice(0, 2).toUpperCase();
+  const displayQrSrc = customQrUrl || qrDataUrl;
+  const footerWebsite = resolved.websiteUrl || `iveo.site/${cleanUsername}`;
 
   return (
     <div
@@ -105,7 +131,6 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
         fontFamily: cardFont,
       }}
     >
-      {/* Template-specific geometric accents */}
       {template === 'executive' && (
         <div
           className="absolute left-0 top-0 bottom-0 w-1.5"
@@ -182,34 +207,47 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                 <span className="font-medium truncate" style={{ color: accent }}>
                   {resolved.role}
                 </span>
-              ) : (
+              ) : resolved.showHandle !== false ? (
                 <span className="font-mono" style={{ color: mutedText }}>
                   @{cleanUsername}
                 </span>
-              )}
-              {resolved.role && resolved.companyOrLocation && (
-                <span style={{ color: mutedText }}>·</span>
+              ) : null}
+              {resolved.role && resolved.showHandle !== false && (
+                <>
+                  <span style={{ color: mutedText }}>·</span>
+                  <span className="font-mono" style={{ color: mutedText }}>
+                    @{cleanUsername}
+                  </span>
+                </>
               )}
               {resolved.companyOrLocation && (
-                <span className="truncate inline-flex items-center gap-0.5" style={{ color: mutedText }}>
-                  <MapPin size={10} />
-                  {resolved.companyOrLocation}
-                </span>
+                <>
+                  {(resolved.role || resolved.showHandle !== false) && (
+                    <span style={{ color: mutedText }}>·</span>
+                  )}
+                  <span className="truncate inline-flex items-center gap-0.5" style={{ color: mutedText }}>
+                    <MapPin size={10} />
+                    {resolved.companyOrLocation}
+                  </span>
+                </>
               )}
             </div>
           </div>
         </div>
 
-        {resolved.showQr && qrDataUrl && (
-          <div className="w-12 h-12 sm:w-13 sm:h-13 bg-white p-1 rounded-lg shrink-0 shadow-xs border border-black/10">
-            <img src={qrDataUrl} alt="QR code" className="w-full h-full object-contain rounded" />
+        {resolved.showQr && displayQrSrc && (
+          <div
+            className="w-12 h-12 sm:w-13 sm:h-13 p-1 rounded-lg shrink-0 shadow-xs border border-black/10"
+            style={{ backgroundColor: qrBg }}
+          >
+            <img src={displayQrSrc} alt="QR code" className="w-full h-full object-contain rounded" />
           </div>
         )}
       </div>
 
       {/* Middle Row: Bio & Contact Chips */}
       <div className="relative z-10 pl-1 my-auto py-1 flex flex-col gap-1.5">
-        {bio && (
+        {resolved.showBio !== false && bio && (
           <p className="text-[11px] sm:text-[12px] leading-snug line-clamp-2" style={{ color: mutedText }}>
             {bio}
           </p>
@@ -241,7 +279,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
         <span className="font-semibold tracking-tight" style={{ color: text }}>
           iveo
         </span>
-        <span className="truncate">iveo.site/{cleanUsername}</span>
+        <span className="truncate">{footerWebsite}</span>
       </div>
     </div>
   );

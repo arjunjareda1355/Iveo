@@ -1,10 +1,12 @@
+import 'dotenv/config';
+
 /**
  * Typed environment getters for server functions under api/
  * Never import from src/.
  */
 
 export function getSiteOrigin(request?: Request): string {
-  const envOrigin = process.env.VITE_SITE_ORIGIN?.trim();
+  const envOrigin = process.env.VITE_SITE_ORIGIN?.trim() || process.env.APP_URL?.trim();
   if (envOrigin) {
     try {
       const u = new URL(envOrigin);
@@ -17,13 +19,50 @@ export function getSiteOrigin(request?: Request): string {
   }
 
   if (request) {
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
     const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
     if (host) {
-      return `https://${host}`;
+      const resolvedProto = host.includes('localhost') || host.startsWith('127.') ? proto : 'https';
+      return `${resolvedProto}://${host}`;
     }
   }
 
   return 'https://iveo.site';
+}
+
+export function getCanonicalSiteOrigin(): string {
+  const explicit = process.env.GSC_SITE_URL?.trim() || process.env.VITE_SITE_ORIGIN?.trim();
+  if (explicit) {
+    try {
+      const u = new URL(explicit);
+      if ((u.protocol === 'https:' || u.protocol === 'http:') && !u.host.includes('localhost')) {
+        return `${u.protocol}//${u.host}`;
+      }
+    } catch {}
+  }
+  return 'https://iveo.site';
+}
+
+export function getBuyMeACoffeeToken(): string | undefined {
+  return process.env.BUYMEACOFFEE_ACCESS_TOKEN?.trim() || undefined;
+}
+
+export function getGoogleSiteVerification(): string | undefined {
+  return process.env.GOOGLE_SITE_VERIFICATION?.trim() || undefined;
+}
+
+export function getBingSiteVerification(): string | undefined {
+  return process.env.BING_SITE_VERIFICATION?.trim() || undefined;
+}
+
+export function getIndexNowKey(): string | undefined {
+  return process.env.INDEXNOW_KEY?.trim() || undefined;
+}
+
+export function getSeoAdminEmails(): string[] {
+  const raw = process.env.SEO_ADMIN_EMAILS?.trim() || '';
+  if (!raw) return [];
+  return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
 export function getSupabaseUrl(): string | undefined {

@@ -242,6 +242,22 @@ async function ensureSchema(pool: sql.ConnectionPool): Promise<void> {
           created_at DATETIME2 DEFAULT SYSUTCDATETIME()
         );
       END
+
+      -- 5. Analytics Events Table
+      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='iveo_analytics_events' AND xtype='U')
+      BEGIN
+        CREATE TABLE iveo_analytics_events (
+          id NVARCHAR(128) NOT NULL PRIMARY KEY,
+          username NVARCHAR(64) NOT NULL,
+          event_type NVARCHAR(32) NOT NULL,
+          block_id NVARCHAR(128) NULL,
+          country NVARCHAR(16) NULL,
+          referrer NVARCHAR(256) NULL,
+          device NVARCHAR(32) NULL,
+          created_at DATETIME2 DEFAULT SYSUTCDATETIME()
+        );
+        CREATE INDEX IX_iveo_analytics_username ON iveo_analytics_events(username, created_at);
+      END
     `;
 
     await pool.request().query(migrationSql);
@@ -311,6 +327,8 @@ export interface ServerStoreData {
   blocks: Record<string, any[]>;
   contacts: Record<string, any[]>;
   passwords: Record<string, string>;
+  analytics: Record<string, any[]>;
+  redirects: Record<string, { to: string; updatedAt: string }>;
 }
 
 function readServerStore(): ServerStoreData {
@@ -340,10 +358,21 @@ function readServerStore(): ServerStoreData {
         blocks: parsed.blocks || {},
         contacts: parsed.contacts || {},
         passwords: parsed.passwords || {},
+        analytics: parsed.analytics || {},
+        redirects: parsed.redirects || {},
       };
     }
   } catch {}
-  return { profiles: {}, userToUsername: {}, claims: {}, blocks: {}, contacts: {}, passwords: {} };
+  return {
+    profiles: {},
+    userToUsername: {},
+    claims: {},
+    blocks: {},
+    contacts: {},
+    passwords: {},
+    analytics: {},
+    redirects: {},
+  };
 }
 
 function writeServerStore(data: ServerStoreData): void {
@@ -392,9 +421,18 @@ export async function dbClaimUsername(
   userId: string,
   username: string,
   profileData?: Partial<any>,
-  primaryEmail?: string | null
-): Promise<{ ok: boolean; error?: string; message?: string; username?: string; profileUrl?: string }> {
+  primaryEmail?: string | null,
+  previousUsernameHint?: string | null
+): Promise<{
+  ok: boolean;
+  error?: string;
+  message?: string;
+  username?: string;
+  previousUsername?: string | null;
+  profileUrl?: string;
+}> {
   const clean = username.toLowerCase().trim();
+  const cleanPrevHint = previousUsernameHint ? previousUsernameHint.toLowerCase().trim() : null;
   const isOwnerEmailMatch = isPrivilegedEmailServer(primaryEmail);
 
   const validation = validateUsernameServer(clean, { allowReserved: isOwnerEmailMatch });
@@ -425,23 +463,39 @@ export async function dbClaimUsername(
         }
       }
 
-      // Check if this user already claimed a different username, rename/migrate blocks
+      // Check if this user already claimed a different username, rename/migrate blocks & contacts
       const userCheckReq = new sql.Request(transaction);
       userCheckReq.input('userId', sql.NVarChar(128), userId);
       const prevClaims = await userCheckReq.query('SELECT username FROM iveo_profiles WHERE user_id = @userId');
+      let releasedUsername: string | null = null;
 
-      if (prevClaims.recordset.length > 0) {
-        for (const row of prevClaims.recordset) {
-          if (row.username !== clean) {
-            const delReq = new sql.Request(transaction);
-            delReq.input('oldUsername', sql.NVarChar(64), row.username);
-            await delReq.query('DELETE FROM iveo_profiles WHERE username = @oldUsername');
+      const prevNames = new Set<string>(prevClaims.recordset.map((r: any) => String(r.username).toLowerCase()));
+      if (cleanPrevHint && cleanPrevHint !== clean) {
+        prevNames.add(cleanPrevHint);
+      }
 
-            const moveBlocksReq = new sql.Request(transaction);
-            moveBlocksReq.input('oldUsername', sql.NVarChar(64), row.username);
-            moveBlocksReq.input('newUsername', sql.NVarChar(64), clean);
-            await moveBlocksReq.query('UPDATE iveo_blocks SET username = @newUsername WHERE username = @oldUsername');
-          }
+      for (const oldUname of prevNames) {
+        if (oldUname && oldUname !== clean) {
+          releasedUsername = oldUname;
+          const delReq = new sql.Request(transaction);
+          delReq.input('oldUsername', sql.NVarChar(64), oldUname);
+          delReq.input('userId', sql.NVarChar(128), userId);
+          await delReq.query('DELETE FROM iveo_profiles WHERE username = @oldUsername AND user_id = @userId');
+
+          const moveBlocksReq = new sql.Request(transaction);
+          moveBlocksReq.input('oldUsername', sql.NVarChar(64), oldUname);
+          moveBlocksReq.input('newUsername', sql.NVarChar(64), clean);
+          await moveBlocksReq.query('UPDATE iveo_blocks SET username = @newUsername WHERE username = @oldUsername');
+
+          const moveContactsReq = new sql.Request(transaction);
+          moveContactsReq.input('oldUsername', sql.NVarChar(64), oldUname);
+          moveContactsReq.input('newUsername', sql.NVarChar(64), clean);
+          await moveContactsReq.query('UPDATE iveo_contacts SET username = @newUsername WHERE username = @oldUsername');
+
+          const moveAnalyticsReq = new sql.Request(transaction);
+          moveAnalyticsReq.input('oldUsername', sql.NVarChar(64), oldUname);
+          moveAnalyticsReq.input('newUsername', sql.NVarChar(64), clean);
+          await moveAnalyticsReq.query('UPDATE iveo_analytics_events SET username = @newUsername WHERE username = @oldUsername');
         }
       }
 
@@ -462,6 +516,7 @@ export async function dbClaimUsername(
         position: profileData?.socialsPosition || 'top',
         email: primaryEmail || null,
         background: profileData?.background || null,
+        status: profileData?.status || 'active',
         integrations: {
           googleAnalyticsId: profileData?.googleAnalyticsId || null,
           metaPixelId: profileData?.metaPixelId || null,
@@ -500,7 +555,19 @@ export async function dbClaimUsername(
       `);
 
       await transaction.commit();
-      return { ok: true, username: clean, profileUrl: `https://iveo.site/${clean}` };
+
+      // Update server store redirect map if old username was released
+      const storeSync = readServerStore();
+      delete storeSync.redirects[clean];
+      if (releasedUsername && releasedUsername !== clean) {
+        storeSync.redirects[releasedUsername] = { to: clean, updatedAt: new Date().toISOString() };
+        delete storeSync.profiles[releasedUsername];
+        delete storeSync.claims[releasedUsername];
+        delete storeSync.blocks[releasedUsername];
+      }
+      writeServerStore(storeSync);
+
+      return { ok: true, username: clean, previousUsername: releasedUsername, profileUrl: `https://iveo.site/${clean}` };
     } catch {
       // Gracefully fall through to server store
     }
@@ -519,14 +586,48 @@ export async function dbClaimUsername(
     return { ok: false, error: 'already_claimed', message: `iveo.site/${clean} is already claimed by another creator. Please pick another address.` };
   }
 
-  // If user previously owned another username, release/transfer
-  const previousUsername = store.userToUsername[userId];
+  // Clear any old redirect pointing away from the newly claimed handle
+  delete store.redirects[clean];
+
+  // If user previously owned another username, release & migrate blocks/contacts/analytics cleanly
+  const previousUsername = store.userToUsername[userId] || (
+    cleanPrevHint &&
+    cleanPrevHint !== clean &&
+    store.profiles[cleanPrevHint] &&
+    (store.profiles[cleanPrevHint].userId === userId || store.profiles[cleanPrevHint].userId === 'owner' || isOwnerEmailMatch)
+      ? cleanPrevHint
+      : null
+  );
+
+  let oldProfSnapshot: any = null;
   if (previousUsername && previousUsername !== clean) {
-    if (store.blocks[previousUsername] && !store.blocks[clean]) {
+    oldProfSnapshot = store.profiles[previousUsername] || null;
+    if (store.blocks[previousUsername]) {
       store.blocks[clean] = store.blocks[previousUsername].map((b) => ({ ...b, username: clean }));
+      delete store.blocks[previousUsername];
+    }
+    if (store.contacts[previousUsername]) {
+      store.contacts[clean] = [
+        ...(store.contacts[clean] || []),
+        ...store.contacts[previousUsername].map((c) => ({ ...c, username: clean })),
+      ];
+      delete store.contacts[previousUsername];
+    }
+    if (store.analytics[previousUsername]) {
+      store.analytics[clean] = [
+        ...(store.analytics[clean] || []),
+        ...store.analytics[previousUsername].map((e) => ({ ...e, username: clean })),
+      ];
+      delete store.analytics[previousUsername];
     }
     delete store.profiles[previousUsername];
     delete store.claims[previousUsername];
+
+    // Record 301 SEO redirect only while previousUsername remains unclaimed
+    store.redirects[previousUsername] = {
+      to: clean,
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   // If claimed by a new user after deletion of an old account, ensure old blocks and contacts are not inherited
@@ -542,33 +643,46 @@ export async function dbClaimUsername(
     claimedAt: new Date().toISOString(),
   };
 
+  const basePrev = store.profiles[clean] || oldProfSnapshot || {};
   store.profiles[clean] = {
-    ...(store.profiles[clean] || {}),
+    ...basePrev,
     userId,
     username: clean,
-    displayName: profileData?.displayName || store.profiles[clean]?.displayName || clean,
-    bio: profileData?.bio || store.profiles[clean]?.bio || '',
-    avatarUrl: profileData?.avatarUrl || store.profiles[clean]?.avatarUrl || null,
-    avatarType: profileData?.avatarType || store.profiles[clean]?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
-    avatarId: profileData?.avatarId || store.profiles[clean]?.avatarId || null,
-    vibeId: profileData?.vibeId || store.profiles[clean]?.vibeId || 'clean',
-    buttonShape: profileData?.buttonShape !== undefined ? profileData.buttonShape : (store.profiles[clean]?.buttonShape ?? null),
-    socials: profileData?.socials || store.profiles[clean]?.socials || {},
-    socialsPosition: profileData?.socialsPosition || store.profiles[clean]?.socialsPosition || 'top',
-    primaryEmail: primaryEmail || store.profiles[clean]?.primaryEmail || null,
-    plan: isOwnerEmailMatch ? 'pro' : (profileData?.plan || store.profiles[clean]?.plan || 'free'),
-    hideFooter: Boolean(profileData?.hideFooter ?? store.profiles[clean]?.hideFooter),
-    hideFromSearch: Boolean(profileData?.hideFromSearch ?? store.profiles[clean]?.hideFromSearch),
-    background: profileData?.background !== undefined ? profileData.background : (store.profiles[clean]?.background || null),
-    fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (store.profiles[clean]?.fontSettings || null),
-    buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (store.profiles[clean]?.buttonColors || null),
-    businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (store.profiles[clean]?.businessCard || null),
-    claimedAt: store.profiles[clean]?.claimedAt || new Date().toISOString(),
+    displayName: profileData?.displayName || basePrev?.displayName || clean,
+    bio: profileData?.bio !== undefined ? profileData.bio : (basePrev?.bio || ''),
+    avatarUrl: profileData?.avatarUrl !== undefined ? profileData.avatarUrl : (basePrev?.avatarUrl || null),
+    avatarType: profileData?.avatarType || basePrev?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
+    avatarId: profileData?.avatarId !== undefined ? profileData.avatarId : (basePrev?.avatarId || null),
+    vibeId: profileData?.vibeId || basePrev?.vibeId || 'clean',
+    buttonShape: profileData?.buttonShape !== undefined ? profileData.buttonShape : (basePrev?.buttonShape ?? null),
+    socials: profileData?.socials || basePrev?.socials || {},
+    socialsPosition: profileData?.socialsPosition || basePrev?.socialsPosition || 'top',
+    primaryEmail: primaryEmail || basePrev?.primaryEmail || null,
+    plan: isOwnerEmailMatch ? 'pro' : (profileData?.plan || basePrev?.plan || 'free'),
+    status: profileData?.status || basePrev?.status || 'active',
+    isPublished: profileData?.isPublished ?? basePrev?.isPublished ?? true,
+    hideFooter: Boolean(profileData?.hideFooter ?? basePrev?.hideFooter),
+    hideFromSearch: Boolean(profileData?.hideFromSearch ?? basePrev?.hideFromSearch),
+    background: profileData?.background !== undefined ? profileData.background : (basePrev?.background || null),
+    googleAnalyticsId: profileData?.googleAnalyticsId !== undefined ? profileData.googleAnalyticsId : (basePrev?.googleAnalyticsId || null),
+    metaPixelId: profileData?.metaPixelId !== undefined ? profileData.metaPixelId : (basePrev?.metaPixelId || null),
+    whatsappNumber: profileData?.whatsappNumber !== undefined ? profileData.whatsappNumber : (basePrev?.whatsappNumber || null),
+    customSeoTitle: profileData?.customSeoTitle !== undefined ? profileData.customSeoTitle : (basePrev?.customSeoTitle || null),
+    customSeoDescription: profileData?.customSeoDescription !== undefined ? profileData.customSeoDescription : (basePrev?.customSeoDescription || null),
+    fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (basePrev?.fontSettings || null),
+    buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (basePrev?.buttonColors || null),
+    businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (basePrev?.businessCard || null),
+    claimedAt: basePrev?.claimedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
   writeServerStore(store);
-  return { ok: true, username: clean, profileUrl: `https://iveo.site/${clean}` };
+  return {
+    ok: true,
+    username: clean,
+    previousUsername: previousUsername && previousUsername !== clean ? previousUsername : null,
+    profileUrl: `https://iveo.site/${clean}`,
+  };
 }
 
 export async function dbGetProfileByUserId(userId: string, email?: string | null): Promise<any | null> {
@@ -686,6 +800,8 @@ export async function dbSaveProfile(profile: {
   socialsPosition?: 'top' | 'bottom' | 'both';
   primaryEmail?: string | null;
   plan?: string;
+  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  isPublished?: boolean;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
   background?: any;
@@ -712,12 +828,14 @@ export async function dbSaveProfile(profile: {
     isPrivilegedEmailServer(profile.primaryEmail) ||
     profile.plan === 'pro';
   const effectivePlan = isOwner ? 'pro' : profile.plan || 'free';
+  const effectiveStatus = profile.status || (profile.isPublished === false ? 'unpublished' : 'active');
 
   const socialsPayload = {
     links: profile.socials || {},
     position: profile.socialsPosition || 'top',
     email: profile.primaryEmail || null,
     background: profile.background !== undefined ? profile.background : null,
+    status: effectiveStatus,
     integrations: {
       googleAnalyticsId: profile.googleAnalyticsId ?? null,
       metaPixelId: profile.metaPixelId ?? null,
@@ -837,6 +955,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
         let socialsPosition: 'top' | 'bottom' | 'both' = 'top';
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
+        let parsedStatus = 'active';
         let integrations: Record<string, any> = {};
         let appearance: Record<string, any> = {};
         try {
@@ -847,6 +966,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
               socialsPosition = parsed.position === 'bottom' ? 'bottom' : parsed.position === 'both' ? 'both' : 'top';
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
+              if (parsed.status) parsedStatus = parsed.status;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
               appearance = (parsed.appearance && typeof parsed.appearance === 'object') ? parsed.appearance : {};
             } else if (parsed && typeof parsed === 'object') {
@@ -868,6 +988,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           socialsPosition,
           primaryEmail,
           plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : row.plan,
+          status: parsedStatus,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
@@ -880,6 +1001,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           buttonColors: appearance.buttonColors || null,
           businessCard: appearance.businessCard || null,
           isPublished: Boolean(row.is_published),
+          updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         };
       }
     } catch {
@@ -893,6 +1015,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
   return {
     ...prof,
     plan: isPrivilegedEmailServer(prof.primaryEmail) ? 'pro' : (prof.plan || 'free'),
+    status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
     avatarType: prof.avatarType || (prof.avatarId ? 'default' : (prof.avatarUrl ? 'uploaded' : 'default')),
     avatarId: prof.avatarId || null,
   };
@@ -940,6 +1063,7 @@ export async function dbSaveBlocks(
         const extraPayload = {
           signup: b.signup || null,
           tipJar: b.tipJar || null,
+          coffee: b.coffee || null,
           faq: b.faq || null,
           vcard: b.vcard || null,
           animation: b.animation || null,
@@ -997,6 +1121,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
       return res.recordset.map((r) => {
         let signup = null;
         let tipJar = null;
+        let coffee = null;
         let faq = null;
         let vcard = null;
         let animation = null;
@@ -1006,9 +1131,10 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           if (r.signup_config_json) {
             const parsed = JSON.parse(r.signup_config_json);
             if (parsed && typeof parsed === 'object') {
-              if ('signup' in parsed || 'tipJar' in parsed || 'faq' in parsed || 'vcard' in parsed) {
+              if ('signup' in parsed || 'tipJar' in parsed || 'coffee' in parsed || 'faq' in parsed || 'vcard' in parsed) {
                 signup = parsed.signup || null;
                 tipJar = parsed.tipJar || null;
+                coffee = parsed.coffee || null;
                 faq = parsed.faq || null;
                 vcard = parsed.vcard || null;
                 animation = parsed.animation || null;
@@ -1033,6 +1159,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           embedProvider: r.embed_provider,
           signup,
           tipJar,
+          coffee,
           faq,
           vcard,
           animation,
@@ -1062,7 +1189,8 @@ export async function dbSaveContact(contact: {
   email?: string | null;
   phone?: string | null;
   consentText?: string | null;
-  source?: string;
+  source?: string | null;
+  formTitle?: string | null;
 }): Promise<void> {
   const clean = contact.username.toLowerCase().trim();
   const pool = await getAzureSqlPool();
@@ -1077,7 +1205,7 @@ export async function dbSaveContact(contact: {
       req.input('email', sql.NVarChar(256), contact.email || null);
       req.input('phone', sql.NVarChar(64), contact.phone || null);
       req.input('consentText', sql.NVarChar(500), contact.consentText || null);
-      req.input('source', sql.NVarChar(64), contact.source || null);
+      req.input('source', sql.NVarChar(64), contact.formTitle || contact.source || null);
 
       await req.query(`
         INSERT INTO iveo_contacts (id, user_id, username, link_id, email, phone, consent_text, source)
@@ -1093,6 +1221,7 @@ export async function dbSaveContact(contact: {
   if (!store.contacts[clean]) store.contacts[clean] = [];
   store.contacts[clean].unshift({
     ...contact,
+    formTitle: contact.formTitle || contact.source || null,
     createdAt: new Date().toISOString(),
   });
   writeServerStore(store);
@@ -1120,6 +1249,7 @@ export async function dbGetContacts(username?: string): Promise<any[]> {
         phone: r.phone,
         consentText: r.consent_text,
         source: r.source,
+        formTitle: r.source || null,
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
       }));
     } catch {
@@ -1324,3 +1454,251 @@ export async function dbVerifyLinkPassword(linkId: string, password: string): Pr
   const store = readServerStore();
   return store.passwords[linkId] === password;
 }
+
+export async function dbGetRedirectTarget(username: string): Promise<string | null> {
+  const clean = (username || '').toLowerCase().trim();
+  if (!clean) return null;
+  const store = readServerStore();
+  // Redirect only applies while the old handle remains unclaimed
+  if (store.profiles[clean]) return null;
+  const rec = store.redirects[clean];
+  if (rec?.to && rec.to !== clean) {
+    return rec.to;
+  }
+  return null;
+}
+
+export async function dbListAllProfiles(): Promise<any[]> {
+  const byUsername = new Map<string, any>();
+  const pool = await getAzureSqlPool();
+
+  if (pool) {
+    try {
+      const res = await pool.request().query('SELECT * FROM iveo_profiles');
+      for (const row of res.recordset) {
+        const uname = String(row.username || '').toLowerCase().trim();
+        if (!uname) continue;
+        let parsedStatus = 'active';
+        let integrations: Record<string, any> = {};
+        let socials: Record<string, string> = {};
+        try {
+          if (row.socials_json) {
+            const parsed = JSON.parse(row.socials_json);
+            if (parsed && typeof parsed === 'object') {
+              socials = parsed.links || {};
+              if (parsed.status) parsedStatus = parsed.status;
+              if (parsed.integrations) integrations = parsed.integrations;
+            }
+          }
+        } catch {}
+        byUsername.set(uname, {
+          userId: row.user_id,
+          username: uname,
+          displayName: row.display_name,
+          bio: row.bio,
+          avatarUrl: row.avatar_url,
+          vibeId: row.vibe_id,
+          socials,
+          plan: row.plan || 'free',
+          status: parsedStatus,
+          hideFromSearch: Boolean(row.hide_from_search),
+          isPublished: Boolean(row.is_published),
+          customSeoTitle: integrations.customSeoTitle || null,
+          customSeoDescription: integrations.customSeoDescription || null,
+          updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+        });
+      }
+    } catch {}
+  }
+
+  const store = readServerStore();
+  for (const [uname, prof] of Object.entries<any>(store.profiles)) {
+    const clean = uname.toLowerCase().trim();
+    if (!clean) continue;
+    if (!byUsername.has(clean)) {
+      byUsername.set(clean, {
+        ...prof,
+        username: clean,
+        status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
+        isPublished: prof.isPublished !== false,
+      });
+    }
+  }
+
+  return Array.from(byUsername.values());
+}
+
+export async function dbRecordAnalyticsEvent(event: {
+  username: string;
+  eventType: 'page_view' | 'link_click';
+  blockId?: string | null;
+  country?: string | null;
+  referrer?: string | null;
+  device?: string | null;
+}): Promise<void> {
+  const clean = (event.username || '').toLowerCase().trim();
+  if (!clean) return;
+
+  const id = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const country = event.country || 'Unknown';
+  const referrer = event.referrer || 'Direct';
+  const device = event.device || 'Desktop';
+  const createdAt = new Date().toISOString();
+
+  const pool = await getAzureSqlPool();
+  if (pool) {
+    try {
+      await pool
+        .request()
+        .input('id', sql.NVarChar(128), id)
+        .input('username', sql.NVarChar(64), clean)
+        .input('eventType', sql.NVarChar(32), event.eventType)
+        .input('blockId', sql.NVarChar(128), event.blockId || null)
+        .input('country', sql.NVarChar(16), country)
+        .input('referrer', sql.NVarChar(256), referrer)
+        .input('device', sql.NVarChar(32), device)
+        .query(`
+          INSERT INTO iveo_analytics_events (id, username, event_type, block_id, country, referrer, device)
+          VALUES (@id, @username, @eventType, @blockId, @country, @referrer, @device)
+        `);
+      return;
+    } catch {}
+  }
+
+  const store = readServerStore();
+  if (!store.analytics[clean]) store.analytics[clean] = [];
+  store.analytics[clean].push({
+    id,
+    username: clean,
+    eventType: event.eventType,
+    blockId: event.blockId || null,
+    country,
+    referrer,
+    device,
+    createdAt,
+  });
+  // Cap per-user raw event buffer cleanly to last 10,000 events
+  if (store.analytics[clean].length > 10000) {
+    store.analytics[clean] = store.analytics[clean].slice(-10000);
+  }
+  writeServerStore(store);
+}
+
+export async function dbGetAnalytics(
+  username: string,
+  fromDate: Date,
+  toDate: Date,
+  isPro: boolean
+): Promise<any> {
+  const clean = (username || '').toLowerCase().trim();
+  if (!clean) return null;
+
+  let events: any[] = [];
+  const pool = await getAzureSqlPool();
+  if (pool) {
+    try {
+      const res = await pool
+        .request()
+        .input('username', sql.NVarChar(64), clean)
+        .input('from', sql.DateTime2, fromDate)
+        .input('to', sql.DateTime2, toDate)
+        .query(`
+          SELECT event_type, block_id, country, referrer, device, created_at
+          FROM iveo_analytics_events
+          WHERE username = @username AND created_at >= @from AND created_at <= @to
+        `);
+      events = res.recordset.map((r) => ({
+        eventType: r.event_type,
+        blockId: r.block_id,
+        country: r.country || 'Unknown',
+        referrer: r.referrer || 'Direct',
+        device: r.device || 'Desktop',
+        createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+      }));
+    } catch {}
+  }
+
+  if (events.length === 0) {
+    const store = readServerStore();
+    const list = store.analytics[clean] || [];
+    const fromMs = fromDate.getTime();
+    const toMs = toDate.getTime();
+    events = list.filter((e) => {
+      const t = new Date(e.createdAt).getTime();
+      return t >= fromMs && t <= toMs;
+    });
+  }
+
+  let views = 0;
+  let clicks = 0;
+  const byDayMap = new Map<string, { views: number; clicks: number }>();
+  const linkClickMap = new Map<string, number>();
+  const refMap = new Map<string, number>();
+  const countryMap = new Map<string, number>();
+  const deviceMap = new Map<string, number>();
+
+  for (const ev of events) {
+    const day = String(ev.createdAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const dayEntry = byDayMap.get(day) || { views: 0, clicks: 0 };
+    if (ev.eventType === 'page_view') {
+      views += 1;
+      dayEntry.views += 1;
+      refMap.set(ev.referrer || 'Direct', (refMap.get(ev.referrer || 'Direct') || 0) + 1);
+      countryMap.set(ev.country || 'Unknown', (countryMap.get(ev.country || 'Unknown') || 0) + 1);
+      deviceMap.set(ev.device || 'Desktop', (deviceMap.get(ev.device || 'Desktop') || 0) + 1);
+    } else if (ev.eventType === 'link_click') {
+      clicks += 1;
+      dayEntry.clicks += 1;
+      if (ev.blockId) {
+        linkClickMap.set(ev.blockId, (linkClickMap.get(ev.blockId) || 0) + 1);
+      }
+    }
+    byDayMap.set(day, dayEntry);
+  }
+
+  const byDay: { date: string; views: number; clicks: number }[] = [];
+  const cursor = new Date(fromDate);
+  cursor.setUTCHours(0, 0, 0, 0);
+  const endCursor = new Date(toDate);
+  endCursor.setUTCHours(0, 0, 0, 0);
+  while (cursor <= endCursor && byDay.length < 366) {
+    const dStr = cursor.toISOString().slice(0, 10);
+    const dData = byDayMap.get(dStr) || { views: 0, clicks: 0 };
+    byDay.push({ date: dStr, views: dData.views, clicks: dData.clicks });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  const blocks = await dbGetBlocks(clean).catch(() => []);
+  const titleById = new Map<string, string>();
+  blocks.forEach((b: any) => {
+    if (b.id) titleById.set(b.id, b.title || b.kind || 'Link');
+  });
+
+  const ctr = views > 0 ? Math.round((clicks / views) * 1000) / 10 : 0;
+
+  return {
+    views,
+    clicks,
+    ctr,
+    by_day: byDay,
+    top_links: Array.from(linkClickMap.entries())
+      .map(([block_id, c]) => ({
+        block_id,
+        title: titleById.get(block_id) || 'Link',
+        clicks: c,
+      }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 8),
+    referrers: isPro
+      ? Array.from(refMap.entries()).map(([referrer, c]) => ({ referrer, clicks: c })).sort((a, b) => b.clicks - a.clicks)
+      : [],
+    countries: isPro
+      ? Array.from(countryMap.entries()).map(([country, c]) => ({ country, clicks: c })).sort((a, b) => b.clicks - a.clicks)
+      : [],
+    devices: isPro
+      ? Array.from(deviceMap.entries()).map(([device, c]) => ({ device, clicks: c })).sort((a, b) => b.clicks - a.clicks)
+      : [],
+    isCapped: false,
+  };
+}
+

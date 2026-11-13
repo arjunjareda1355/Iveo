@@ -28,6 +28,8 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'discover',
   'docs',
   'explore',
+  'healthz',
+  '_health',
   'help',
   'home',
   'iveo',
@@ -40,11 +42,16 @@ export const RESERVED_USERNAMES: readonly string[] = [
   'pay',
   'pricing',
   'privacy',
+  'robots',
+  'robots.txt',
   'root',
+  'seo',
   'settings',
   'signin',
   'signout',
   'signup',
+  'sitemap',
+  'sitemap.xml',
   'sso-callback',
   'ssocallback',
   'staging',
@@ -110,7 +117,7 @@ export type UsernameValidationResult =
       message?: string;
     };
 
-export const PRIVATE_ROUTES = new Set(['login', 'signup', 'dashboard', 'onboarding', 'account']);
+export const PRIVATE_ROUTES = new Set(['login', 'signup', 'dashboard', 'onboarding', 'account', 'admin']);
 
 export function validateUsername(
   input: string,

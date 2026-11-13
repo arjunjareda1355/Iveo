@@ -12,7 +12,25 @@ export async function sendTrackingRpc(
   const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
   if (!rawUrl || !anonKey) {
-    // If Supabase is not configured, fallback to local dev simulation
+    // Persist cross-device to unified Express/AzureSQL analytics endpoint + local fallback
+    if (fnName === 'record_page_event' && typeof window !== 'undefined') {
+      const username = String(params.p_username || '').toLowerCase().trim();
+      const eventType = params.p_event === 'click' ? 'link_click' : 'page_view';
+      if (username) {
+        fetch('/api/analytics/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            eventType,
+            blockId: params.p_link_id || null,
+            referrer: String(params.p_source || 'Direct') || 'Direct',
+            device: String(params.p_device || 'Desktop') || 'Desktop',
+          }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    }
     try {
       if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
         recordLocalSimulation(fnName, params);

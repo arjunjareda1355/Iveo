@@ -629,8 +629,8 @@ export const LinksTab: React.FC = () => {
 
       {activeComposer === 'coffee' && (
         <CoffeeComposer
-          onAdd={async ({ title, url, badge }) => {
-            await addCoffee(title, url, badge);
+          onAdd={async ({ title, url, badge, coffee }) => {
+            await addCoffee(title, url, badge, coffee || null);
             handleCloseComposer();
           }}
           onCancel={handleCloseComposer}
@@ -1058,13 +1058,15 @@ export const LinksTab: React.FC = () => {
                       title: block.title,
                       url: block.url || '',
                       badge: block.badge || undefined,
+                      coffee: block.coffee || undefined,
                     }}
                     isEditing
-                    onAdd={async ({ title, url, badge }) => {
+                    onAdd={async ({ title, url, badge, coffee }) => {
                       await updateBlock(block.id, {
                         title,
                         url,
                         badge: badge || null,
+                        coffee: coffee || null,
                       });
                       setEditingBlockId(null);
                     }}

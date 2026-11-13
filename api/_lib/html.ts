@@ -75,3 +75,21 @@ export function injectHead(template: string, tags: string): string {
   const newHead = `${headContent.trimEnd()}\n    ${tags}\n  `;
   return `${template.slice(0, headOpeningIndex)}${newHead}${template.slice(headClosingIndex)}`;
 }
+
+/**
+ * Injects crawlable semantic HTML inside <div id="root">...</div> so Googlebot / curl
+ * receive full headings, bio, social links, and outbound block links before JS hydration.
+ */
+export function injectRootSsr(template: string, innerHtml: string): string {
+  if (!innerHtml) return template;
+  const emptyRootRegex = /<div\b([^>]*\bid=["']root["'][^>]*)><\/div>/i;
+  if (emptyRootRegex.test(template)) {
+    return template.replace(emptyRootRegex, `<div$1>${innerHtml}</div>`);
+  }
+  const openRootRegex = /<div\b([^>]*\bid=["']root["'][^>]*)>/i;
+  if (openRootRegex.test(template)) {
+    return template.replace(openRootRegex, `<div$1>${innerHtml}`);
+  }
+  return template;
+}
+

@@ -88,6 +88,14 @@ export const Footer: React.FC = () => {
                 </a>
               </li>
               <li>
+                <Link
+                  to="/discover"
+                  className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
+                >
+                  Discover creators
+                </Link>
+              </li>
+              <li>
                 <a
                   href="#pricing"
                   className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"

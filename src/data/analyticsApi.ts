@@ -67,7 +67,84 @@ export async function getAnalytics(
     return mapped;
   }
 
-  // Fallback local simulation for dev environment
+  const cleanUsername = (username || '').toLowerCase().trim();
+  const maxDays = isPro ? 365 : 30;
+
+  if (cleanUsername && typeof window !== 'undefined') {
+    try {
+      const qs = new URLSearchParams({
+        username: cleanUsername,
+        from,
+        to,
+        isPro: isPro ? 'true' : 'false',
+      });
+      const res = await fetch(`/api/analytics?${qs.toString()}`);
+      if (res.ok) {
+        const srv = await res.json();
+        if (srv && typeof srv === 'object' && Array.isArray(srv.by_day)) {
+          const validSources = new Set<string>([
+            '', 'qr', 'google', 'bing', 'duckduckgo', 'instagram', 'facebook', 'x',
+            'tiktok', 'youtube', 'linkedin', 'pinterest', 'reddit', 'whatsapp',
+            'telegram', 'snapchat', 'threads', 'github', 'discord', 'email', 'other',
+          ]);
+          const normalizeSource = (rawSrc: string): TrackSource => {
+            const lower = (rawSrc || '').toLowerCase().trim();
+            if (!lower || lower === 'direct') return '';
+            return validSources.has(lower) ? (lower as TrackSource) : 'other';
+          };
+          const normalizeDevice = (rawDev: string): DeviceType => {
+            const lower = (rawDev || '').toLowerCase().trim();
+            if (lower === 'mobile' || lower === 'tablet' || lower === 'desktop' || lower === 'other') {
+              return lower as DeviceType;
+            }
+            return 'desktop';
+          };
+
+          const serverViews = typeof srv.views === 'number' ? srv.views : 0;
+          const serverClicks = typeof srv.clicks === 'number' ? srv.clicks : 0;
+          const localSim = getLocalSimulatedAnalytics(from, to, isPro, username);
+
+          // If server already recorded events (or local is empty), return server result cleanly
+          if (serverViews > 0 || serverClicks > 0 || (localSim.totals.views === 0 && localSim.totals.clicks === 0)) {
+            return {
+              range: { from, to, maxDays, isPro },
+              totals: { views: serverViews, clicks: serverClicks },
+              daily: srv.by_day.map((d: any) => ({
+                day: String(d.date || d.day || ''),
+                views: typeof d.views === 'number' ? d.views : 0,
+                clicks: typeof d.clicks === 'number' ? d.clicks : 0,
+              })),
+              links: Array.isArray(srv.top_links)
+                ? srv.top_links.map((l: any) => ({
+                    linkId: String(l.block_id || l.linkId || ''),
+                    clicks: typeof l.clicks === 'number' ? l.clicks : 0,
+                  }))
+                : [],
+              sources: isPro && Array.isArray(srv.referrers)
+                ? srv.referrers.map((r: any) => ({
+                    source: normalizeSource(String(r.referrer || '')),
+                    views: typeof r.clicks === 'number' ? r.clicks : 0,
+                    clicks: 0,
+                  }))
+                : null,
+              devices: isPro && Array.isArray(srv.devices)
+                ? srv.devices.map((dv: any) => ({
+                    device: normalizeDevice(String(dv.device || 'desktop')),
+                    views: typeof dv.clicks === 'number' ? dv.clicks : 0,
+                    clicks: 0,
+                  }))
+                : null,
+            };
+          }
+          return localSim;
+        }
+      }
+    } catch {
+      // Fall through to local simulation
+    }
+  }
+
+  // Fallback local simulation for dev/offline environment
   return getLocalSimulatedAnalytics(from, to, isPro, username);
 }
 

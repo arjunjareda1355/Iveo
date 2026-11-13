@@ -13,6 +13,14 @@ import {
   handleUnlockLink,
   handleSetLinkPassword,
   handleDeleteAccount,
+  handleRecordAnalyticsEvent,
+  handleGetAnalytics,
+  handleBuyMeACoffee,
+  handleDiscoverProfiles,
+  handleSeoAdminOverview,
+  handleSeoAdminRegenerate,
+  handleSeoAdminValidate,
+  handleSeoAdminInspect,
 } from './_lib/db-handlers.ts';
 
 export const dynamic = 'force-dynamic';
@@ -54,6 +62,22 @@ async function dispatchNode(action: string, req: any, res: any) {
       if (method === 'DELETE') return handleDeleteContacts(req, res);
       if (method === 'POST') return handleSaveContact(req, res);
       return handleGetContacts(req, res);
+    case 'analytics-event':
+      return handleRecordAnalyticsEvent(req, res);
+    case 'analytics':
+      return method === 'POST' ? handleRecordAnalyticsEvent(req, res) : handleGetAnalytics(req, res);
+    case 'buymeacoffee':
+      return handleBuyMeACoffee(req, res);
+    case 'discover':
+      return handleDiscoverProfiles(req, res);
+    case 'seo-overview':
+      return handleSeoAdminOverview(req, res);
+    case 'seo-regenerate':
+      return handleSeoAdminRegenerate(req, res);
+    case 'seo-validate':
+      return handleSeoAdminValidate(req, res);
+    case 'seo-inspect':
+      return handleSeoAdminInspect(req, res);
     case 'unlock-link':
       return handleUnlockLink(req, res);
     case 'link-password':

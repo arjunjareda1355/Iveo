@@ -275,6 +275,8 @@ export async function firebaseSaveProfile(
     socialsPosition: profileData.socialsPosition || 'top',
     primaryEmail: profileData.primaryEmail || null,
     plan: profileData.plan || 'free',
+    status: profileData.status || (profileData.isPublished === false ? 'unpublished' : 'active'),
+    isPublished: profileData.isPublished !== false,
     hideFooter: Boolean(profileData.hideFooter),
     hideFromSearch: Boolean(profileData.hideFromSearch),
     background: profileData.background ?? null,
@@ -347,6 +349,7 @@ export async function firebaseSaveBlocks(
         isProtected: Boolean(b.isProtected),
         signup: b.signup || null,
         tipJar: b.tipJar || null,
+        coffee: b.coffee || null,
         faq: b.faq || null,
         vcard: b.vcard || null,
         animation: b.animation || null,
@@ -437,3 +440,86 @@ export async function firebaseRecordClick(
     console.warn('[FirebaseServer] Background recordClick notice:', err);
   }
 }
+
+/**
+ * Releases an old username cleanly across Firebase collections when a user renames or deletes their handle.
+ */
+export async function firebaseReleaseUsername(
+  oldUsername: string,
+  userId?: string
+): Promise<void> {
+  if (!serverDb || !oldUsername) return;
+  const cleanOld = oldUsername.toLowerCase().trim();
+  if (!cleanOld) return;
+
+  try {
+    // Delete old claim doc if unclaimed or owned by this user
+    const claimRef = doc(serverDb, 'claims', cleanOld);
+    const claimSnap = await getDoc(claimRef).catch(() => null);
+    if (claimSnap && claimSnap.exists()) {
+      const ownerId = claimSnap.data()?.userId;
+      if (!userId || !ownerId || ownerId === userId || ownerId === 'owner') {
+        await deleteDoc(claimRef).catch(() => {});
+      }
+    }
+
+    // Delete old blocks subcollection under users/{cleanOld}/blocks
+    const oldBlocksSnap = await getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null);
+    if (oldBlocksSnap && !oldBlocksSnap.empty) {
+      const batch = writeBatch(serverDb);
+      oldBlocksSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit().catch(() => {});
+    }
+
+    // Delete old user doc keyed by oldUsername (only if owned by userId or key equals oldUsername)
+    const oldUserRef = doc(serverDb, 'users', cleanOld);
+    const oldUserSnap = await getDoc(oldUserRef).catch(() => null);
+    if (oldUserSnap && oldUserSnap.exists()) {
+      const ownerId = oldUserSnap.data()?.userId;
+      if (!userId || !ownerId || ownerId === userId || ownerId === 'owner') {
+        await deleteDoc(oldUserRef).catch(() => {});
+      }
+    }
+
+    // Delete any mirrored user docs still holding username == cleanOld for this owner
+    const qOld = query(collection(serverDb, 'users'), where('username', '==', cleanOld));
+    const qOldSnap = await getDocs(qOld).catch(() => null);
+    if (qOldSnap && !qOldSnap.empty) {
+      for (const d of qOldSnap.docs) {
+        const ownerId = d.data()?.userId;
+        if (!userId || !ownerId || ownerId === userId || ownerId === 'owner') {
+          await deleteDoc(d.ref).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[FirebaseServer] releaseUsername notice:', err);
+  }
+}
+
+/**
+ * Lists all user profiles stored in Firebase Firestore (for SEO sitemap & audit).
+ */
+export async function firebaseGetAllProfiles(): Promise<any[]> {
+  if (!serverDb) return [];
+  try {
+    const snap = await getDocs(collection(serverDb, 'users'));
+    const byUsername = new Map<string, any>();
+    snap.docs.forEach((d) => {
+      const data = d.data() || {};
+      const uname = typeof data.username === 'string' ? data.username.toLowerCase().trim() : '';
+      if (!uname) return;
+      const existing = byUsername.get(uname);
+      if (!existing || ((data.updatedAt || '') > (existing.updatedAt || ''))) {
+        byUsername.set(uname, {
+          ...data,
+          username: uname,
+        });
+      }
+    });
+    return Array.from(byUsername.values());
+  } catch {
+    return [];
+  }
+}
+

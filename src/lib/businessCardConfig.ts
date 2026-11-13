@@ -13,6 +13,7 @@ export type BusinessCardCornerStyle = 'rounded' | 'sharp' | 'pill';
 export interface BusinessCardConfig {
   template?: BusinessCardTemplate;
   bgColor?: string | null;
+  bgColor2?: string | null;
   accentColor?: string | null;
   textColor?: string | null;
   fontId?: string | null;
@@ -20,15 +21,21 @@ export interface BusinessCardConfig {
   companyOrLocation?: string | null;
   contactEmail?: string | null;
   contactPhone?: string | null;
+  websiteUrl?: string | null;
   badgeText?: string | null;
   showAvatar?: boolean;
+  showBio?: boolean;
+  showHandle?: boolean;
   showQr?: boolean;
+  qrFgColor?: string | null;
+  qrBgColor?: string | null;
   cornerStyle?: BusinessCardCornerStyle;
 }
 
 export const DEFAULT_BUSINESS_CARD_CONFIG: Required<BusinessCardConfig> = {
   template: 'classic',
   bgColor: null,
+  bgColor2: null,
   accentColor: null,
   textColor: null,
   fontId: null,
@@ -36,9 +43,14 @@ export const DEFAULT_BUSINESS_CARD_CONFIG: Required<BusinessCardConfig> = {
   companyOrLocation: null,
   contactEmail: null,
   contactPhone: null,
+  websiteUrl: null,
   badgeText: null,
   showAvatar: true,
+  showBio: true,
+  showHandle: true,
   showQr: true,
+  qrFgColor: null,
+  qrBgColor: null,
   cornerStyle: 'rounded',
 };
 
@@ -87,6 +99,7 @@ export function parseBusinessCardConfig(raw: unknown): BusinessCardConfig | null
   return {
     template,
     bgColor: normalizeHexColor(typeof r.bgColor === 'string' ? r.bgColor : null),
+    bgColor2: normalizeHexColor(typeof r.bgColor2 === 'string' ? r.bgColor2 : null),
     accentColor: normalizeHexColor(typeof r.accentColor === 'string' ? r.accentColor : null),
     textColor: normalizeHexColor(typeof r.textColor === 'string' ? r.textColor : null),
     fontId:
@@ -97,9 +110,14 @@ export function parseBusinessCardConfig(raw: unknown): BusinessCardConfig | null
     companyOrLocation: cleanStr(r.companyOrLocation, 60),
     contactEmail: cleanStr(r.contactEmail, 100),
     contactPhone: cleanStr(r.contactPhone, 32),
+    websiteUrl: cleanStr(r.websiteUrl, 80),
     badgeText: cleanStr(r.badgeText, 28),
     showAvatar: r.showAvatar !== false,
+    showBio: r.showBio !== false,
+    showHandle: r.showHandle !== false,
     showQr: r.showQr !== false,
+    qrFgColor: normalizeHexColor(typeof r.qrFgColor === 'string' ? r.qrFgColor : null),
+    qrBgColor: normalizeHexColor(typeof r.qrBgColor === 'string' ? r.qrBgColor : null),
     cornerStyle,
   };
 }
@@ -113,6 +131,8 @@ export function mergeBusinessCardConfig(
     ...(base || {}),
     ...(patch || {}),
     showAvatar: (patch?.showAvatar ?? base?.showAvatar) !== false,
+    showBio: (patch?.showBio ?? base?.showBio) !== false,
+    showHandle: (patch?.showHandle ?? base?.showHandle) !== false,
     showQr: (patch?.showQr ?? base?.showQr) !== false,
   };
 }

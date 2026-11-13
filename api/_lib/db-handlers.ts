@@ -18,9 +18,12 @@ import {
   dbSetLinkPassword,
   dbClearLinkPassword,
   dbVerifyLinkPassword,
+  dbRecordAnalyticsEvent,
+  dbGetAnalytics,
 } from './azureSql.ts';
 import { isAllowedAvatarHost } from './publicPage.ts';
 import { RESERVED, isPrivilegedEmailServer } from './usernames.ts';
+import { getCanonicalSiteOrigin, getSeoAdminEmails, getSiteOrigin } from './env.ts';
 import {
   firebaseGetProfile,
   firebaseGetProfileByUserId,
@@ -28,7 +31,18 @@ import {
   firebaseSaveProfile,
   firebaseSaveBlocks,
   firebaseSaveContact,
+  firebaseReleaseUsername,
 } from './firebaseServer.ts';
+import { fetchBuyMeACoffeeProfile } from './buymeacoffee.ts';
+import {
+  evaluateProfileIndexability,
+  getAllUnifiedProfiles,
+  getSeoHealthReport,
+  notifyProfileSeoChanged,
+  regenerateAndPingSitemap,
+  validateProfileSeo,
+} from './seoService.ts';
+import { inspectUrlWithGsc } from './searchEngines.ts';
 import { VIBES } from '../../src/lib/vibes.ts';
 
 /**
@@ -116,6 +130,11 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       return res.status(404).json({ error: 'not_found' });
     }
 
+    const effectiveStatus = profile.status || (profile.isPublished === false ? 'unpublished' : 'active');
+    if (effectiveStatus === 'deleted' || effectiveStatus === 'suspended' || effectiveStatus === 'private' || effectiveStatus === 'unpublished') {
+      return res.status(404).json({ error: 'not_found', status: effectiveStatus });
+    }
+
     let allBlocks = await dbGetBlocks(clean);
     if (cameFromFirebase && (!allBlocks || allBlocks.length === 0)) {
       const fbBlocks = await firebaseGetBlocks(clean);
@@ -146,6 +165,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         isProtected: Boolean(b.isProtected),
         signup: b.signup || null,
         tipJar: b.tipJar || null,
+        coffee: b.coffee || null,
         faq: b.faq || null,
         vcard: b.vcard || null,
         animation: b.animation || null,
@@ -191,6 +211,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
   const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
   const username = (body.username as string || '').toLowerCase().trim();
+  const previousUsernameHint = (body.previousUsername as string || '').toLowerCase().trim() || null;
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
   const profileData = body.profile || body.profileData || body;
 
@@ -203,7 +224,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    const result = await dbClaimUsername(userId, username, profileData, primaryEmail);
+    const result = await dbClaimUsername(userId, username, profileData, primaryEmail, previousUsernameHint);
     if (!result.ok) {
       const statusCode = result.error === 'already_claimed' ? 409 : 400;
       return res.status(statusCode).json({
@@ -213,22 +234,34 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
       });
     }
 
+    const releasedOld = result.previousUsername || (previousUsernameHint && previousUsernameHint !== result.username ? previousUsernameHint : null);
+
     if (result.username) {
-      // Sync claim and profile to Firebase in background
-      firebaseSaveProfile(
-        result.username,
-        {
-          ...(profileData || {}),
-          primaryEmail,
-          plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : (profileData?.plan || 'free'),
-        },
-        userId
-      ).catch(() => {});
+      // Release old username in Firebase first so another user can claim it immediately
+      if (releasedOld) {
+        await firebaseReleaseUsername(releasedOld, userId).catch(() => {});
+      }
+      // Sync new claim and profile to Firebase (bounded await so subsequent renames never race)
+      await Promise.race([
+        firebaseSaveProfile(
+          result.username,
+          {
+            ...(profileData || {}),
+            primaryEmail,
+            plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : (profileData?.plan || 'free'),
+          },
+          userId
+        ).catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+
+      notifyProfileSeoChanged(releasedOld ? 'renamed' : 'created', result.username, releasedOld).catch(() => {});
     }
 
     return res.status(200).json({
       ok: true,
       username: result.username,
+      releasedUsername: releasedOld,
       profileUrl: result.profileUrl,
       message: `iveo.site/${result.username} successfully claimed!`,
     });
@@ -342,6 +375,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       socialsPosition: body.socialsPosition,
       primaryEmail: resolvedEmail,
       plan: resolvedPlan,
+      status: body.status,
+      isPublished: body.isPublished,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
       background: body.background,
@@ -368,6 +403,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan },
       body.userId || req.headers['x-user-id'] as string || 'owner'
     ).catch(() => {});
+
+    notifyProfileSeoChanged('updated', username).catch(() => {});
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -525,6 +562,7 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
     }
     // Sync to Firebase Cloud Database in background
     firebaseSaveBlocks(username, blocks, userId || undefined).catch(() => {});
+    notifyProfileSeoChanged('updated', username).catch(() => {});
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -561,6 +599,7 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
       phone: body.phone || null,
       consentText: body.consentText || null,
       source: body.source || null,
+      formTitle: body.formTitle || body.source || null,
     };
     await dbSaveContact(contactData);
 
@@ -575,7 +614,7 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
 
 /**
  * GET /api/contacts?username=...
- * Owner retrieves collected contacts
+ * Owner retrieves collected contacts (strictly scoped to username)
  */
 export async function handleGetContacts(req: ExpressReq, res: ExpressRes) {
   const username = (req.query.username as string || '').toLowerCase().trim();
@@ -583,8 +622,12 @@ export async function handleGetContacts(req: ExpressReq, res: ExpressRes) {
   const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
   const pageSize = Math.max(1, parseInt(req.query.pageSize as string, 10) || 20);
 
+  if (!username) {
+    return res.status(200).json({ rows: [], total: 0 });
+  }
+
   try {
-    let contacts = await dbGetContacts(username || undefined);
+    let contacts = await dbGetContacts(username);
     if (search) {
       contacts = contacts.filter((c: any) =>
         (c.email && c.email.toLowerCase().includes(search)) ||
@@ -700,8 +743,236 @@ export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
       }
       return res.status(400).json({ error: result.error });
     }
+    await firebaseReleaseUsername(username, userId || undefined).catch(() => {});
+    notifyProfileSeoChanged('deleted', username).catch(() => {});
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'delete_failed', message: err?.message });
   }
 }
+
+/**
+ * POST /api/analytics/event
+ * Persists page view & link click analytics events cross-device
+ */
+export async function handleRecordAnalyticsEvent(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const username = (body.username as string || '').toLowerCase().trim();
+  const isClick =
+    body.eventType === 'link_click' ||
+    body.eventType === 'click' ||
+    body.type === 'click' ||
+    body.type === 'link_click';
+  const eventType = isClick ? 'link_click' : 'page_view';
+  if (!username) {
+    return res.status(400).json({ error: 'missing_username' });
+  }
+
+  try {
+    const ua = String(req.headers['user-agent'] || '');
+    const device = body.device || (/mobile|iphone|android/i.test(ua) ? 'Mobile' : 'Desktop');
+    const country = body.country || String(req.headers['x-vercel-ip-country'] || req.headers['cf-ipcountry'] || 'IN');
+
+    await dbRecordAnalyticsEvent({
+      username,
+      eventType,
+      blockId: body.blockId || null,
+      country,
+      referrer: body.referrer || body.source || 'Direct',
+      device,
+    });
+    return res.status(200).json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'analytics_record_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/analytics?username=...&from=...&to=...&isPro=...
+ */
+export async function handleGetAnalytics(req: ExpressReq, res: ExpressRes) {
+  const username = (req.query.username as string || '').toLowerCase().trim();
+  if (!username) {
+    return res.status(400).json({ error: 'missing_username' });
+  }
+
+  const now = new Date();
+  const defaultFrom = new Date(now);
+  defaultFrom.setDate(defaultFrom.getDate() - 7);
+  const rawFrom = req.query.from ? String(req.query.from).trim() : '';
+  const rawTo = req.query.to ? String(req.query.to).trim() : '';
+  const fromDate = rawFrom ? new Date(rawFrom) : defaultFrom;
+  const toDate = rawTo ? new Date(rawTo) : now;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawTo) && !Number.isNaN(toDate.getTime())) {
+    toDate.setUTCHours(23, 59, 59, 999);
+  }
+  const isPro = req.query.isPro === 'true' || req.query.isPro === '1';
+
+  try {
+    const data = await dbGetAnalytics(
+      username,
+      Number.isNaN(fromDate.getTime()) ? defaultFrom : fromDate,
+      Number.isNaN(toDate.getTime()) ? now : toDate,
+      isPro
+    );
+    return res.status(200).json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'analytics_fetch_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/integrations/buymeacoffee?url=...
+ * Server-side Buy Me a Coffee profile & live Creator API fetcher (token stays server-only)
+ */
+export async function handleBuyMeACoffee(req: ExpressReq, res: ExpressRes) {
+  const rawUrl = String(req.query.url || req.query.slug || '').trim();
+  if (!rawUrl) {
+    return res.status(400).json({ ok: false, error: 'missing_url' });
+  }
+
+  try {
+    const profile = await fetchBuyMeACoffeeProfile(rawUrl);
+    if (!profile) {
+      return res.status(400).json({
+        ok: false,
+        error: 'invalid_buymeacoffee_url',
+        message: 'Enter a valid buymeacoffee.com/username link.',
+      });
+    }
+    return res.status(200).json({ ok: true, profile });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'bmc_fetch_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/discover
+ * Returns public indexable creator profiles for crawlable internal linking & search discovery
+ */
+export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
+  const q = String(req.query.q || '').toLowerCase().trim();
+  const origin = getCanonicalSiteOrigin();
+
+  try {
+    const all = await getAllUnifiedProfiles();
+    const indexable = all
+      .filter((p) => evaluateProfileIndexability(p).indexable)
+      .filter((p) => {
+        if (!q) return true;
+        return (
+          p.username.includes(q) ||
+          (p.displayName || '').toLowerCase().includes(q) ||
+          (p.bio || '').toLowerCase().includes(q)
+        );
+      })
+      .map((p) => ({
+        username: p.username,
+        displayName: p.displayName || p.username,
+        bio: p.bio || '',
+        avatarUrl: isAllowedAvatarHost(p.avatarUrl) ? p.avatarUrl : null,
+        vibeId: p.vibeId || 'clean',
+        url: `${origin}/${encodeURIComponent(p.username)}`,
+        updatedAt: p.updatedAt,
+      }));
+
+    return res.status(200).json({ ok: true, profiles: indexable });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'discover_failed', message: err?.message });
+  }
+}
+
+function isSeoAdminRequest(req: ExpressReq): boolean {
+  const email = String(req.query.adminEmail || req.headers['x-user-email'] || '').toLowerCase().trim();
+  if (isPrivilegedEmailServer(email)) return true;
+  const extraAdmins = getSeoAdminEmails();
+  if (email && extraAdmins.includes(email)) return true;
+  return false;
+}
+
+/**
+ * GET /api/seo/admin/overview
+ */
+export async function handleSeoAdminOverview(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  }
+
+  try {
+    const origin = getSiteOrigin({
+      headers: {
+        get: (name: string) => {
+          const val = req.headers[name.toLowerCase()];
+          return Array.isArray(val) ? val[0] : (val ? String(val) : null);
+        },
+      },
+    } as any);
+    const report = await getSeoHealthReport(origin);
+    return res.status(200).json({ ok: true, report });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'seo_overview_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/seo/admin/regenerate-sitemap
+ */
+export async function handleSeoAdminRegenerate(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden' });
+  }
+
+  try {
+    const result = await regenerateAndPingSitemap(getCanonicalSiteOrigin());
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'regenerate_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/seo/admin/validate?u=username
+ */
+export async function handleSeoAdminValidate(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden' });
+  }
+
+  const username = String(req.query.u || req.query.username || '').trim();
+  if (!username) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+
+  try {
+    const result = await validateProfileSeo(getCanonicalSiteOrigin(), username);
+    return res.status(200).json({ ok: true, validation: result });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'validate_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/seo/admin/inspect
+ */
+export async function handleSeoAdminInspect(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden' });
+  }
+
+  const username = String(req.body?.username || '').toLowerCase().trim();
+  if (!username) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+
+  try {
+    const canonical = `${getCanonicalSiteOrigin()}/${encodeURIComponent(username)}`;
+    const [localValidation, gsc] = await Promise.all([
+      validateProfileSeo(getCanonicalSiteOrigin(), username),
+      inspectUrlWithGsc(canonical),
+    ]);
+    return res.status(200).json({ ok: true, targetUrl: canonical, localValidation, gsc });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'inspect_failed', message: err?.message });
+  }
+}
+

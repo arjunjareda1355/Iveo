@@ -56,7 +56,7 @@ export function useContacts({
 
     try {
       const token = await getToken({ template: 'supabase' }).catch(() => null);
-      const res = await listContacts(token, { page, pageSize, search });
+      const res = await listContacts(token, { page, pageSize, search, username: session.username });
       setRows(res.rows);
       setTotal(res.total);
       previousDataRef.current = res;
@@ -72,7 +72,7 @@ export function useContacts({
       setIsLoading(false);
       setIsFetching(false);
     }
-  }, [getToken, page, pageSize, search, session.isSignedIn]);
+  }, [getToken, page, pageSize, search, session.isSignedIn, session.username]);
 
   useEffect(() => {
     fetchContacts();

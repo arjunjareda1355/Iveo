@@ -12,9 +12,18 @@ import { Faq } from '../components/sections/Faq';
 import { FinalCta } from '../components/sections/FinalCta';
 import { Footer } from '../components/sections/Footer';
 import { useToast } from '../components/ui/Toast';
+import { usePageMeta } from '../hooks/usePageMeta';
+import { SITE_ORIGIN } from '../lib/site';
 import { copy } from '../content/copy';
 
 export const Landing: React.FC = () => {
+  usePageMeta({
+    title: 'Iveo – One Link for Everything You Create',
+    description:
+      'Create your personal space with Iveo. Share your social links, websites, projects and everything you create through one beautiful, customizable profile.',
+    canonical: `${SITE_ORIGIN}/`,
+    robots: 'index, follow',
+  });
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { showToast } = useToast();

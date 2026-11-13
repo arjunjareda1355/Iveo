@@ -413,8 +413,9 @@ function useClerkSession(): IveoSession {
     if (!clean) {
       throw new Error('Please enter a valid address (3 to 24 letters, numbers or underscores).');
     }
+    const previousUsername = username && username !== clean ? username : null;
 
-    // 1. Atomically claim username on database FIRST
+    // 1. Atomically claim username on database FIRST (server automatically releases previousUsername)
     const claimRes = await fetch('/api/claim-username', {
       method: 'POST',
       headers: {
@@ -425,6 +426,7 @@ function useClerkSession(): IveoSession {
       body: JSON.stringify({
         userId: currentUser.id,
         username: clean,
+        previousUsername,
         primaryEmail,
         displayName: displayName || clean,
         bio,
@@ -446,7 +448,29 @@ function useClerkSession(): IveoSession {
       throw new Error(claimData.message || 'That address is unavailable. Try another.');
     }
 
-    // 2. Set serverProfile state immediately
+    // 2. Clean up old handle localStorage cache so stale data never lingers
+    if (typeof window !== 'undefined') {
+      try {
+        if (previousUsername) {
+          const oldProfile = localStorage.getItem(`iveo_profile_${previousUsername}`);
+          if (oldProfile && !localStorage.getItem(`iveo_profile_${clean}`)) {
+            localStorage.setItem(`iveo_profile_${clean}`, oldProfile);
+          }
+          const oldBlocks = localStorage.getItem(`iveo_blocks_${previousUsername}`);
+          if (oldBlocks && !localStorage.getItem(`iveo_blocks_${clean}`)) {
+            localStorage.setItem(`iveo_blocks_${clean}`, oldBlocks);
+          }
+          localStorage.removeItem(`iveo_profile_${previousUsername}`);
+          localStorage.removeItem(`iveo_blocks_${previousUsername}`);
+          localStorage.removeItem(`iveo_onboarding_done_${previousUsername}`);
+          localStorage.removeItem(`ivio_profile_${previousUsername}`);
+          localStorage.removeItem(`ivio_blocks_${previousUsername}`);
+        }
+        localStorage.setItem('iveo_current_username', clean);
+      } catch {}
+    }
+
+    // 3. Set serverProfile state immediately
     setServerProfile((prev: any) => ({
       ...(prev || {}),
       userId: currentUser.id,
@@ -454,7 +478,7 @@ function useClerkSession(): IveoSession {
       displayName: displayName || clean,
     }));
 
-    // 3. Write to Clerk unsafeMetadata
+    // 4. Write to Clerk unsafeMetadata
     const currentMeta = (currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
       ? currentUser.unsafeMetadata
       : {}) as Record<string, unknown>;
@@ -470,7 +494,7 @@ function useClerkSession(): IveoSession {
       console.warn('Could not save username to unsafeMetadata:', metaErr);
     }
 
-    // 4. Try updating top-level Clerk username (if enabled in Clerk dashboard settings)
+    // 5. Try updating top-level Clerk username (if enabled in Clerk dashboard settings)
     try {
       await currentUser.update({ username: clean });
     } catch {}

@@ -80,6 +80,7 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
       const res = await submitContact({
         username,
         linkId: block.id,
+        formTitle: heading,
         email: (collect === 'email' || collect === 'both') ? email.trim() : null,
         phone: (collect === 'phone' || collect === 'both') ? phone.trim() : null,
         consent,
