@@ -1,4 +1,7 @@
 import type { VibeId } from './vibes.ts';
+import { type FontSettings, parseFontSettings } from './fonts.ts';
+import { type ButtonColors, parseButtonColors } from './colors.ts';
+import { type BusinessCardConfig, parseBusinessCardConfig } from './businessCardConfig.ts';
 
 export type ButtonShape = 'square' | 'rounded' | 'pill';
 
@@ -32,6 +35,9 @@ export interface IveoPreferences {
   whatsappNumber?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
+  fontSettings?: FontSettings | null;
+  buttonColors?: ButtonColors | null;
+  businessCard?: BusinessCardConfig | null;
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -56,6 +62,9 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   whatsappNumber: null,
   customSeoTitle: null,
   customSeoDescription: null,
+  fontSettings: null,
+  buttonColors: null,
+  businessCard: null,
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -173,6 +182,10 @@ export function parsePreferences(raw: unknown): IveoPreferences {
       ? record.customSeoDescription.trim()
       : null;
 
+  const fontSettings = parseFontSettings(record.fontSettings);
+  const buttonColors = parseButtonColors(record.buttonColors);
+  const businessCard = parseBusinessCardConfig(record.businessCard);
+
   return {
     vibeId,
     buttonShape,
@@ -193,5 +206,8 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     whatsappNumber,
     customSeoTitle,
     customSeoDescription,
+    fontSettings,
+    buttonColors,
+    businessCard,
   };
 }

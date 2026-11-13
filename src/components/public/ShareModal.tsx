@@ -21,8 +21,14 @@ import {
   downloadBusinessCardPng,
   generateBusinessCardPng,
   dataUrlToBlob,
-  isLightColor,
 } from '../../lib/businessCard';
+import {
+  BusinessCardConfig,
+  DEFAULT_BUSINESS_CARD_CONFIG,
+} from '../../lib/businessCardConfig';
+import { pageUrl as buildCanonicalPageUrl } from '../../lib/site';
+import { BusinessCardPreview } from '../share/BusinessCardPreview';
+import { BusinessCardCustomizer } from '../share/BusinessCardCustomizer';
 import type { Vibe } from '../../lib/vibes';
 
 interface ShareModalProps {
@@ -33,6 +39,7 @@ interface ShareModalProps {
   bio?: string;
   avatarUrl?: string | null;
   vibe?: Vibe;
+  businessCard?: BusinessCardConfig | null;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -43,6 +50,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   bio,
   avatarUrl,
   vibe,
+  businessCard,
 }) => {
   const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
   const [copied, setCopied] = useState(false);
@@ -51,11 +59,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [qrPngUrl, setQrPngUrl] = useState<string | null>(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [cardError, setCardError] = useState<string | null>(null);
+  const [cardConfig, setCardConfig] = useState<BusinessCardConfig>(() => ({
+    ...DEFAULT_BUSINESS_CARD_CONFIG,
+    ...(businessCard || {}),
+  }));
+
+  useEffect(() => {
+    setCardConfig({
+      ...DEFAULT_BUSINESS_CARD_CONFIG,
+      ...(businessCard || {}),
+    });
+  }, [businessCard]);
 
   const cleanUsername = (username || '').toLowerCase().trim();
-  const pageUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/${cleanUsername}`
-    : `https://iveo.site/${cleanUsername}`;
+  const pageUrl = buildCanonicalPageUrl(cleanUsername);
 
   const shareText = `Check out ${displayName || cleanUsername}'s page on iveo`;
 
@@ -139,6 +156,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       bio,
       pageUrl,
       avatarUrl,
+      cardConfig,
     });
   };
 
@@ -149,7 +167,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     accent: vibe?.tokens?.buttonBg || '#4F46E5',
     buttonBg: vibe?.tokens?.buttonBg || '#4F46E5',
   };
-  const cardBgIsLight = isLightColor(cardTheme.bg);
 
   const handleDownloadCardPng = async () => {
     setIsGeneratingCard(true);
@@ -163,6 +180,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         avatarUrl,
         qrDataUrl: qrPngUrl,
         theme: cardTheme,
+        cardConfig,
       });
       setDownloadedCard(true);
       setTimeout(() => setDownloadedCard(false), 2200);
@@ -186,6 +204,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           avatarUrl,
           qrDataUrl: qrPngUrl,
           theme: cardTheme,
+          cardConfig,
         });
         const blob = dataUrlToBlob(pngDataUrl);
         const cardFile = new File([blob], `iveo-card-${cleanUsername}.png`, { type: 'image/png' });
@@ -277,6 +296,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               <img
                 src={avatarUrl}
                 alt={displayName || cleanUsername}
+                referrerPolicy="no-referrer"
                 className="w-10 h-10 rounded-full object-cover border border-border shadow-2xs"
               />
             ) : (
@@ -433,83 +453,22 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         {/* TAB 2: DIGITAL BUSINESS CARD */}
         {activeTab === 'card' && (
           <div className="mt-4 flex flex-col gap-4">
-            {/* Visual Card Preview */}
-            <div
-              className={`w-full rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between aspect-[1.7/1] select-none border ${
-                cardBgIsLight ? 'border-black/10' : 'border-white/15'
-              }`}
-              style={{
-                backgroundColor: cardTheme.bg,
-                color: cardTheme.text,
-              }}
-            >
-              {/* Subtle card decorative lighting */}
-              <div
-                className={`absolute w-44 h-44 rounded-full pointer-events-none blur-2xl ${
-                  cardBgIsLight ? '-bottom-16 -left-16 opacity-[0.06]' : '-top-16 -right-16 opacity-20'
-                }`}
-                style={{ backgroundColor: cardTheme.accent }}
-              />
+            {/* Visual Card Preview matching PNG output */}
+            <BusinessCardPreview
+              username={cleanUsername}
+              displayName={displayName || cleanUsername}
+              bio={bio}
+              avatarUrl={avatarUrl}
+              qrDataUrl={qrPngUrl}
+              vibeTheme={cardTheme}
+              config={cardConfig}
+            />
 
-              {/* Card Top: Avatar + Identity + Mini QR */}
-              <div className="flex items-start justify-between gap-3 relative z-10">
-                <div className="flex items-center gap-3">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={displayName}
-                      className={`w-12 h-12 rounded-full object-cover border-2 shadow-xs shrink-0 ${
-                        cardBgIsLight ? 'border-black/10' : 'border-white/25'
-                      }`}
-                    />
-                  ) : (
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-[18px] shrink-0 border ${
-                        cardBgIsLight ? 'bg-black/5 border-black/10' : 'bg-white/15 border-white/20'
-                      }`}
-                    >
-                      {(displayName || cleanUsername).slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="overflow-hidden">
-                    <h4 className="text-[16px] font-bold leading-tight truncate">
-                      {displayName || cleanUsername}
-                    </h4>
-                    <span className="text-[12px] opacity-75 font-mono">
-                      @{cleanUsername}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Scannable Micro QR inside card */}
-                {qrPngUrl && (
-                  <div className="w-12 h-12 bg-white p-0.5 rounded-lg shrink-0 shadow-xs flex items-center justify-center border border-black/5">
-                    <img
-                      src={qrPngUrl}
-                      alt=""
-                      className="w-full h-full object-contain rounded"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Card Middle: Bio / Tagline */}
-              {bio && (
-                <p className="text-[12px] opacity-80 line-clamp-2 leading-relaxed my-2 relative z-10">
-                  {bio}
-                </p>
-              )}
-
-              {/* Card Bottom: Branding */}
-              <div
-                className={`pt-2 border-t flex items-center justify-between text-[11px] opacity-70 font-mono relative z-10 ${
-                  cardBgIsLight ? 'border-black/10' : 'border-white/15'
-                }`}
-              >
-                <span>iveo</span>
-                <span>iveo.site/{cleanUsername}</span>
-              </div>
-            </div>
+            {/* Optional visitor personalization before downloading */}
+            <BusinessCardCustomizer
+              value={cardConfig}
+              onChange={setCardConfig}
+            />
 
             {/* Business Card Actions */}
             <div className="flex flex-col gap-2">
@@ -524,7 +483,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </button>
 
               <div className="grid grid-cols-2 gap-2">
-                {/* 2. Download Card Image (PNG 1920x1080) */}
+                {/* 2. Download Card Image (PNG 2040x1200) */}
                 <button
                   type="button"
                   onClick={handleDownloadCardPng}
@@ -569,7 +528,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               )}
 
               <p className="text-center text-[11px] text-muted mt-1 leading-normal">
-                Exports a crisp 1920×1080 PNG card with your scannable QR code, or saves directly to phone contacts.
+                Exports a pixel-true 2040×1200 PNG card matching your preview with a scannable QR code.
               </p>
             </div>
           </div>

@@ -181,6 +181,72 @@ async function startServer() {
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
   app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
 
+  // 4.1 Safe CORS image proxy for HD Canvas business card export (external avatars)
+  app.get('/api/proxy-image', async (req, res) => {
+    const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+    if (!rawUrl) {
+      return res.status(400).json({ error: 'missing_url' });
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return res.status(400).json({ error: 'invalid_url' });
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return res.status(400).json({ error: 'invalid_protocol' });
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    // SSRF protections: block localhost, link-local, metadata, and private IPv4/IPv6 ranges
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname === '::1' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal') ||
+      /^10\./.test(hostname) ||
+      /^127\./.test(hostname) ||
+      /^169\.254\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^fc00:|^fe80:/i.test(hostname)
+    ) {
+      return res.status(403).json({ error: 'forbidden_host' });
+    }
+
+    try {
+      const upstream = await fetch(parsed.toString(), {
+        signal: AbortSignal.timeout(4500),
+        headers: {
+          Accept: 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/*;q=0.8',
+        },
+      });
+      if (!upstream.ok) {
+        return res.status(502).json({ error: 'upstream_failed', status: upstream.status });
+      }
+      const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
+      if (!contentType.startsWith('image/')) {
+        return res.status(415).json({ error: 'not_an_image' });
+      }
+      const contentLength = Number(upstream.headers.get('content-length') || '0');
+      if (contentLength > 2 * 1024 * 1024) {
+        return res.status(413).json({ error: 'image_too_large' });
+      }
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      if (buf.byteLength > 2 * 1024 * 1024) {
+        return res.status(413).json({ error: 'image_too_large' });
+      }
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(200).send(buf);
+    } catch {
+      return res.status(504).json({ error: 'proxy_timeout' });
+    }
+  });
+
   // 4.5 Subdomain to Path Redirect Handler (Legacy https://:username.iveo.site -> https://iveo.site/:username)
   const { RESERVED, USERNAME_PATTERN } = await import('./api/_lib/usernames.ts');
   app.use((req, res, next) => {
@@ -273,17 +339,43 @@ async function startServer() {
   const { resolveSeoHeadForSegment } = await import('./api/page.ts');
   const { injectHead } = await import('./api/_lib/html.ts');
 
+  const { isUserPageLocation } = await import('./src/lib/intro.ts');
+
+  const stripSiteIntroMarkup = (html: string): string => {
+    return html
+      .replace(/<style id="iveo-intro-css">[\s\S]*?<\/style>/i, '')
+      .replace(/<div id="iveo-intro"[\s\S]*?<div class="iv-edge"><\/div>\s*<\/div>/i, '')
+      .replace(/<script id="iveo-intro-js">[\s\S]*?<\/script>/i, '');
+  };
+
   const applySsrSeoTags = async (req: ExpressReq, html: string): Promise<string> => {
     const cleanPath = (req.path || '/').replace(/^\/+|\/+$/g, '');
+    const host = (req.get('host') || '').toLowerCase();
+    const qIndex = req.originalUrl.indexOf('?');
+    const search = qIndex !== -1 ? req.originalUrl.slice(qIndex) : '';
+    const isUserPage = isUserPageLocation({
+      pathname: req.path || '/',
+      hostname: host,
+      search,
+    });
+
+    let resultHtml = html;
+    if (isUserPage) {
+      resultHtml = stripSiteIntroMarkup(resultHtml);
+    }
+
     // Single path segment without dots (e.g. /maya, /arjun) -> inject user or route SEO tags
     if (cleanPath && !cleanPath.includes('/') && !cleanPath.includes('.')) {
       const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
-      const host = req.get('host') || `localhost:${port}`;
-      const origin = `${protocol}://${host}`;
-      const { tags } = await resolveSeoHeadForSegment(origin, cleanPath);
-      return injectHead(html, tags);
+      const reqHost = req.get('host') || `localhost:${port}`;
+      const origin = `${protocol}://${reqHost}`;
+      const { tags, foundProfile } = await resolveSeoHeadForSegment(origin, cleanPath);
+      if (foundProfile) {
+        resultHtml = stripSiteIntroMarkup(resultHtml);
+      }
+      return injectHead(resultHtml, tags);
     }
-    return html;
+    return resultHtml;
   };
 
   // 5. Vite Dev Server / Static SPA Fallback

@@ -304,13 +304,55 @@
       <div class="iv-edge"></div>
     </div>
 
-    <!-- Early check: skip instantly if already seen for first time (no flash). -->
+    <!-- Early check: skip on user pages and skip instantly if already seen (no flash). -->
     <script>
       (function () {
         try {
+          var SITE_ROUTES = {
+            '': 1, 'pricing': 1, 'legal': 1, 'privacy': 1, 'terms': 1,
+            'login': 1, 'signup': 1, 'sso-callback': 1, 'onboarding': 1,
+            'dashboard': 1, 'account': 1
+          };
+          var RESERVED_SUBS = {
+            'admin': 1, 'administrator': 1, 'analytics': 1, 'api': 1, 'app': 1,
+            'about': 1, 'account': 1, 'accounts': 1, 'auth': 1, 'billing': 1,
+            'blog': 1, 'checkout': 1, 'clerk': 1, 'contact': 1, 'dashboard': 1,
+            'demo': 1, 'dev': 1, 'developer': 1, 'discover': 1, 'docs': 1,
+            'explore': 1, 'help': 1, 'home': 1, 'iveo': 1, 'ivio': 1,
+            'legal': 1, 'login': 1, 'logout': 1, 'mail': 1, 'onboarding': 1,
+            'pay': 1, 'pricing': 1, 'privacy': 1, 'root': 1, 'settings': 1,
+            'signin': 1, 'signout': 1, 'signup': 1, 'sso-callback': 1,
+            'ssocallback': 1, 'staging': 1, 'status': 1, 'supabase': 1,
+            'support': 1, 'terms': 1, 'test': 1, 'user': 1, 'users': 1,
+            'vercel': 1, 'verify': 1, 'webhook': 1, 'webhooks': 1, 'www': 1,
+            'null': 1, 'undefined': 1
+          };
+          var cleanPath = (window.location.pathname || '/').replace(/^\/+|\/+$/g, '');
+          var firstSeg = (cleanPath.split('/')[0] || '').toLowerCase();
+          var host = (window.location.hostname || '').toLowerCase().split(':')[0];
           var params = new URLSearchParams(window.location.search);
+
+          var isUserSub = false;
+          if (host.endsWith('.iveo.site')) {
+            var s1 = host.slice(0, -10);
+            if (s1 && !RESERVED_SUBS[s1]) isUserSub = true;
+          } else if (host.endsWith('.localhost')) {
+            var s2 = host.slice(0, -10);
+            if (s2 && !RESERVED_SUBS[s2]) isUserSub = true;
+          } else if (host.indexOf('.run.app') !== -1 && host.indexOf('---') !== -1) {
+            var s3 = host.split('---')[0];
+            if (s3 && !RESERVED_SUBS[s3]) isUserSub = true;
+          }
+          if (!firstSeg && params.get('subdomain')) {
+            var sp = params.get('subdomain').toLowerCase().trim();
+            if (sp && !RESERVED_SUBS[sp]) isUserSub = true;
+          }
+
+          var isUserPage = isUserSub || (firstSeg !== '' && !SITE_ROUTES[firstSeg]);
           var forceIntro = params.has('intro') || params.has('replay-intro');
-          if (!forceIntro && (localStorage.getItem('iveo-intro-seen') === '1' || sessionStorage.getItem('iveo-intro-seen') === '1')) {
+          var alreadySeen = localStorage.getItem('iveo-intro-seen') === '1' || sessionStorage.getItem('iveo-intro-seen') === '1';
+
+          if (isUserPage || (!forceIntro && alreadySeen)) {
             var el = document.getElementById('iveo-intro');
             if (el) el.remove();
           } else {

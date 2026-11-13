@@ -376,6 +376,12 @@ export const SettingsTab: React.FC = () => {
           bio={session.bio}
           avatarUrl={session.imageUrl}
           vibeId={session.vibeId}
+          fontSettings={session.fontSettings}
+          buttonColors={session.buttonColors}
+          businessCard={session.businessCard}
+          onSaveCardConfig={async (cfg) => {
+            await session.updatePreferences({ businessCard: cfg });
+          }}
           isPublished={true}
         />
       )}

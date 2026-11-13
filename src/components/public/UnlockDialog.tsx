@@ -13,6 +13,7 @@ interface UnlockDialogProps {
   vibe: Vibe;
   onSuccess: (block: PageBlock, url: string) => void;
   buttonRadiusOverride?: number;
+  fontFamily?: string;
 }
 
 export const UnlockDialog: React.FC<UnlockDialogProps> = ({
@@ -22,6 +23,7 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
   vibe,
   onSuccess,
   buttonRadiusOverride,
+  fontFamily,
 }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -104,13 +106,6 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
     }
   };
 
-  const handleOpenLink = () => {
-    if (unlockedUrl && isSafeHref(unlockedUrl)) {
-      window.open(unlockedUrl, '_blank', 'noopener,noreferrer');
-      onClose();
-    }
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
@@ -128,7 +123,7 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
         style={{
           backgroundColor: tokens.bg,
           color: tokens.text,
-          fontFamily: vibe.fontFamily,
+          fontFamily: fontFamily || vibe.fontFamily,
           border: tokens.buttonBorder
             ? `1px solid ${tokens.buttonBorder}`
             : '1px solid rgba(0,0,0,0.1)',
@@ -174,9 +169,11 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
             </p>
 
             <div className="w-full flex flex-col gap-2.5">
-              <button
-                type="button"
-                onClick={handleOpenLink}
+              <a
+                href={isSafeHref(unlockedUrl) ? unlockedUrl : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onClose}
                 className="w-full h-11 px-4 font-medium transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center cursor-pointer shadow-sm"
                 style={{
                   backgroundColor: tokens.buttonBg,
@@ -188,7 +185,7 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
                 }}
               >
                 {copy.password.visitor.openLinkButton}
-              </button>
+              </a>
 
               <button
                 type="button"

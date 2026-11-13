@@ -14,6 +14,9 @@
         "avatarId": { "type": "string", "maxLength": 64 },
         "vibeId": { "type": "string", "maxLength": 32 },
         "buttonShape": { "type": "string", "enum": ["square", "rounded", "pill"] },
+        "fontSettings": { "type": "object" },
+        "buttonColors": { "type": "object" },
+        "businessCard": { "type": "object" },
         "plan": { "type": "string", "enum": ["free", "pro"] },
         "updatedAt": { "type": "string" },
         "createdAt": { "type": "string" }

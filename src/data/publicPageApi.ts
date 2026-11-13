@@ -63,6 +63,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             whatsappNumber: data.profile.whatsappNumber || null,
             customSeoTitle: data.profile.customSeoTitle || null,
             customSeoDescription: data.profile.customSeoDescription || null,
+            fontSettings: data.profile.fontSettings || null,
+            buttonColors: data.profile.buttonColors || null,
+            businessCard: data.profile.businessCard || null,
           },
           links: (Array.isArray(data.links) ? data.links : []).map((b: any) => ({
             id: String(b.id),
@@ -134,6 +137,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             whatsappNumber: parsed.whatsappNumber || null,
             customSeoTitle: parsed.customSeoTitle || null,
             customSeoDescription: parsed.customSeoDescription || null,
+            fontSettings: parsed.fontSettings || null,
+            buttonColors: parsed.buttonColors || null,
+            businessCard: parsed.businessCard || null,
           },
           links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
         };
@@ -168,6 +174,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           whatsappNumber: data.whatsappNumber || null,
           customSeoTitle: data.customSeoTitle || null,
           customSeoDescription: data.customSeoDescription || null,
+          fontSettings: data.fontSettings || null,
+          buttonColors: data.buttonColors || null,
+          businessCard: data.businessCard || null,
         },
         links: links.map((b) => ({
           id: String(b.id),

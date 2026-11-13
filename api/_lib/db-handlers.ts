@@ -161,7 +161,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         avatarType: profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default')),
         avatarId: profile.avatarId || null,
         vibeId: profile.vibeId || 'clean',
-        buttonShape: profile.buttonShape || 'rounded',
+        buttonShape: profile.buttonShape ?? null,
         socials: profile.socials || {},
         socialsPosition: profile.socialsPosition || 'top',
         hideFromSearch: Boolean(profile.hideFromSearch),
@@ -172,6 +172,9 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         whatsappNumber: profile.whatsappNumber || null,
         customSeoTitle: profile.customSeoTitle || null,
         customSeoDescription: profile.customSeoDescription || null,
+        fontSettings: profile.fontSettings || null,
+        buttonColors: profile.buttonColors || null,
+        businessCard: profile.businessCard || null,
       },
       links: filteredBlocks,
     });
@@ -347,6 +350,9 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       whatsappNumber: body.whatsappNumber,
       customSeoTitle: body.customSeoTitle,
       customSeoDescription: body.customSeoDescription,
+      fontSettings: body.fontSettings,
+      buttonColors: body.buttonColors,
+      businessCard: body.businessCard,
     });
 
     if (saveResult && !saveResult.ok) {
@@ -425,7 +431,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       avatarType: 'uploaded',
       avatarId: null,
       vibeId: existing?.vibeId || 'clean',
-      buttonShape: existing?.buttonShape || 'rounded',
+      buttonShape: existing?.buttonShape ?? null,
       socials: existing?.socials || {},
       socialsPosition: existing?.socialsPosition || 'top',
       primaryEmail: primaryEmail || existing?.primaryEmail || null,
@@ -438,6 +444,9 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       whatsappNumber: existing?.whatsappNumber ?? null,
       customSeoTitle: existing?.customSeoTitle ?? null,
       customSeoDescription: existing?.customSeoDescription ?? null,
+      fontSettings: existing?.fontSettings ?? null,
+      buttonColors: existing?.buttonColors ?? null,
+      businessCard: existing?.businessCard ?? null,
     });
 
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });

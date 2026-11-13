@@ -7,6 +7,7 @@ interface TipJarBlockProps {
   config: TipJarConfig;
   tokens: VibeTokens;
   buttonRadius: number;
+  fontFamily?: string;
   scale?: number;
 }
 
@@ -14,6 +15,7 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
   config,
   tokens,
   buttonRadius,
+  fontFamily,
   scale = 1,
 }) => {
   const currency = config.currency || '$';
@@ -23,24 +25,21 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
 
   const finalAmount = selectedAmount === 'custom' ? parseFloat(customVal) || 0 : selectedAmount;
 
-  const handlePay = () => {
+  const paymentHref = (() => {
     let url = config.paymentUrl || 'https://paypal.me';
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('upi://')) {
       url = `https://${url}`;
     }
 
-    // Append amount if standard platform supported (e.g., paypal.me/user/10)
     try {
       const parsed = new URL(url);
       if (parsed.hostname.includes('paypal.me') && finalAmount > 0) {
         url = `${url.replace(/\/+$/, '')}/${finalAmount}`;
-      } else if (parsed.hostname.includes('buymeacoffee.com') && finalAmount > 0) {
-        // BuyMeACoffee price query or direct link
       }
     } catch {}
 
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
+    return url;
+  })();
 
   return (
     <div
@@ -53,6 +52,7 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         borderRadius: buttonRadius,
         padding: `${Math.round(18 * scale)}px ${Math.round(16 * scale)}px`,
         color: tokens.buttonText || tokens.text,
+        fontFamily,
       }}
     >
       <div className="flex items-center gap-2 mb-1.5">
@@ -124,10 +124,11 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         </div>
       )}
 
-      {/* Action Button */}
-      <button
-        type="button"
-        onClick={handlePay}
+      {/* Native Link Action Button */}
+      <a
+        href={paymentHref}
+        target="_blank"
+        rel="noopener noreferrer"
         className="w-full font-medium py-2 px-4 flex items-center justify-center gap-2 transition-transform duration-150 active:scale-[0.98] cursor-pointer"
         style={{
           borderRadius: Math.max(buttonRadius - 4, 6),
@@ -140,7 +141,7 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         <span>
           Support {finalAmount > 0 ? `${currency}${finalAmount}` : ''}
         </span>
-      </button>
+      </a>
     </div>
   );
 };

@@ -9,6 +9,9 @@ import {
   parsePreferences,
   DEFAULT_PREFERENCES,
 } from '../lib/preferences';
+import type { FontSettings } from '../lib/fonts';
+import type { ButtonColors } from '../lib/colors';
+import type { BusinessCardConfig } from '../lib/businessCardConfig';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 import { isOwnerEmail } from '../lib/plan';
@@ -36,6 +39,9 @@ export interface IveoSession {
   whatsappNumber?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
+  fontSettings?: FontSettings | null;
+  buttonColors?: ButtonColors | null;
+  businessCard?: BusinessCardConfig | null;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
@@ -79,6 +85,9 @@ const FALLBACK_SESSION: IveoSession = {
   whatsappNumber: null,
   customSeoTitle: null,
   customSeoDescription: null,
+  fontSettings: null,
+  buttonColors: null,
+  businessCard: null,
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
@@ -218,7 +227,10 @@ function useClerkSession(): IveoSession {
   const socialsPosition: 'top' | 'bottom' | 'both' =
     serverProfile?.socialsPosition || preferences.socialsPosition || 'top';
   const vibeId = serverProfile?.vibeId || preferences.vibeId || DEFAULT_PREFERENCES.vibeId;
-  const buttonShape = serverProfile?.buttonShape || preferences.buttonShape || DEFAULT_PREFERENCES.buttonShape;
+  const buttonShape =
+    serverProfile?.buttonShape !== undefined
+      ? serverProfile.buttonShape
+      : (preferences.buttonShape ?? DEFAULT_PREFERENCES.buttonShape);
   const effectiveBackground =
     serverProfile?.background !== undefined ? serverProfile.background : (preferences.background || null);
   const googleAnalyticsId =
@@ -241,6 +253,18 @@ function useClerkSession(): IveoSession {
     serverProfile?.customSeoDescription !== undefined
       ? serverProfile.customSeoDescription
       : (preferences.customSeoDescription || null);
+  const fontSettings =
+    serverProfile?.fontSettings !== undefined
+      ? serverProfile.fontSettings
+      : (preferences.fontSettings || null);
+  const buttonColors =
+    serverProfile?.buttonColors !== undefined
+      ? serverProfile.buttonColors
+      : (preferences.buttonColors || null);
+  const businessCard =
+    serverProfile?.businessCard !== undefined
+      ? serverProfile.businessCard
+      : (preferences.businessCard || null);
 
   const syncToServer = async (payload: Record<string, unknown>) => {
     if (!activeUser?.id) return;
@@ -317,6 +341,9 @@ function useClerkSession(): IveoSession {
         whatsappNumber,
         customSeoTitle,
         customSeoDescription,
+        fontSettings,
+        buttonColors,
+        businessCard,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
         hideFooter,
@@ -339,6 +366,9 @@ function useClerkSession(): IveoSession {
     whatsappNumber,
     customSeoTitle,
     customSeoDescription,
+    fontSettings,
+    buttonColors,
+    businessCard,
     primaryEmail,
     isPro,
     plan,
@@ -403,6 +433,9 @@ function useClerkSession(): IveoSession {
         buttonShape: preferences.buttonShape,
         socials,
         socialsPosition: preferences.socialsPosition || 'top',
+        fontSettings,
+        buttonColors,
+        businessCard,
         plan: isPro ? 'pro' : plan,
         hideFooter,
       }),
@@ -493,6 +526,14 @@ function useClerkSession(): IveoSession {
     }
 
     const nextBackground = merged.background !== undefined ? merged.background : effectiveBackground;
+    const nextButtonShape =
+      merged.buttonShape !== undefined ? merged.buttonShape : buttonShape;
+    const nextFontSettings =
+      merged.fontSettings !== undefined ? merged.fontSettings : fontSettings;
+    const nextButtonColors =
+      merged.buttonColors !== undefined ? merged.buttonColors : buttonColors;
+    const nextBusinessCard =
+      merged.businessCard !== undefined ? merged.businessCard : businessCard;
 
     // Mirror to localStorage for offline fallback
     if (username) {
@@ -504,7 +545,7 @@ function useClerkSession(): IveoSession {
           JSON.stringify({
             ...parsed,
             vibeId: merged.vibeId || parsed.vibeId,
-            buttonShape: merged.buttonShape || parsed.buttonShape,
+            buttonShape: merged.buttonShape !== undefined ? merged.buttonShape : parsed.buttonShape,
             hideFooter:
               merged.hideIveoFooter !== undefined
                 ? Boolean(merged.hideIveoFooter)
@@ -522,6 +563,9 @@ function useClerkSession(): IveoSession {
             whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : parsed.whatsappNumber,
             customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : parsed.customSeoTitle,
             customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : parsed.customSeoDescription,
+            fontSettings: nextFontSettings,
+            buttonColors: nextButtonColors,
+            businessCard: nextBusinessCard,
           })
         );
       } catch {}
@@ -535,7 +579,7 @@ function useClerkSession(): IveoSession {
         avatarType: merged.avatarType || (merged.avatarId ? 'default' : (merged.avatarUrl ? 'uploaded' : 'default')),
         avatarId: merged.avatarId || null,
         vibeId: merged.vibeId || preferences.vibeId,
-        buttonShape: merged.buttonShape || preferences.buttonShape,
+        buttonShape: nextButtonShape,
         socials: merged.socials !== undefined ? merged.socials : socials,
         socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
         background: nextBackground,
@@ -544,6 +588,9 @@ function useClerkSession(): IveoSession {
         whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
         customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : customSeoTitle,
         customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
+        fontSettings: nextFontSettings,
+        buttonColors: nextButtonColors,
+        businessCard: nextBusinessCard,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
         hideFooter:
@@ -562,7 +609,7 @@ function useClerkSession(): IveoSession {
           avatarType: merged.avatarType || (merged.avatarId ? 'default' : (merged.avatarUrl ? 'uploaded' : 'default')),
           avatarId: merged.avatarId || null,
           vibeId: merged.vibeId || preferences.vibeId,
-          buttonShape: merged.buttonShape || preferences.buttonShape,
+          buttonShape: nextButtonShape,
           socials: merged.socials !== undefined ? merged.socials : socials,
           socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
           background: nextBackground,
@@ -571,6 +618,9 @@ function useClerkSession(): IveoSession {
           whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
           customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : customSeoTitle,
           customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
+          fontSettings: nextFontSettings,
+          buttonColors: nextButtonColors,
+          businessCard: nextBusinessCard,
           primaryEmail,
           plan: isPro ? 'pro' : plan,
         }).catch(() => {});
@@ -672,6 +722,9 @@ function useClerkSession(): IveoSession {
     whatsappNumber,
     customSeoTitle,
     customSeoDescription,
+    fontSettings,
+    buttonColors,
+    businessCard,
     onboardingComplete,
     plan,
     isPro,
@@ -707,6 +760,9 @@ function useDemoSession(): IveoSession {
     whatsappNumber: string | null;
     customSeoTitle: string | null;
     customSeoDescription: string | null;
+    fontSettings: FontSettings | null;
+    buttonColors: ButtonColors | null;
+    businessCard: BusinessCardConfig | null;
     hideFooter: boolean;
   }>(() => {
     const defaults = {
@@ -724,6 +780,9 @@ function useDemoSession(): IveoSession {
       whatsappNumber: null as string | null,
       customSeoTitle: null as string | null,
       customSeoDescription: null as string | null,
+      fontSettings: null as FontSettings | null,
+      buttonColors: null as ButtonColors | null,
+      businessCard: null as BusinessCardConfig | null,
       hideFooter: false,
     };
 
@@ -782,6 +841,9 @@ function useDemoSession(): IveoSession {
     whatsappNumber: demoState.whatsappNumber,
     customSeoTitle: demoState.customSeoTitle,
     customSeoDescription: demoState.customSeoDescription,
+    fontSettings: demoState.fontSettings,
+    buttonColors: demoState.buttonColors,
+    businessCard: demoState.businessCard,
     isPro: true,
     plan: 'pro',
     hideIveoFooter: demoState.hideFooter,
@@ -797,6 +859,9 @@ function useDemoSession(): IveoSession {
         ...prev,
         ...(patch.vibeId !== undefined ? { vibeId: patch.vibeId } : {}),
         ...(patch.buttonShape !== undefined ? { buttonShape: patch.buttonShape } : {}),
+        ...(patch.displayName !== undefined ? { displayName: patch.displayName || '' } : {}),
+        ...(patch.bio !== undefined ? { bio: patch.bio || '' } : {}),
+        ...(patch.avatarUrl !== undefined ? { imageUrl: patch.avatarUrl } : {}),
         ...(patch.socials !== undefined ? { socials: patch.socials } : {}),
         ...(patch.socialsPosition !== undefined ? { socialsPosition: patch.socialsPosition } : {}),
         ...(patch.background !== undefined ? { background: patch.background } : {}),
@@ -805,6 +870,9 @@ function useDemoSession(): IveoSession {
         ...(patch.whatsappNumber !== undefined ? { whatsappNumber: patch.whatsappNumber } : {}),
         ...(patch.customSeoTitle !== undefined ? { customSeoTitle: patch.customSeoTitle } : {}),
         ...(patch.customSeoDescription !== undefined ? { customSeoDescription: patch.customSeoDescription } : {}),
+        ...(patch.fontSettings !== undefined ? { fontSettings: patch.fontSettings } : {}),
+        ...(patch.buttonColors !== undefined ? { buttonColors: patch.buttonColors } : {}),
+        ...(patch.businessCard !== undefined ? { businessCard: patch.businessCard } : {}),
         ...(patch.hideIveoFooter !== undefined || patch.hideIvioFooter !== undefined
           ? { hideFooter: Boolean(patch.hideIveoFooter ?? patch.hideIvioFooter) }
           : {}),

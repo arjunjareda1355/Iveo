@@ -469,6 +469,11 @@ export async function dbClaimUsername(
           customSeoTitle: profileData?.customSeoTitle || null,
           customSeoDescription: profileData?.customSeoDescription || null,
         },
+        appearance: {
+          fontSettings: profileData?.fontSettings || null,
+          buttonColors: profileData?.buttonColors || null,
+          businessCard: profileData?.businessCard || null,
+        },
       }));
       insReq.input('plan', sql.NVarChar(32), effectivePlan);
 
@@ -547,14 +552,17 @@ export async function dbClaimUsername(
     avatarType: profileData?.avatarType || store.profiles[clean]?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
     avatarId: profileData?.avatarId || store.profiles[clean]?.avatarId || null,
     vibeId: profileData?.vibeId || store.profiles[clean]?.vibeId || 'clean',
-    buttonShape: profileData?.buttonShape || store.profiles[clean]?.buttonShape || 'rounded',
+    buttonShape: profileData?.buttonShape !== undefined ? profileData.buttonShape : (store.profiles[clean]?.buttonShape ?? null),
     socials: profileData?.socials || store.profiles[clean]?.socials || {},
     socialsPosition: profileData?.socialsPosition || store.profiles[clean]?.socialsPosition || 'top',
     primaryEmail: primaryEmail || store.profiles[clean]?.primaryEmail || null,
     plan: isOwnerEmailMatch ? 'pro' : (profileData?.plan || store.profiles[clean]?.plan || 'free'),
     hideFooter: Boolean(profileData?.hideFooter ?? store.profiles[clean]?.hideFooter),
     hideFromSearch: Boolean(profileData?.hideFromSearch ?? store.profiles[clean]?.hideFromSearch),
-    background: profileData?.background || store.profiles[clean]?.background || null,
+    background: profileData?.background !== undefined ? profileData.background : (store.profiles[clean]?.background || null),
+    fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (store.profiles[clean]?.fontSettings || null),
+    buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (store.profiles[clean]?.buttonColors || null),
+    businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (store.profiles[clean]?.businessCard || null),
     claimedAt: store.profiles[clean]?.claimedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -584,6 +592,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
         let integrations: Record<string, any> = {};
+        let appearance: Record<string, any> = {};
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
@@ -593,6 +602,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
+              appearance = (parsed.appearance && typeof parsed.appearance === 'object') ? parsed.appearance : {};
             } else if (parsed && typeof parsed === 'object') {
               socials = parsed;
             }
@@ -620,6 +630,9 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           whatsappNumber: integrations.whatsappNumber || null,
           customSeoTitle: integrations.customSeoTitle || null,
           customSeoDescription: integrations.customSeoDescription || null,
+          fontSettings: appearance.fontSettings || null,
+          buttonColors: appearance.buttonColors || null,
+          businessCard: appearance.businessCard || null,
           isPublished: Boolean(row.is_published),
         };
       }
@@ -681,6 +694,9 @@ export async function dbSaveProfile(profile: {
   whatsappNumber?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
+  fontSettings?: any;
+  buttonColors?: any;
+  businessCard?: any;
 }): Promise<{ ok: boolean; error?: string }> {
   const cleanUsername = profile.username.toLowerCase().trim();
 
@@ -709,6 +725,11 @@ export async function dbSaveProfile(profile: {
       customSeoTitle: profile.customSeoTitle ?? null,
       customSeoDescription: profile.customSeoDescription ?? null,
     },
+    appearance: {
+      fontSettings: profile.fontSettings ?? null,
+      buttonColors: profile.buttonColors ?? null,
+      businessCard: profile.businessCard ?? null,
+    },
   };
 
   const calculatedAvatarType = profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default'));
@@ -724,7 +745,7 @@ export async function dbSaveProfile(profile: {
       req.input('avatarType', sql.NVarChar(32), calculatedAvatarType);
       req.input('avatarId', sql.NVarChar(64), profile.avatarId || null);
       req.input('vibeId', sql.NVarChar(32), profile.vibeId || 'clean');
-      req.input('buttonShape', sql.NVarChar(32), profile.buttonShape || 'rounded');
+      req.input('buttonShape', sql.NVarChar(32), profile.buttonShape === null ? null : (profile.buttonShape || 'rounded'));
       req.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(socialsPayload));
       req.input('plan', sql.NVarChar(32), effectivePlan);
       req.input('hideFooter', sql.Bit, profile.hideFooter ? 1 : 0);
@@ -777,12 +798,16 @@ export async function dbSaveProfile(profile: {
     avatarId: profile.avatarId !== undefined ? profile.avatarId : (existingProf?.avatarId || null),
     socials: profile.socials !== undefined ? (profile.socials || {}) : (existingProf?.socials || {}),
     socialsPosition: profile.socialsPosition || existingProf?.socialsPosition || 'top',
+    buttonShape: profile.buttonShape !== undefined ? profile.buttonShape : (existingProf?.buttonShape ?? null),
     background: profile.background !== undefined ? profile.background : (existingProf?.background ?? null),
     googleAnalyticsId: profile.googleAnalyticsId !== undefined ? profile.googleAnalyticsId : (existingProf?.googleAnalyticsId ?? null),
     metaPixelId: profile.metaPixelId !== undefined ? profile.metaPixelId : (existingProf?.metaPixelId ?? null),
     whatsappNumber: profile.whatsappNumber !== undefined ? profile.whatsappNumber : (existingProf?.whatsappNumber ?? null),
     customSeoTitle: profile.customSeoTitle !== undefined ? profile.customSeoTitle : (existingProf?.customSeoTitle ?? null),
     customSeoDescription: profile.customSeoDescription !== undefined ? profile.customSeoDescription : (existingProf?.customSeoDescription ?? null),
+    fontSettings: profile.fontSettings !== undefined ? profile.fontSettings : (existingProf?.fontSettings ?? null),
+    buttonColors: profile.buttonColors !== undefined ? profile.buttonColors : (existingProf?.buttonColors ?? null),
+    businessCard: profile.businessCard !== undefined ? profile.businessCard : (existingProf?.businessCard ?? null),
     username: cleanUsername,
     updatedAt: new Date().toISOString(),
   };
@@ -813,6 +838,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
         let integrations: Record<string, any> = {};
+        let appearance: Record<string, any> = {};
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
@@ -822,6 +848,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
+              appearance = (parsed.appearance && typeof parsed.appearance === 'object') ? parsed.appearance : {};
             } else if (parsed && typeof parsed === 'object') {
               socials = parsed;
             }
@@ -849,6 +876,9 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           whatsappNumber: integrations.whatsappNumber || null,
           customSeoTitle: integrations.customSeoTitle || null,
           customSeoDescription: integrations.customSeoDescription || null,
+          fontSettings: appearance.fontSettings || null,
+          buttonColors: appearance.buttonColors || null,
+          businessCard: appearance.businessCard || null,
           isPublished: Boolean(row.is_published),
         };
       }

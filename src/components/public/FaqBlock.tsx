@@ -8,6 +8,7 @@ interface FaqBlockProps {
   config: FaqConfig;
   tokens: VibeTokens;
   buttonRadius: number;
+  fontFamily?: string;
   scale?: number;
 }
 
@@ -16,6 +17,7 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
   config,
   tokens,
   buttonRadius,
+  fontFamily,
   scale = 1,
 }) => {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
@@ -34,7 +36,7 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-2">
+    <div className="w-full flex flex-col gap-2" style={fontFamily ? { fontFamily } : undefined}>
       {title && (
         <div className="flex items-center gap-1.5 px-1 mb-0.5 opacity-80">
           <HelpCircle size={Math.round(14 * scale)} />

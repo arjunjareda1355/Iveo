@@ -180,7 +180,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
                 {username ? `@${username}` : 'Profile Picture'}
               </span>
               <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ${
                   isCurrentDefault
                     ? 'bg-ink/10 text-ink'
                     : currentAvatarUrl

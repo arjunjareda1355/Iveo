@@ -18,6 +18,8 @@ import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
 import { normalizeGoogleAnalyticsId, normalizeMetaPixelId } from '../lib/integrations';
 import { formatExternalUrl } from '../lib/urls';
+import { getFontCssFamily, loadGoogleFonts } from '../lib/fonts';
+import { resolveEffectiveTokens } from '../lib/colors';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -99,6 +101,15 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     const prevHtmlBg = document.documentElement.style.backgroundColor;
     document.body.style.backgroundColor = vibe.tokens.bg;
     document.documentElement.style.backgroundColor = vibe.tokens.bg;
+
+    // Preload any user-selected custom Google Fonts immediately
+    loadGoogleFonts([
+      pageData.profile.fontSettings?.nameFont,
+      pageData.profile.fontSettings?.bioFont,
+      pageData.profile.fontSettings?.buttonFont,
+      pageData.profile.businessCard?.fontId,
+    ]);
+
     return () => {
       document.body.style.backgroundColor = prevBodyBg;
       document.documentElement.style.backgroundColor = prevHtmlBg;
@@ -421,58 +432,80 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
         </div>
 
         <div className="relative z-10 w-full max-w-[580px] min-h-[100dvh] flex flex-col">
-          <PageRenderer
-            vibe={vibe}
-            profile={{
-              name: pageData.profile.displayName,
-              handle: pageData.profile.username,
-              bio: pageData.profile.bio,
-              avatarUrl: pageData.profile.avatarUrl,
-              socials: pageData.profile.socials,
-              socialsPosition: pageData.profile.socialsPosition || 'top',
-              whatsappNumber: pageData.profile.whatsappNumber || null,
-              background: pageData.profile.background,
-            }}
-            blocks={effectiveBlocks}
-            buttonRadiusOverride={buttonRadiusOverride}
-            hideFooterMark={pageData.profile.hideFooter}
-            embedMode="live"
-            isPublicPage={true}
-            onLinkClick={(block) => {
-              trackLinkClick(block);
-              const w = window as any;
-              if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
-                w.gtag('event', 'link_click', {
-                  link_title: block.title,
-                  link_url: block.url || '',
-                  creator: clean,
-                });
-              }
-            }}
-            onUnlock={(block) => setUnlockBlock(block)}
-            renderSignupForm={(block) => (
-              <SignupFormBlock
-                block={block}
-                vibe={vibe}
-                ownerName={pageData.profile?.displayName || clean}
-                username={clean}
-                buttonRadiusOverride={buttonRadiusOverride}
-              />
-            )}
-          />
-        </div>
+          {(() => {
+            const effectiveTokens = resolveEffectiveTokens(
+              vibe.tokens,
+              pageData.profile.buttonColors,
+              pageData.profile.background
+            );
+            const effectiveVibe = { ...vibe, tokens: effectiveTokens };
+            const buttonFontFamily = getFontCssFamily(
+              pageData.profile.fontSettings?.buttonFont,
+              vibe.fontFamily
+            );
 
-        <UnlockDialog
-          isOpen={unlockBlock !== null}
-          onClose={() => setUnlockBlock(null)}
-          block={unlockBlock}
-          vibe={vibe}
-          buttonRadiusOverride={buttonRadiusOverride}
-          onSuccess={(block, url) => {
-            setUnlockedUrls((prev) => ({ ...prev, [block.id]: url }));
-            trackLinkClick(block);
-          }}
-        />
+            return (
+              <>
+                <PageRenderer
+                  vibe={vibe}
+                  profile={{
+                    name: pageData.profile.displayName,
+                    handle: pageData.profile.username,
+                    bio: pageData.profile.bio,
+                    avatarUrl: pageData.profile.avatarUrl,
+                    socials: pageData.profile.socials,
+                    socialsPosition: pageData.profile.socialsPosition || 'top',
+                    whatsappNumber: pageData.profile.whatsappNumber || null,
+                    background: pageData.profile.background,
+                    fontSettings: pageData.profile.fontSettings,
+                    buttonColors: pageData.profile.buttonColors,
+                    businessCard: pageData.profile.businessCard,
+                  }}
+                  blocks={effectiveBlocks}
+                  buttonRadiusOverride={buttonRadiusOverride}
+                  hideFooterMark={pageData.profile.hideFooter}
+                  embedMode="live"
+                  isPublicPage={true}
+                  onLinkClick={(block) => {
+                    trackLinkClick(block);
+                    const w = window as any;
+                    if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
+                      w.gtag('event', 'link_click', {
+                        link_title: block.title,
+                        link_url: block.url || '',
+                        creator: clean,
+                      });
+                    }
+                  }}
+                  onUnlock={(block) => setUnlockBlock(block)}
+                  renderSignupForm={(block) => (
+                    <SignupFormBlock
+                      block={block}
+                      vibe={effectiveVibe}
+                      ownerName={pageData.profile?.displayName || clean}
+                      username={clean}
+                      buttonRadiusOverride={buttonRadiusOverride}
+                      buttonFontFamily={buttonFontFamily}
+                    />
+                  )}
+                />
+
+                <UnlockDialog
+                  isOpen={unlockBlock !== null}
+                  onClose={() => setUnlockBlock(null)}
+                  block={unlockBlock}
+                  vibe={effectiveVibe}
+                  buttonRadiusOverride={buttonRadiusOverride}
+                  fontFamily={buttonFontFamily}
+                  onSuccess={(block, url) => {
+                    setUnlockedUrls((prev) => ({ ...prev, [block.id]: url }));
+                    trackLinkClick(block);
+                  }}
+                />
+              </>
+            );
+          })()}
+        </div>
       </div>
     );
   }

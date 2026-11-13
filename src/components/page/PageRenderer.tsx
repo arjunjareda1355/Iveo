@@ -25,6 +25,8 @@ import { ShareModal } from '../public/ShareModal';
 import { formatExternalUrl } from '../../lib/urls';
 import { storagePublicUrl } from '../../data/storageApi';
 import { Logo } from '../ui/Logo';
+import { getFontCssFamily, loadGoogleFonts } from '../../lib/fonts';
+import { resolveEffectiveTokens } from '../../lib/colors';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -57,12 +59,47 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   renderSignupForm,
   protectedIds,
 }) => {
-  const { tokens, persona } = vibe;
+  const { persona } = vibe;
+  const tokens = resolveEffectiveTokens(
+    vibe.tokens,
+    profile?.buttonColors,
+    profile?.background
+  );
+  const effectiveVibe: Vibe = { ...vibe, tokens };
+
+  const nameFontFamily = getFontCssFamily(
+    profile?.fontSettings?.nameFont,
+    vibe.fontFamily
+  );
+  const bioFontFamily = getFontCssFamily(
+    profile?.fontSettings?.bioFont,
+    vibe.fontFamily
+  );
+  const buttonFontFamily = getFontCssFamily(
+    profile?.fontSettings?.buttonFont,
+    vibe.fontFamily
+  );
+
   const effectiveRadius =
     buttonRadiusOverride !== undefined ? buttonRadiusOverride : tokens.buttonRadius;
 
   const [activeEmbedId, setActiveEmbedId] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
+
+  // Load any customized Google Fonts used on this page
+  React.useEffect(() => {
+    loadGoogleFonts([
+      profile?.fontSettings?.nameFont,
+      profile?.fontSettings?.bioFont,
+      profile?.fontSettings?.buttonFont,
+      profile?.businessCard?.fontId,
+    ]);
+  }, [
+    profile?.fontSettings?.nameFont,
+    profile?.fontSettings?.bioFont,
+    profile?.fontSettings?.buttonFont,
+    profile?.businessCard?.fontId,
+  ]);
 
   // Reset avatar error when avatarUrl changes
   React.useEffect(() => {
@@ -169,6 +206,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             style={{
               backgroundColor: tokens.buttonBg,
               color: tokens.buttonText,
+              fontFamily: buttonFontFamily,
               border: `1px solid ${tokens.buttonBorder || 'rgba(0,0,0,0.1)'}`,
             }}
           >
@@ -219,6 +257,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           style={{
             fontSize: `${Math.max(14, Math.round(17 * scale))}px`,
             color: tokens.text,
+            fontFamily: nameFontFamily,
           }}
         >
           {displayName}
@@ -243,6 +282,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             marginTop: `${Math.round(8 * scale)}px`,
             fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
             color: tokens.muted,
+            fontFamily: bioFontFamily,
           }}
         >
           {displayBio}
@@ -324,6 +364,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 style={{
                   fontSize: `${Math.max(13, Math.round(15 * scale))}px`,
                   color: tokens.text,
+                  fontFamily: nameFontFamily,
                 }}
               >
                 {block.title}
@@ -354,11 +395,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <EmbedBlock
                 key={block.id}
                 block={block}
-                vibe={vibe}
+                vibe={effectiveVibe}
                 effectiveRadius={effectiveRadius}
                 embedMode={embedMode}
                 activeEmbedId={activeEmbedId}
                 onActivate={(id) => setActiveEmbedId(id)}
+                fontFamily={buttonFontFamily}
                 scale={scale}
                 onLinkClick={onLinkClick}
               />
@@ -392,6 +434,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   borderRadius: `${Math.round(cardRadius * scale)}px`,
                   padding: `${Math.round(14 * scale)}px`,
                   color: tokens.text,
+                  fontFamily: buttonFontFamily,
                 }}
               >
                 <div
@@ -459,6 +502,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   config={block.tipJar}
                   tokens={tokens}
                   buttonRadius={effectiveRadius}
+                  fontFamily={buttonFontFamily}
                   scale={scale}
                 />
               </div>
@@ -474,6 +518,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   config={block.faq}
                   tokens={tokens}
                   buttonRadius={effectiveRadius}
+                  fontFamily={buttonFontFamily}
                   scale={scale}
                 />
               </div>
@@ -488,6 +533,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   config={block.vcard}
                   tokens={tokens}
                   buttonRadius={effectiveRadius}
+                  fontFamily={buttonFontFamily}
                   scale={scale}
                 />
               </div>
@@ -504,6 +550,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 style={{
                   backgroundColor: tokens.buttonBg,
                   color: tokens.buttonText,
+                  fontFamily: buttonFontFamily,
                   borderRadius: `${Math.round(effectiveRadius * scale)}px`,
                   border: tokens.buttonBorder
                     ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
@@ -580,6 +627,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 style={{
                   backgroundColor: tokens.buttonBg,
                   color: tokens.buttonText,
+                  fontFamily: buttonFontFamily,
                   borderRadius: `${Math.round(effectiveRadius * scale)}px`,
                   border: tokens.buttonBorder
                     ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
@@ -644,6 +692,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 style={{
                   backgroundColor: tokens.buttonBg,
                   color: tokens.buttonText,
+                  fontFamily: buttonFontFamily,
                   borderRadius: `${Math.round(effectiveRadius * scale)}px`,
                   border: tokens.buttonBorder
                     ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
@@ -698,8 +747,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <FeaturedLink
                 key={block.id}
                 block={block}
-                vibe={vibe}
+                vibe={effectiveVibe}
                 effectiveRadius={effectiveRadius}
+                fontFamily={buttonFontFamily}
                 scale={scale}
                 isInteractive={isPublicPage}
                 isEager={isEager}
@@ -750,6 +800,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 paddingRight: `${sidePadding}px`,
                 backgroundColor: tokens.buttonBg,
                 color: tokens.buttonText,
+                fontFamily: buttonFontFamily,
                 borderRadius: `${Math.round(effectiveRadius * scale)}px`,
                 border: tokens.buttonBorder
                   ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
@@ -995,7 +1046,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         displayName={displayName}
         bio={displayBio}
         avatarUrl={!avatarError && (profile?.avatarUrl ?? persona.avatarUrl) ? (profile?.avatarUrl ?? persona.avatarUrl) : null}
-        vibe={vibe}
+        vibe={effectiveVibe}
+        businessCard={profile?.businessCard}
       />
     </div>
   );

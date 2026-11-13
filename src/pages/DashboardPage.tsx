@@ -19,6 +19,8 @@ import { useIvioSession } from '../auth/useIvioSession';
 import { useProtectedLinkIds } from '../data/hooks/useProtectedLinkIds';
 import { VIBES, VibeId } from '../lib/vibes';
 import { ButtonShape } from '../lib/preferences';
+import { FontSettings } from '../lib/fonts';
+import { ButtonColors } from '../lib/colors';
 import { useNow, isBlockVisibleNow } from '../lib/time';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
@@ -39,14 +41,22 @@ const DashboardContent: React.FC = () => {
 
   const [previewVibeId, setPreviewVibeId] = useState<VibeId>(session.vibeId);
   const [previewShape, setPreviewShape] = useState<ButtonShape | null>(session.buttonShape);
+  const [previewFontSettings, setPreviewFontSettings] = useState<FontSettings | null>(
+    session.fontSettings ?? null
+  );
+  const [previewButtonColors, setPreviewButtonColors] = useState<ButtonColors | null>(
+    session.buttonColors ?? null
+  );
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
 
   // Sync state with session
   useEffect(() => {
     setPreviewVibeId(session.vibeId);
-    setPreviewShape(session.buttonShape);
-  }, [session.vibeId, session.buttonShape]);
+    setPreviewShape(session.buttonShape ?? null);
+    setPreviewFontSettings(session.fontSettings ?? null);
+    setPreviewButtonColors(session.buttonColors ?? null);
+  }, [session.vibeId, session.buttonShape, session.fontSettings, session.buttonColors]);
 
   // Determine active tab & document title
   const isAppearance = location.pathname.includes('/appearance');
@@ -97,6 +107,8 @@ const DashboardContent: React.FC = () => {
     socialsPosition: session.socialsPosition,
     whatsappNumber: session.whatsappNumber,
     background: session.background,
+    fontSettings: previewFontSettings,
+    buttonColors: previewButtonColors,
   };
 
   const buttonRadiusOverride = previewShape ? BUTTON_RADIUS_MAP[previewShape] : undefined;
@@ -252,7 +264,7 @@ const DashboardContent: React.FC = () => {
       </nav>
 
       {/* Main Content Area */}
-      <main id="main" className="flex-1 py-8 sm:py-10">
+      <main id="main" className="flex-1 py-8 sm:py-10 pb-24 lg:pb-10">
         <Container>
           {isAnalytics ? (
             <div className="w-full">
@@ -271,6 +283,9 @@ const DashboardContent: React.FC = () => {
                   <AppearanceTab
                     onPreviewVibeChange={(vId) => setPreviewVibeId(vId)}
                     onPreviewShapeChange={(shape) => setPreviewShape(shape)}
+                    onPreviewFontSettingsChange={(fonts) => setPreviewFontSettings(fonts)}
+                    onPreviewButtonColorsChange={(colors) => setPreviewButtonColors(colors)}
+                    onOpenPreview={() => setMobilePreviewOpen(true)}
                   />
                 )}
                 {isSettings && <SettingsTab />}
@@ -316,9 +331,12 @@ const DashboardContent: React.FC = () => {
               role="dialog"
               aria-modal="true"
               aria-label="Phone Preview"
-              className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end"
+              className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex flex-col justify-end lg:justify-center lg:items-center"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setMobilePreviewOpen(false);
+              }}
             >
-              <div className="bg-surface rounded-t-[20px] p-6 max-h-[85vh] overflow-y-auto flex flex-col items-center relative border-t border-border">
+              <div className="bg-surface rounded-t-[20px] lg:rounded-[24px] p-6 max-h-[88vh] lg:w-full lg:max-w-[380px] overflow-y-auto flex flex-col items-center relative border-t lg:border border-border shadow-2xl">
                 <button
                   type="button"
                   onClick={() => setMobilePreviewOpen(false)}
@@ -355,6 +373,12 @@ const DashboardContent: React.FC = () => {
           bio={session.bio}
           avatarUrl={session.imageUrl}
           vibeId={previewVibeId}
+          fontSettings={previewFontSettings}
+          buttonColors={previewButtonColors}
+          businessCard={session.businessCard}
+          onSaveCardConfig={async (cfg) => {
+            await session.updatePreferences({ businessCard: cfg });
+          }}
           isPublished={true}
         />
       )}

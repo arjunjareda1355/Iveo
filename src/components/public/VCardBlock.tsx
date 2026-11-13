@@ -8,6 +8,7 @@ interface VCardBlockProps {
   config: VCardConfig;
   tokens: VibeTokens;
   buttonRadius: number;
+  fontFamily?: string;
   scale?: number;
 }
 
@@ -15,6 +16,7 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
   config,
   tokens,
   buttonRadius,
+  fontFamily,
   scale = 1,
 }) => {
   const [downloaded, setDownloaded] = useState(false);
@@ -64,6 +66,7 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
         padding: `${Math.round(10 * scale)}px ${Math.round(14 * scale)}px`,
         backgroundColor: tokens.buttonBg,
         color: tokens.buttonText,
+        fontFamily,
         borderRadius: `${Math.round(buttonRadius * scale)}px`,
         border: tokens.buttonBorder
           ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`

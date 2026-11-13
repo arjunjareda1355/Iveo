@@ -11,6 +11,7 @@ interface SignupFormBlockProps {
   ownerName: string;
   username: string;
   buttonRadiusOverride?: number;
+  buttonFontFamily?: string;
 }
 
 export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
@@ -19,6 +20,7 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
   ownerName,
   username,
   buttonRadiusOverride,
+  buttonFontFamily,
 }) => {
   const cfg = block.signup;
   const collect = cfg?.collect || 'email';
@@ -121,7 +123,7 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
         borderRadius: `${cardRadius}px`,
         backgroundColor: tokens.buttonBg ? `${tokens.buttonBg}0d` : 'transparent',
         color: tokens.text,
-        fontFamily: vibe.fontFamily,
+        fontFamily: buttonFontFamily || vibe.fontFamily,
       }}
     >
       {isSuccess ? (

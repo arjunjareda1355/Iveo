@@ -1,6 +1,12 @@
 import React from 'react';
 import { Vibe } from '../../lib/vibes';
-import { PageBlock, BackgroundConfig } from '../../data/types';
+import {
+  PageBlock,
+  BackgroundConfig,
+  FontSettings,
+  ButtonColors,
+  BusinessCardConfig,
+} from '../../data/types';
 import { PageRenderer } from '../page/PageRenderer';
 
 export interface PhoneProfile {
@@ -14,6 +20,9 @@ export interface PhoneProfile {
   socialsPosition?: 'top' | 'bottom' | 'both';
   whatsappNumber?: string | null;
   background?: BackgroundConfig | null;
+  fontSettings?: FontSettings | null;
+  buttonColors?: ButtonColors | null;
+  businessCard?: BusinessCardConfig | null;
 }
 
 interface PhonePageProps {

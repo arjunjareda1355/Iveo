@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Upload,
   Sparkles,
@@ -21,6 +21,7 @@ interface BackgroundSelectorCardProps {
   currentBackground?: BackgroundConfig | null;
   isPro: boolean;
   onBackgroundChange: (bg: BackgroundConfig | null) => Promise<void> | void;
+  embedded?: boolean;
 }
 
 interface PresetOption {
@@ -106,6 +107,7 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
   currentBackground,
   isPro,
   onBackgroundChange,
+  embedded = false,
 }) => {
   const { openUpgrade } = useUpgradeDialog();
   const { showToast } = useToast();
@@ -115,6 +117,11 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [blur, setBlur] = useState<number>(currentBackground?.blur ?? 0);
   const [opacity, setOpacity] = useState<number>(currentBackground?.opacity ?? 0.9);
+
+  useEffect(() => {
+    setBlur(currentBackground?.blur ?? 0);
+    setOpacity(currentBackground?.opacity ?? 0.9);
+  }, [currentBackground?.blur, currentBackground?.opacity]);
 
   const activePresetId =
     currentBackground?.presetId ||
@@ -205,35 +212,38 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
     showToast('Background removed');
   };
 
-  return (
-    <Card className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-[20px] font-semibold text-ink leading-tight flex items-center gap-2">
-            <span>Page Background</span>
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-ink/5 text-muted">
-              Personalize
-            </span>
-          </h3>
-          <p className="mt-1 text-[14px] text-muted">
-            Customize the ambient backdrop for your public link-in-bio page.
-          </p>
-        </div>
+  const content = (
+    <>
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[20px] font-semibold text-ink leading-tight flex items-center gap-2">
+              <span>Page Background</span>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-ink/5 text-muted">
+                Personalize
+              </span>
+            </h3>
+            <p className="mt-1 text-[14px] text-muted">
+              Customize the ambient backdrop for your public link-in-bio page.
+            </p>
+          </div>
 
-        {currentBackground && currentBackground.type !== 'none' && (
-          <button
-            type="button"
-            onClick={handleRemoveBackground}
-            className="text-[12px] text-muted hover:text-red-600 flex items-center gap-1 transition-colors cursor-pointer"
-          >
-            <Trash2 size={13} />
-            <span>Reset to default</span>
-          </button>
-        )}
-      </div>
+          {currentBackground && currentBackground.type !== 'none' && (
+            <button
+              type="button"
+              onClick={handleRemoveBackground}
+              className="text-[12px] text-muted hover:text-red-600 flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Trash2 size={13} />
+              <span>Reset to default</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tabs: Presets vs Custom Image */}
-      <div className="flex items-center gap-2 border-b border-border pb-2 text-[13px]">
+      <div className="flex items-center justify-between gap-2 border-b border-border pb-2 text-[13px]">
+        <div className="flex items-center gap-4">
         <button
           type="button"
           onClick={() => setActiveTab('presets')}
@@ -258,6 +268,17 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
           <span>Custom Photo</span>
           {!isPro && <ProBadge className="scale-75 origin-left" />}
         </button>
+        </div>
+        {embedded && currentBackground && currentBackground.type !== 'none' && (
+          <button
+            type="button"
+            onClick={handleRemoveBackground}
+            className="text-[12px] text-muted hover:text-red-600 flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            <Trash2 size={13} />
+            <span>Reset</span>
+          </button>
+        )}
       </div>
 
       {/* Tab 1: Presets Grid */}
@@ -410,6 +431,12 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
           )}
         </div>
       )}
-    </Card>
+    </>
+  );
+
+  return embedded ? (
+    <div className="flex flex-col gap-4">{content}</div>
+  ) : (
+    <Card className="flex flex-col gap-4">{content}</Card>
   );
 };

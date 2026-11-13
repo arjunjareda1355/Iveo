@@ -11,6 +11,7 @@ interface EmbedBlockProps {
   embedMode: 'placeholder' | 'live';
   activeEmbedId: string | null;
   onActivate: (id: string) => void;
+  fontFamily?: string;
   scale?: number;
   onLinkClick?: (block: PageBlock) => void;
 }
@@ -22,6 +23,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   embedMode,
   activeEmbedId,
   onActivate,
+  fontFamily,
   scale = 1,
   onLinkClick,
 }) => {
@@ -62,6 +64,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
           minHeight: `${defaultHeight}px`,
           backgroundColor: tokens.buttonBg,
           color: tokens.buttonText,
+          fontFamily: fontFamily || vibe.fontFamily,
           borderRadius: `${Math.round(effectiveRadius * scale)}px`,
           border: tokens.buttonBorder
             ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
@@ -137,6 +140,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         aspectRatio: parsed?.aspect || undefined,
         backgroundColor: tokens.buttonBg,
         color: tokens.buttonText,
+        fontFamily: fontFamily || vibe.fontFamily,
         borderRadius: `${effectiveRadius}px`,
         border: tokens.buttonBorder
           ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`

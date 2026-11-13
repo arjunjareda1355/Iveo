@@ -1,7 +1,10 @@
 import { VibeId } from '../lib/vibes';
 import { ButtonShape, BackgroundConfig } from '../lib/preferences';
+import type { FontSettings } from '../lib/fonts';
+import type { ButtonColors } from '../lib/colors';
+import type { BusinessCardConfig } from '../lib/businessCardConfig';
 
-export type { BackgroundConfig };
+export type { BackgroundConfig, FontSettings, ButtonColors, BusinessCardConfig };
 
 export type BlockKind =
   | 'link'
@@ -157,6 +160,9 @@ export interface Profile {
   whatsappNumber?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
+  fontSettings?: FontSettings | null;
+  buttonColors?: ButtonColors | null;
+  businessCard?: BusinessCardConfig | null;
 }
 
 export interface PublicProfileData {
@@ -178,6 +184,9 @@ export interface PublicProfileData {
   whatsappNumber?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
+  fontSettings?: FontSettings | null;
+  buttonColors?: ButtonColors | null;
+  businessCard?: BusinessCardConfig | null;
 }
 
 export interface PublicPageData {

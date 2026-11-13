@@ -9,6 +9,7 @@ interface FeaturedLinkProps {
   block: PageBlock;
   vibe: Vibe;
   effectiveRadius: number;
+  fontFamily?: string;
   scale?: number;
   isInteractive?: boolean;
   isEager?: boolean;
@@ -21,6 +22,7 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
   block,
   vibe,
   effectiveRadius,
+  fontFamily,
   scale = 1,
   isInteractive = false,
   isEager = false,
@@ -37,6 +39,7 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
       style={{
         backgroundColor: tokens.buttonBg,
         color: tokens.buttonText,
+        fontFamily: fontFamily || vibe.fontFamily,
         borderRadius: `${Math.round(effectiveRadius * scale)}px`,
         border: tokens.buttonBorder
           ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`

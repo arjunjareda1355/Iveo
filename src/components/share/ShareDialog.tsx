@@ -15,11 +15,18 @@ import {
   downloadBusinessCardPng,
   generateBusinessCardPng,
   dataUrlToBlob,
-  isLightColor,
 } from '../../lib/businessCard';
+import {
+  BusinessCardConfig,
+  DEFAULT_BUSINESS_CARD_CONFIG,
+} from '../../lib/businessCardConfig';
+import { ButtonColors, resolveEffectiveTokens } from '../../lib/colors';
+import { FontSettings } from '../../lib/fonts';
 import { VIBES } from '../../lib/vibes';
 import { TrackedLinkSection } from './TrackedLinkSection';
 import { LinkPreviewSection } from './LinkPreviewSection';
+import { BusinessCardPreview } from './BusinessCardPreview';
+import { BusinessCardCustomizer } from './BusinessCardCustomizer';
 
 interface ShareDialogProps {
   isOpen: boolean;
@@ -29,6 +36,10 @@ interface ShareDialogProps {
   bio?: string;
   avatarUrl?: string | null;
   vibeId?: string;
+  fontSettings?: FontSettings | null;
+  buttonColors?: ButtonColors | null;
+  businessCard?: BusinessCardConfig | null;
+  onSaveCardConfig?: (cfg: BusinessCardConfig) => Promise<void> | void;
   isPublished?: boolean;
 }
 
@@ -49,6 +60,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   bio,
   avatarUrl,
   vibeId,
+  fontSettings,
+  buttonColors,
+  businessCard,
+  onSaveCardConfig,
   isPublished = true,
 }) => {
   const { showToast } = useToast();
@@ -56,12 +71,27 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const [copied, setCopied] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
   const [isDownloadingCard, setIsDownloadingCard] = useState(false);
+  const [isSavingCard, setIsSavingCard] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#0A0A0A');
   const [showBrandedFrame, setShowBrandedFrame] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [qrPngDataUrl, setQrPngDataUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const [cardConfig, setCardConfig] = useState<BusinessCardConfig>(() => ({
+    ...DEFAULT_BUSINESS_CARD_CONFIG,
+    fontId: fontSettings?.nameFont || null,
+    ...(businessCard || {}),
+  }));
+
+  useEffect(() => {
+    setCardConfig({
+      ...DEFAULT_BUSINESS_CARD_CONFIG,
+      fontId: fontSettings?.nameFont || null,
+      ...(businessCard || {}),
+    });
+  }, [businessCard, fontSettings?.nameFont]);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -70,14 +100,14 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const qrUrl = pageUrl(username, { src: 'qr' });
   const displayAddress = `iveo.site/${username}`;
   const activeVibe = VIBES.find((v) => v.id === vibeId) || VIBES[0];
+  const effectiveTokens = resolveEffectiveTokens(activeVibe.tokens, buttonColors);
   const cardTheme = {
-    bg: activeVibe.tokens.bg,
-    text: activeVibe.tokens.text,
-    muted: activeVibe.tokens.muted,
-    accent: activeVibe.tokens.buttonBg,
-    buttonBg: activeVibe.tokens.buttonBg,
+    bg: effectiveTokens.bg,
+    text: effectiveTokens.text,
+    muted: effectiveTokens.muted,
+    accent: effectiveTokens.buttonBg,
+    buttonBg: effectiveTokens.buttonBg,
   };
-  const cardBgIsLight = isLightColor(cardTheme.bg);
 
   // Generate QR lazily when opened or when color changes
   useEffect(() => {
@@ -212,8 +242,22 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
       bio,
       pageUrl: fullUrl,
       avatarUrl,
+      cardConfig,
     });
     showToast('Contact card (.vcf) downloaded');
+  };
+
+  const handleSaveCardDesign = async (next: BusinessCardConfig) => {
+    if (!onSaveCardConfig) return;
+    setIsSavingCard(true);
+    try {
+      await onSaveCardConfig(next);
+      showToast('Business card design saved');
+    } catch {
+      showToast("Couldn't save business card design");
+    } finally {
+      setIsSavingCard(false);
+    }
   };
 
   const handleDownloadBusinessCard = async () => {
@@ -227,8 +271,9 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         avatarUrl,
         qrDataUrl: qrPngDataUrl,
         theme: cardTheme,
+        cardConfig,
       });
-      showToast('Business card (1920×1080 PNG) downloaded');
+      showToast('Business card (2040×1200 HD PNG) downloaded');
     } catch {
       showToast('Could not generate card PNG. Try downloading the QR or .vcf.');
     } finally {
@@ -248,6 +293,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
           avatarUrl,
           qrDataUrl: qrPngDataUrl,
           theme: cardTheme,
+          cardConfig,
         });
         const blob = dataUrlToBlob(pngDataUrl);
         const file = new File([blob], `iveo-card-${username}.png`, { type: 'image/png' });
@@ -344,69 +390,22 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
         {activeTab === 'card' ? (
           <div className="mt-5 flex flex-col gap-4">
-            <div
-              className={`w-full rounded-[16px] p-5 shadow-md relative overflow-hidden flex flex-col justify-between aspect-[1.7/1] select-none border ${
-                cardBgIsLight ? 'border-black/10' : 'border-white/15'
-              }`}
-              style={{
-                backgroundColor: cardTheme.bg,
-                color: cardTheme.text,
-              }}
-            >
-              <div
-                className={`absolute w-40 h-40 rounded-full pointer-events-none blur-2xl ${
-                  cardBgIsLight ? '-bottom-16 -left-16 opacity-[0.06]' : '-top-14 -right-14 opacity-20'
-                }`}
-                style={{ backgroundColor: cardTheme.accent }}
-              />
-              <div className="flex items-start justify-between gap-3 relative z-10">
-                <div className="flex items-center gap-3 min-w-0">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={displayName || username}
-                      className={`w-12 h-12 rounded-full object-cover border-2 shrink-0 ${
-                        cardBgIsLight ? 'border-black/10' : 'border-white/25'
-                      }`}
-                    />
-                  ) : (
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-[18px] shrink-0 border ${
-                        cardBgIsLight ? 'bg-black/5 border-black/10' : 'bg-white/15 border-white/20'
-                      }`}
-                    >
-                      {(displayName || username).slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <h4 className="text-[16px] font-bold leading-tight truncate">
-                      {displayName || username}
-                    </h4>
-                    <span className="text-[12px] opacity-75 font-mono">@{username}</span>
-                  </div>
-                </div>
-                {qrPngDataUrl && (
-                  <div className="w-12 h-12 bg-white p-0.5 rounded-lg shrink-0 shadow-xs border border-black/5">
-                    <img src={qrPngDataUrl} alt="" className="w-full h-full object-contain rounded" />
-                  </div>
-                )}
-              </div>
+            <BusinessCardPreview
+              username={username}
+              displayName={displayName || username}
+              bio={bio}
+              avatarUrl={avatarUrl}
+              qrDataUrl={qrPngDataUrl}
+              vibeTheme={cardTheme}
+              config={cardConfig}
+            />
 
-              {bio && (
-                <p className="text-[12px] opacity-80 line-clamp-2 leading-relaxed my-2 relative z-10">
-                  {bio}
-                </p>
-              )}
-
-              <div
-                className={`pt-2 border-t flex items-center justify-between text-[11px] opacity-70 font-mono relative z-10 ${
-                  cardBgIsLight ? 'border-black/10' : 'border-white/15'
-                }`}
-              >
-                <span>iveo</span>
-                <span>{displayAddress}</span>
-              </div>
-            </div>
+            <BusinessCardCustomizer
+              value={cardConfig}
+              onChange={setCardConfig}
+              onSave={onSaveCardConfig ? handleSaveCardDesign : undefined}
+              isSaving={isSavingCard}
+            />
 
             <div className="flex flex-col gap-2">
               <Button
@@ -417,7 +416,11 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                 fullWidth
               >
                 <Download size={15} />
-                <span>{isDownloadingCard ? 'Rendering 1920×1080 PNG...' : 'Download HD Business Card (.png)'}</span>
+                <span>
+                  {isDownloadingCard
+                    ? 'Rendering 2040×1200 PNG...'
+                    : 'Download HD Business Card (.png)'}
+                </span>
               </Button>
 
               <div className="grid grid-cols-2 gap-2">
@@ -433,7 +436,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </div>
 
             <p className="text-center text-[12px] text-muted leading-relaxed">
-              Full HD 1920×1080 business card matched to your active Vibe with an embedded scannable QR code.
+              Exports a pixel-true 2040×1200 HD PNG matching your card preview with an embedded scannable QR code.
             </p>
           </div>
         ) : (
@@ -522,6 +525,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                     <img
                       src={avatarUrl}
                       alt={displayName || username}
+                      referrerPolicy="no-referrer"
                       className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-xs mb-1.5"
                     />
                   ) : (

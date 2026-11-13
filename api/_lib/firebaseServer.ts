@@ -270,7 +270,7 @@ export async function firebaseSaveProfile(
     avatarType: profileData.avatarType || (profileData.avatarId ? 'default' : (profileData.avatarUrl ? 'uploaded' : 'default')),
     avatarId: profileData.avatarId || null,
     vibeId: profileData.vibeId || 'clean',
-    buttonShape: profileData.buttonShape || 'rounded',
+    buttonShape: profileData.buttonShape !== undefined ? profileData.buttonShape : null,
     socials: profileData.socials || {},
     socialsPosition: profileData.socialsPosition || 'top',
     primaryEmail: profileData.primaryEmail || null,
@@ -283,6 +283,9 @@ export async function firebaseSaveProfile(
     whatsappNumber: profileData.whatsappNumber ?? null,
     customSeoTitle: profileData.customSeoTitle ?? null,
     customSeoDescription: profileData.customSeoDescription ?? null,
+    fontSettings: profileData.fontSettings ?? null,
+    buttonColors: profileData.buttonColors ?? null,
+    businessCard: profileData.businessCard ?? null,
     updatedAt: new Date().toISOString(),
   };
 
