@@ -5,7 +5,7 @@ import { escapeHtml, safeJsonLd, truncate } from './html.ts';
 import { ogImageAddress, pageAddress } from './site.ts';
 import { loadPublicPage, version, type PublicPageServerData } from './publicPage.ts';
 import { appendSeoEvent, getSearchEngineStatus, notifyIndexNow, submitSitemapsToSearchEngines } from './searchEngines.ts';
-import { classifySegment, PRIVATE_ROUTES, PUBLIC_INFO_ROUTES } from './usernames.ts';
+import { classifySegment, isPrivilegedEmailServer, PRIVATE_ROUTES, PUBLIC_INFO_ROUTES } from './usernames.ts';
 
 export const MAIN_SEO_TITLE = 'Iveo – One Link for Everything You Create';
 export const MAIN_SEO_DESCRIPTION =
@@ -20,6 +20,7 @@ export interface SeoUnifiedProfile {
   avatarUrl: string | null;
   vibeId: string;
   plan: string;
+  isPro?: boolean;
   status: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
   isPublished: boolean;
   hideFromSearch: boolean;
@@ -184,13 +185,15 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
     for (const prof of fbProfiles) {
       const uname = typeof prof?.username === 'string' ? prof.username.toLowerCase().trim() : '';
       if (!uname || prof?.status === 'deleted') continue;
+      const isPro = Boolean(prof.isPro || prof.plan === 'pro' || isPrivilegedEmailServer(prof.primaryEmail));
       upsertIfNewer({
         username: uname,
         displayName: prof.displayName || uname,
         bio: prof.bio || '',
         avatarUrl: prof.avatarUrl || null,
         vibeId: prof.vibeId || 'clean',
-        plan: prof.plan || 'free',
+        plan: isPro ? 'pro' : (prof.plan || 'free'),
+        isPro,
         status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
         isPublished: prof.isPublished !== false,
         hideFromSearch: Boolean(prof.hideFromSearch),
@@ -209,13 +212,15 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
     for (const prof of dbProfiles) {
       const uname = typeof prof?.username === 'string' ? prof.username.toLowerCase().trim() : '';
       if (!uname || prof?.status === 'deleted') continue;
+      const isPro = Boolean(prof.isPro || prof.plan === 'pro' || isPrivilegedEmailServer(prof.primaryEmail));
       upsertIfNewer({
         username: uname,
         displayName: prof.displayName || uname,
         bio: prof.bio || '',
         avatarUrl: prof.avatarUrl || null,
         vibeId: prof.vibeId || 'clean',
-        plan: prof.plan || 'free',
+        plan: isPro ? 'pro' : (prof.plan || 'free'),
+        isPro,
         status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
         isPublished: prof.isPublished !== false,
         hideFromSearch: Boolean(prof.hideFromSearch),

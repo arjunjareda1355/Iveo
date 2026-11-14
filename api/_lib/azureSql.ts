@@ -1529,16 +1529,19 @@ export async function dbListAllProfiles(): Promise<any[]> {
         let parsedStatus = 'active';
         let integrations: Record<string, any> = {};
         let socials: Record<string, string> = {};
+        let primaryEmail: string | null = null;
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
             if (parsed && typeof parsed === 'object') {
               socials = parsed.links || {};
               if (parsed.status) parsedStatus = parsed.status;
+              if (parsed.email) primaryEmail = parsed.email;
               if (parsed.integrations) integrations = parsed.integrations;
             }
           }
         } catch {}
+        const isPro = Boolean(row.plan === 'pro' || isPrivilegedEmailServer(primaryEmail));
         byUsername.set(uname, {
           userId: row.user_id,
           username: uname,
@@ -1547,7 +1550,9 @@ export async function dbListAllProfiles(): Promise<any[]> {
           avatarUrl: row.avatar_url,
           vibeId: row.vibe_id,
           socials,
-          plan: row.plan || 'free',
+          primaryEmail,
+          plan: isPro ? 'pro' : (row.plan || 'free'),
+          isPro,
           status: parsedStatus,
           hideFromSearch: Boolean(row.hide_from_search),
           isPublished: Boolean(row.is_published),
@@ -1564,9 +1569,12 @@ export async function dbListAllProfiles(): Promise<any[]> {
     const clean = uname.toLowerCase().trim();
     if (!clean) continue;
     if (!byUsername.has(clean)) {
+      const isPro = Boolean(prof.plan === 'pro' || isPrivilegedEmailServer(prof.primaryEmail));
       byUsername.set(clean, {
         ...prof,
         username: clean,
+        plan: isPro ? 'pro' : (prof.plan || 'free'),
+        isPro,
         status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
         isPublished: prof.isPublished !== false,
       });

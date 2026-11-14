@@ -16,6 +16,8 @@ export interface PhoneProfile {
   bio?: string;
   avatarUrl?: string | null;
   initials?: string;
+  isPro?: boolean;
+  isVerified?: boolean;
   links?: readonly string[];
   socials?: Record<string, string>;
   socialsPosition?: 'top' | 'bottom' | 'both';

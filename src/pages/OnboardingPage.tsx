@@ -703,6 +703,10 @@ export const OnboardingPage: React.FC = () => {
                     <VibeTileGroup
                       selectedVibeId={selectedVibeId}
                       onSelect={(vId) => setSelectedVibeId(vId)}
+                      isPro={session.isPro}
+                      onProBlocked={(vibe) =>
+                        showToast(`${vibe.name} is a Pro vibe — choose a Free vibe or upgrade in Dashboard.`)
+                      }
                     />
                   </div>
 

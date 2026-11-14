@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, Receipt, ChevronRight, FileDown } from 'lucide-react';
+import { Sparkles, Check, Minus, ChevronRight, ChevronDown, FileDown } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { VerifiedTick } from '../ui/VerifiedTick';
 import { ProBadge } from './ProBadge';
 import { useUpgradeDialog } from './UpgradeDialogProvider';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { downloadInvoicePdf } from '../../lib/invoicePdf';
+import { PLAN_COMPARISON_SECTIONS, PRO_PLAN_HIGHLIGHTS } from '../../lib/plan';
 
 export const SubscriptionCard: React.FC = () => {
   const session = useIvioSession();
   const { openUpgrade } = useUpgradeDialog();
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
-  // Check stored subscription info if available
   const uname = session.username?.toLowerCase() || '';
   let subInfo: any = null;
   if (typeof window !== 'undefined' && uname) {
@@ -25,23 +27,23 @@ export const SubscriptionCard: React.FC = () => {
   }
 
   const isPro = session.isPro;
+  const proHighlights = PRO_PLAN_HIGHLIGHTS.filter((item) => item !== 'Everything in Free');
 
   return (
     <Card className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-[20px] font-semibold text-ink leading-tight">
-          Subscription & Billing
+          Subscription &amp; Billing
         </h3>
         {isPro && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-medium text-ink">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Active</span>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-medium text-ink">
+            <VerifiedTick size={14} />
+            <span>Verified Pro</span>
           </div>
         )}
       </div>
 
       {isPro ? (
-        // Pro State
         <div className="flex flex-col gap-4">
           <div className="p-4 rounded-[12px] bg-surface-2 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -58,7 +60,7 @@ export const SubscriptionCard: React.FC = () => {
                 <p className="text-[13px] text-muted mt-0.5">
                   {subInfo?.period
                     ? `Billed ${subInfo.period}`
-                    : 'Full access to all Pro features'}
+                    : 'Verified tick, all 12 vibes, 19 fonts & full Pro tools'}
                 </p>
               </div>
             </div>
@@ -73,12 +75,11 @@ export const SubscriptionCard: React.FC = () => {
             </Button>
           </div>
 
-          {/* Receipt and subscription metadata */}
           {showReceiptDetails && (
             <div className="p-4 rounded-[12px] bg-surface border border-border text-[13px] flex flex-col gap-2.5 transition-all">
               <div className="flex items-center justify-between">
                 <span className="text-muted">Status</span>
-                <span className="font-medium text-emerald-600">Active</span>
+                <span className="font-medium text-emerald-700">Active</span>
               </div>
               {subInfo?.period && (
                 <div className="flex items-center justify-between">
@@ -89,7 +90,7 @@ export const SubscriptionCard: React.FC = () => {
               {subInfo?.expiresAt && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted">Valid Until</span>
-                  <span className="font-medium text-ink">
+                  <span className="font-medium text-ink tabular-nums">
                     {new Date(subInfo.expiresAt).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
@@ -137,34 +138,24 @@ export const SubscriptionCard: React.FC = () => {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[13px] text-ink pt-1">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0">
-                <Check size={12} strokeWidth={2.5} />
-              </div>
-              <span>Link scheduling & expiration</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0">
-                <Check size={12} strokeWidth={2.5} />
-              </div>
-              <span>YouTube & Spotify embeds</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0">
-                <Check size={12} strokeWidth={2.5} />
-              </div>
-              <span>Sources & Devices breakdown</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0">
-                <Check size={12} strokeWidth={2.5} />
-              </div>
-              <span>Remove iveo mark anytime</span>
-            </div>
+            {proHighlights.map((item) => {
+              const isVerifiedRow = item.toLowerCase().includes('verified pro tick');
+              return (
+                <div key={item} className="flex items-start gap-2">
+                  <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0 mt-0.5">
+                    {isVerifiedRow ? (
+                      <VerifiedTick size={12} />
+                    ) : (
+                      <Check size={12} strokeWidth={2.5} />
+                    )}
+                  </div>
+                  <span className="leading-snug">{item}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
-        // Free State
         <div className="flex flex-col gap-4">
           <div className="p-4 rounded-[12px] bg-surface-2 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -174,7 +165,7 @@ export const SubscriptionCard: React.FC = () => {
                 </span>
               </div>
               <p className="text-[13px] text-muted mt-0.5">
-                1 page, unlimited basic links, all 6 vibes, and standard analytics.
+                1 page, 6 Free vibes, 8 free fonts, 15 showcase blocks &amp; standard analytics.
               </p>
             </div>
 
@@ -189,10 +180,92 @@ export const SubscriptionCard: React.FC = () => {
           </div>
 
           <p className="text-[13px] text-muted leading-relaxed">
-            Upgrade to Pro to unlock YouTube/Spotify embeds, link scheduling, audience source analytics, and remove the iveo footer mark. Plans start at ₹499/mo or $6/mo.
+            Upgrade to Pro for your Verified Pro tick, all 12 vibes, 19 fonts, custom photo backdrops, embeds, scheduling, password links, signup forms, and advanced analytics. Plans start at ₹499/mo or $6/mo.
           </p>
         </div>
       )}
+
+      {/* Expandable Free vs. Pro Feature Breakdown */}
+      <div className="pt-2 border-t border-border">
+        <button
+          type="button"
+          onClick={() => setShowComparison((prev) => !prev)}
+          aria-expanded={showComparison}
+          className="w-full flex items-center justify-between py-1.5 text-[13px] font-medium text-ink hover:text-ink-2 transition-colors cursor-pointer"
+        >
+          <span>Compare Free vs. Pro features</span>
+          <ChevronDown
+            size={15}
+            className={`text-muted transition-transform duration-150 ${
+              showComparison ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+
+        {showComparison && (
+          <div className="mt-3 rounded-[10px] border border-border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[12px]">
+                <thead>
+                  <tr className="bg-surface-2 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted">
+                    <th className="py-2 px-3">Feature</th>
+                    <th className="py-2 px-3 text-center">Free</th>
+                    <th className="py-2 px-3 text-center text-ink">Pro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {PLAN_COMPARISON_SECTIONS.map((section) => (
+                    <React.Fragment key={section.category}>
+                      <tr className="bg-surface-2/50 border-b border-border">
+                        <th
+                          colSpan={3}
+                          className="py-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted"
+                        >
+                          {section.category}
+                        </th>
+                      </tr>
+                      {section.rows.map((row) => {
+                        const renderVal = (val: string | boolean, isProCol: boolean) => {
+                          if (val === true) {
+                            return <Check size={13} strokeWidth={2.5} className="inline text-ink" />;
+                          }
+                          if (val === false) {
+                            return <Minus size={13} strokeWidth={2} className="inline text-subtle" />;
+                          }
+                          if (isProCol && row.feature.toLowerCase().includes('verified pro tick')) {
+                            return (
+                              <span className="inline-flex items-center justify-center gap-1 font-medium text-ink">
+                                <VerifiedTick size={12} />
+                                <span>{val}</span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className={isProCol ? 'font-medium text-ink' : 'text-muted'}>
+                              {val}
+                            </span>
+                          );
+                        };
+
+                        return (
+                          <tr
+                            key={row.feature}
+                            className="border-b border-border/60 last:border-b-0"
+                          >
+                            <td className="py-2 px-3 text-ink">{row.feature}</td>
+                            <td className="py-2 px-3 text-center">{renderVal(row.free, false)}</td>
+                            <td className="py-2 px-3 text-center">{renderVal(row.pro, true)}</td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </Card>
   );
 };

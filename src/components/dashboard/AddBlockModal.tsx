@@ -251,8 +251,12 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [tierFilter, setTierFilter] = useState<'all' | 'free' | 'pro'>('all');
 
   if (!isOpen) return null;
+
+  const freeCount = FEATURES.filter((f) => !f.proRequired).length;
+  const proCount = FEATURES.filter((f) => f.proRequired).length;
 
   const filteredFeatures = FEATURES.filter((feat) => {
     const q = searchQuery.toLowerCase().trim();
@@ -262,7 +266,11 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
       feat.description.toLowerCase().includes(q);
     const matchesCategory =
       activeCategory === 'all' || feat.category === activeCategory;
-    return matchesSearch && matchesCategory;
+    const matchesTier =
+      tierFilter === 'all' ||
+      (tierFilter === 'free' && !feat.proRequired) ||
+      (tierFilter === 'pro' && Boolean(feat.proRequired));
+    return matchesSearch && matchesCategory && matchesTier;
   });
 
   return (
@@ -313,20 +321,49 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[12px]">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                  activeCategory === cat.id
-                    ? 'bg-ink text-surface'
-                    : 'bg-ink/5 text-muted hover:text-ink hover:bg-ink/10'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[12px]">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                    activeCategory === cat.id
+                      ? 'bg-ink text-surface'
+                      : 'bg-ink/5 text-muted hover:text-ink hover:bg-ink/10'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <div
+              className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border text-[11px] shrink-0"
+              role="group"
+              aria-label="Filter by plan tier"
+            >
+              {(
+                [
+                  { id: 'all', label: 'All' },
+                  { id: 'free', label: `Free (${freeCount})` },
+                  { id: 'pro', label: `Pro (${proCount})` },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTierFilter(t.id)}
+                  className={`px-2 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    tierFilter === t.id
+                      ? 'bg-ink text-surface'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -356,13 +393,24 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
                     <span className="text-[14px] font-semibold text-ink group-hover:text-ink">
                       {feat.title}
                     </span>
+                    {feat.proRequired ? (
+                      <>
+                        <ProBadge className="scale-90 origin-left" />
+                        {requiresUpgrade && (
+                          <span className="text-[10px] font-medium text-muted">
+                            (Upgrade)
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 border border-border text-muted">
+                        Free
+                      </span>
+                    )}
                     {feat.badge && (
                       <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                         {feat.badge}
                       </span>
-                    )}
-                    {requiresUpgrade && (
-                      <ProBadge className="scale-90 origin-left" />
                     )}
                   </div>
                   <p className="text-[12px] text-muted leading-relaxed mt-1 line-clamp-2">

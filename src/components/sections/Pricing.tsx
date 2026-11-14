@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check } from 'lucide-react';
+import { Check, Minus } from 'lucide-react';
 import { Container } from '../ui/Container';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { VerifiedTick } from '../ui/VerifiedTick';
 import { PRICING_PLANS } from '../../content/pricing';
+import { PLAN_COMPARISON_SECTIONS } from '../../lib/plan';
 import { copy } from '../../content/copy';
 import { useReveal } from '../../hooks/useReveal';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -188,6 +190,112 @@ export const Pricing: React.FC = () => {
                 ))}
               </ul>
             </div>
+          </div>
+        </div>
+
+        {/* Free vs Pro Comparison Matrix */}
+        <div
+          id="compare-plans"
+          className="mt-12 sm:mt-16 max-w-[880px] rounded-[14px] border border-border bg-surface overflow-hidden shadow-[0_1px_2px_rgba(10,10,10,0.03)]"
+        >
+          <div className="px-5 py-4 sm:px-6 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-surface-2/60">
+            <div>
+              <h3 className="text-[17px] font-semibold text-ink tracking-tight">
+                Compare Free vs. Pro
+              </h3>
+              <p className="text-[13px] text-muted mt-0.5">
+                Every capability separated clearly between Free creators and Verified Pro members.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink">
+              <VerifiedTick size={14} />
+              <span>Pro includes Verified Tick</span>
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-border text-[12px] font-semibold uppercase tracking-wider text-muted bg-surface">
+                  <th scope="col" className="py-3 px-5 sm:px-6 w-[52%]">
+                    Feature
+                  </th>
+                  <th scope="col" className="py-3 px-4 w-[24%] text-center">
+                    Free
+                  </th>
+                  <th scope="col" className="py-3 px-4 sm:px-6 w-[24%] text-center text-ink">
+                    Pro
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {PLAN_COMPARISON_SECTIONS.map((section) => (
+                  <React.Fragment key={section.category}>
+                    <tr className="bg-surface-2/50 border-b border-border">
+                      <th
+                        colSpan={3}
+                        scope="colgroup"
+                        className="py-2.5 px-5 sm:px-6 text-[11px] font-semibold uppercase tracking-wider text-muted"
+                      >
+                        {section.category}
+                      </th>
+                    </tr>
+                    {section.rows.map((row) => {
+                      const renderCell = (val: string | boolean, isProCol: boolean) => {
+                        if (val === true) {
+                          return (
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-ink/5 text-ink">
+                              <Check size={13} strokeWidth={2.5} aria-label="Included" />
+                            </span>
+                          );
+                        }
+                        if (val === false) {
+                          return (
+                            <span className="inline-flex items-center justify-center text-subtle">
+                              <Minus size={14} strokeWidth={2} aria-label="Not included" />
+                            </span>
+                          );
+                        }
+                        if (isProCol && row.feature.toLowerCase().includes('verified pro tick')) {
+                          return (
+                            <span className="inline-flex items-center justify-center gap-1.5 text-[13px] font-medium text-ink">
+                              <VerifiedTick size={13} />
+                              <span>{val}</span>
+                            </span>
+                          );
+                        }
+                        return (
+                          <span
+                            className={`text-[13px] ${
+                              isProCol ? 'font-medium text-ink' : 'text-ink-2'
+                            }`}
+                          >
+                            {val}
+                          </span>
+                        );
+                      };
+
+                      return (
+                        <tr
+                          key={row.feature}
+                          className="border-b border-border/70 last:border-b-0 hover:bg-surface-2/30 transition-colors"
+                        >
+                          <td className="py-3 px-5 sm:px-6 text-[14px] text-ink">
+                            {row.feature}
+                          </td>
+                          <td className="py-3 px-4 text-center align-middle">
+                            {renderCell(row.free, false)}
+                          </td>
+                          <td className="py-3 px-4 sm:px-6 text-center align-middle">
+                            {renderCell(row.pro, true)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

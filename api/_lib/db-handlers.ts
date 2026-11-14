@@ -176,6 +176,12 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         download: b.download || null,
       }));
 
+    const isPro = Boolean(
+      profile.isPro ||
+      profile.plan === 'pro' ||
+      isPrivilegedEmailServer(profile.primaryEmail)
+    );
+
     return res.status(200).json({
       profile: {
         username: profile.username,
@@ -185,6 +191,9 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         avatarType: profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default')),
         avatarId: profile.avatarId || null,
         vibeId: profile.vibeId || 'clean',
+        plan: isPro ? 'pro' : 'free',
+        isPro,
+        isVerified: isPro,
         buttonShape: profile.buttonShape ?? null,
         socials: profile.socials || {},
         socialsPosition: profile.socialsPosition || 'top',
@@ -340,9 +349,17 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
       return res.status(200).json({ ok: true, claimed: false });
     }
 
-    if (isPrivilegedEmailServer(email || profile.primaryEmail)) {
-      profile = { ...profile, plan: 'pro' };
-    }
+    const isPro = Boolean(
+      profile.isPro ||
+      profile.plan === 'pro' ||
+      isPrivilegedEmailServer(email || profile.primaryEmail)
+    );
+    profile = {
+      ...profile,
+      plan: isPro ? 'pro' : 'free',
+      isPro,
+      isVerified: isPro,
+    };
 
     let blocks = await dbGetBlocks(profile.username);
     if (cameFromFirebase || !blocks || blocks.length === 0) {
@@ -1071,6 +1088,8 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
       bio: p.bio || '',
       avatarUrl: isAllowedAvatarHost(p.avatarUrl) ? p.avatarUrl : null,
       vibeId: p.vibeId || 'clean',
+      isPro: Boolean(p.isPro || p.plan === 'pro'),
+      isVerified: Boolean(p.isPro || p.plan === 'pro'),
       url: `${origin}/${encodeURIComponent(p.username)}`,
       updatedAt: p.updatedAt,
     }));

@@ -3,6 +3,7 @@ import { storagePublicUrl } from './storageApi';
 import type { VibeId } from '../lib/vibes';
 import { parseEmbedUrl } from '../lib/embeds';
 import { isAllowedAvatarUrl } from '../lib/avatar';
+import { isOwnerEmail } from '../lib/plan';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -52,6 +53,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             avatarType: data.profile.avatarType,
             avatarId: data.profile.avatarId,
             vibeId: (data.profile.vibeId as VibeId) || 'clean',
+            plan: data.profile.isPro || data.profile.plan === 'pro' ? 'pro' : 'free',
+            isPro: Boolean(data.profile.isVerified ?? data.profile.isPro ?? data.profile.plan === 'pro'),
+            isVerified: Boolean(data.profile.isVerified ?? data.profile.isPro ?? data.profile.plan === 'pro'),
             buttonShape: data.profile.buttonShape || null,
             socials: data.profile.socials || {},
             socialsPosition: data.profile.socialsPosition || 'top',
@@ -135,6 +139,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             bio: parsed.bio || '',
             avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
             vibeId: (parsed.vibeId as VibeId) || 'clean',
+            plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
+            isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
+            isVerified: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
             buttonShape: parsed.buttonShape || null,
             socials: parsed.socials || {},
             socialsPosition: parsed.socialsPosition || 'top',
@@ -173,6 +180,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           bio: data.bio || '',
           avatarUrl: isAllowedAvatarUrl(data.avatarUrl) ? data.avatarUrl : null,
           vibeId: (data.vibeId as VibeId) || 'clean',
+          plan: isOwnerEmail(data.primaryEmail) || data.plan === 'pro' ? 'pro' : 'free',
+          isPro: Boolean(isOwnerEmail(data.primaryEmail) || data.isPro || data.plan === 'pro'),
+          isVerified: Boolean(isOwnerEmail(data.primaryEmail) || data.isVerified || data.isPro || data.plan === 'pro'),
           buttonShape: data.buttonShape || null,
           socials: data.socials || {},
           socialsPosition: data.socialsPosition || 'top',

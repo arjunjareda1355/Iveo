@@ -314,6 +314,9 @@ export interface PublicProfileData {
   avatarType?: 'default' | 'uploaded';
   avatarId?: string | null;
   vibeId: VibeId;
+  plan?: 'free' | 'pro';
+  isPro?: boolean;
+  isVerified?: boolean;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
   socialsPosition?: 'top' | 'bottom' | 'both';

@@ -166,7 +166,7 @@ export const copy = {
     items: [
       {
         question: 'Is iveo free?',
-        answer: 'Yes. The free plan includes one page, unlimited links and all six vibes. Pro adds link scheduling, password-protected links, advanced analytics and contact collection.',
+        answer: 'Yes. The free plan includes one page, unlimited links, 15 showcase blocks, 6 Free vibes, 8 fonts, custom button colors & shapes, QR studio, and Digital Business Card export. Pro adds your Verified Pro tick, all 12 vibes, 19 fonts, custom photo backgrounds, link scheduling, password links, embeds, contact forms, advanced analytics, and removing the iveo mark.',
       },
       {
         question: 'Can I change my username later?',
@@ -410,7 +410,7 @@ export const copy = {
     badge: 'Pro',
     upgradeHeading: 'Upgrade to iveo Pro',
     upgradeSubheading:
-      'Unlock link scheduling, rich embeds, detailed analytics, and remove the iveo mark.',
+      'Unlock your Verified Pro tick, all 12 vibes, 19 fonts, custom photo backdrops, embeds, scheduling, password links, signup forms, and detailed analytics.',
     featureNoticeSuffix: 'is a Pro feature.',
     emailUsButton: 'Email us',
     closeButton: 'Close',

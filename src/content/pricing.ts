@@ -1,3 +1,5 @@
+import { FREE_PLAN_HIGHLIGHTS, PRO_PLAN_HIGHLIGHTS } from '../lib/plan';
+
 export interface PricingPlan {
   id: 'free' | 'pro';
   name: string;
@@ -18,7 +20,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
   {
     id: 'free',
     name: 'Free',
-    description: 'Everything you need for a clean, professional page.',
+    description: 'Everything you need for a clean, customizable creator page.',
     monthlyPrice: '$0',
     yearlyPrice: '$0',
     inrMonthlyPrice: '₹0',
@@ -27,21 +29,13 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     yearlyPeriod: 'forever',
     buttonLabel: 'Claim your name',
     buttonHref: '/signup',
-    features: [
-      '1 page',
-      'Unlimited links',
-      'All six vibes',
-      'Header and divider blocks',
-      'Live preview',
-      'Basic analytics: views and clicks',
-      'QR code download',
-    ],
+    features: FREE_PLAN_HIGHLIGHTS,
   },
   {
     id: 'pro',
     name: 'Pro',
     badge: 'Recommended',
-    description: 'For people who share their work and want to know what is working.',
+    description: 'For verified creators who want premium design, embeds, scheduling, and full analytics.',
     monthlyPrice: '$6',
     yearlyPrice: '$5',
     inrMonthlyPrice: '₹499',
@@ -50,15 +44,6 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     yearlyPeriod: 'per month, billed $60 yearly (or ₹4,999)',
     buttonLabel: 'Upgrade to Pro',
     buttonHref: '/signup?plan=pro',
-    features: [
-      'Everything in Free',
-      'Link scheduling and expiration dates',
-      'Password-protected links',
-      'Advanced analytics: sources and devices',
-      'Full 90-day and 12-month analytics ranges',
-      'YouTube, Spotify and SoundCloud embeds',
-      'Option to remove the iveo mark',
-      'Priority support by email',
-    ],
+    features: PRO_PLAN_HIGHLIGHTS,
   },
 ] as const;

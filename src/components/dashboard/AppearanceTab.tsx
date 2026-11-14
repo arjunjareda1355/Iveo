@@ -19,6 +19,7 @@ import { ButtonColorsPanel } from './ButtonColorsPanel';
 import { LayoutEffectsPanel } from './LayoutEffectsPanel';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
+import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { VibeId, VIBES } from '../../lib/vibes';
 import { ButtonShape, DEFAULT_LAYOUT_SETTINGS, LayoutSettings } from '../../lib/preferences';
 import { FontSettings, getFontOption, loadGoogleFonts } from '../../lib/fonts';
@@ -88,6 +89,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 }) => {
   const session = useIvioSession();
   const { showToast } = useToast();
+  const { openUpgrade } = useUpgradeDialog();
 
   const [activePanel, setActivePanel] = useState<AppearancePanel>('hub');
   const [currentVibeId, setCurrentVibeId] = useState<VibeId>(session.vibeId);
@@ -350,7 +352,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         {/* Sub-screen Body */}
         {activePanel === 'vibe' && (
           <Card className="flex flex-col gap-5">
-            <VibeTileGroup selectedVibeId={currentVibeId} onSelect={handleSelectVibe} />
+            <VibeTileGroup
+              selectedVibeId={currentVibeId}
+              onSelect={handleSelectVibe}
+              isPro={session.isPro}
+              onProBlocked={() => openUpgrade('pro_vibes')}
+            />
 
             <div className="pt-4 border-t border-border">
               <p className="text-[12px] font-semibold uppercase tracking-wider text-muted mb-3">
@@ -529,6 +536,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   const featureButtons: {
     id: Exclude<AppearancePanel, 'hub'>;
     label: string;
+    tierNote: string;
     description: string;
     summary: string;
     icon: React.ReactNode;
@@ -537,6 +545,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'vibe',
       label: 'Vibe',
+      tierNote: '6 Free · 6 Pro',
       description: 'Theme palette & overall mood',
       summary: activeVibe.name,
       icon: <Sparkles size={18} strokeWidth={1.75} />,
@@ -560,11 +569,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'background',
       label: 'Page Background',
+      tierNote: '5 Free · 10 Pro + Photo',
       description: 'Gradients, patterns or custom photo',
       summary: backgroundSummary,
       icon: <ImageIcon size={18} strokeWidth={1.75} />,
       accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 border border-border text-ink truncate max-w-[110px]">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink truncate max-w-[110px]">
           {backgroundSummary}
         </span>
       ),
@@ -572,11 +582,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'fonts',
       label: 'Fonts',
+      tierNote: '8 Free · 11 Pro',
       description: 'Customize Name, Bio & Button typography',
       summary: fontsSummary,
       icon: <Type size={18} strokeWidth={1.75} />,
       accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 border border-border text-ink truncate max-w-[130px]">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink truncate max-w-[130px]">
           {fontsSummary}
         </span>
       ),
@@ -584,11 +595,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'shape',
       label: 'Button Shape',
+      tierNote: 'Free',
       description: 'Square, Rounded or Pill link buttons',
       summary: shapeSummary,
       icon: <RectangleHorizontal size={18} strokeWidth={1.75} />,
       accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 border border-border text-ink">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink">
           {shapeSummary}
         </span>
       ),
@@ -596,6 +608,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'colors',
       label: 'Button Colors',
+      tierNote: 'Free',
       description: 'Custom hex codes, picker & border colors',
       summary: buttonColorsSummary,
       icon: <Palette size={18} strokeWidth={1.75} />,
@@ -619,11 +632,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'layout',
       label: 'Layout & Effects',
+      tierNote: 'Free',
       description: 'Avatar frame, button finish, spacing & width',
       summary: layoutSummary,
       icon: <Layers size={18} strokeWidth={1.75} />,
       accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 border border-border text-ink">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink">
           {layoutSummary}
         </span>
       ),
@@ -728,8 +742,13 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                   {feat.icon}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[14px] font-semibold text-ink leading-snug">
-                    {feat.label}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[14px] font-semibold text-ink leading-snug">
+                      {feat.label}
+                    </span>
+                    <span className="text-[11px] font-medium text-muted">
+                      {feat.tierNote}
+                    </span>
                   </div>
                   <div className="text-[12px] text-muted truncate">
                     {feat.description}

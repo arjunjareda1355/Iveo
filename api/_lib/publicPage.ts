@@ -1,6 +1,7 @@
 import { publicRpc } from './supabase.ts';
 import { dbGetProfile, dbGetRedirectTarget } from './azureSql.ts';
 import { firebaseGetProfile } from './firebaseServer.ts';
+import { isPrivilegedEmailServer } from './usernames.ts';
 
 export interface PublicPageServerData {
   displayName: string | null;
@@ -10,6 +11,8 @@ export interface PublicPageServerData {
   vibeId: string;
   hideFromSearch: boolean;
   isPublished?: boolean;
+  isPro?: boolean;
+  isVerified?: boolean;
   status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
   updatedAt?: string | null;
   customSeoTitle?: string | null;
@@ -57,6 +60,7 @@ export async function loadPublicPage(
       if (status === 'deleted' || status === 'suspended') {
         return null;
       }
+      const isPro = Boolean(dbProf.plan === 'pro' || isPrivilegedEmailServer(dbProf.primaryEmail));
       return {
         username: dbProf.username.toLowerCase(),
         displayName: dbProf.displayName || `@${dbProf.username}`,
@@ -65,6 +69,8 @@ export async function loadPublicPage(
         vibeId: dbProf.vibeId || 'clean',
         hideFromSearch: Boolean(dbProf.hideFromSearch),
         isPublished: dbProf.isPublished !== false,
+        isPro,
+        isVerified: isPro,
         status,
         updatedAt: dbProf.updatedAt || null,
         customSeoTitle: dbProf.customSeoTitle || null,
@@ -90,6 +96,7 @@ export async function loadPublicPage(
       if (status === 'deleted' || status === 'suspended') {
         return null;
       }
+      const isPro = Boolean(fbProf.plan === 'pro' || isPrivilegedEmailServer(fbProf.primaryEmail));
       return {
         username: fbProf.username.toLowerCase(),
         displayName: fbProf.displayName || `@${fbProf.username}`,
@@ -98,6 +105,8 @@ export async function loadPublicPage(
         vibeId: fbProf.vibeId || 'clean',
         hideFromSearch: Boolean(fbProf.hideFromSearch),
         isPublished: fbProf.isPublished !== false,
+        isPro,
+        isVerified: isPro,
         status,
         updatedAt: fbProf.updatedAt || null,
         customSeoTitle: fbProf.customSeoTitle || null,
@@ -117,12 +126,14 @@ export async function loadPublicPage(
         avatar_url?: string | null;
         vibe_id?: string | null;
         hide_from_search?: boolean;
+        plan?: string | null;
       } | null;
     }>('get_public_page', { p_username: clean });
 
     if (raw && raw.profile && typeof raw.profile.username === 'string' && raw.profile.username) {
       const p = raw.profile;
       const cleanAvatar = isAllowedAvatarHost(p.avatar_url) ? p.avatar_url! : null;
+      const isPro = p.plan === 'pro';
       return {
         username: (p.username || clean).toLowerCase(),
         displayName: p.display_name?.trim() || null,
@@ -131,6 +142,8 @@ export async function loadPublicPage(
         vibeId: p.vibe_id || 'clean',
         hideFromSearch: Boolean(p.hide_from_search),
         isPublished: true,
+        isPro,
+        isVerified: isPro,
         status: 'active',
         updatedAt: null,
         customSeoTitle: null,

@@ -590,6 +590,9 @@ function useClerkSession(): IveoSession {
           JSON.stringify({
             ...parsed,
             vibeId: merged.vibeId || parsed.vibeId,
+            plan: isPro ? 'pro' : plan,
+            isPro,
+            isVerified: isPro,
             buttonShape: merged.buttonShape !== undefined ? merged.buttonShape : parsed.buttonShape,
             hideFooter:
               merged.hideIveoFooter !== undefined

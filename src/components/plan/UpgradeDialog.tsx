@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Check, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { ProBadge } from './ProBadge';
 import { Button } from '../ui/Button';
-import { ProFeature, getProFeatureName } from '../../lib/plan';
+import { VerifiedTick } from '../ui/VerifiedTick';
+import { ProFeature, PRO_PLAN_HIGHLIGHTS, getProFeatureName } from '../../lib/plan';
 import {
   PlanPeriod,
   PaymentCurrency,
@@ -141,15 +142,7 @@ export const UpgradeDialog: React.FC<UpgradeDialogProps> = ({
     });
   };
 
-  const proFeaturesList = [
-    'Link scheduling and expiration dates',
-    'Password-protected links',
-    'YouTube, Spotify & SoundCloud embeds',
-    'Advanced analytics: sources and devices',
-    'Full 90-day and 12-month analytics views',
-    'Remove the iveo mark from your page',
-    'Priority support by email',
-  ];
+  const proFeaturesList = PRO_PLAN_HIGHLIGHTS.filter((item) => item !== 'Everything in Free');
 
   return (
     <div
@@ -273,14 +266,21 @@ export const UpgradeDialog: React.FC<UpgradeDialogProps> = ({
             What's included in Pro
           </p>
           <ul className="space-y-2 text-[13px] text-ink">
-            {proFeaturesList.map((feat, idx) => (
-              <li key={idx} className="flex items-center gap-2.5">
-                <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0">
-                  <Check size={12} strokeWidth={2.5} />
-                </div>
-                <span>{feat}</span>
-              </li>
-            ))}
+            {proFeaturesList.map((feat, idx) => {
+              const isVerifiedRow = feat.toLowerCase().includes('verified pro tick');
+              return (
+                <li key={idx} className="flex items-start gap-2.5">
+                  <div className="w-4 h-4 rounded-full bg-ink/5 text-ink flex items-center justify-center shrink-0 mt-0.5">
+                    {isVerifiedRow ? (
+                      <VerifiedTick size={12} />
+                    ) : (
+                      <Check size={12} strokeWidth={2.5} />
+                    )}
+                  </div>
+                  <span>{feat}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
 

@@ -32,7 +32,12 @@ import {
 import { formatExternalUrl } from '../../lib/urls';
 import { storagePublicUrl } from '../../data/storageApi';
 import { getFontCssFamily, loadGoogleFonts } from '../../lib/fonts';
-import { resolveEffectiveTokens } from '../../lib/colors';
+import {
+  resolveEffectiveTokens,
+  isLightHexColor,
+  isDarkBackgroundConfig,
+} from '../../lib/colors';
+import { VerifiedTick } from '../ui/VerifiedTick';
 import {
   DEFAULT_LAYOUT_SETTINGS,
   resolveCardBorderRadius,
@@ -78,6 +83,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     profile?.background
   );
   const effectiveVibe: Vibe = { ...vibe, tokens };
+  const isVerified = Boolean(profile?.isVerified ?? profile?.isPro);
+  const onDarkTick = !isLightHexColor(tokens.bg) || isDarkBackgroundConfig(profile?.background);
 
   const nameFontFamily = getFontCssFamily(
     profile?.fontSettings?.nameFont,
@@ -377,15 +384,21 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           </h1>
 
           <div
-            className={`font-mono tracking-tight truncate max-w-full ${
-              isLeftHeader ? 'text-left' : 'text-center px-2'
+            className={`font-mono tracking-tight max-w-full inline-flex items-center gap-1.5 ${
+              isLeftHeader ? 'justify-start text-left' : 'justify-center text-center px-2'
             }`}
             style={{
               fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
               color: tokens.muted,
             }}
           >
-            @{displayHandle}
+            <span className="truncate">@{displayHandle}</span>
+            {isVerified && (
+              <VerifiedTick
+                size={Math.max(13, Math.round(15 * scale))}
+                onDark={onDarkTick}
+              />
+            )}
           </div>
         </div>
 
@@ -1332,6 +1345,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         avatarUrl={!avatarError && (profile?.avatarUrl ?? persona.avatarUrl) ? (profile?.avatarUrl ?? persona.avatarUrl) : null}
         vibe={effectiveVibe}
         businessCard={profile?.businessCard}
+        isPro={isVerified}
       />
     </div>
   );
