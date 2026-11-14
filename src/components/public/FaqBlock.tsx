@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, HelpCircle } from 'lucide-react';
 import { FaqConfig } from '../../data/types';
 import { VibeTokens } from '../../lib/vibes';
+import { resolveCardBorderRadius } from '../../lib/preferences';
 
 interface FaqBlockProps {
   title?: string;
@@ -10,6 +11,7 @@ interface FaqBlockProps {
   buttonRadius: number;
   fontFamily?: string;
   scale?: number;
+  surfaceStyle?: React.CSSProperties;
 }
 
 export const FaqBlock: React.FC<FaqBlockProps> = ({
@@ -19,9 +21,19 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
   buttonRadius,
   fontFamily,
   scale = 1,
+  surfaceStyle,
 }) => {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const items = config.items || [];
+  const cardRadius = resolveCardBorderRadius(buttonRadius, scale, 'card');
+
+  const baseSurface: React.CSSProperties = surfaceStyle || {
+    backgroundColor: tokens.buttonBg,
+    borderColor: tokens.buttonBorder,
+    borderWidth: tokens.buttonBorderWidth || 1,
+    borderStyle: 'solid',
+    color: tokens.buttonText || tokens.text,
+  };
 
   const toggleItem = (id: string) => {
     setOpenIds((prev) => {
@@ -56,12 +68,8 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
             key={item.id}
             className="w-full overflow-hidden transition-all duration-200"
             style={{
-              backgroundColor: tokens.buttonBg,
-              borderColor: tokens.buttonBorder,
-              borderWidth: tokens.buttonBorderWidth || 1,
-              borderStyle: 'solid',
-              borderRadius: buttonRadius,
-              color: tokens.buttonText || tokens.text,
+              ...baseSurface,
+              borderRadius: `${cardRadius}px`,
             }}
           >
             <button
@@ -71,7 +79,7 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
               aria-expanded={isOpen}
             >
               <span
-                className="font-medium leading-snug"
+                className="font-medium leading-snug flex-1 min-w-0"
                 style={{ fontSize: `${Math.round(13 * scale)}px` }}
               >
                 {item.question}

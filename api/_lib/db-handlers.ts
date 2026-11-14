@@ -23,11 +23,16 @@ import {
 } from './azureSql.ts';
 import { isAllowedAvatarHost } from './publicPage.ts';
 import { RESERVED, isPrivilegedEmailServer } from './usernames.ts';
-import { getCanonicalSiteOrigin, getSeoAdminEmails, getSiteOrigin } from './env.ts';
+import { getCanonicalSiteOrigin, getSiteOrigin } from './env.ts';
 import {
+  firebaseIsUsernameClaimed,
   firebaseGetProfile,
   firebaseGetProfileByUserId,
   firebaseGetBlocks,
+  firebaseGetContacts,
+  firebaseDeleteContact,
+  firebaseDeleteAllContacts,
+  firebaseMigrateUsernameData,
   firebaseSaveProfile,
   firebaseSaveBlocks,
   firebaseSaveContact,
@@ -44,12 +49,12 @@ import {
   evaluateProfileIndexability,
   getAllUnifiedProfiles,
   getSeoHealthReport,
+  isSyntheticTestHandle,
   notifyProfileSeoChanged,
   regenerateAndPingSitemap,
   validateProfileSeo,
 } from './seoService.ts';
 import { inspectUrlWithGsc } from './searchEngines.ts';
-import { VIBES } from '../../src/lib/vibes.ts';
 
 /**
  * GET /api/db/readiness
@@ -97,42 +102,25 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    let profile = await dbGetProfile(clean);
+    const [dbProf, fbProf] = await Promise.all([
+      dbGetProfile(clean).catch(() => null),
+      Promise.race([
+        firebaseGetProfile(clean).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+      ]),
+    ]);
+
+    let profile = dbProf;
     let cameFromFirebase = false;
-    if (!profile) {
-      profile = await firebaseGetProfile(clean);
-      cameFromFirebase = Boolean(profile);
+    if (!profile && fbProf) {
+      profile = fbProf;
+      cameFromFirebase = true;
+    } else if (profile && fbProf && (fbProf.updatedAt || '') > (profile.updatedAt || '')) {
+      profile = { ...profile, ...fbProf };
+      cameFromFirebase = true;
     }
 
-    if (!profile) {
-      // Demo persona fallback so demo creator addresses always render
-      const personaVibe = VIBES.find((v) => v.persona.handle === clean);
-      if (personaVibe) {
-        return res.status(200).json({
-          profile: {
-            username: clean,
-            displayName: personaVibe.persona.name,
-            bio: personaVibe.persona.bio,
-            avatarUrl: null,
-            avatarType: 'default',
-            avatarId: null,
-            vibeId: personaVibe.id,
-            buttonShape: 'rounded',
-            socials: {},
-            socialsPosition: 'top',
-            hideFromSearch: false,
-            hideFooter: false,
-          },
-          links: personaVibe.persona.links.map((l, i) => ({
-            id: `persona-${i}`,
-            kind: 'link',
-            title: l,
-            url: 'https://iveo.site',
-            layout: 'classic',
-            isActive: true,
-          })),
-        });
-      }
+    if (!profile || isSyntheticTestHandle(clean)) {
       return res.status(404).json({ error: 'not_found' });
     }
 
@@ -142,9 +130,12 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     }
 
     let allBlocks = await dbGetBlocks(clean);
-    if (cameFromFirebase && (!allBlocks || allBlocks.length === 0)) {
-      const fbBlocks = await firebaseGetBlocks(clean);
-      if (fbBlocks && fbBlocks.length > 0) {
+    if (cameFromFirebase || !allBlocks || allBlocks.length === 0) {
+      const fbBlocks = await Promise.race([
+        firebaseGetBlocks(clean).catch(() => []),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+      if (fbBlocks && fbBlocks.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
         allBlocks = fbBlocks;
       }
     }
@@ -238,6 +229,29 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
+    // Check Firebase Cloud claims first so cross-instance usernames cannot be double-claimed
+    try {
+      const fbClaim = await Promise.race([
+        firebaseIsUsernameClaimed(username, userId),
+        new Promise<{ claimed: boolean; isOwn?: boolean }>((resolve) =>
+          setTimeout(() => resolve({ claimed: false }), 2000)
+        ),
+      ]);
+      if (fbClaim.claimed && !fbClaim.isOwn && !isPrivilegedEmailServer(primaryEmail)) {
+        return res.status(409).json({
+          ok: false,
+          error: 'already_claimed',
+          message: `iveo.site/${username} is already claimed by another creator. Please pick another address.`,
+        });
+      }
+    } catch {
+      return res.status(503).json({
+        ok: false,
+        error: 'check_failed',
+        message: 'Could not verify username availability right now. Please try again.',
+      });
+    }
+
     const result = await dbClaimUsername(userId, username, profileData, primaryEmail, previousUsernameHint);
     if (!result.ok) {
       const statusCode = result.error === 'already_claimed' ? 409 : 400;
@@ -251,9 +265,16 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
     const releasedOld = result.previousUsername || (previousUsernameHint && previousUsernameHint !== result.username ? previousUsernameHint : null);
 
     if (result.username) {
-      // Release old username in Firebase first so another user can claim it immediately
       if (releasedOld) {
-        await firebaseReleaseUsername(releasedOld, userId).catch(() => {});
+        // Migrate existing blocks, contacts, clicks before releasing old username
+        await Promise.race([
+          firebaseMigrateUsernameData(releasedOld, result.username, userId).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 2000)),
+        ]);
+        await Promise.race([
+          firebaseReleaseUsername(releasedOld, userId).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 2000)),
+        ]);
       }
       // Sync new claim and profile to Firebase (bounded await so subsequent renames never race)
       await Promise.race([
@@ -297,12 +318,24 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    let profile = await dbGetProfileByUserId(userId, email);
+    const [dbProf, fbProf] = await Promise.all([
+      dbGetProfileByUserId(userId, email).catch(() => null),
+      Promise.race([
+        firebaseGetProfileByUserId(userId, email).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+      ]),
+    ]);
+
+    let profile = dbProf;
     let cameFromFirebase = false;
-    if (!profile) {
-      profile = await firebaseGetProfileByUserId(userId, email);
-      cameFromFirebase = Boolean(profile);
+    if (!profile && fbProf) {
+      profile = fbProf;
+      cameFromFirebase = true;
+    } else if (profile && fbProf && (fbProf.updatedAt || '') > (profile.updatedAt || '')) {
+      profile = { ...profile, ...fbProf };
+      cameFromFirebase = true;
     }
+
     if (!profile) {
       return res.status(200).json({ ok: true, claimed: false });
     }
@@ -312,8 +345,14 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
     }
 
     let blocks = await dbGetBlocks(profile.username);
-    if (cameFromFirebase && (!blocks || blocks.length === 0)) {
-      blocks = await firebaseGetBlocks(profile.username);
+    if (cameFromFirebase || !blocks || blocks.length === 0) {
+      const fbBlocks = await Promise.race([
+        firebaseGetBlocks(profile.username).catch(() => []),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+      if (fbBlocks && fbBlocks.length > 0 && (!blocks || blocks.length === 0 || cameFromFirebase)) {
+        blocks = fbBlocks;
+      }
     }
 
     return res.status(200).json({
@@ -412,12 +451,15 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       return res.status(400).json({ error: saveResult.error });
     }
 
-    // Sync to Firebase Cloud Database in background
-    firebaseSaveProfile(
-      username,
-      { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan },
-      body.userId || req.headers['x-user-id'] as string || 'owner'
-    ).catch(() => {});
+    // Bounded await sync to Firebase Cloud Database so immediate page loads stay consistent
+    await Promise.race([
+      firebaseSaveProfile(
+        username,
+        { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan },
+        body.userId || req.headers['x-user-id'] as string || 'owner'
+      ).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
 
     notifyProfileSeoChanged('updated', username).catch(() => {});
 
@@ -474,20 +516,20 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
     const avatarUrl = `/api/avatar/${username}?v=${Date.now()}`;
 
     // Update in database immediately while preserving existing background and integrations
-    await dbSaveProfile({
+    const updatedAvatarProfile = {
       userId: userId || existing?.userId || 'owner',
       username,
       displayName: existing?.displayName || username,
       bio: existing?.bio || '',
       avatarUrl,
-      avatarType: 'uploaded',
+      avatarType: 'uploaded' as const,
       avatarId: null,
       vibeId: existing?.vibeId || 'clean',
       buttonShape: existing?.buttonShape ?? null,
       socials: existing?.socials || {},
-      socialsPosition: existing?.socialsPosition || 'top',
+      socialsPosition: (existing?.socialsPosition || 'top') as 'top' | 'bottom' | 'both',
       primaryEmail: primaryEmail || existing?.primaryEmail || null,
-      plan: existing?.plan || 'free',
+      plan: isPrivilegedEmailServer(primaryEmail || existing?.primaryEmail) ? 'pro' : (existing?.plan || 'free'),
       hideFooter: existing?.hideFooter,
       hideFromSearch: existing?.hideFromSearch,
       background: existing?.background ?? null,
@@ -500,7 +542,12 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       buttonColors: existing?.buttonColors ?? null,
       businessCard: existing?.businessCard ?? null,
       layoutSettings: existing?.layoutSettings ?? null,
-    });
+    };
+    await dbSaveProfile(updatedAvatarProfile);
+    await Promise.race([
+      firebaseSaveProfile(username, updatedAvatarProfile, updatedAvatarProfile.userId).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
 
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
   } catch (err: any) {
@@ -546,7 +593,16 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    const blocks = await dbGetBlocks(username);
+    let blocks = await dbGetBlocks(username);
+    if (!blocks || blocks.length === 0) {
+      const fbBlocks = await Promise.race([
+        firebaseGetBlocks(username).catch(() => []),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+      if (fbBlocks && fbBlocks.length > 0) {
+        blocks = fbBlocks;
+      }
+    }
     return res.status(200).json(blocks);
   } catch (err: any) {
     return res.status(500).json({ error: 'fetch_failed', message: err?.message });
@@ -576,8 +632,11 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
       }
       return res.status(400).json({ error: result.error });
     }
-    // Sync to Firebase Cloud Database in background
-    firebaseSaveBlocks(username, blocks, userId || undefined).catch(() => {});
+    // Bounded-await sync to Firebase Cloud Database so deletions & edits never leave ghost items
+    await Promise.race([
+      firebaseSaveBlocks(username, blocks, userId || undefined).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]);
     notifyProfileSeoChanged('updated', username).catch(() => {});
 
     return res.status(200).json({ ok: true });
@@ -619,8 +678,11 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
     };
     await dbSaveContact(contactData);
 
-    // Sync contact to Firebase in background
-    firebaseSaveContact(username, contactData).catch(() => {});
+    // Bounded-await sync contact to Firebase
+    await Promise.race([
+      firebaseSaveContact(username, contactData).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1800)),
+    ]);
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -644,6 +706,15 @@ export async function handleGetContacts(req: ExpressReq, res: ExpressRes) {
 
   try {
     let contacts = await dbGetContacts(username);
+    if (!contacts || contacts.length === 0) {
+      const fbContacts = await Promise.race([
+        firebaseGetContacts(username).catch(() => []),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+      if (fbContacts && fbContacts.length > 0) {
+        contacts = fbContacts;
+      }
+    }
     if (search) {
       contacts = contacts.filter((c: any) =>
         (c.email && c.email.toLowerCase().includes(search)) ||
@@ -673,8 +744,10 @@ export async function handleDeleteContacts(req: ExpressReq, res: ExpressRes) {
   try {
     if (all) {
       await dbDeleteAllContacts(username || undefined);
+      if (username) await firebaseDeleteAllContacts(username).catch(() => {});
     } else if (contactId) {
       await dbDeleteContact(username || undefined, contactId);
+      if (username) await firebaseDeleteContact(username, contactId).catch(() => {});
     }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -980,27 +1053,29 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
 
   try {
     const all = await getAllUnifiedProfiles();
-    const indexable = all
-      .filter((p) => evaluateProfileIndexability(p).indexable)
-      .filter((p) => {
-        if (!q) return true;
-        return (
+    const allIndexable = all
+      .filter((p) => !isSyntheticTestHandle(p.username) && evaluateProfileIndexability(p).indexable);
+
+    const totalCount = allIndexable.length;
+
+    const filtered = (q
+      ? allIndexable.filter((p) =>
           p.username.includes(q) ||
           (p.displayName || '').toLowerCase().includes(q) ||
           (p.bio || '').toLowerCase().includes(q)
-        );
-      })
-      .map((p) => ({
-        username: p.username,
-        displayName: p.displayName || p.username,
-        bio: p.bio || '',
-        avatarUrl: isAllowedAvatarHost(p.avatarUrl) ? p.avatarUrl : null,
-        vibeId: p.vibeId || 'clean',
-        url: `${origin}/${encodeURIComponent(p.username)}`,
-        updatedAt: p.updatedAt,
-      }));
+        ).slice(0, 50)
+      : allIndexable.slice(0, 16)
+    ).map((p) => ({
+      username: p.username,
+      displayName: p.displayName || p.username,
+      bio: p.bio || '',
+      avatarUrl: isAllowedAvatarHost(p.avatarUrl) ? p.avatarUrl : null,
+      vibeId: p.vibeId || 'clean',
+      url: `${origin}/${encodeURIComponent(p.username)}`,
+      updatedAt: p.updatedAt,
+    }));
 
-    return res.status(200).json({ ok: true, profiles: indexable });
+    return res.status(200).json({ ok: true, profiles: filtered, totalCount });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'discover_failed', message: err?.message });
   }
@@ -1008,10 +1083,7 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
 
 function isSeoAdminRequest(req: ExpressReq): boolean {
   const email = String(req.query.adminEmail || req.headers['x-user-email'] || '').toLowerCase().trim();
-  if (isPrivilegedEmailServer(email)) return true;
-  const extraAdmins = getSeoAdminEmails();
-  if (email && extraAdmins.includes(email)) return true;
-  return false;
+  return isPrivilegedEmailServer(email);
 }
 
 /**

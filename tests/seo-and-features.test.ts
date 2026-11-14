@@ -1,5 +1,7 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { terminate } from 'firebase/firestore';
+import { serverDb } from '../api/_lib/firebaseServer';
 
 import {
   MAIN_SEO_TITLE,
@@ -14,6 +16,8 @@ import {
   generateSitemapXml,
   generateSitemapPageXml,
   validateProfileSeo,
+  getAllUnifiedProfiles,
+  isSyntheticTestHandle,
 } from '../api/_lib/seoService';
 import { extractBmcSlug } from '../api/_lib/buymeacoffee';
 import {
@@ -34,6 +38,8 @@ import {
 import {
   parseLayoutSettings,
   DEFAULT_LAYOUT_SETTINGS,
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
 } from '../src/lib/preferences';
 import {
   BACKGROUND_PRESETS,
@@ -278,3 +284,62 @@ test('YouTube URL parser handles handles, channel IDs, watch URLs, and invalid d
   assert.equal(parseYouTubeInput('UC1234567890123456789012')?.kind, 'channel_id');
   assert.equal(parseYouTubeInput('https://evil.example.com/watch?v=123'), null);
 });
+
+test('resolveCardBorderRadius & resolveButtonControlRadius prevent pill oval distortion on tall cards', () => {
+  // Square (0)
+  assert.equal(resolveCardBorderRadius(0, 1, 'bar'), 0);
+  assert.equal(resolveCardBorderRadius(0, 1, 'card'), 0);
+  assert.equal(resolveCardBorderRadius(0, 1, 'inner'), 0);
+  assert.equal(resolveButtonControlRadius(0, 1), 0);
+
+  // Rounded (12)
+  assert.equal(resolveCardBorderRadius(12, 1, 'bar'), 12);
+  assert.equal(resolveCardBorderRadius(12, 1, 'card'), 12);
+  assert.equal(resolveCardBorderRadius(12, 1, 'inner'), 10);
+  assert.equal(resolveButtonControlRadius(12, 1), 12);
+
+  // Pill (999) — bar & control buttons become 9999, cards cap at 22px (scaled) so they stay crisp rectangles
+  assert.equal(resolveCardBorderRadius(999, 1, 'bar'), 9999);
+  assert.equal(resolveCardBorderRadius(999, 1, 'card'), 22);
+  assert.equal(resolveCardBorderRadius(999, 0.5, 'card'), 11);
+  assert.equal(resolveCardBorderRadius(999, 1, 'inner'), 12);
+  assert.equal(resolveButtonControlRadius(999, 1), 9999);
+});
+
+test('Owner email allowlist and SEO admin access are strictly limited to @iveo.site and designated Gmail owners', () => {
+  const allowed = ['owner@iveo.site', 'support@IVEO.SITE', 'arjunjareda2007@gmail.com', 'arjunjareda1355@gmail.com'];
+  const denied = ['seo@gmail.com', 'admin@example.com', 'hacker@iveo.site.evil.com', 'arjunjareda2007@yahoo.com', '', null, undefined];
+
+  for (const email of allowed) {
+    assert.equal(isOwnerEmail(email), true, `Expected ${email} to pass client owner check`);
+    assert.equal(isPrivilegedEmailServer(email), true, `Expected ${email} to pass server owner check`);
+  }
+  for (const email of denied) {
+    assert.equal(isOwnerEmail(email), false, `Expected ${String(email)} to fail client owner check`);
+    assert.equal(isPrivilegedEmailServer(email), false, `Expected ${String(email)} to fail server owner check`);
+  }
+});
+
+test('Fake/demo personas and synthetic test handles are completely excluded', async () => {
+  assert.equal(isSyntheticTestHandle('test'), true);
+  assert.equal(isSyntheticTestHandle('test-user-1'), true);
+  assert.equal(isSyntheticTestHandle('demo_99'), true);
+  assert.equal(isSyntheticTestHandle('old-1700000000'), true);
+  assert.equal(isSyntheticTestHandle('seo-rename-old-123'), true);
+  assert.equal(isSyntheticTestHandle('arjun-studio'), false);
+
+  const unified = await getAllUnifiedProfiles();
+  const fakeHandles = new Set(['maya', 'devsharma', 'lenahoffmann', 'tomasreyes', 'elena', 'kai', 'alex', 'test']);
+  for (const prof of unified) {
+    assert.equal(fakeHandles.has(prof.username), false, `Fake handle ${prof.username} should not exist`);
+    assert.equal(isSyntheticTestHandle(prof.username), false, `Synthetic handle ${prof.username} should not exist`);
+  }
+});
+
+after(async () => {
+  if (serverDb) {
+    await terminate(serverDb).catch(() => {});
+  }
+});
+
+

@@ -1,5 +1,5 @@
-import { normalizeHexColor } from './colors';
-import { getFontOption } from './fonts';
+import { normalizeHexColor } from './colors.ts';
+import { getFontOption } from './fonts.ts';
 
 export type BusinessCardTemplate =
   | 'classic'
@@ -122,7 +122,7 @@ export function parseBusinessCardConfig(raw: unknown): BusinessCardConfig | null
   };
 }
 
-import { isLightHexColor } from './colors';
+import { isLightHexColor } from './colors.ts';
 
 export function mergeBusinessCardConfig(
   base?: BusinessCardConfig | null,

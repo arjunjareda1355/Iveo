@@ -86,11 +86,12 @@ export async function checkUsernameAvailability(
   try {
     const res = await fetch(`/api/check-username?u=${encodeURIComponent(clean)}${userParam}${emailParam}`, {
       method: 'GET',
+      cache: 'no-store',
       headers: {
         'Accept': 'application/json',
         ...(email ? { 'x-user-email': email } : {}),
       },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(4000),
     });
 
     if (res.ok) {
@@ -107,9 +108,15 @@ export async function checkUsernameAvailability(
         username: clean,
       };
     }
-  } catch {
-    // If network fails, rely on sync check
-  }
 
-  return syncResult;
+    return {
+      status: 'unavailable',
+      message: 'Could not verify username availability right now. Please try again.',
+    };
+  } catch {
+    return {
+      status: 'unavailable',
+      message: 'Could not verify username availability right now. Please try again.',
+    };
+  }
 }

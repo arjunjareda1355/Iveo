@@ -1,5 +1,5 @@
-import type { TrackSource } from './analytics/sources';
-import { RESERVED_USERNAMES_SET } from './username-rules';
+import type { TrackSource } from './analytics/sources.ts';
+import { RESERVED_USERNAMES_SET } from './username-rules.ts';
 
 export const SUPPORT_EMAIL = 'help@iveo.site';
 export const BASE_DOMAIN = 'iveo.site';

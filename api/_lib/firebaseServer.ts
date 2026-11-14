@@ -44,43 +44,43 @@ export async function firebaseIsUsernameClaimed(
   if (!serverDb || !username) return { claimed: false };
   const clean = username.toLowerCase().trim();
 
-  try {
-    // 1. Check atomic claims collection
-    const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
-    if (claimSnap.exists()) {
-      const data = claimSnap.data() || {};
+  // 1. Check atomic claims collection
+  const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
+  if (claimSnap.exists()) {
+    const data = claimSnap.data() || {};
+    if (data.status !== 'deleted') {
       const ownerId = data.userId || null;
       if (requestingUserId && ownerId && ownerId === requestingUserId) {
         return { claimed: true, isOwn: true, userId: ownerId };
       }
       return { claimed: true, isOwn: false, userId: ownerId };
     }
+  }
 
-    // 2. Check users collection doc keyed by username
-    const userSnap = await getDoc(doc(serverDb, 'users', clean));
-    if (userSnap.exists()) {
-      const data = userSnap.data() || {};
+  // 2. Check users collection doc keyed by username
+  const userSnap = await getDoc(doc(serverDb, 'users', clean));
+  if (userSnap.exists()) {
+    const data = userSnap.data() || {};
+    if (data.status !== 'deleted') {
       const ownerId = data.userId || null;
       if (requestingUserId && ownerId && ownerId === requestingUserId) {
         return { claimed: true, isOwn: true, userId: ownerId };
       }
       return { claimed: true, isOwn: false, userId: ownerId };
     }
+  }
 
-    // 3. Check users collection query where username matches
-    const q = query(collection(serverDb, 'users'), where('username', '==', clean));
-    const querySnap = await getDocs(q);
-    if (!querySnap.empty) {
-      const first = querySnap.docs[0];
-      const data = first.data() || {};
-      const ownerId = data.userId || first.id || null;
-      if (requestingUserId && ownerId && ownerId === requestingUserId) {
-        return { claimed: true, isOwn: true, userId: ownerId };
-      }
-      return { claimed: true, isOwn: false, userId: ownerId };
+  // 3. Check users collection query where username matches
+  const q = query(collection(serverDb, 'users'), where('username', '==', clean));
+  const querySnap = await getDocs(q);
+  for (const docItem of querySnap.docs) {
+    const data = docItem.data() || {};
+    if (data.status === 'deleted') continue;
+    const ownerId = data.userId || docItem.id || null;
+    if (requestingUserId && ownerId && ownerId === requestingUserId) {
+      return { claimed: true, isOwn: true, userId: ownerId };
     }
-  } catch (err) {
-    console.warn('[FirebaseServer] check username claim warning:', err);
+    return { claimed: true, isOwn: false, userId: ownerId };
   }
 
   return { claimed: false };
@@ -98,24 +98,29 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
     const userSnap = await getDoc(doc(serverDb, 'users', clean));
     if (userSnap.exists()) {
       const data = userSnap.data();
-      return {
-        ...data,
-        username: data.username || clean,
-      };
+      if (data?.status !== 'deleted') {
+        return {
+          ...data,
+          username: data.username || clean,
+        };
+      }
     }
 
     // 2. Check claim to find userId
     const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
     if (claimSnap.exists()) {
       const claimData = claimSnap.data();
-      if (claimData.userId && claimData.userId !== clean) {
+      if (claimData?.status !== 'deleted' && claimData.userId && claimData.userId !== clean) {
         const userIdSnap = await getDoc(doc(serverDb, 'users', claimData.userId));
         if (userIdSnap.exists()) {
           const udata = userIdSnap.data();
-          return {
-            ...udata,
-            username: udata.username || clean,
-          };
+          const uUsername = typeof udata?.username === 'string' ? udata.username.toLowerCase().trim() : clean;
+          if (udata?.status !== 'deleted' && uUsername === clean) {
+            return {
+              ...udata,
+              username: udata.username || clean,
+            };
+          }
         }
       }
     }
@@ -123,8 +128,9 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
     // 3. Query by username attribute
     const q = query(collection(serverDb, 'users'), where('username', '==', clean));
     const querySnap = await getDocs(q);
-    if (!querySnap.empty) {
-      const data = querySnap.docs[0].data();
+    for (const d of querySnap.docs) {
+      const data = d.data();
+      if (data?.status === 'deleted') continue;
       return {
         ...data,
         username: data.username || clean,
@@ -152,7 +158,7 @@ export async function firebaseGetProfileByUserId(
       const userSnap = await getDoc(doc(serverDb, 'users', userId));
       if (userSnap.exists()) {
         const data = userSnap.data();
-        if (data.username) {
+        if (data.username && data.status !== 'deleted') {
           return {
             ...data,
             username: data.username,
@@ -163,9 +169,9 @@ export async function firebaseGetProfileByUserId(
       // 2. Query users collection where userId == userId
       const qUser = query(collection(serverDb, 'users'), where('userId', '==', userId));
       const qSnap = await getDocs(qUser);
-      if (!qSnap.empty) {
-        const data = qSnap.docs[0].data();
-        if (data.username) {
+      for (const d of qSnap.docs) {
+        const data = d.data();
+        if (data.username && data.status !== 'deleted') {
           return {
             ...data,
             username: data.username,
@@ -179,7 +185,7 @@ export async function firebaseGetProfileByUserId(
       if (!claimsSnap.empty) {
         const claimData = claimsSnap.docs[0].data();
         const username = claimData.username || claimsSnap.docs[0].id;
-        if (username) {
+        if (username && claimData.status !== 'deleted') {
           const profile = await firebaseGetProfile(username);
           if (profile) return profile;
           return {
@@ -196,9 +202,9 @@ export async function firebaseGetProfileByUserId(
       const cleanEmail = email.toLowerCase().trim();
       const qEmail = query(collection(serverDb, 'users'), where('primaryEmail', '==', cleanEmail));
       const emailSnap = await getDocs(qEmail);
-      if (!emailSnap.empty) {
-        const data = emailSnap.docs[0].data();
-        if (data.username) {
+      for (const d of emailSnap.docs) {
+        const data = d.data();
+        if (data.username && data.status !== 'deleted') {
           return {
             ...data,
             username: data.username,
@@ -408,7 +414,7 @@ export async function firebaseSaveBlocks(
  */
 export async function firebaseSaveContact(
   username: string,
-  contact: { id: string; email?: string | null; phone?: string | null; consentText?: string | null; source?: string | null }
+  contact: { id: string; email?: string | null; phone?: string | null; consentText?: string | null; source?: string | null; formTitle?: string | null }
 ): Promise<void> {
   if (!serverDb || !username || !contact?.id) return;
   const clean = username.toLowerCase().trim();
@@ -421,6 +427,104 @@ export async function firebaseSaveContact(
     });
   } catch (err) {
     console.warn('[FirebaseServer] Background saveContact notice:', err);
+  }
+}
+
+export async function firebaseGetContacts(username: string): Promise<any[]> {
+  if (!serverDb || !username) return [];
+  const clean = username.toLowerCase().trim();
+
+  try {
+    const snap = await getDocs(collection(serverDb, 'users', clean, 'contacts'));
+    return snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  } catch {
+    return [];
+  }
+}
+
+export async function firebaseDeleteContact(username: string, contactId: string): Promise<void> {
+  if (!serverDb || !username || !contactId) return;
+  const clean = username.toLowerCase().trim();
+  try {
+    await deleteDoc(doc(serverDb, 'users', clean, 'contacts', contactId));
+  } catch {}
+}
+
+export async function firebaseDeleteAllContacts(username: string): Promise<void> {
+  if (!serverDb || !username) return;
+  const clean = username.toLowerCase().trim();
+  try {
+    const snap = await getDocs(collection(serverDb, 'users', clean, 'contacts'));
+    if (snap.empty) return;
+    const batch = writeBatch(serverDb);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  } catch {}
+}
+
+export async function firebaseMigrateUsernameData(
+  oldUsername: string,
+  newUsername: string,
+  userId?: string
+): Promise<void> {
+  if (!serverDb || !oldUsername || !newUsername) return;
+  const cleanOld = oldUsername.toLowerCase().trim();
+  const cleanNew = newUsername.toLowerCase().trim();
+  if (!cleanOld || !cleanNew || cleanOld === cleanNew) return;
+
+  try {
+    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap] = await Promise.all([
+      getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'contacts')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'clicks')).catch(() => null),
+    ]);
+
+    const batch = writeBatch(serverDb);
+    let hasWrites = false;
+
+    if (oldBlocksSnap && !oldBlocksSnap.empty) {
+      oldBlocksSnap.docs.forEach((d) => {
+        hasWrites = true;
+        const data = d.data() || {};
+        batch.set(
+          doc(serverDb!, 'users', cleanNew, 'blocks', d.id),
+          { ...data, username: cleanNew, userId: userId || data.userId || 'owner' },
+          { merge: true }
+        );
+      });
+    }
+
+    if (oldContactsSnap && !oldContactsSnap.empty) {
+      oldContactsSnap.docs.forEach((d) => {
+        hasWrites = true;
+        const data = d.data() || {};
+        batch.set(
+          doc(serverDb!, 'users', cleanNew, 'contacts', d.id),
+          { ...data, username: cleanNew },
+          { merge: true }
+        );
+      });
+    }
+
+    if (oldClicksSnap && !oldClicksSnap.empty) {
+      oldClicksSnap.docs.forEach((d) => {
+        hasWrites = true;
+        const data = d.data() || {};
+        batch.set(
+          doc(serverDb!, 'users', cleanNew, 'clicks', d.id),
+          { ...data, username: cleanNew },
+          { merge: true }
+        );
+      });
+    }
+
+    if (hasWrites) {
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('[FirebaseServer] migrateUsernameData notice:', err);
   }
 }
 
@@ -459,43 +563,70 @@ export async function firebaseReleaseUsername(
   if (!serverDb || !oldUsername) return;
   const cleanOld = oldUsername.toLowerCase().trim();
   if (!cleanOld) return;
+  const nowIso = new Date().toISOString();
 
   try {
-    // Delete old claim doc if unclaimed or owned by this user
+    // 1. Tombstone + attempt delete of old claim doc if unclaimed or owned by this user
     const claimRef = doc(serverDb, 'claims', cleanOld);
     const claimSnap = await getDoc(claimRef).catch(() => null);
     if (claimSnap && claimSnap.exists()) {
       const ownerId = claimSnap.data()?.userId;
       if (!userId || !ownerId || ownerId === userId || ownerId === 'owner') {
+        await setDoc(claimRef, {
+          username: cleanOld,
+          userId: null,
+          status: 'deleted',
+          releasedAt: nowIso,
+        }).catch(() => {});
         await deleteDoc(claimRef).catch(() => {});
       }
     }
 
-    // Delete old blocks subcollection under users/{cleanOld}/blocks
-    const oldBlocksSnap = await getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null);
-    if (oldBlocksSnap && !oldBlocksSnap.empty) {
+    // 2. Delete old blocks, contacts & clicks subcollections under users/{cleanOld}/...
+    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap] = await Promise.all([
+      getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'contacts')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'clicks')).catch(() => null),
+    ]);
+    if ((oldBlocksSnap && !oldBlocksSnap.empty) || (oldContactsSnap && !oldContactsSnap.empty) || (oldClicksSnap && !oldClicksSnap.empty)) {
       const batch = writeBatch(serverDb);
-      oldBlocksSnap.docs.forEach((d) => batch.delete(d.ref));
+      oldBlocksSnap?.docs.forEach((d) => batch.delete(d.ref));
+      oldContactsSnap?.docs.forEach((d) => batch.delete(d.ref));
+      oldClicksSnap?.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit().catch(() => {});
     }
 
-    // Delete old user doc keyed by oldUsername (only if owned by userId or key equals oldUsername)
+    // 3. Tombstone + attempt delete of old user doc keyed by oldUsername
     const oldUserRef = doc(serverDb, 'users', cleanOld);
     const oldUserSnap = await getDoc(oldUserRef).catch(() => null);
     if (oldUserSnap && oldUserSnap.exists()) {
       const ownerId = oldUserSnap.data()?.userId;
       if (!userId || !ownerId || ownerId === userId || ownerId === 'owner') {
+        await setDoc(oldUserRef, {
+          username: cleanOld,
+          userId: null,
+          status: 'deleted',
+          isPublished: false,
+          updatedAt: nowIso,
+        }).catch(() => {});
         await deleteDoc(oldUserRef).catch(() => {});
       }
     }
 
-    // Delete any mirrored user docs still holding username == cleanOld for this owner
+    // 4. Tombstone + attempt delete of any mirrored user docs still holding username == cleanOld
     const qOld = query(collection(serverDb, 'users'), where('username', '==', cleanOld));
     const qOldSnap = await getDocs(qOld).catch(() => null);
     if (qOldSnap && !qOldSnap.empty) {
       for (const d of qOldSnap.docs) {
         const ownerId = d.data()?.userId;
         if (!userId || !ownerId || ownerId === userId || ownerId === 'owner') {
+          await setDoc(d.ref, {
+            username: cleanOld,
+            userId: null,
+            status: 'deleted',
+            isPublished: false,
+            updatedAt: nowIso,
+          }).catch(() => {});
           await deleteDoc(d.ref).catch(() => {});
         }
       }

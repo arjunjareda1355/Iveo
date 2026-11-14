@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { normalizeHexColor, parseHexRgb } from './colors';
+import { normalizeHexColor, parseHexRgb } from './colors.ts';
 
 const svgCache = new Map<string, string>();
 const pngCache = new Map<string, string>();

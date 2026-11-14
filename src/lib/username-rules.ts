@@ -75,25 +75,8 @@ export const RESERVED_USERNAMES_SET = new Set(
   RESERVED_USERNAMES.map((name) => name.toLowerCase())
 );
 
-// Taken names on client for instant feedback
-export const SIMULATED_TAKEN_USERNAMES_SET = new Set([
-  'alex',
-  'sam',
-  'maya',
-  'devsharma',
-  'lenahoffmann',
-  'tomasreyes',
-  'elena',
-  'kai',
-  'arjun',
-  'studio',
-  'music',
-  'art',
-  'design',
-  'travel',
-  'food',
-  'news',
-]);
+// Deprecated mock taken names; live server checks determine real claimed handles
+export const SIMULATED_TAKEN_USERNAMES_SET = new Set<string>([]);
 
 /**
  * Normalizes username by converting to lowercase, replacing underscores and spaces with hyphens,

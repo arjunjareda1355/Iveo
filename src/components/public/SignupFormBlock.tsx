@@ -4,6 +4,10 @@ import { Vibe } from '../../lib/vibes';
 import { copy } from '../../content/copy';
 import { submitContact } from '../../data/publicApi';
 import { Check } from 'lucide-react';
+import {
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
+} from '../../lib/preferences';
 
 interface SignupFormBlockProps {
   block: PageBlock;
@@ -47,7 +51,9 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
     buttonRadiusOverride !== undefined
       ? buttonRadiusOverride
       : vibe.tokens.buttonRadius;
-  const cardRadius = Math.min(16, effectiveRadius);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, 1, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, 1, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, 1);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,9 +212,10 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
                 disabled={isSubmitting}
                 autoComplete="email"
                 placeholder={copy.signup.visitor.emailPlaceholder}
-                className="w-full h-10 px-3 text-sm bg-transparent rounded-lg focus:outline-none transition-colors"
+                className="w-full h-10 px-3 text-sm bg-transparent focus:outline-none transition-colors"
                 style={{
                   color: tokens.text,
+                  borderRadius: `${innerRadius}px`,
                   border: tokens.buttonBorder
                     ? `1px solid ${tokens.buttonBorder}`
                     : '1px solid rgba(0,0,0,0.2)',
@@ -239,9 +246,10 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
                 disabled={isSubmitting}
                 autoComplete="tel"
                 placeholder={copy.signup.visitor.phonePlaceholder}
-                className="w-full h-10 px-3 text-sm bg-transparent rounded-lg focus:outline-none transition-colors"
+                className="w-full h-10 px-3 text-sm bg-transparent focus:outline-none transition-colors"
                 style={{
                   color: tokens.text,
+                  borderRadius: `${innerRadius}px`,
                   border: tokens.buttonBorder
                     ? `1px solid ${tokens.buttonBorder}`
                     : '1px solid rgba(0,0,0,0.2)',
@@ -284,7 +292,7 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
             style={{
               backgroundColor: tokens.buttonBg,
               color: tokens.buttonText,
-              borderRadius: `${Math.min(12, effectiveRadius)}px`,
+              borderRadius: `${controlRadius}px`,
               border: tokens.buttonBorder
                 ? `1px solid ${tokens.buttonBorder}`
                 : 'none',

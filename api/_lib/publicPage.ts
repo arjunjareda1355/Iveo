@@ -1,7 +1,6 @@
 import { publicRpc } from './supabase.ts';
 import { dbGetProfile, dbGetRedirectTarget } from './azureSql.ts';
 import { firebaseGetProfile } from './firebaseServer.ts';
-import { VIBES } from '../../src/lib/vibes.ts';
 
 export interface PublicPageServerData {
   displayName: string | null;
@@ -140,25 +139,6 @@ export async function loadPublicPage(
       };
     }
   } catch {}
-
-  // 3. Demo persona fallback
-  const personaVibe = VIBES.find((v) => v.persona.handle === clean);
-  if (personaVibe) {
-    return {
-      username: clean,
-      displayName: personaVibe.persona.name,
-      bio: personaVibe.persona.bio,
-      avatarUrl: null,
-      vibeId: personaVibe.id,
-      hideFromSearch: false,
-      isPublished: true,
-      status: 'active',
-      updatedAt: null,
-      customSeoTitle: null,
-      customSeoDescription: null,
-      socials: {},
-    };
-  }
 
   return null;
 }

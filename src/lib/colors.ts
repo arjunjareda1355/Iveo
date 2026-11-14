@@ -1,6 +1,6 @@
-import type { VibeTokens } from './vibes';
-import type { BackgroundConfig } from './preferences';
-import { isDarkBackgroundPreset } from './backgrounds';
+import type { VibeTokens } from './vibes.ts';
+import type { BackgroundConfig } from './preferences.ts';
+import { isDarkBackgroundPreset } from './backgrounds.ts';
 
 export interface ButtonColors {
   bg?: string | null;

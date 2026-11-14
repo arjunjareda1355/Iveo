@@ -66,26 +66,61 @@ const BlocksContext = createContext<BlocksContextValue | null>(null);
 
 export const BlocksProvider: React.FC<{
   userId: string;
+  ownerUserId?: string | null;
+  primaryEmail?: string | null;
   token?: string | null;
   children: React.ReactNode;
-}> = ({ userId, token = null, children }) => {
+}> = ({ userId, ownerUserId = null, primaryEmail = null, token = null, children }) => {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
+  const isDemoMode =
+    typeof window !== 'undefined' &&
+    (new URLSearchParams(window.location.search).get('demo') === '1' ||
+      new URLSearchParams(window.location.search).get('autostart') === '1');
+
+  const authCtx = React.useMemo(
+    () => ({ ownerUserId, primaryEmail, isDemo: isDemoMode }),
+    [ownerUserId, primaryEmail, isDemoMode]
+  );
+
+  const syncAllTargets = useCallback(
+    async (nextBlocks: Block[]) => {
+      if (isDemoMode) return;
+      await syncAllBlocksToFirebase(userId, nextBlocks).catch(() => {});
+      if (ownerUserId && ownerUserId !== userId) {
+        await syncAllBlocksToFirebase(ownerUserId, nextBlocks).catch(() => {});
+      }
+    },
+    [userId, ownerUserId, isDemoMode]
+  );
+
+  const syncBlockTargets = useCallback(
+    async (block: Block) => {
+      if (isDemoMode) return;
+      await syncBlockToFirebase(userId, block).catch(() => {});
+      if (ownerUserId && ownerUserId !== userId) {
+        await syncBlockToFirebase(ownerUserId, block).catch(() => {});
+      }
+    },
+    [userId, ownerUserId, isDemoMode]
+  );
 
   const fetchBlocks = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await listMyBlocks(token, userId);
+      const data = await listMyBlocks(token, userId, authCtx);
       setBlocks(data);
-      syncAllBlocksToFirebase(userId, data).catch(() => {});
+      if (!isDemoMode) {
+        syncAllTargets(data).catch(() => {});
+      }
     } catch {
       // Ignored
     } finally {
       setIsLoading(false);
     }
-  }, [userId, token]);
+  }, [userId, token, authCtx, isDemoMode, syncAllTargets]);
 
   useEffect(() => {
     fetchBlocks();
@@ -100,9 +135,9 @@ export const BlocksProvider: React.FC<{
         url,
         layout: 'classic',
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Link added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -125,9 +160,9 @@ export const BlocksProvider: React.FC<{
         embedProvider: provider,
         layout: 'classic',
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Embed added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -148,9 +183,9 @@ export const BlocksProvider: React.FC<{
         title: config.heading || 'Join my list',
         position: blocks.length,
         signup: config,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Signup form added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -171,9 +206,9 @@ export const BlocksProvider: React.FC<{
         title,
         position: blocks.length,
         tipJar: config,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Tip Jar added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -190,9 +225,9 @@ export const BlocksProvider: React.FC<{
         title,
         position: blocks.length,
         faq: { items },
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('FAQ section added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -209,9 +244,9 @@ export const BlocksProvider: React.FC<{
         title: title || config.fullName || 'Save Contact',
         position: blocks.length,
         vcard: config,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Contact card added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -226,9 +261,9 @@ export const BlocksProvider: React.FC<{
         kind: 'header',
         title,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Header added');
     } catch {
       showToast("Couldn't add header. Try again.");
@@ -241,9 +276,9 @@ export const BlocksProvider: React.FC<{
         kind: 'divider',
         title: '',
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Divider added');
     } catch {
       showToast("Couldn't add divider. Try again.");
@@ -265,9 +300,9 @@ export const BlocksProvider: React.FC<{
         badge,
         coffee: coffee || null,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Buy Me a Coffee block added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -285,9 +320,9 @@ export const BlocksProvider: React.FC<{
         url,
         badge,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Instagram showcase added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -311,9 +346,9 @@ export const BlocksProvider: React.FC<{
         badge,
         youtube: youtube || null,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('YouTube showcase added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -331,9 +366,9 @@ export const BlocksProvider: React.FC<{
         url,
         product,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Product card added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -351,9 +386,9 @@ export const BlocksProvider: React.FC<{
         url,
         booking,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Booking card added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -371,9 +406,9 @@ export const BlocksProvider: React.FC<{
         url,
         countdown,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Countdown added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -391,9 +426,9 @@ export const BlocksProvider: React.FC<{
         url,
         promo,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Promo code added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -411,9 +446,9 @@ export const BlocksProvider: React.FC<{
         url,
         location,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Location card added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -431,9 +466,9 @@ export const BlocksProvider: React.FC<{
         url,
         download,
         position: blocks.length,
-      });
+      }, authCtx);
       setBlocks((b) => [newBlock, ...b]);
-      syncBlockToFirebase(userId, newBlock).catch(() => {});
+      syncBlockTargets(newBlock).catch(() => {});
       showToast('Download card added');
     } catch (err: unknown) {
       setBlocks(prev);
@@ -447,9 +482,9 @@ export const BlocksProvider: React.FC<{
     setBlocks((b) => b.map((item) => (item.id === id ? { ...item, ...patch } : item)));
 
     try {
-      await updateBlock(token, userId, id, patch);
+      await updateBlock(token, userId, id, patch, authCtx);
       const updated = { ...(blocks.find((b) => b.id === id) || {}), ...patch };
-      syncBlockToFirebase(userId, updated as Block).catch(() => {});
+      syncBlockTargets(updated as Block).catch(() => {});
     } catch (err: unknown) {
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
@@ -481,14 +516,14 @@ export const BlocksProvider: React.FC<{
         thumbnailPath,
         layout,
         thumbnailUrl: finalThumbUrl,
-      });
+      }, authCtx);
       const updated = {
         ...(blocks.find((b) => b.id === id) || {}),
         thumbnailPath,
         thumbnailUrl: finalThumbUrl,
         layout,
       };
-      syncBlockToFirebase(userId, updated as Block).catch(() => {});
+      syncBlockTargets(updated as Block).catch(() => {});
     } catch (err: unknown) {
       setBlocks(prev);
       showToast("Couldn't save image. Try again.");
@@ -503,9 +538,14 @@ export const BlocksProvider: React.FC<{
     setBlocks(next);
 
     try {
-      await apiDeleteBlock(token, userId, id);
-      await deleteBlockFromFirebase(userId, id).catch(() => {});
-      await syncAllBlocksToFirebase(userId, next).catch(() => {});
+      await apiDeleteBlock(token, userId, id, authCtx);
+      if (!isDemoMode) {
+        await deleteBlockFromFirebase(userId, id).catch(() => {});
+        if (ownerUserId && ownerUserId !== userId) {
+          await deleteBlockFromFirebase(ownerUserId, id).catch(() => {});
+        }
+        await syncAllTargets(next).catch(() => {});
+      }
       showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
     } catch {
       setBlocks(prev);
@@ -524,8 +564,8 @@ export const BlocksProvider: React.FC<{
     );
 
     try {
-      await updateBlock(token, userId, id, { isArchived: nextArchived });
-      syncBlockToFirebase(userId, { ...target, isArchived: nextArchived }).catch(() => {});
+      await updateBlock(token, userId, id, { isArchived: nextArchived }, authCtx);
+      syncBlockTargets({ ...target, isArchived: nextArchived }).catch(() => {});
       const isEmbed = target.kind === 'embed';
       if (nextArchived) {
         showToast(isEmbed ? 'Embed archived' : 'Link archived');
@@ -549,8 +589,8 @@ export const BlocksProvider: React.FC<{
     );
 
     try {
-      await updateBlock(token, userId, id, { isActive: nextActive });
-      syncBlockToFirebase(userId, { ...target, isActive: nextActive }).catch(() => {});
+      await updateBlock(token, userId, id, { isActive: nextActive }, authCtx);
+      syncBlockTargets({ ...target, isActive: nextActive }).catch(() => {});
     } catch {
       setBlocks(prev);
       showToast("Couldn't update item. Try again.");
@@ -572,8 +612,8 @@ export const BlocksProvider: React.FC<{
     });
 
     setBlocks(reordered);
-    await saveOrderedBlocks(token, userId, reordered).catch(() => {});
-    syncAllBlocksToFirebase(userId, reordered).catch(() => {});
+    await saveOrderedBlocks(token, userId, reordered, authCtx).catch(() => {});
+    syncAllTargets(reordered).catch(() => {});
   };
 
   const clearSchedule = async (id: string) => {

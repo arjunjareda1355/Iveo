@@ -31,11 +31,8 @@ export function getProFeatureName(feature: ProFeature): string {
  * and can use reserved usernames. Any email ending with @iveo.site is also included.
  */
 export const OWNER_EMAILS = [
-  'help@iveo.site',
   'arjunjareda2007@gmail.com',
   'arjunjareda1355@gmail.com',
-  'arjunjared1355@gmail.com',
-  'help@fanq.me',
 ] as const;
 
 export function isOwnerEmail(email: string | null | undefined): boolean {

@@ -1,4 +1,3 @@
-import { VIBES } from '../../src/lib/vibes.ts';
 import { dbGetBlocks, dbListAllProfiles } from './azureSql.ts';
 import { getBingSiteVerification, getCanonicalSiteOrigin, getGoogleSiteVerification } from './env.ts';
 import { firebaseGetAllProfiles } from './firebaseServer.ts';
@@ -28,7 +27,20 @@ export interface SeoUnifiedProfile {
   customSeoDescription: string | null;
   socials: Record<string, string>;
   updatedAt: string;
-  source: 'database' | 'firebase' | 'persona';
+  source: 'database' | 'firebase';
+}
+
+const SYNTHETIC_TEST_HANDLE_PATTERNS: RegExp[] = [
+  /^(test|demo)([_-].*|\d+)?$/i,
+  /^old-\d+$/i,
+  /^seo-rename-(old|new)-\d+$/i,
+  /^(verifytemp|themeverify)\d+$/i,
+];
+
+export function isSyntheticTestHandle(username: string | null | undefined): boolean {
+  const clean = (username || '').toLowerCase().trim();
+  if (!clean) return true;
+  return SYNTHETIC_TEST_HANDLE_PATTERNS.some((rx) => rx.test(clean));
 }
 
 export interface IndexabilityDecision {
@@ -156,37 +168,23 @@ export function evaluateProfileIndexability(profile: Partial<SeoUnifiedProfile> 
 
 export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
   const byUsername = new Map<string, SeoUnifiedProfile>();
-
-  // 1. Seed demo personas first (lowest precedence; real profiles override them)
   const todayIso = new Date().toISOString();
-  for (const vibe of VIBES) {
-    const handle = vibe.persona?.handle?.toLowerCase().trim();
-    if (!handle) continue;
-    byUsername.set(handle, {
-      username: handle,
-      displayName: vibe.persona.name || handle,
-      bio: vibe.persona.bio || '',
-      avatarUrl: null,
-      vibeId: vibe.id,
-      plan: 'free',
-      status: 'active',
-      isPublished: true,
-      hideFromSearch: false,
-      customSeoTitle: null,
-      customSeoDescription: null,
-      socials: {},
-      updatedAt: todayIso,
-      source: 'persona',
-    });
-  }
 
-  // 2. Firebase profiles
+  const upsertIfNewer = (candidate: SeoUnifiedProfile) => {
+    if (isSyntheticTestHandle(candidate.username)) return;
+    const existing = byUsername.get(candidate.username);
+    if (!existing || (candidate.updatedAt || '') >= (existing.updatedAt || '')) {
+      byUsername.set(candidate.username, candidate);
+    }
+  };
+
+  // 1. Firebase profiles
   try {
     const fbProfiles = await firebaseGetAllProfiles();
     for (const prof of fbProfiles) {
       const uname = typeof prof?.username === 'string' ? prof.username.toLowerCase().trim() : '';
-      if (!uname) continue;
-      byUsername.set(uname, {
+      if (!uname || prof?.status === 'deleted') continue;
+      upsertIfNewer({
         username: uname,
         displayName: prof.displayName || uname,
         bio: prof.bio || '',
@@ -205,13 +203,13 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
     }
   } catch {}
 
-  // 3. Azure SQL + Server Store (highest precedence)
+  // 2. Azure SQL + Server Store (merged by updatedAt so newest write wins)
   try {
     const dbProfiles = await dbListAllProfiles();
     for (const prof of dbProfiles) {
       const uname = typeof prof?.username === 'string' ? prof.username.toLowerCase().trim() : '';
-      if (!uname) continue;
-      byUsername.set(uname, {
+      if (!uname || prof?.status === 'deleted') continue;
+      upsertIfNewer({
         username: uname,
         displayName: prof.displayName || uname,
         bio: prof.bio || '',
@@ -230,7 +228,7 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
     }
   } catch {}
 
-  return Array.from(byUsername.values()).sort((a, b) => a.username.localeCompare(b.username));
+  return Array.from(byUsername.values()).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
 export function buildProfileSeoTitle(page: PublicPageServerData): string {
@@ -474,7 +472,7 @@ export async function buildProfileSeoPayload(
 export async function buildDiscoverSsrHtml(requestOrigin: string): Promise<string> {
   const canonicalOrigin = getCanonicalSiteOrigin();
   const profiles = await getAllUnifiedProfiles();
-  const eligible = profiles.filter((p) => evaluateProfileIndexability(p).indexable).slice(0, 200);
+  const eligible = profiles.filter((p) => evaluateProfileIndexability(p).indexable).slice(0, 16);
   const items = eligible
     .map(
       (p) =>
@@ -783,7 +781,7 @@ export async function getSeoHealthReport(origin: string) {
     const hasAvatar = Boolean(prof.avatarUrl);
     if (!hasBio) {
       missingBioCount += 1;
-      if (decision.indexable && prof.source !== 'persona') {
+      if (decision.indexable) {
         issues.push({
           username: prof.username,
           severity: 'warning',
@@ -795,7 +793,7 @@ export async function getSeoHealthReport(origin: string) {
     if (!hasAvatar) {
       missingAvatarCount += 1;
     }
-    if (!decision.indexable && prof.source !== 'persona') {
+    if (!decision.indexable) {
       issues.push({
         username: prof.username,
         severity: 'info',

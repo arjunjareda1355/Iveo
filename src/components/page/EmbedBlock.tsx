@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Play, Music, Headphones } from 'lucide-react';
 import { PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
 import { parseEmbedUrl } from '../../lib/embeds';
+import {
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
+} from '../../lib/preferences';
 
 interface EmbedBlockProps {
   block: PageBlock;
@@ -14,6 +18,7 @@ interface EmbedBlockProps {
   fontFamily?: string;
   scale?: number;
   onLinkClick?: (block: PageBlock) => void;
+  surfaceStyle?: React.CSSProperties;
 }
 
 export const EmbedBlock: React.FC<EmbedBlockProps> = ({
@@ -26,6 +31,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   fontFamily,
   scale = 1,
   onLinkClick,
+  surfaceStyle,
 }) => {
   const { tokens } = vibe;
   const parsed = parseEmbedUrl(block.url || '');
@@ -46,6 +52,17 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         : Headphones;
 
   const isActivePlayer = activeEmbedId === block.id;
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
+
+  const baseSurface: React.CSSProperties = surfaceStyle || {
+    backgroundColor: tokens.buttonBg,
+    color: tokens.buttonText,
+    border: tokens.buttonBorder
+      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+      : 'none',
+    boxShadow: tokens.buttonShadow || 'none',
+  };
 
   // Height calculations
   const defaultHeight =
@@ -62,14 +79,9 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         className="w-full relative flex flex-col items-center justify-center overflow-hidden transition-all duration-150 p-4 text-center"
         style={{
           minHeight: `${defaultHeight}px`,
-          backgroundColor: tokens.buttonBg,
-          color: tokens.buttonText,
+          ...baseSurface,
           fontFamily: fontFamily || vibe.fontFamily,
-          borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-          border: tokens.buttonBorder
-            ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-            : 'none',
-          boxShadow: tokens.buttonShadow || 'none',
+          borderRadius: `${cardRadius}px`,
         }}
       >
         <div
@@ -87,7 +99,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         {block.title && (
           <span
             className="text-[12px] opacity-75 mt-1 max-w-[90%] truncate leading-normal"
-            style={{ color: tokens.text }}
+            style={{ color: String(baseSurface.color || tokens.text) }}
           >
             {block.title}
           </span>
@@ -103,7 +115,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
       <div
         className="w-full overflow-hidden transition-all duration-150"
         style={{
-          borderRadius: `${effectiveRadius}px`,
+          borderRadius: `${cardRadius}px`,
           height: parsed.height ? `${parsed.height}px` : undefined,
           aspectRatio: parsed.aspect || undefined,
         }}
@@ -117,7 +129,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
           referrerPolicy="strict-origin-when-cross-origin"
           sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
           className="w-full h-full border-0 block"
-          style={{ borderRadius: `${effectiveRadius}px` }}
+          style={{ borderRadius: `${cardRadius}px` }}
         />
       </div>
     );
@@ -134,18 +146,13 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
   return (
     <div
-      className="w-full relative flex flex-col items-center justify-center p-6 text-center transition-all duration-150"
+      className="w-full overflow-hidden relative flex flex-col items-center justify-center p-6 text-center transition-all duration-150"
       style={{
         minHeight: `${defaultHeight}px`,
         aspectRatio: parsed?.aspect || undefined,
-        backgroundColor: tokens.buttonBg,
-        color: tokens.buttonText,
+        ...baseSurface,
         fontFamily: fontFamily || vibe.fontFamily,
-        borderRadius: `${effectiveRadius}px`,
-        border: tokens.buttonBorder
-          ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-          : 'none',
-        boxShadow: tokens.buttonShadow || 'none',
+        borderRadius: `${cardRadius}px`,
       }}
     >
       <div
@@ -175,10 +182,11 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
           onActivate(block.id);
           onLinkClick?.(block);
         }}
-        className="h-10 px-6 rounded-full font-semibold text-[14px] flex items-center justify-center gap-2 transition-transform duration-120 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="h-10 px-6 font-semibold text-[14px] flex items-center justify-center gap-2 transition-transform duration-120 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
         style={{
           backgroundColor: tokens.text,
           color: tokens.bg,
+          borderRadius: `${controlRadius}px`,
         }}
       >
         <Play size={15} fill="currentColor" />

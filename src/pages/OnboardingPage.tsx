@@ -133,7 +133,7 @@ export const OnboardingPage: React.FC = () => {
     setIsCheckingUsername(true);
 
     const timer = setTimeout(async () => {
-      const res = await checkUsernameAvailability(usernameInput, undefined, session.primaryEmail);
+      const res = await checkUsernameAvailability(usernameInput, session.userId || undefined, session.primaryEmail);
       if (!active) return;
       setIsCheckingUsername(false);
 
@@ -150,7 +150,7 @@ export const OnboardingPage: React.FC = () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [usernameInput, currentStep, session.primaryEmail]);
+  }, [usernameInput, currentStep, session.userId, session.primaryEmail]);
 
   // Update craft links suggestion when craft changes
   const handleSelectCraft = (craftId: string) => {

@@ -35,31 +35,32 @@ test('isPrivilegedEmailServer matches client privilege rules', () => {
 });
 
 test('validateUsername allows reserved handles only when allowReserved is true and always blocks private routes', () => {
-  assert.equal(validateUsername('admin', { allowReserved: false }).ok, false);
+  assert.equal(validateUsername('support', { allowReserved: false }).ok, false);
   assert.equal(validateUsername('iveo', { allowReserved: false }).ok, false);
   assert.equal(validateUsername('help', { allowReserved: false }).ok, false);
 
-  assert.equal(validateUsername('admin', { allowReserved: true }).ok, true);
+  assert.equal(validateUsername('support', { allowReserved: true }).ok, true);
   assert.equal(validateUsername('iveo', { allowReserved: true }).ok, true);
   assert.equal(validateUsername('help', { allowReserved: true }).ok, true);
 
-  for (const sysRoute of ['login', 'signup', 'dashboard', 'onboarding', 'account']) {
+  for (const sysRoute of ['login', 'signup', 'dashboard', 'onboarding', 'account', 'admin']) {
     const res = validateUsername(sysRoute, { allowReserved: true });
     assert.equal(res.ok, false, `Expected ${sysRoute} to remain blocked`);
   }
 });
 
 test('validateUsernameServer allows reserved handles for privileged callers and blocks private routes', () => {
-  assert.equal(validateUsernameServer('admin', { allowReserved: false }).ok, false);
-  assert.equal(validateUsernameServer('admin', { allowReserved: true }).ok, true);
+  assert.equal(validateUsernameServer('support', { allowReserved: false }).ok, false);
+  assert.equal(validateUsernameServer('support', { allowReserved: true }).ok, true);
   assert.equal(validateUsernameServer('iveo', { allowReserved: true }).ok, true);
+  assert.equal(validateUsernameServer('admin', { allowReserved: true }).ok, false);
   assert.equal(validateUsernameServer('dashboard', { allowReserved: true }).ok, false);
   assert.equal(validateUsernameServer('login', { allowReserved: true }).ok, false);
 });
 
 test('validateUsernameSync forwards email for reserved handles', () => {
-  assert.equal(validateUsernameSync('admin', { email: 'regular@gmail.com' }).status, 'unavailable');
-  assert.equal(validateUsernameSync('admin', { email: 'example@iveo.site' }).status, 'available');
+  assert.equal(validateUsernameSync('support', { email: 'regular@gmail.com' }).status, 'unavailable');
+  assert.equal(validateUsernameSync('support', { email: 'example@iveo.site' }).status, 'available');
   assert.equal(validateUsernameSync('iveo', { email: 'arjunjareda2007@gmail.com' }).status, 'available');
   assert.equal(validateUsernameSync('login', { email: 'example@iveo.site' }).status, 'unavailable');
 });

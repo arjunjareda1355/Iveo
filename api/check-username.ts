@@ -3,18 +3,6 @@ import { adminClient } from './_lib/supabase.ts';
 import { dbGetProfile } from './_lib/azureSql.ts';
 import { firebaseIsUsernameClaimed } from './_lib/firebaseServer.ts';
 
-export const DEMO_TAKEN_USERNAMES = new Set([
-  'maya',
-  'devsharma',
-  'lenahoffmann',
-  'tomasreyes',
-  'elena',
-  'kai',
-  'alex',
-  'test',
-  'owner',
-]);
-
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const raw = url.searchParams.get('u') || url.searchParams.get('username') || '';
@@ -33,27 +21,9 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  // 1. Check demo creator reserved addresses
-  if (DEMO_TAKEN_USERNAMES.has(clean)) {
-    if (requestingUserId && requestingUserId.toLowerCase() === `demo_${clean}`) {
-      return Response.json({
-        ok: true,
-        available: true,
-        username: clean,
-        profileUrl: `https://iveo.site/${clean}`,
-        subdomainUrl: `https://iveo.site/${clean}`,
-        message: `iveo.site/${clean} is your address`,
-      });
-    }
-    return Response.json({
-      ok: true,
-      available: false,
-      reason: 'taken',
-      message: `iveo.site/${clean} is already claimed. Try another.`,
-    });
-  }
+  let lookupHadError = false;
 
-  // 2. Check Firebase Cloud Database (persistent across revisions & instances)
+  // 1. Check Firebase Cloud Database (persistent across revisions & instances)
   try {
     const fbClaim = await firebaseIsUsernameClaimed(clean, requestingUserId || undefined);
     if (fbClaim.claimed) {
@@ -74,9 +44,11 @@ export async function GET(request: Request): Promise<Response> {
         message: `iveo.site/${clean} is already claimed. Try another.`,
       });
     }
-  } catch {}
+  } catch {
+    lookupHadError = true;
+  }
 
-  // 3. Check centralized database (Azure SQL / server store)
+  // 2. Check centralized database (Azure SQL / server store)
   try {
     const existing = await dbGetProfile(clean);
     if (existing && existing.username) {
@@ -97,9 +69,11 @@ export async function GET(request: Request): Promise<Response> {
         message: `iveo.site/${clean} is already claimed. Try another.`,
       });
     }
-  } catch {}
+  } catch {
+    lookupHadError = true;
+  }
 
-  // Check Supabase database if configured
+  // 3. Check Supabase database if configured
   const supabase = adminClient();
   if (supabase) {
     try {
@@ -109,7 +83,9 @@ export async function GET(request: Request): Promise<Response> {
         .eq('username', clean)
         .maybeSingle();
 
-      if (!error && data && data.username) {
+      if (error) {
+        lookupHadError = true;
+      } else if (data && data.username) {
         if (requestingUserId && data.user_id === requestingUserId) {
           return Response.json({
             ok: true,
@@ -128,8 +104,20 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
     } catch {
-      // Continue if database lookup fails
+      lookupHadError = true;
     }
+  }
+
+  if (lookupHadError) {
+    return Response.json(
+      {
+        ok: false,
+        available: false,
+        reason: 'check_failed',
+        message: 'Could not verify availability right now. Please try again.',
+      },
+      { status: 503 }
+    );
   }
 
   return Response.json({
@@ -149,8 +137,10 @@ export async function POST(request: Request): Promise<Response> {
   } catch {}
   const u = body.u || body.username || '';
   const userId = body.userId || '';
+  const email = body.email || body.primaryEmail || '';
   const url = new URL(request.url);
   url.searchParams.set('u', u);
   if (userId) url.searchParams.set('userId', userId);
+  if (email) url.searchParams.set('email', email);
   return GET(new Request(url.toString(), { method: 'GET', headers: request.headers }));
 }

@@ -1,4 +1,4 @@
-import { RESERVED_USERNAMES_SET } from './username-rules';
+import { RESERVED_USERNAMES_SET } from './username-rules.ts';
 
 const SITE_APP_ROOT_SEGMENTS = new Set([
   'pricing',

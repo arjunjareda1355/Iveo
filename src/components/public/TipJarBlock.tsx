@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { Heart, DollarSign, Sparkles } from 'lucide-react';
+import { Heart, Sparkles } from 'lucide-react';
 import { TipJarConfig } from '../../data/types';
 import { VibeTokens } from '../../lib/vibes';
+import {
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
+} from '../../lib/preferences';
 
 interface TipJarBlockProps {
   config: TipJarConfig;
@@ -9,6 +13,7 @@ interface TipJarBlockProps {
   buttonRadius: number;
   fontFamily?: string;
   scale?: number;
+  surfaceStyle?: React.CSSProperties;
 }
 
 export const TipJarBlock: React.FC<TipJarBlockProps> = ({
@@ -17,6 +22,7 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
   buttonRadius,
   fontFamily,
   scale = 1,
+  surfaceStyle,
 }) => {
   const currency = config.currency || '$';
   const amounts = config.amounts && config.amounts.length > 0 ? config.amounts : [3, 5, 10, 25];
@@ -24,6 +30,18 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
   const [customVal, setCustomVal] = useState<string>('');
 
   const finalAmount = selectedAmount === 'custom' ? parseFloat(customVal) || 0 : selectedAmount;
+  const cardRadius = resolveCardBorderRadius(buttonRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(buttonRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(buttonRadius, scale);
+
+  const baseSurface: React.CSSProperties = surfaceStyle || {
+    backgroundColor: tokens.buttonBg,
+    borderColor: tokens.buttonBorder,
+    borderWidth: tokens.buttonBorderWidth || 1,
+    borderStyle: 'solid',
+    color: tokens.buttonText || tokens.text,
+  };
+  const fg = String(baseSurface.color || tokens.buttonText || tokens.text);
 
   const paymentHref = (() => {
     let url = config.paymentUrl || 'https://paypal.me';
@@ -43,22 +61,19 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
 
   return (
     <div
-      className="w-full flex flex-col items-center transition-all duration-200"
+      className="w-full overflow-hidden flex flex-col items-center transition-all duration-200"
       style={{
-        backgroundColor: tokens.buttonBg,
-        borderColor: tokens.buttonBorder,
-        borderWidth: tokens.buttonBorderWidth || 1,
-        borderStyle: 'solid',
-        borderRadius: buttonRadius,
-        padding: `${Math.round(18 * scale)}px ${Math.round(16 * scale)}px`,
-        color: tokens.buttonText || tokens.text,
+        ...baseSurface,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(16 * scale)}px`,
+        color: fg,
         fontFamily,
       }}
     >
-      <div className="flex items-center gap-2 mb-1.5">
-        <Heart size={Math.round(18 * scale)} className="text-red-500 fill-red-500 animate-pulse" />
+      <div className="flex items-center gap-2 mb-1.5 max-w-full">
+        <Heart size={Math.round(18 * scale)} className="text-red-500 fill-red-500 animate-pulse shrink-0" />
         <h4
-          className="font-semibold text-center leading-tight"
+          className="font-semibold text-center leading-tight truncate"
           style={{ fontSize: `${Math.round(15 * scale)}px` }}
         >
           {config.buttonText || 'Support my work'}
@@ -83,11 +98,12 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
               key={amt}
               type="button"
               onClick={() => setSelectedAmount(amt)}
-              className="px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-150 cursor-pointer"
+              className="px-3 py-1.5 text-xs font-semibold transition-all duration-150 cursor-pointer"
               style={{
-                backgroundColor: isSelected ? tokens.text : 'transparent',
-                color: isSelected ? tokens.bg : tokens.text,
-                border: `1px solid ${isSelected ? tokens.text : tokens.buttonBorder || '#ccc'}`,
+                backgroundColor: isSelected ? fg : 'transparent',
+                color: isSelected ? tokens.bg : fg,
+                border: `1px solid ${isSelected ? fg : tokens.buttonBorder || `${fg}40`}`,
+                borderRadius: `${controlRadius}px`,
               }}
             >
               {currency}{amt}
@@ -98,11 +114,12 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         <button
           type="button"
           onClick={() => setSelectedAmount('custom')}
-          className="px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150 cursor-pointer"
+          className="px-3 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer"
           style={{
-            backgroundColor: selectedAmount === 'custom' ? tokens.text : 'transparent',
-            color: selectedAmount === 'custom' ? tokens.bg : tokens.text,
-            border: `1px solid ${selectedAmount === 'custom' ? tokens.text : tokens.buttonBorder || '#ccc'}`,
+            backgroundColor: selectedAmount === 'custom' ? fg : 'transparent',
+            color: selectedAmount === 'custom' ? tokens.bg : fg,
+            border: `1px solid ${selectedAmount === 'custom' ? fg : tokens.buttonBorder || `${fg}40`}`,
+            borderRadius: `${controlRadius}px`,
           }}
         >
           Custom
@@ -119,7 +136,8 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
             placeholder="Amount"
             value={customVal}
             onChange={(e) => setCustomVal(e.target.value)}
-            className="w-full px-2.5 py-1 text-sm rounded border border-current/30 bg-transparent focus:outline-none focus:border-current"
+            className="w-full px-2.5 py-1 text-sm border border-current/30 bg-transparent focus:outline-none focus:border-current"
+            style={{ borderRadius: `${innerRadius}px` }}
           />
         </div>
       )}
@@ -131,8 +149,8 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         rel="noopener noreferrer"
         className="w-full font-medium py-2 px-4 flex items-center justify-center gap-2 transition-transform duration-150 active:scale-[0.98] cursor-pointer"
         style={{
-          borderRadius: Math.max(buttonRadius - 4, 6),
-          backgroundColor: tokens.text,
+          borderRadius: `${controlRadius}px`,
+          backgroundColor: fg,
           color: tokens.bg,
           fontSize: `${Math.round(13 * scale)}px`,
         }}

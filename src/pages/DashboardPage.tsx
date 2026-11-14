@@ -75,6 +75,14 @@ const DashboardContent: React.FC = () => {
   const isSettings = location.pathname.includes('/settings');
   const isLinks = !isAppearance && !isContacts && !isAnalytics && !isSettings;
 
+  const demoSearch = React.useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('demo') === '1' || params.get('autostart') === '1') {
+      return location.search;
+    }
+    return '';
+  }, [location.search]);
+
   useEffect(() => {
     if (isAppearance) {
       document.title = copy.dashboard.titles.appearance;
@@ -167,7 +175,7 @@ const DashboardContent: React.FC = () => {
       >
         <Container className="h-full flex items-center gap-6 sm:gap-8">
           <NavLink
-            to="/dashboard"
+            to={`/dashboard${demoSearch}`}
             end
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
@@ -189,7 +197,7 @@ const DashboardContent: React.FC = () => {
           </NavLink>
 
           <NavLink
-            to="/dashboard/appearance"
+            to={`/dashboard/appearance${demoSearch}`}
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
@@ -210,7 +218,7 @@ const DashboardContent: React.FC = () => {
           </NavLink>
 
           <NavLink
-            to="/dashboard/contacts"
+            to={`/dashboard/contacts${demoSearch}`}
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
@@ -231,7 +239,7 @@ const DashboardContent: React.FC = () => {
           </NavLink>
 
           <NavLink
-            to="/dashboard/analytics"
+            to={`/dashboard/analytics${demoSearch}`}
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
@@ -252,7 +260,7 @@ const DashboardContent: React.FC = () => {
           </NavLink>
 
           <NavLink
-            to="/dashboard/settings"
+            to={`/dashboard/settings${demoSearch}`}
             className={({ isActive }) =>
               `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
@@ -297,7 +305,6 @@ const DashboardContent: React.FC = () => {
                     onPreviewFontSettingsChange={(fonts) => setPreviewFontSettings(fonts)}
                     onPreviewButtonColorsChange={(colors) => setPreviewButtonColors(colors)}
                     onPreviewLayoutChange={(layout) => setPreviewLayoutSettings(layout)}
-                    onOpenPreview={() => setMobilePreviewOpen(true)}
                   />
                 )}
                 {isSettings && <SettingsTab />}
@@ -403,7 +410,12 @@ export const DashboardPage: React.FC = () => {
   const userId = session.username || 'owner';
 
   return (
-    <BlocksProvider key={userId} userId={userId}>
+    <BlocksProvider
+      key={userId}
+      userId={userId}
+      ownerUserId={session.userId}
+      primaryEmail={session.primaryEmail}
+    >
       <DashboardContent />
     </BlocksProvider>
   );

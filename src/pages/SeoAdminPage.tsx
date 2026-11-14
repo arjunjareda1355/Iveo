@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Search,
   RefreshCw,
@@ -99,18 +99,18 @@ export const SeoAdminPage: React.FC = () => {
   });
 
   const session = useIvioSession();
-  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
-  const isDemoAdmin = searchParams.get('demo') === '1';
-  const isAuthorized = isDemoAdmin || (session.isLoaded && isOwnerEmail(session.primaryEmail));
-  const adminEmail = isDemoAdmin ? 'help@iveo.site' : session.primaryEmail || '';
+  const isAuthorized = Boolean(
+    session.isLoaded && session.isSignedIn && isOwnerEmail(session.primaryEmail)
+  );
+  const adminEmail = isAuthorized ? (session.primaryEmail || '') : '';
 
   const [report, setReport] = useState<SeoHealthReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
-  const [inspectUsername, setInspectUsername] = useState('maya');
+  const [inspectUsername, setInspectUsername] = useState('');
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [gscResult, setGscResult] = useState<any>(null);
@@ -232,7 +232,7 @@ export const SeoAdminPage: React.FC = () => {
     }
   };
 
-  if (!session.isLoaded && !isDemoAdmin) {
+  if (!session.isLoaded) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <RefreshCw className="animate-spin text-muted" size={20} />
@@ -392,7 +392,7 @@ export const SeoAdminPage: React.FC = () => {
                         type="text"
                         value={inspectUsername}
                         onChange={(e) => setInspectUsername(e.target.value)}
-                        placeholder="Enter username (e.g. maya)"
+                        placeholder="Enter username (e.g. yourhandle)"
                         aria-label="Username to validate"
                         className="w-full h-10 pl-9 pr-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                       />

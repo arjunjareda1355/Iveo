@@ -20,13 +20,10 @@ test('validateUsernameSync: handles empty and short inputs', () => {
   assert.equal(validateUsernameSync('ab').message, 'Use 3 to 30 letters, numbers or hyphens.');
 });
 
-test('validateUsernameSync: rejects reserved and taken usernames', () => {
-  for (const name of RESERVED_USERNAMES) {
-    const res = validateUsernameSync(name);
-    assert.equal(res.status, 'unavailable', `Expected ${name} to be unavailable`);
-  }
+test('validateUsernameSync: rejects reserved usernames and contains zero fake demo taken usernames', () => {
+  assert.equal(SIMULATED_TAKEN_USERNAMES.size, 0);
 
-  for (const name of SIMULATED_TAKEN_USERNAMES) {
+  for (const name of RESERVED_USERNAMES) {
     const res = validateUsernameSync(name);
     assert.equal(res.status, 'unavailable', `Expected ${name} to be unavailable`);
   }

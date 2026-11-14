@@ -5,10 +5,8 @@ import { Button } from './ui/Button';
 import { useIvioSession } from '../auth/useIvioSession';
 import {
   normalizeUsername,
-  validateUsername,
   USERNAME_MIN,
   USERNAME_MAX,
-  SIMULATED_TAKEN_USERNAMES_SET,
 } from '../lib/username-rules';
 import { checkUsernameAvailability } from '../lib/username';
 import { copy } from '../content/copy';
@@ -59,7 +57,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     setStatusState('checking');
 
     const timer = setTimeout(async () => {
-      const res = await checkUsernameAvailability(rawInput, undefined, session.primaryEmail);
+      const res = await checkUsernameAvailability(rawInput, session.userId || undefined, session.primaryEmail);
       if (!active) return;
       setIsChecking(false);
 
@@ -76,7 +74,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [rawInput, session.primaryEmail]);
+  }, [rawInput, session.userId, session.primaryEmail]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const clean = normalizeUsername(e.target.value);

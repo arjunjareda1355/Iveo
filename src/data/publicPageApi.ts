@@ -1,6 +1,6 @@
 import { PublicPageData, PublicBlock, SignupConfig } from './types';
 import { storagePublicUrl } from './storageApi';
-import { VIBES, VibeId } from '../lib/vibes';
+import type { VibeId } from '../lib/vibes';
 import { parseEmbedUrl } from '../lib/embeds';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 
@@ -316,35 +316,6 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     } catch {
       // Fall through
     }
-  }
-
-  // If username matches default demo persona like maya
-  const personaVibe = VIBES.find((v) => v.persona.handle === clean);
-  if (personaVibe) {
-    return {
-      profile: {
-        username: clean,
-        displayName: personaVibe.persona.name,
-        bio: personaVibe.persona.bio,
-        avatarUrl: null,
-        vibeId: personaVibe.id,
-        buttonShape: null,
-        socials: {},
-        hideFromSearch: false,
-        hideFooter: false,
-      },
-      links: personaVibe.persona.links.map((l, i) => ({
-        id: `persona-${i}`,
-        kind: 'link',
-        title: l,
-        url: 'https://iveo.site',
-        icon: null,
-        thumbnailPath: null,
-        thumbnailUrl: null,
-        layout: 'classic',
-        embedProvider: null,
-      })),
-    };
   }
 
   return null;

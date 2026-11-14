@@ -15,6 +15,10 @@ import {
 import { PageBlock } from '../../data/types';
 import { VibeTokens } from '../../lib/vibes';
 import { formatExternalUrl } from '../../lib/urls';
+import {
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
+} from '../../lib/preferences';
 
 interface SharedBlockRenderProps {
   block: PageBlock;
@@ -29,11 +33,12 @@ interface SharedBlockRenderProps {
 
 function resolveCardPalette(surfaceStyle: React.CSSProperties, tokens: VibeTokens) {
   const fg = String(surfaceStyle.color || tokens.buttonText || tokens.text || '#0A0A0A');
+  const upper = fg.toUpperCase();
   const isLightFg =
-    fg.toUpperCase() === '#FFFFFF' ||
-    fg.toUpperCase() === '#FAFAFA' ||
-    fg.toUpperCase() === '#F8FAFC' ||
-    fg.toUpperCase() === '#F5F5F5';
+    upper === '#FFFFFF' ||
+    upper === '#FAFAFA' ||
+    upper === '#F8FAFC' ||
+    upper === '#F5F5F5';
   const pillBg = fg;
   const pillText =
     typeof surfaceStyle.backgroundColor === 'string' &&
@@ -59,55 +64,69 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   const ytUrl = block.url ? formatExternalUrl(block.url) : 'https://youtube.com';
   const yt = block.youtube;
   const ctaLabel = yt?.buttonLabel?.trim() || 'Subscribe';
-  const videos = yt?.showLatestVideo && Array.isArray(yt.latestVideos) ? yt.latestVideos.slice(0, 3) : [];
+  const videos =
+    yt?.showLatestVideo && Array.isArray(yt.latestVideos)
+      ? yt.latestVideos.slice(0, 3)
+      : [];
   const { fg } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
   return (
     <div
-      className="w-full flex flex-col gap-2.5 transition-all duration-150 select-none"
+      className="w-full overflow-hidden flex flex-col gap-2.5 transition-all duration-150 select-none"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(12 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(13 * scale)}px ${Math.round(14 * scale)}px`,
       }}
     >
-      <div className="w-full flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0 pr-1">
+      <div className="w-full flex items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
           {yt?.avatarUrl ? (
             <img
               src={yt.avatarUrl}
               alt={block.title || 'YouTube'}
               referrerPolicy="no-referrer"
-              className="rounded-full object-cover shrink-0 border border-current/20"
+              className="object-cover shrink-0 border border-current/20"
               style={{
                 width: `${Math.round(36 * scale)}px`,
                 height: `${Math.round(36 * scale)}px`,
+                borderRadius: '9999px',
               }}
             />
           ) : (
             <div
-              className="rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs"
+              className="bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs"
               style={{
                 width: `${Math.round(34 * scale)}px`,
                 height: `${Math.round(34 * scale)}px`,
+                borderRadius: `${innerRadius}px`,
               }}
             >
               <Youtube size={Math.round(16 * scale)} strokeWidth={2} />
             </div>
           )}
 
-          <div className="flex flex-col min-w-0 text-left">
+          <div className="flex flex-col flex-1 min-w-0 text-left">
             <div className="flex items-center gap-1.5 min-w-0">
               <span
                 className="font-semibold truncate leading-tight"
-                style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px`, color: fg }}
+                style={{
+                  fontSize: `${Math.max(12, Math.round(13.5 * scale))}px`,
+                  color: fg,
+                }}
               >
                 {block.title || yt?.channelTitle || 'YouTube Channel'}
               </span>
               {yt?.subscriberText && (
-                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-600/15 text-red-500 border border-red-500/20 shrink-0 whitespace-nowrap">
+                <span
+                  className="px-1.5 py-0.5 text-[9px] font-semibold bg-red-600/15 text-red-500 border border-red-500/20 shrink-0 whitespace-nowrap"
+                  style={{ borderRadius: `${controlRadius}px` }}
+                >
                   {yt.subscriberText}
                 </span>
               )}
@@ -124,12 +143,16 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => onLinkClick?.(block)}
-            className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white transition-transform active:scale-95"
+            className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap bg-red-600 text-white transition-transform active:scale-95"
+            style={{ borderRadius: `${controlRadius}px` }}
           >
             {ctaLabel}
           </a>
         ) : (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 bg-red-600 text-white">
+          <span
+            className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap bg-red-600 text-white"
+            style={{ borderRadius: `${controlRadius}px` }}
+          >
             {ctaLabel}
           </span>
         )}
@@ -137,14 +160,21 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
 
       {videos.length > 0 && (
         <div
-          className={`grid gap-1.5 pt-1 border-t border-current/10 ${
-            videos.length === 1 ? 'grid-cols-1' : videos.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
+          className={`grid gap-1.5 pt-1.5 border-t border-current/10 ${
+            videos.length === 1
+              ? 'grid-cols-1'
+              : videos.length === 2
+                ? 'grid-cols-2'
+                : 'grid-cols-3'
           }`}
         >
           {videos.map((vid, idx) => {
             const vidUrl = formatExternalUrl(vid.url || ytUrl);
             const cardInner = (
-              <div className="rounded-lg overflow-hidden border border-current/15 bg-black/5 flex flex-col">
+              <div
+                className="overflow-hidden border border-current/15 bg-black/5 flex flex-col"
+                style={{ borderRadius: `${innerRadius}px` }}
+              >
                 <div className="relative aspect-video bg-black/20">
                   {vid.thumbnailUrl && (
                     <img
@@ -163,7 +193,10 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
                 </div>
                 <div
                   className="px-1.5 py-1 font-medium line-clamp-1 text-left"
-                  style={{ fontSize: `${Math.max(10, Math.round(10.5 * scale))}px`, color: fg }}
+                  style={{
+                    fontSize: `${Math.max(10, Math.round(10.5 * scale))}px`,
+                    color: fg,
+                  }}
                 >
                   {vid.title}
                 </div>
@@ -206,36 +239,41 @@ export const ProductShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   const href = block.url ? formatExternalUrl(block.url) : '#';
   const cta = cfg.buttonLabel?.trim() || 'Buy Now';
   const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
   const body = (
     <div
-      className="w-full flex items-center justify-between gap-2.5 transition-all duration-150 select-none text-left"
+      className="w-full overflow-hidden flex items-center justify-between gap-2.5 transition-all duration-150 select-none text-left"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(14 * scale)}px`,
       }}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
         {cfg.imageUrl ? (
           <img
             src={cfg.imageUrl}
             alt={block.title}
             referrerPolicy="no-referrer"
-            className="rounded-lg object-cover shrink-0 border border-current/15"
+            className="object-cover shrink-0 border border-current/15"
             style={{
               width: `${Math.round(42 * scale)}px`,
               height: `${Math.round(42 * scale)}px`,
+              borderRadius: `${innerRadius}px`,
             }}
           />
         ) : (
           <div
-            className="rounded-lg flex items-center justify-center shrink-0"
+            className="flex items-center justify-center shrink-0"
             style={{
               width: `${Math.round(38 * scale)}px`,
               height: `${Math.round(38 * scale)}px`,
+              borderRadius: `${innerRadius}px`,
               backgroundColor: `${fg}14`,
               color: fg,
             }}
@@ -243,9 +281,9 @@ export const ProductShowcaseCard: React.FC<SharedBlockRenderProps> = ({
             <ShoppingBag size={Math.round(17 * scale)} />
           </div>
         )}
-        <div className="min-w-0">
+        <div className="flex-1 min-w-0">
           {cfg.tag && (
-            <span className="text-[9px] font-bold uppercase tracking-wider opacity-75 block leading-none mb-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider opacity-75 block leading-none mb-0.5 truncate">
               {cfg.tag}
             </span>
           )}
@@ -255,21 +293,26 @@ export const ProductShowcaseCard: React.FC<SharedBlockRenderProps> = ({
           >
             {block.title}
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] mt-0.5">
-            <span className="font-bold">{cfg.price}</span>
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5 min-w-0">
+            <span className="font-bold shrink-0">{cfg.price}</span>
             {cfg.compareAtPrice && (
-              <span className="line-through opacity-60">{cfg.compareAtPrice}</span>
+              <span className="line-through opacity-60 shrink-0">
+                {cfg.compareAtPrice}
+              </span>
             )}
-            {cfg.description && <span className="opacity-75 truncate">· {cfg.description}</span>}
+            {cfg.description && (
+              <span className="opacity-75 truncate">· {cfg.description}</span>
+            )}
           </div>
         </div>
       </div>
 
       <span
-        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1"
+        className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap inline-flex items-center gap-1"
         style={{
           backgroundColor: pillBg,
           color: pillText,
+          borderRadius: `${controlRadius}px`,
         }}
       >
         <span>{cta}</span>
@@ -286,6 +329,7 @@ export const ProductShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         rel="noopener noreferrer nofollow"
         onClick={() => onLinkClick?.(block)}
         className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        style={{ borderRadius: `${cardRadius}px` }}
       >
         {body}
       </a>
@@ -309,30 +353,34 @@ export const BookingShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   const href = block.url ? formatExternalUrl(block.url) : '#';
   const cta = cfg.buttonLabel?.trim() || 'Book Slot';
   const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
   const body = (
     <div
-      className="w-full flex items-center justify-between gap-2.5 transition-all duration-150 select-none text-left"
+      className="w-full overflow-hidden flex items-center justify-between gap-2.5 transition-all duration-150 select-none text-left"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(14 * scale)}px`,
       }}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
         <div
-          className="rounded-lg flex items-center justify-center shrink-0"
+          className="flex items-center justify-center shrink-0"
           style={{
             width: `${Math.round(36 * scale)}px`,
             height: `${Math.round(36 * scale)}px`,
+            borderRadius: `${innerRadius}px`,
             backgroundColor: `${fg}14`,
           }}
         >
           <CalendarClock size={Math.round(17 * scale)} />
         </div>
-        <div className="min-w-0">
+        <div className="flex-1 min-w-0">
           <div
             className="font-semibold truncate leading-tight"
             style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
@@ -349,10 +397,11 @@ export const BookingShowcaseCard: React.FC<SharedBlockRenderProps> = ({
       </div>
 
       <span
-        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0"
+        className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap"
         style={{
           backgroundColor: pillBg,
           color: pillText,
+          borderRadius: `${controlRadius}px`,
         }}
       >
         {cta}
@@ -368,6 +417,7 @@ export const BookingShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         rel="noopener noreferrer nofollow"
         onClick={() => onLinkClick?.(block)}
         className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        style={{ borderRadius: `${cardRadius}px` }}
       >
         {body}
       </a>
@@ -389,6 +439,9 @@ export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   const cfg = block.countdown;
   const [now, setNow] = useState(() => Date.now());
   const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -406,19 +459,19 @@ export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
 
   return (
     <div
-      className="w-full flex flex-col items-center text-center gap-2 select-none"
+      className="w-full overflow-hidden flex flex-col items-center text-center gap-2 select-none"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(13 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(14 * scale)}px`,
       }}
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 max-w-full">
         <Timer size={Math.round(14 * scale)} className="opacity-80 shrink-0" />
         <span
-          className="font-semibold leading-tight"
+          className="font-semibold leading-tight truncate"
           style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px` }}
         >
           {block.title}
@@ -426,7 +479,9 @@ export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
       </div>
 
       {cfg.venueOrSubtitle && (
-        <span className="text-[11px] opacity-75 leading-tight">{cfg.venueOrSubtitle}</span>
+        <span className="text-[11px] opacity-75 leading-tight max-w-full truncate">
+          {cfg.venueOrSubtitle}
+        </span>
       )}
 
       {diff > 0 ? (
@@ -439,8 +494,11 @@ export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
           ].map((u) => (
             <div
               key={u.label}
-              className="rounded-lg py-1.5 px-1 flex flex-col items-center border border-current/15"
-              style={{ backgroundColor: `${fg}10` }}
+              className="py-1.5 px-1 flex flex-col items-center border border-current/15"
+              style={{
+                backgroundColor: `${fg}10`,
+                borderRadius: `${innerRadius}px`,
+              }}
             >
               <span className="font-mono font-bold text-[15px] leading-none">
                 {String(u.val).padStart(2, '0')}
@@ -453,8 +511,11 @@ export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         </div>
       ) : (
         <div
-          className="px-3 py-1 rounded-full text-[12px] font-semibold"
-          style={{ backgroundColor: `${fg}18` }}
+          className="px-3 py-1 text-[12px] font-semibold"
+          style={{
+            backgroundColor: `${fg}18`,
+            borderRadius: `${controlRadius}px`,
+          }}
         >
           {cfg.expiredLabel || 'Live Now'}
         </div>
@@ -467,20 +528,22 @@ export const CountdownShowcaseCard: React.FC<SharedBlockRenderProps> = ({
             target="_blank"
             rel="noopener noreferrer nofollow"
             onClick={() => onLinkClick?.(block)}
-            className="mt-0.5 px-4 py-1.5 rounded-full text-[12px] font-semibold transition-transform active:scale-95"
+            className="mt-0.5 px-4 py-1.5 text-[12px] font-semibold transition-transform active:scale-95"
             style={{
               backgroundColor: pillBg,
               color: pillText,
+              borderRadius: `${controlRadius}px`,
             }}
           >
             {cfg.buttonLabel}
           </a>
         ) : (
           <span
-            className="mt-0.5 px-4 py-1.5 rounded-full text-[12px] font-semibold"
+            className="mt-0.5 px-4 py-1.5 text-[12px] font-semibold"
             style={{
               backgroundColor: pillBg,
               color: pillText,
+              borderRadius: `${controlRadius}px`,
             }}
           >
             {cfg.buttonLabel}
@@ -505,6 +568,9 @@ export const PromoShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   const [copied, setCopied] = useState(false);
   if (!cfg) return null;
   const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -519,26 +585,27 @@ export const PromoShowcaseCard: React.FC<SharedBlockRenderProps> = ({
 
   return (
     <div
-      className="w-full flex flex-col gap-2 select-none"
+      className="w-full overflow-hidden flex flex-col gap-2 select-none"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(12 * scale)}px ${Math.round(13 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(12 * scale)}px ${Math.round(14 * scale)}px`,
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0 text-left">
+        <div className="flex items-center gap-2 flex-1 min-w-0 text-left">
           <Ticket size={Math.round(16 * scale)} className="shrink-0 opacity-85" />
-          <div className="min-w-0">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               {cfg.discountLabel && (
                 <span
-                  className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0"
+                  className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shrink-0"
                   style={{
                     backgroundColor: pillBg,
                     color: pillText,
+                    borderRadius: `${Math.min(innerRadius, 6)}px`,
                   }}
                 >
                   {cfg.discountLabel}
@@ -562,8 +629,11 @@ export const PromoShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-current/45 font-mono text-[11px] font-bold shrink-0 cursor-pointer transition-transform active:scale-95"
-          style={{ backgroundColor: `${fg}12` }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 border border-dashed border-current/45 font-mono text-[11px] font-bold shrink-0 whitespace-nowrap cursor-pointer transition-transform active:scale-95"
+          style={{
+            backgroundColor: `${fg}12`,
+            borderRadius: `${controlRadius}px`,
+          }}
         >
           <span>{copied ? 'Copied!' : cfg.code}</span>
           {copied ? <Check size={11} /> : <Copy size={11} />}
@@ -599,6 +669,10 @@ export const LocationShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   const cfg = block.location;
   if (!cfg) return null;
   const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
+
   const mapsUrl = block.url
     ? formatExternalUrl(block.url)
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -607,27 +681,28 @@ export const LocationShowcaseCard: React.FC<SharedBlockRenderProps> = ({
 
   const inner = (
     <div
-      className="w-full flex items-center justify-between gap-2.5 select-none text-left"
+      className="w-full overflow-hidden flex items-center justify-between gap-2.5 select-none text-left"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(14 * scale)}px`,
       }}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
         <div
-          className="rounded-lg flex items-center justify-center shrink-0"
+          className="flex items-center justify-center shrink-0"
           style={{
             width: `${Math.round(34 * scale)}px`,
             height: `${Math.round(34 * scale)}px`,
+            borderRadius: `${innerRadius}px`,
             backgroundColor: `${fg}14`,
           }}
         >
           <MapPin size={Math.round(16 * scale)} />
         </div>
-        <div className="min-w-0">
+        <div className="flex-1 min-w-0">
           <div
             className="font-semibold truncate leading-tight"
             style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
@@ -640,10 +715,11 @@ export const LocationShowcaseCard: React.FC<SharedBlockRenderProps> = ({
       </div>
 
       <span
-        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1"
+        className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap inline-flex items-center gap-1"
         style={{
           backgroundColor: pillBg,
           color: pillText,
+          borderRadius: `${controlRadius}px`,
         }}
       >
         <span>{cfg.buttonLabel || 'Maps'}</span>
@@ -660,6 +736,7 @@ export const LocationShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         rel="noopener noreferrer nofollow"
         onClick={() => onLinkClick?.(block)}
         className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        style={{ borderRadius: `${cardRadius}px` }}
       >
         {inner}
       </a>
@@ -682,30 +759,34 @@ export const DownloadShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   if (!cfg) return null;
   const href = block.url ? formatExternalUrl(block.url) : '#';
   const { fg, pillBg, pillText } = resolveCardPalette(surfaceStyle, tokens);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+  const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
   const inner = (
     <div
-      className="w-full flex items-center justify-between gap-2.5 select-none text-left"
+      className="w-full overflow-hidden flex items-center justify-between gap-2.5 select-none text-left"
       style={{
         ...surfaceStyle,
         color: fg,
         fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        padding: `${Math.round(11 * scale)}px ${Math.round(13 * scale)}px`,
+        borderRadius: `${cardRadius}px`,
+        padding: `${Math.round(11 * scale)}px ${Math.round(14 * scale)}px`,
       }}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-2.5 flex-1 min-w-0">
         <div
-          className="rounded-lg flex items-center justify-center shrink-0 font-mono text-[10px] font-bold"
+          className="flex items-center justify-center shrink-0 font-mono text-[10px] font-bold"
           style={{
             width: `${Math.round(36 * scale)}px`,
             height: `${Math.round(36 * scale)}px`,
+            borderRadius: `${innerRadius}px`,
             backgroundColor: `${fg}14`,
           }}
         >
           {(cfg.fileFormat || 'PDF').slice(0, 4).toUpperCase()}
         </div>
-        <div className="min-w-0">
+        <div className="flex-1 min-w-0">
           <div
             className="font-semibold truncate leading-tight"
             style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
@@ -713,16 +794,18 @@ export const DownloadShowcaseCard: React.FC<SharedBlockRenderProps> = ({
             {block.title}
           </div>
           <div className="text-[11px] opacity-80 truncate">
-            {[cfg.fileSize, cfg.description].filter(Boolean).join(' · ') || 'Instant Download'}
+            {[cfg.fileSize, cfg.description].filter(Boolean).join(' · ') ||
+              'Instant Download'}
           </div>
         </div>
       </div>
 
       <span
-        className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 inline-flex items-center gap-1"
+        className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap inline-flex items-center gap-1"
         style={{
           backgroundColor: pillBg,
           color: pillText,
+          borderRadius: `${controlRadius}px`,
         }}
       >
         <FileDown size={11} />
@@ -739,6 +822,7 @@ export const DownloadShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         rel="noopener noreferrer nofollow"
         onClick={() => onLinkClick?.(block)}
         className="w-full block transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        style={{ borderRadius: `${cardRadius}px` }}
       >
         {inner}
       </a>

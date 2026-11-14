@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ChevronRight,
-  Eye,
   Image as ImageIcon,
   Palette,
   RectangleHorizontal,
@@ -37,7 +36,6 @@ interface AppearanceTabProps {
   onPreviewFontSettingsChange?: (fonts: FontSettings | null) => void;
   onPreviewButtonColorsChange?: (colors: ButtonColors | null) => void;
   onPreviewLayoutChange?: (layout: LayoutSettings | null) => void;
-  onOpenPreview?: () => void;
 }
 
 const BUTTON_SHAPE_OPTIONS: readonly { value: ButtonShape; label: string }[] = [
@@ -87,7 +85,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   onPreviewFontSettingsChange,
   onPreviewButtonColorsChange,
   onPreviewLayoutChange,
-  onOpenPreview,
 }) => {
   const session = useIvioSession();
   const { showToast } = useToast();
@@ -716,17 +713,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
               Select a feature below to open its full editor.
             </p>
           </div>
-          {onOpenPreview && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onOpenPreview}
-              aria-label="Open live preview"
-            >
-              <Eye size={15} />
-              <span>Preview</span>
-            </Button>
-          )}
         </div>
 
         <div className="grid grid-cols-1 gap-2.5">

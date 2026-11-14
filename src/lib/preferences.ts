@@ -279,3 +279,43 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     businessCard,
   };
 }
+
+/**
+ * Resolves a safe border-radius in pixels across button shapes (square=0, rounded=12, pill=999)
+ * so tall/multi-row cards never morph into squished ovals when 'pill' is active.
+ */
+export function resolveCardBorderRadius(
+  effectiveRadius: number,
+  scale = 1,
+  variant: 'bar' | 'card' | 'inner' = 'card'
+): number {
+  const safe = Number.isFinite(effectiveRadius) ? Math.max(0, effectiveRadius) : 12;
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  if (variant === 'bar') {
+    return safe >= 999 ? 9999 : Math.round(safe * safeScale);
+  }
+  if (variant === 'inner') {
+    if (safe <= 0) return 0;
+    if (safe >= 999) return Math.round(12 * safeScale);
+    return Math.round(Math.min(safe, 10) * safeScale);
+  }
+  // 'card' variant: square stays sharp (0), rounded stays balanced, pill uses crisp 22px card radius
+  if (safe <= 0) return 0;
+  return Math.round(Math.min(safe, 22) * safeScale);
+}
+
+/**
+ * Resolves control/CTA chip border-radius inside showcase cards so inner buttons
+ * mirror square, rounded, or pill shapes cleanly.
+ */
+export function resolveButtonControlRadius(
+  effectiveRadius: number,
+  scale = 1
+): number {
+  const safe = Number.isFinite(effectiveRadius) ? Math.max(0, effectiveRadius) : 12;
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  if (safe <= 0) return 0;
+  if (safe >= 999) return 9999;
+  return Math.round(Math.min(safe, 14) * safeScale);
+}
+

@@ -22,6 +22,7 @@ import { syncProfileToFirebase } from '../lib/firebaseSync';
 export interface IveoSession {
   isLoaded: boolean;
   isSignedIn: boolean;
+  userId?: string | null;
   username: string | null;
   displayName: string;
   bio: string;
@@ -69,6 +70,7 @@ export type IvioSession = IveoSession;
 const FALLBACK_SESSION: IveoSession = {
   isLoaded: true,
   isSignedIn: false,
+  userId: null,
   username: null,
   displayName: 'Your name',
   bio: '',
@@ -388,6 +390,7 @@ function useClerkSession(): IveoSession {
     return {
       isLoaded,
       isSignedIn: false,
+      userId: null,
       username: null,
       displayName: 'Your name',
       bio: '',
@@ -440,10 +443,16 @@ function useClerkSession(): IveoSession {
         displayName: displayName || clean,
         bio,
         avatarUrl: imageUrl,
-        vibeId: preferences.vibeId,
-        buttonShape: preferences.buttonShape,
+        vibeId: vibeId || preferences.vibeId,
+        buttonShape: buttonShape ?? preferences.buttonShape,
         socials,
-        socialsPosition: preferences.socialsPosition || 'top',
+        socialsPosition: socialsPosition || preferences.socialsPosition || 'top',
+        background: effectiveBackground,
+        googleAnalyticsId,
+        metaPixelId,
+        whatsappNumber,
+        customSeoTitle,
+        customSeoDescription,
         fontSettings,
         buttonColors,
         layoutSettings,
@@ -743,6 +752,7 @@ function useClerkSession(): IveoSession {
   return {
     isLoaded: true,
     isSignedIn: true,
+    userId: currentUser.id,
     username,
     displayName,
     bio,
@@ -938,20 +948,18 @@ function useDemoSession(): IveoSession {
 }
 
 export function useIveoSession(): IveoSession {
-  if (typeof window !== 'undefined') {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('demo') === '1' || params.get('autostart') === '1') {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      return useDemoSession();
-    }
-  }
+  const isDemo =
+    typeof window !== 'undefined' &&
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('demo') === '1' || params.get('autostart') === '1';
+    })();
 
-  if (!HAS_CLERK_KEY) {
-    return FALLBACK_SESSION;
-  }
-
+  const demoSession = useDemoSession();
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useClerkSession();
+  const clerkSession = HAS_CLERK_KEY ? useClerkSession() : FALLBACK_SESSION;
+
+  return isDemo ? demoSession : clerkSession;
 }
 
 export const useIvioSession = useIveoSession;

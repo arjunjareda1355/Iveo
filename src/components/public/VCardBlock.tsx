@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { UserCheck, Download, Check, Phone, Mail, Building } from 'lucide-react';
+import { UserCheck, Download, Check } from 'lucide-react';
 import { VCardConfig } from '../../data/types';
 import { VibeTokens } from '../../lib/vibes';
 import { buildVCardString, sanitizeVCardFilename } from '../../lib/vcard';
+import {
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
+} from '../../lib/preferences';
 
 interface VCardBlockProps {
   config: VCardConfig;
@@ -10,6 +14,7 @@ interface VCardBlockProps {
   buttonRadius: number;
   fontFamily?: string;
   scale?: number;
+  surfaceStyle?: React.CSSProperties;
 }
 
 export const VCardBlock: React.FC<VCardBlockProps> = ({
@@ -18,8 +23,37 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
   buttonRadius,
   fontFamily,
   scale = 1,
+  surfaceStyle,
 }) => {
   const [downloaded, setDownloaded] = useState(false);
+  const barRadius = resolveCardBorderRadius(buttonRadius, scale, 'bar');
+  const controlRadius = resolveButtonControlRadius(buttonRadius, scale);
+
+  const baseSurface: React.CSSProperties = surfaceStyle || {
+    backgroundColor: tokens.buttonBg,
+    color: tokens.buttonText,
+    border: tokens.buttonBorder
+      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+      : '1px solid rgba(0,0,0,0.06)',
+    boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.04)',
+  };
+
+  const fg = String(baseSurface.color || tokens.buttonText || tokens.text);
+  const isLightFg =
+    fg.toUpperCase() === '#FFFFFF' ||
+    fg.toUpperCase() === '#FAFAFA' ||
+    fg.toUpperCase() === '#F8FAFC' ||
+    fg.toUpperCase() === '#F5F5F5';
+  const ctaBg = downloaded ? '#10B981' : fg;
+  const ctaText = downloaded
+    ? '#FFFFFF'
+    : typeof baseSurface.backgroundColor === 'string' &&
+        baseSurface.backgroundColor.startsWith('#') &&
+        baseSurface.backgroundColor !== 'transparent'
+      ? baseSurface.backgroundColor
+      : isLightFg
+        ? '#0A0A0A'
+        : '#FFFFFF';
 
   const handleDownloadVCard = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -49,6 +83,8 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
     setTimeout(() => setDownloaded(false), 3000);
   };
 
+  const horizPad = buttonRadius >= 999 ? Math.round(16 * scale) : Math.round(14 * scale);
+
   return (
     <div
       onClick={handleDownloadVCard}
@@ -60,40 +96,35 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
         }
       }}
       aria-label={`Save contact for ${config.fullName}`}
-      className="w-full relative flex items-center justify-between transition-all duration-150 cursor-pointer select-none group hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="w-full overflow-hidden relative flex items-center justify-between gap-2.5 transition-all duration-150 cursor-pointer select-none group hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
       style={{
         minHeight: `${Math.round(56 * scale)}px`,
-        padding: `${Math.round(10 * scale)}px ${Math.round(14 * scale)}px`,
-        backgroundColor: tokens.buttonBg,
-        color: tokens.buttonText,
+        padding: `${Math.round(10 * scale)}px ${horizPad}px`,
+        ...baseSurface,
         fontFamily,
-        borderRadius: `${Math.round(buttonRadius * scale)}px`,
-        border: tokens.buttonBorder
-          ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-          : '1px solid rgba(0,0,0,0.06)',
-        boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.04)',
+        borderRadius: `${barRadius}px`,
       }}
     >
-      <div className="flex items-center gap-3 overflow-hidden">
+      <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
         {/* Left Icon Avatar */}
         <div
-          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-medium"
+          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-medium"
           style={{
-            backgroundColor: tokens.avatarBg || tokens.text,
+            backgroundColor: tokens.avatarBg || fg,
             color: tokens.avatarText || tokens.bg,
             fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
           }}
         >
-          <UserCheck size={Math.round(20 * scale)} strokeWidth={1.75} />
+          <UserCheck size={Math.round(18 * scale)} strokeWidth={1.75} />
         </div>
 
         {/* Text Details */}
-        <div className="flex flex-col text-left overflow-hidden">
+        <div className="flex flex-col text-left flex-1 min-w-0 overflow-hidden">
           <div
             className="font-semibold truncate leading-tight"
             style={{
               fontSize: `${Math.max(13, Math.round(14 * scale))}px`,
-              color: tokens.buttonText,
+              color: fg,
             }}
           >
             {config.fullName}
@@ -113,10 +144,11 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
 
       {/* Right Action Button */}
       <div
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full font-medium text-[11px] shrink-0 transition-transform group-hover:scale-105"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 font-medium text-[11px] shrink-0 whitespace-nowrap transition-transform group-hover:scale-105"
         style={{
-          backgroundColor: downloaded ? '#10B981' : tokens.text,
-          color: downloaded ? '#FFFFFF' : tokens.bg,
+          backgroundColor: ctaBg,
+          color: ctaText,
+          borderRadius: `${controlRadius}px`,
         }}
       >
         {downloaded ? (

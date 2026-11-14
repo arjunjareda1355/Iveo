@@ -4,6 +4,7 @@ import { PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
 import { formatExternalUrl } from '../../lib/urls';
 import { storagePublicUrl } from '../../data/storageApi';
+import { resolveCardBorderRadius } from '../../lib/preferences';
 
 interface FeaturedLinkProps {
   block: PageBlock;
@@ -16,6 +17,7 @@ interface FeaturedLinkProps {
   isProtected?: boolean;
   onLinkClick?: (block: PageBlock) => void;
   onUnlock?: (block: PageBlock) => void;
+  surfaceStyle?: React.CSSProperties;
 }
 
 export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
@@ -29,27 +31,34 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
   isProtected = false,
   onLinkClick,
   onUnlock,
+  surfaceStyle,
 }) => {
   const { tokens } = vibe;
   const [imageError, setImageError] = useState(false);
+  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+
+  const baseStyle: React.CSSProperties = surfaceStyle || {
+    backgroundColor: tokens.buttonBg,
+    color: tokens.buttonText,
+    border: tokens.buttonBorder
+      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
+      : 'none',
+    boxShadow: tokens.buttonShadow || 'none',
+  };
 
   const content = (
     <div
       className="w-full relative flex flex-col overflow-hidden transition-all duration-150 select-none text-left"
       style={{
-        backgroundColor: tokens.buttonBg,
-        color: tokens.buttonText,
+        ...baseStyle,
         fontFamily: fontFamily || vibe.fontFamily,
-        borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-        border: tokens.buttonBorder
-          ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-          : 'none',
-        boxShadow: tokens.buttonShadow || 'none',
+        borderRadius: `${cardRadius}px`,
       }}
     >
       {/* 16/9 aspect-ratio image */}
       {(() => {
-        const effectiveThumbUrl = block.thumbnailUrl || (block.thumbnailPath ? storagePublicUrl(block.thumbnailPath) : null);
+        const effectiveThumbUrl =
+          block.thumbnailUrl || (block.thumbnailPath ? storagePublicUrl(block.thumbnailPath) : null);
         if (imageError || !effectiveThumbUrl) return null;
         return (
           <div className="w-full relative aspect-video overflow-hidden bg-black/5">
@@ -83,8 +92,8 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
                 style={{
                   width: `${Math.round(28 * scale)}px`,
                   height: `${Math.round(28 * scale)}px`,
-                  backgroundColor: `${tokens.bg}E6`, // 90% opacity
-                  border: `1px solid ${tokens.text}26`, // 15% opacity
+                  backgroundColor: `${tokens.bg}E6`,
+                  border: `1px solid ${tokens.text}26`,
                   color: tokens.text,
                 }}
                 aria-hidden="true"
@@ -125,7 +134,7 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
           aria-haspopup="dialog"
           aria-label={`${block.title}, password protected`}
           className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
-          style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
+          style={{ borderRadius: `${cardRadius}px` }}
         >
           {content}
         </button>
@@ -144,7 +153,7 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
         onClick={() => onLinkClick?.(block)}
         onAuxClick={() => onLinkClick?.(block)}
         className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
+        style={{ borderRadius: `${cardRadius}px` }}
       >
         {content}
       </a>

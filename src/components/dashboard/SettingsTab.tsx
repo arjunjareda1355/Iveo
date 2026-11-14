@@ -99,14 +99,16 @@ export const SettingsTab: React.FC = () => {
     setUsernameError(null);
 
     try {
-      const avail = await checkUsernameAvailability(clean, undefined, session.primaryEmail);
+      const avail = await checkUsernameAvailability(clean, session.userId || undefined, session.primaryEmail);
       if (avail.status !== 'available') {
         setUsernameError(avail.message || "That name isn't available. Try another.");
         setIsCheckingUsername(false);
         return;
       }
     } catch {
-      // Continue if network check fails
+      setUsernameError('Could not verify username availability right now. Please try again.');
+      setIsCheckingUsername(false);
+      return;
     } finally {
       setIsCheckingUsername(false);
     }

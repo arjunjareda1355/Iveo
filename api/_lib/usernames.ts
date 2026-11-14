@@ -75,11 +75,8 @@ export const PRIVATE_ROUTES = ['login', 'signup', 'dashboard', 'onboarding', 'ac
 export const PUBLIC_INFO_ROUTES = ['privacy', 'terms', 'pricing', 'legal', 'discover'];
 
 export const OWNER_EMAILS_LIST = [
-  'help@iveo.site',
   'arjunjareda2007@gmail.com',
   'arjunjareda1355@gmail.com',
-  'arjunjared1355@gmail.com',
-  'help@fanq.me',
 ];
 
 export function isPrivilegedEmailServer(email: string | null | undefined): boolean {

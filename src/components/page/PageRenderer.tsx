@@ -33,7 +33,11 @@ import { formatExternalUrl } from '../../lib/urls';
 import { storagePublicUrl } from '../../data/storageApi';
 import { getFontCssFamily, loadGoogleFonts } from '../../lib/fonts';
 import { resolveEffectiveTokens } from '../../lib/colors';
-import { DEFAULT_LAYOUT_SETTINGS } from '../../lib/preferences';
+import {
+  DEFAULT_LAYOUT_SETTINGS,
+  resolveCardBorderRadius,
+  resolveButtonControlRadius,
+} from '../../lib/preferences';
 import { getBackgroundPreset } from '../../lib/backgrounds';
 
 export interface PageRendererProps {
@@ -518,6 +522,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 fontFamily={buttonFontFamily}
                 scale={scale}
                 onLinkClick={onLinkClick}
+                surfaceStyle={buttonSurfaceStyle}
               />
             );
           }
@@ -537,16 +542,18 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             const collectMode = cfg?.collect || 'email';
             const buttonText = cfg?.button || 'Subscribe';
             const desc = cfg?.description;
-            const cardRadius = Math.min(16, effectiveRadius);
+            const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+            const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+            const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
             const numBars = collectMode === 'both' ? 2 : 1;
 
             return (
               <div
                 key={block.id}
-                className="w-full flex flex-col items-center text-center select-none"
+                className="w-full overflow-hidden flex flex-col items-center text-center select-none"
                 style={{
                   border: `1px solid ${tokens.buttonBorder || tokens.text}26`,
-                  borderRadius: `${Math.round(cardRadius * scale)}px`,
+                  borderRadius: `${cardRadius}px`,
                   padding: `${Math.round(14 * scale)}px`,
                   color: tokens.text,
                   fontFamily: buttonFontFamily,
@@ -583,7 +590,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       className="w-full"
                       style={{
                         height: `${Math.round(38 * scale)}px`,
-                        borderRadius: `${Math.round(10 * scale)}px`,
+                        borderRadius: `${innerRadius}px`,
                         border: `1px solid ${tokens.text}4D`,
                       }}
                     />
@@ -594,12 +601,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   className="w-full flex items-center justify-center font-medium truncate"
                   style={{
                     height: `${Math.round(38 * scale)}px`,
-                    borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-                    backgroundColor: tokens.buttonBg,
-                    color: tokens.buttonText,
-                    border: tokens.buttonBorder
-                      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-                      : 'none',
+                    ...buttonSurfaceStyle,
+                    borderRadius: `${controlRadius}px`,
                     fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
                   }}
                 >
@@ -619,6 +622,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   buttonRadius={effectiveRadius}
                   fontFamily={buttonFontFamily}
                   scale={scale}
+                  surfaceStyle={buttonSurfaceStyle}
                 />
               </div>
             );
@@ -635,6 +639,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   buttonRadius={effectiveRadius}
                   fontFamily={buttonFontFamily}
                   scale={scale}
+                  surfaceStyle={buttonSurfaceStyle}
                 />
               </div>
             );
@@ -650,6 +655,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   buttonRadius={effectiveRadius}
                   fontFamily={buttonFontFamily}
                   scale={scale}
+                  surfaceStyle={buttonSurfaceStyle}
                 />
               </div>
             );
@@ -660,23 +666,38 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             const coffeeUrl = block.url ? formatExternalUrl(block.url) : 'https://buymeacoffee.com';
             const coffeeMeta = block.coffee;
             const ctaLabel = coffeeMeta?.buttonLabel?.trim() || 'Support with a Coffee';
+            const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
+            const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+            const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
+            const coffeeFg = String(buttonSurfaceStyle.color || tokens.buttonText || tokens.text);
+            const isLightFg =
+              coffeeFg.toUpperCase() === '#FFFFFF' ||
+              coffeeFg.toUpperCase() === '#FAFAFA' ||
+              coffeeFg.toUpperCase() === '#F8FAFC' ||
+              coffeeFg.toUpperCase() === '#F5F5F5';
+            const ctaBg = coffeeFg;
+            const ctaColor =
+              typeof buttonSurfaceStyle.backgroundColor === 'string' &&
+              buttonSurfaceStyle.backgroundColor.startsWith('#') &&
+              buttonSurfaceStyle.backgroundColor !== 'transparent'
+                ? buttonSurfaceStyle.backgroundColor
+                : isLightFg
+                  ? '#0A0A0A'
+                  : '#FFFFFF';
+
             return (
               <div
                 key={block.id}
-                className="w-full flex flex-col items-center select-none transition-transform duration-150"
+                className="w-full overflow-hidden flex flex-col items-center select-none transition-transform duration-150"
                 style={{
-                  backgroundColor: tokens.buttonBg,
-                  color: tokens.buttonText,
+                  ...buttonSurfaceStyle,
+                  color: coffeeFg,
                   fontFamily: buttonFontFamily,
-                  borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-                  border: tokens.buttonBorder
-                    ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-                    : '1px solid rgba(0,0,0,0.08)',
+                  borderRadius: `${cardRadius}px`,
                   padding: `${Math.round(14 * scale)}px`,
-                  boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
-                <div className="flex items-center gap-2.5 mb-1 max-w-full">
+                <div className="flex items-center gap-2.5 mb-1 max-w-full min-w-0">
                   {coffeeMeta?.avatarUrl ? (
                     <img
                       src={coffeeMeta.avatarUrl}
@@ -684,7 +705,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       className="w-7 h-7 rounded-full object-cover border border-current/20 shrink-0"
                     />
                   ) : (
-                    <span className="text-[18px] leading-none">☕</span>
+                    <span className="text-[18px] leading-none shrink-0">☕</span>
                   )}
                   <span
                     className="font-semibold leading-tight truncate"
@@ -694,8 +715,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   </span>
                   {typeof coffeeMeta?.supportersCount === 'number' && coffeeMeta.supportersCount > 0 && (
                     <span
-                      className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-current/25 shrink-0"
-                      style={{ opacity: 0.9 }}
+                      className="px-2 py-0.5 text-[10px] font-semibold border border-current/25 shrink-0 whitespace-nowrap"
+                      style={{ opacity: 0.9, borderRadius: `${controlRadius}px` }}
                     >
                       {coffeeMeta.supportersCount} supporters
                     </span>
@@ -716,8 +737,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       target={isPublicPage ? '_blank' : undefined}
                       rel={isPublicPage ? 'noopener noreferrer' : undefined}
                       onClick={isPublicPage ? () => onLinkClick?.(block) : undefined}
-                      className="px-2.5 py-1 rounded-full text-[11px] font-medium border border-current/20 hover:border-current/60 transition-colors cursor-pointer"
-                      style={{ color: tokens.buttonText }}
+                      className="px-2.5 py-1 text-[11px] font-medium border border-current/20 hover:border-current/60 transition-colors cursor-pointer"
+                      style={{ color: coffeeFg, borderRadius: `${controlRadius}px` }}
                     >
                       {count} ☕ (${count * 3})
                     </a>
@@ -725,7 +746,10 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 </div>
 
                 {coffeeMeta?.recentSupporters && coffeeMeta.recentSupporters.length > 0 && (
-                  <div className="w-full mt-1 mb-1.5 px-2.5 py-1.5 rounded-lg border border-current/15 text-[11px] opacity-85 text-center truncate">
+                  <div
+                    className="w-full mt-1 mb-1.5 px-2.5 py-1.5 border border-current/15 text-[11px] opacity-85 text-center truncate"
+                    style={{ borderRadius: `${innerRadius}px` }}
+                  >
                     ☕ Latest:{' '}
                     <strong>
                       {coffeeMeta.recentSupporters[0].supporterName ||
@@ -747,8 +771,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                         href={isPublicPage ? extra.url || coffeeUrl : undefined}
                         target={isPublicPage ? '_blank' : undefined}
                         rel={isPublicPage ? 'noopener noreferrer' : undefined}
-                        className="px-2 py-0.5 rounded-md border border-current/20 text-[10px] font-medium opacity-90 hover:opacity-100"
-                        style={{ color: tokens.buttonText }}
+                        className="px-2 py-0.5 border border-current/20 text-[10px] font-medium opacity-90 hover:opacity-100"
+                        style={{ color: coffeeFg, borderRadius: `${innerRadius}px` }}
                       >
                         ★ {extra.title}
                         {extra.price ? ` · ${extra.price}` : ''}
@@ -763,20 +787,22 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => onLinkClick?.(block)}
-                    className="mt-1 w-full py-2 px-3 text-center rounded-[10px] text-[13px] font-semibold transition-transform active:scale-[0.98]"
+                    className="mt-1 w-full py-2 px-3 text-center text-[13px] font-semibold transition-transform active:scale-[0.98]"
                     style={{
-                      backgroundColor: tokens.buttonText,
-                      color: tokens.buttonBg,
+                      backgroundColor: ctaBg,
+                      color: ctaColor,
+                      borderRadius: `${controlRadius}px`,
                     }}
                   >
                     {ctaLabel}
                   </a>
                 ) : (
                   <div
-                    className="mt-1 w-full py-2 px-3 text-center rounded-[10px] text-[13px] font-semibold"
+                    className="mt-1 w-full py-2 px-3 text-center text-[13px] font-semibold"
                     style={{
-                      backgroundColor: tokens.buttonText,
-                      color: tokens.buttonBg,
+                      backgroundColor: ctaBg,
+                      color: ctaColor,
+                      borderRadius: `${controlRadius}px`,
                     }}
                   >
                     {ctaLabel}
@@ -789,30 +815,51 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           // 4f. Instagram Showcase Block
           if (block.kind === 'instagram') {
             const igUrl = block.url ? formatExternalUrl(block.url) : 'https://instagram.com';
+            const barRadius = resolveCardBorderRadius(effectiveRadius, scale, 'bar');
+            const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
+            const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
+            const igFg = String(buttonSurfaceStyle.color || tokens.buttonText || tokens.text);
+            const isLightFg =
+              igFg.toUpperCase() === '#FFFFFF' ||
+              igFg.toUpperCase() === '#FAFAFA' ||
+              igFg.toUpperCase() === '#F8FAFC' ||
+              igFg.toUpperCase() === '#F5F5F5';
+            const ctaBg = igFg;
+            const ctaColor =
+              typeof buttonSurfaceStyle.backgroundColor === 'string' &&
+              buttonSurfaceStyle.backgroundColor.startsWith('#') &&
+              buttonSurfaceStyle.backgroundColor !== 'transparent'
+                ? buttonSurfaceStyle.backgroundColor
+                : isLightFg
+                  ? '#0A0A0A'
+                  : '#FFFFFF';
+            const igHorizPad = effectiveRadius >= 999 ? Math.round(16 * scale) : Math.round(12 * scale);
+
             return (
               <div
                 key={block.id}
-                className="w-full flex items-center justify-between transition-all duration-150 select-none"
+                className="w-full overflow-hidden flex items-center justify-between gap-2.5 transition-all duration-150 select-none"
                 style={{
-                  backgroundColor: tokens.buttonBg,
-                  color: tokens.buttonText,
+                  ...buttonSurfaceStyle,
+                  color: igFg,
                   fontFamily: buttonFontFamily,
-                  borderRadius: `${Math.round(effectiveRadius * scale)}px`,
-                  border: tokens.buttonBorder
-                    ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-                    : '1px solid rgba(0,0,0,0.08)',
-                  padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
-                  boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.05)',
+                  borderRadius: `${barRadius}px`,
+                  padding: `${Math.round(10 * scale)}px ${igHorizPad}px`,
                 }}
               >
-                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
+                  <div
+                    className="w-8 h-8 bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-xs"
+                    style={{
+                      borderRadius: effectiveRadius >= 999 ? '9999px' : `${innerRadius}px`,
+                    }}
+                  >
                     <Instagram size={16} strokeWidth={2} />
                   </div>
-                  <div className="flex flex-col min-w-0">
+                  <div className="flex flex-col flex-1 min-w-0">
                     <span
                       className="font-semibold truncate text-[13px] leading-tight"
-                      style={{ color: tokens.buttonText }}
+                      style={{ color: igFg }}
                     >
                       {block.title || 'Instagram'}
                     </span>
@@ -828,20 +875,22 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => onLinkClick?.(block)}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-transform active:scale-95"
+                    className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap transition-transform active:scale-95"
                     style={{
-                      backgroundColor: tokens.buttonText,
-                      color: tokens.buttonBg,
+                      backgroundColor: ctaBg,
+                      color: ctaColor,
+                      borderRadius: `${controlRadius}px`,
                     }}
                   >
                     Follow
                   </a>
                 ) : (
                   <span
-                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0"
+                    className="px-2.5 py-1 text-[11px] font-semibold shrink-0 whitespace-nowrap"
                     style={{
-                      backgroundColor: tokens.buttonText,
-                      color: tokens.buttonBg,
+                      backgroundColor: ctaBg,
+                      color: ctaColor,
+                      borderRadius: `${controlRadius}px`,
                     }}
                   >
                     Follow
@@ -989,6 +1038,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 isProtected={isProtected}
                 onLinkClick={onLinkClick}
                 onUnlock={onUnlock}
+                surfaceStyle={buttonSurfaceStyle}
               />
             );
           }
@@ -1002,15 +1052,20 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           if (hasThumb) imageCounter++;
           const isEager = hasThumb && imageCounter <= 2;
           const thumbSize = isPublicPage ? 40 : Math.round(32 * scale);
-          const thumbRadius = Math.min(8, effectiveRadius);
+          const thumbRadius =
+            effectiveRadius >= 999
+              ? 9999
+              : resolveCardBorderRadius(effectiveRadius, 1, 'inner');
           const lockSize = isPublicPage ? 16 : Math.round(14 * scale);
+          const barRadius = resolveCardBorderRadius(effectiveRadius, scale, 'bar');
 
           // Space reservation for centered text with icon/thumb on left and optional lock on right
+          const baseSidePad = effectiveRadius >= 999 ? Math.round(18 * scale) : Math.round(14 * scale);
           const sidePadding = isProtected
-            ? Math.max(hasThumb ? thumbSize + 16 : Math.round(36 * scale), Math.round(36 * scale))
+            ? Math.max(hasThumb ? thumbSize + 18 : Math.round(38 * scale), Math.round(38 * scale))
             : hasThumb
-            ? thumbSize + 16
-            : Math.round(14 * scale);
+            ? thumbSize + 18
+            : baseSidePad;
 
           const animClass =
             block.animation === 'pulse'
@@ -1034,7 +1089,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 paddingRight: `${sidePadding}px`,
                 ...classicSurfaceStyle,
                 fontFamily: buttonFontFamily,
-                borderRadius: `${Math.round(effectiveRadius * scale)}px`,
+                borderRadius: `${barRadius}px`,
                 fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
                 fontWeight: 500,
               }}
@@ -1088,7 +1143,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               {isProtected && (
                 <span
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0 opacity-80"
-                  style={{ color: tokens.buttonText }}
+                  style={{ color: String(classicSurfaceStyle.color || tokens.buttonText) }}
                   aria-hidden="true"
                 >
                   <Lock size={lockSize} strokeWidth={1.5} />
@@ -1108,7 +1163,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   aria-haspopup="dialog"
                   aria-label={`${block.title}, password protected`}
                   className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
-                  style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
+                  style={{ borderRadius: `${barRadius}px` }}
                 >
                   {innerButton}
                 </button>
@@ -1128,7 +1183,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 onClick={() => onLinkClick?.(block)}
                 onAuxClick={() => onLinkClick?.(block)}
                 className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ borderRadius: `${Math.round(effectiveRadius * scale)}px` }}
+                style={{ borderRadius: `${barRadius}px` }}
               >
                 {innerButton}
               </a>

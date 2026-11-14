@@ -24,6 +24,7 @@ export const DiscoverPage: React.FC = () => {
   const initialQuery = searchParams.get('q') || '';
   const [query, setQuery] = useState(initialQuery);
   const [profiles, setProfiles] = useState<DiscoverProfile[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [failedAvatars, setFailedAvatars] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export const DiscoverPage: React.FC = () => {
           return;
         }
         setProfiles(data.profiles);
+        setTotalCount(typeof data.totalCount === 'number' ? data.totalCount : data.profiles.length);
       } catch {
         if (active) setError('Network error while loading creator directory.');
       } finally {
@@ -124,6 +126,13 @@ export const DiscoverPage: React.FC = () => {
                 className="w-full h-11 pl-10 pr-4 bg-surface border border-border rounded-xl text-[14px] text-ink placeholder:text-subtle focus-visible:outline-2 focus-visible:outline-ink shadow-2xs"
               />
             </div>
+            {!isLoading && !error && profiles.length > 0 && !query.trim() && (
+              <p className="mt-3 text-[13px] text-muted">
+                {totalCount > profiles.length
+                  ? `Showing ${profiles.length} featured creators out of ${totalCount} — search above to find any creator on Iveo.`
+                  : `Showing ${profiles.length} creator${profiles.length === 1 ? '' : 's'} on Iveo.`}
+              </p>
+            )}
           </div>
 
           {isLoading ? (
