@@ -51,8 +51,9 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
   let trimmed = input.trim();
   if (!trimmed) return null;
 
-  // Prepend https:// if no scheme is provided
-  if (!/^https?:\/\//i.test(trimmed)) {
+  // Upgrade http:// or missing scheme to https://
+  trimmed = trimmed.replace(/^http:\/\//i, 'https://');
+  if (!/^https:\/\//i.test(trimmed)) {
     trimmed = 'https://' + trimmed;
   }
 
@@ -70,7 +71,7 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
   const host = parsed.hostname.toLowerCase();
 
   // 1. YouTube
-  if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(host)) {
+  if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'].includes(host)) {
     let videoId: string | null = null;
     const pathname = parsed.pathname;
 
@@ -85,7 +86,7 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
         videoId = v;
       }
     } else {
-      const match = pathname.match(/^\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})/);
+      const match = pathname.match(/^\/(?:shorts|embed|live|v)\/([A-Za-z0-9_-]{11})/);
       if (match && YOUTUBE_ID_REGEX.test(match[1])) {
         videoId = match[1];
       }

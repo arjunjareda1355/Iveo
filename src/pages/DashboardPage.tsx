@@ -399,6 +399,7 @@ const DashboardContent: React.FC = () => {
           fontSettings={previewFontSettings}
           buttonColors={previewButtonColors}
           businessCard={session.businessCard}
+          socials={session.socials}
           onSaveCardConfig={async (cfg) => {
             await session.updatePreferences({ businessCard: cfg });
           }}

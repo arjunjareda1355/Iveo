@@ -69,9 +69,73 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
       ? yt.latestVideos.slice(0, 3)
       : [];
   const { fg } = resolveCardPalette(surfaceStyle, tokens);
+  const upperFg = fg.toUpperCase();
+  const isLightFg =
+    upperFg === '#FFFFFF' ||
+    upperFg === '#FAFAFA' ||
+    upperFg === '#F8FAFC' ||
+    upperFg === '#F5F5F5';
   const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
   const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
   const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
+
+  const channelIdentity = (
+    <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
+      {yt?.avatarUrl ? (
+        <img
+          src={yt.avatarUrl}
+          alt={block.title || 'YouTube'}
+          referrerPolicy="no-referrer"
+          className="object-cover shrink-0 border border-current/20"
+          style={{
+            width: `${Math.round(36 * scale)}px`,
+            height: `${Math.round(36 * scale)}px`,
+            borderRadius: '9999px',
+          }}
+        />
+      ) : (
+        <div
+          className="bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs"
+          style={{
+            width: `${Math.round(34 * scale)}px`,
+            height: `${Math.round(34 * scale)}px`,
+            borderRadius: `${innerRadius}px`,
+          }}
+        >
+          <Youtube size={Math.round(16 * scale)} strokeWidth={2} />
+        </div>
+      )}
+
+      <div className="flex flex-col flex-1 min-w-0 text-left">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className="font-semibold truncate leading-tight"
+            style={{
+              fontSize: `${Math.max(12, Math.round(13.5 * scale))}px`,
+              color: fg,
+            }}
+          >
+            {block.title || yt?.channelTitle || 'YouTube Channel'}
+          </span>
+          {yt?.subscriberText && (
+            <span
+              className={`px-1.5 py-0.5 text-[9px] font-semibold shrink-0 whitespace-nowrap border ${
+                isLightFg
+                  ? 'bg-red-500/25 text-red-100 border-red-400/35'
+                  : 'bg-red-600/12 text-red-700 border-red-600/20'
+              }`}
+              style={{ borderRadius: `${controlRadius}px` }}
+            >
+              {yt.subscriberText}
+            </span>
+          )}
+        </div>
+        <span className="text-[11px] opacity-75 truncate">
+          {block.badge || yt?.handle || 'Subscribe for new videos'}
+        </span>
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -85,57 +149,19 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
       }}
     >
       <div className="w-full flex items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
-          {yt?.avatarUrl ? (
-            <img
-              src={yt.avatarUrl}
-              alt={block.title || 'YouTube'}
-              referrerPolicy="no-referrer"
-              className="object-cover shrink-0 border border-current/20"
-              style={{
-                width: `${Math.round(36 * scale)}px`,
-                height: `${Math.round(36 * scale)}px`,
-                borderRadius: '9999px',
-              }}
-            />
-          ) : (
-            <div
-              className="bg-red-600 flex items-center justify-center text-white shrink-0 shadow-xs"
-              style={{
-                width: `${Math.round(34 * scale)}px`,
-                height: `${Math.round(34 * scale)}px`,
-                borderRadius: `${innerRadius}px`,
-              }}
-            >
-              <Youtube size={Math.round(16 * scale)} strokeWidth={2} />
-            </div>
-          )}
-
-          <div className="flex flex-col flex-1 min-w-0 text-left">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span
-                className="font-semibold truncate leading-tight"
-                style={{
-                  fontSize: `${Math.max(12, Math.round(13.5 * scale))}px`,
-                  color: fg,
-                }}
-              >
-                {block.title || yt?.channelTitle || 'YouTube Channel'}
-              </span>
-              {yt?.subscriberText && (
-                <span
-                  className="px-1.5 py-0.5 text-[9px] font-semibold bg-red-600/15 text-red-500 border border-red-500/20 shrink-0 whitespace-nowrap"
-                  style={{ borderRadius: `${controlRadius}px` }}
-                >
-                  {yt.subscriberText}
-                </span>
-              )}
-            </div>
-            <span className="text-[11px] opacity-75 truncate">
-              {block.badge || yt?.handle || 'Subscribe for new videos'}
-            </span>
-          </div>
-        </div>
+        {isPublicPage ? (
+          <a
+            href={ytUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onLinkClick?.(block)}
+            className="flex-1 min-w-0 flex items-center hover:opacity-85 transition-opacity"
+          >
+            {channelIdentity}
+          </a>
+        ) : (
+          channelIdentity
+        )}
 
         {isPublicPage ? (
           <a

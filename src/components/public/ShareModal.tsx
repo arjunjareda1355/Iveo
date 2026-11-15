@@ -38,6 +38,7 @@ interface ShareModalProps {
   bio?: string;
   avatarUrl?: string | null;
   vibe?: Vibe;
+  socials?: Record<string, string> | null;
   businessCard?: BusinessCardConfig | null;
   isPro?: boolean;
 }
@@ -50,10 +51,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   bio,
   avatarUrl,
   vibe,
+  socials,
   businessCard,
   isPro = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
+  const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
   const [copied, setCopied] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
   const [downloadedCard, setDownloadedCard] = useState(false);
@@ -172,7 +175,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     buttonBg: vibe?.tokens?.buttonBg || '#4F46E5',
   };
 
-  const handleDownloadCardPng = async () => {
+  const handleDownloadCardPng = async (exportSide: 'front' | 'back' | 'both' = cardSide) => {
     setIsGeneratingCard(true);
     setCardError(null);
     try {
@@ -182,8 +185,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         bio,
         pageUrl,
         avatarUrl,
+        socials,
         isPro,
         qrDataUrl: qrPngUrl,
+        side: exportSide,
         theme: cardTheme,
         cardConfig,
       });
@@ -207,8 +212,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           bio,
           pageUrl,
           avatarUrl,
+          socials,
           isPro,
           qrDataUrl: qrPngUrl,
+          side: cardSide,
           theme: cardTheme,
           cardConfig,
         });
@@ -480,8 +487,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               displayName={displayName || cleanUsername}
               bio={bio}
               avatarUrl={avatarUrl}
+              socials={socials}
               isPro={isPro}
               qrDataUrl={qrPngUrl}
+              side={cardSide}
+              onSideChange={setCardSide}
               vibeTheme={cardTheme}
               config={cardConfig}
             />
@@ -489,36 +499,53 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             <BusinessCardCustomizer
               value={cardConfig}
               onChange={setCardConfig}
+              onSelectSide={setCardSide}
             />
 
             <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleSaveContact}
-                className="w-full py-2.5 px-4 rounded-xl bg-ink text-white font-medium text-[13px] flex items-center justify-center gap-2 hover:bg-ink/90 active:scale-[0.98] transition-all cursor-pointer shadow-xs"
-              >
-                <Contact size={16} />
-                <span>Save to Phone Contacts (.vcf)</span>
-              </button>
-
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={handleDownloadCardPng}
+                  onClick={() => handleDownloadCardPng(cardSide)}
                   disabled={isGeneratingCard}
-                  className="py-2.5 px-3 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink font-medium text-[12px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  className="py-2.5 px-3 rounded-xl bg-ink text-white font-medium text-[12px] flex items-center justify-center gap-1.5 hover:bg-ink/90 active:scale-[0.98] transition-all cursor-pointer shadow-xs disabled:opacity-50"
                 >
                   {downloadedCard ? (
                     <>
-                      <Check size={14} className="text-emerald-600" />
-                      <span>Downloaded HD PNG</span>
+                      <Check size={14} className="text-emerald-400" />
+                      <span>Downloaded!</span>
                     </>
                   ) : (
                     <>
                       <Download size={14} />
-                      <span>{isGeneratingCard ? 'Rendering HD...' : 'Download HD PNG'}</span>
+                      <span>
+                        {isGeneratingCard
+                          ? 'Rendering HD...'
+                          : `Download ${cardSide === 'front' ? 'Front' : 'Back'}`}
+                      </span>
                     </>
                   )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDownloadCardPng('both')}
+                  disabled={isGeneratingCard}
+                  className="py-2.5 px-3 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink font-medium text-[12px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Download size={14} />
+                  <span>Both Sides Sheet</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveContact}
+                  className="py-2.5 px-3 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink font-medium text-[12px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Contact size={14} />
+                  <span>Save Contact (.vcf)</span>
                 </button>
 
                 <button
@@ -545,7 +572,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               )}
 
               <p className="text-center text-[11px] text-muted mt-1 leading-normal">
-                Exports a pixel-true 2040×1200 PNG card matching your preview with a scannable QR code.
+                Exports pixel-true 2040×1200 PNGs for Front &amp; Back with metallic finish, QR code &amp; social links.
               </p>
             </div>
           </div>

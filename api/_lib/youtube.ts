@@ -26,15 +26,25 @@ export interface ParsedYouTubeInput {
 }
 
 const cache = new Map<string, { data: YouTubeShowcaseData; expiresAt: number }>();
-const CACHE_TTL_MS = 120_000;
+const CACHE_TTL_MS = 180_000;
+
+const YT_FETCH_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  Cookie:
+    'SOCS=CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzEaAmVuIAEaBgiA_LyaBg; CONSENT=YES+cb.20210328-17-p0.en+FX+667',
+};
 
 export function parseYouTubeInput(raw: string): ParsedYouTubeInput | null {
   const trimmed = (raw || '').trim();
   if (!trimmed) return null;
 
-  // Bare @handle
-  if (trimmed.startsWith('@') && !trimmed.includes('://') && !trimmed.includes('/')) {
-    const clean = trimmed.replace(/[^@a-zA-Z0-9._-]/g, '');
+  // Bare @handle (possibly with query params stripped)
+  if (trimmed.startsWith('@') && !trimmed.includes('://')) {
+    const firstPart = trimmed.split(/[/?#]/)[0];
+    const clean = firstPart.replace(/[^@a-zA-Z0-9._-]/g, '');
     if (clean.length < 2) return null;
     return {
       kind: 'handle',
@@ -55,7 +65,11 @@ export function parseYouTubeInput(raw: string): ParsedYouTubeInput | null {
   const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
     const parsed = new URL(withProto);
-    const host = parsed.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+    const host = parsed.hostname
+      .toLowerCase()
+      .replace(/^www\./, '')
+      .replace(/^m\./, '')
+      .replace(/^music\./, '');
     if (host !== 'youtube.com' && host !== 'youtu.be' && host !== 'youtube-nocookie.com') {
       return null;
     }
@@ -80,15 +94,10 @@ export function parseYouTubeInput(raw: string): ParsedYouTubeInput | null {
       };
     }
 
-    if (parts[0] === 'shorts' && parts[1]) {
-      return {
-        kind: 'video',
-        value: parts[1],
-        canonicalUrl: `https://www.youtube.com/watch?v=${parts[1]}`,
-      };
-    }
-
-    if (parts[0] === 'live' && parts[1]) {
+    if (
+      (parts[0] === 'shorts' || parts[0] === 'live' || parts[0] === 'embed' || parts[0] === 'v') &&
+      parts[1]
+    ) {
       return {
         kind: 'video',
         value: parts[1],
@@ -120,7 +129,7 @@ export function parseYouTubeInput(raw: string): ParsedYouTubeInput | null {
       };
     }
 
-    if (parts[0]) {
+    if (parts[0] && parts[0] !== 'playlist' && parts[0] !== 'feed' && parts[0] !== 'results') {
       return {
         kind: 'custom',
         value: parts[0],
@@ -150,19 +159,56 @@ function decodeXmlEntities(str: string): string {
 
 function formatCountCompact(rawCount: string | number | null | undefined): string | null {
   if (rawCount === null || rawCount === undefined) return null;
-  const num = typeof rawCount === 'number' ? rawCount : parseInt(String(rawCount).replace(/\D/g, ''), 10);
+  const num =
+    typeof rawCount === 'number'
+      ? rawCount
+      : parseInt(String(rawCount).replace(/\D/g, ''), 10);
   if (!Number.isFinite(num) || num <= 0) return null;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M subscribers`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}K subscribers`;
+  if (num >= 1_000_000) {
+    return `${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M subscribers`;
+  }
+  if (num >= 1_000) {
+    return `${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}K subscribers`;
+  }
   return `${num} subscriber${num === 1 ? '' : 's'}`;
+}
+
+export function extractSubscriberCountFromHtml(html: string): string | null {
+  if (!html) return null;
+  // Modern YouTube Polymer header view model: pageHeaderViewModel -> contentMetadataViewModel
+  const modernMatch = html.match(
+    /"metadataParts"\s*:\s*\[[^\]]*?"content"\s*:\s*"([0-9.,]+\s*[KMB]?\s+subscribers?)"/i
+  );
+  if (modernMatch?.[1]) {
+    return decodeXmlEntities(modernMatch[1]);
+  }
+
+  // Fallback inside contentMetadataViewModel block
+  const rowMatch = html.match(/"text"\s*:\s*\{\s*"content"\s*:\s*"([0-9.,]+[KMB]?\s+subscribers?)"/i);
+  if (rowMatch?.[1]) {
+    return decodeXmlEntities(rowMatch[1]);
+  }
+
+  // Classic c4TabbedHeaderRenderer
+  const classicMatch = html.match(
+    /"subscriberCountText"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([0-9.,]+[KMB]?\s+subscribers?)"/i
+  );
+  if (classicMatch?.[1]) {
+    return decodeXmlEntities(classicMatch[1]);
+  }
+
+  return null;
 }
 
 async function fetchRssFeedVideos(channelId: string): Promise<YouTubeVideoItem[]> {
   try {
-    const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`, {
-      signal: AbortSignal.timeout(4500),
-      headers: { 'User-Agent': 'iveo-showcase/1.0' },
-    });
+    const res = await fetch(
+      `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`,
+      {
+        signal: AbortSignal.timeout(4500),
+        headers: { 'User-Agent': 'iveo-showcase/1.0' },
+      }
+    );
     if (!res.ok) return [];
     const xml = await res.text();
     const entries = xml.match(/<entry>[\s\S]*?<\/entry>/gi) || [];
@@ -178,7 +224,8 @@ async function fetchRssFeedVideos(channelId: string): Promise<YouTubeVideoItem[]
         videoId,
         title: titleMatch?.[1] ? decodeXmlEntities(titleMatch[1]) : 'Watch on YouTube',
         url: `https://www.youtube.com/watch?v=${videoId}`,
-        thumbnailUrl: thumbMatch?.[1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        thumbnailUrl:
+          thumbMatch?.[1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
         publishedAt: pubMatch?.[1] || null,
       });
     }
@@ -188,56 +235,12 @@ async function fetchRssFeedVideos(channelId: string): Promise<YouTubeVideoItem[]
   }
 }
 
-export async function fetchYouTubeShowcase(rawInput: string): Promise<YouTubeShowcaseData | null> {
-  const parsed = parseYouTubeInput(rawInput);
-  if (!parsed) return null;
-
-  const cached = cache.get(parsed.canonicalUrl);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  // Video URL -> oEmbed + optional channel lookup
-  if (parsed.kind === 'video') {
-    try {
-      const oembedRes = await fetch(
-        `https://www.youtube.com/oembed?url=${encodeURIComponent(parsed.canonicalUrl)}&format=json`,
-        { signal: AbortSignal.timeout(4500) }
-      );
-      if (oembedRes.ok) {
-        const json: any = await oembedRes.json();
-        const authorUrl = typeof json.author_url === 'string' ? json.author_url : parsed.canonicalUrl;
-        const result: YouTubeShowcaseData = {
-          channelId: null,
-          channelTitle: json.author_name || 'YouTube Creator',
-          handle: authorUrl.includes('/@') ? `@${authorUrl.split('/@')[1].split('/')[0]}` : null,
-          avatarUrl: null,
-          subscriberCountText: null,
-          channelUrl: authorUrl,
-          latestVideos: [
-            {
-              videoId: parsed.value,
-              title: json.title || 'Featured Video',
-              url: parsed.canonicalUrl,
-              thumbnailUrl: json.thumbnail_url || `https://i.ytimg.com/vi/${parsed.value}/hqdefault.jpg`,
-            },
-          ],
-          source: 'oembed',
-        };
-        cache.set(parsed.canonicalUrl, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-        return result;
-      }
-    } catch {}
-  }
-
-  // Channel URL / @handle / UC... -> Fetch channel HTML + RSS feed
+async function fetchChannelDetailsByUrl(
+  parsed: ParsedYouTubeInput
+): Promise<YouTubeShowcaseData> {
   try {
     const res = await fetch(parsed.canonicalUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        Accept: 'text/html,application/xhtml+xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+      headers: YT_FETCH_HEADERS,
       redirect: 'follow',
       signal: AbortSignal.timeout(5500),
     });
@@ -247,36 +250,42 @@ export async function fetchYouTubeShowcase(rawInput: string): Promise<YouTubeSho
       const channelIdMatch =
         html.match(/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/) ||
         html.match(/<meta\s+itemprop="identifier"\s+content="(UC[a-zA-Z0-9_-]{20,26})"/i) ||
-        html.match(/channel_id=(UC[a-zA-Z0-9_-]{20,26})/);
+        html.match(/channel_id=(UC[a-zA-Z0-9_-]{20,26})/) ||
+        html.match(/"browseId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/);
 
       const ogTitle =
         html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1] ||
         html.match(/<meta\s+name="title"\s+content="([^"]+)"/i)?.[1];
       const ogImage = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1];
-      const subMatch = html.match(/"subscriberCountText"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"/);
+      const handleFromUrl =
+        html.match(/"vanityChannelUrl"\s*:\s*"https?:\/\/(?:www\.)?youtube\.com\/(@[^"]+)"/i)?.[1] ||
+        html.match(/"canonicalBaseUrl"\s*:\s*"\/(@[^"]+)"/i)?.[1];
 
-      const channelId = channelIdMatch?.[1] || (parsed.kind === 'channel_id' ? parsed.value : null);
+      const subscriberCountText = extractSubscriberCountFromHtml(html);
+      const channelId =
+        channelIdMatch?.[1] || (parsed.kind === 'channel_id' ? parsed.value : null);
       const latestVideos = channelId ? await fetchRssFeedVideos(channelId) : [];
 
-      const result: YouTubeShowcaseData = {
+      return {
         channelId,
-        channelTitle: ogTitle ? decodeXmlEntities(ogTitle).replace(/\s*-\s*YouTube$/i, '') : parsed.value,
-        handle: parsed.kind === 'handle' ? parsed.value : null,
+        channelTitle: ogTitle
+          ? decodeXmlEntities(ogTitle).replace(/\s*-\s*YouTube$/i, '')
+          : parsed.value.replace(/^@/, ''),
+        handle: handleFromUrl || (parsed.kind === 'handle' ? parsed.value : null),
         avatarUrl: ogImage ? decodeXmlEntities(ogImage) : null,
-        subscriberCountText: subMatch?.[1] ? decodeXmlEntities(subMatch[1]) : null,
-        channelUrl: parsed.canonicalUrl,
+        subscriberCountText,
+        channelUrl: handleFromUrl
+          ? `https://www.youtube.com/${handleFromUrl}`
+          : parsed.canonicalUrl,
         latestVideos,
         source: latestVideos.length > 0 ? 'channel_rss' : 'manual',
       };
-
-      cache.set(parsed.canonicalUrl, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-      return result;
     }
   } catch {}
 
   if (parsed.kind === 'channel_id') {
     const videos = await fetchRssFeedVideos(parsed.value);
-    const fallbackData: YouTubeShowcaseData = {
+    return {
       channelId: parsed.value,
       channelTitle: videos[0]?.title ? 'YouTube Channel' : parsed.value,
       handle: null,
@@ -286,7 +295,6 @@ export async function fetchYouTubeShowcase(rawInput: string): Promise<YouTubeSho
       latestVideos: videos,
       source: videos.length > 0 ? 'channel_rss' : 'manual',
     };
-    return fallbackData;
   }
 
   return {
@@ -301,7 +309,84 @@ export async function fetchYouTubeShowcase(rawInput: string): Promise<YouTubeSho
   };
 }
 
-export function getGoogleOAuthCredentials(): { clientId: string; clientSecret: string } | null {
+export async function fetchYouTubeShowcase(
+  rawInput: string
+): Promise<YouTubeShowcaseData | null> {
+  const parsed = parseYouTubeInput(rawInput);
+  if (!parsed) return null;
+
+  const cached = cache.get(parsed.canonicalUrl);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  // Video URL -> oEmbed + enrich channel avatar, handle, subscriber count & latest uploads
+  if (parsed.kind === 'video') {
+    try {
+      const oembedRes = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(parsed.canonicalUrl)}&format=json`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (oembedRes.ok) {
+        const json: any = await oembedRes.json();
+        const authorUrl =
+          typeof json.author_url === 'string' && json.author_url.startsWith('http')
+            ? json.author_url
+            : null;
+        const featuredVideo: YouTubeVideoItem = {
+          videoId: parsed.value,
+          title: json.title || 'Featured Video',
+          url: parsed.canonicalUrl,
+          thumbnailUrl:
+            json.thumbnail_url || `https://i.ytimg.com/vi/${parsed.value}/hqdefault.jpg`,
+        };
+
+        let channelMeta: YouTubeShowcaseData | null = null;
+        if (authorUrl) {
+          const parsedChannel = parseYouTubeInput(authorUrl);
+          if (parsedChannel) {
+            channelMeta = await fetchChannelDetailsByUrl(parsedChannel);
+          }
+        }
+
+        const otherVideos = (channelMeta?.latestVideos || []).filter(
+          (v) => v.videoId !== parsed.value
+        );
+        const result: YouTubeShowcaseData = {
+          channelId: channelMeta?.channelId || null,
+          channelTitle: channelMeta?.channelTitle || json.author_name || 'YouTube Creator',
+          handle:
+            channelMeta?.handle ||
+            (authorUrl && authorUrl.includes('/@')
+              ? `@${authorUrl.split('/@')[1].split('/')[0]}`
+              : null),
+          avatarUrl: channelMeta?.avatarUrl || null,
+          subscriberCountText: channelMeta?.subscriberCountText || null,
+          channelUrl: authorUrl || parsed.canonicalUrl,
+          latestVideos: [featuredVideo, ...otherVideos].slice(0, 3),
+          source: channelMeta?.channelId ? 'channel_rss' : 'oembed',
+        };
+        cache.set(parsed.canonicalUrl, {
+          data: result,
+          expiresAt: Date.now() + CACHE_TTL_MS,
+        });
+        return result;
+      }
+    } catch {}
+  }
+
+  const result = await fetchChannelDetailsByUrl(parsed);
+  cache.set(parsed.canonicalUrl, {
+    data: result,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+  return result;
+}
+
+export function getGoogleOAuthCredentials(): {
+  clientId: string;
+  clientSecret: string;
+} | null {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) return null;
@@ -309,17 +394,30 @@ export function getGoogleOAuthCredentials(): { clientId: string; clientSecret: s
 }
 
 export function resolveYouTubeOAuthRedirectUri(requestOrigin?: string): string {
+  const cleanOrigin =
+    requestOrigin && /^https?:\/\//i.test(requestOrigin.trim())
+      ? requestOrigin.trim().replace(/\/+$/, '')
+      : null;
   const appUrl = process.env.APP_URL?.trim();
-  const base = (appUrl && /^https?:\/\//i.test(appUrl) ? appUrl : requestOrigin || 'https://iveo.site').replace(/\/+$/, '');
+  const cleanAppUrl =
+    appUrl && /^https?:\/\//i.test(appUrl) ? appUrl.replace(/\/+$/, '') : null;
+
+  // Prefer the actual live request origin so OAuth callbacks return to the exact host
+  // where the popup opener lives (localhost, AI Studio preview, or iveo.site).
+  const base = cleanOrigin || cleanAppUrl || 'https://iveo.site';
   return `${base}/api/oauth/youtube/callback`;
 }
 
-export function buildYouTubeOAuthUrl(requestOrigin?: string): { url: string; redirectUri: string } | null {
+export function buildYouTubeOAuthUrl(
+  requestOrigin?: string
+): { url: string; redirectUri: string } | null {
   const creds = getGoogleOAuthCredentials();
   if (!creds) return null;
 
   const redirectUri = resolveYouTubeOAuthRedirectUri(requestOrigin);
-  const statePayload = Buffer.from(JSON.stringify({ r: redirectUri }), 'utf8').toString('base64url');
+  const statePayload = Buffer.from(JSON.stringify({ r: redirectUri }), 'utf8').toString(
+    'base64url'
+  );
 
   const params = new URLSearchParams({
     client_id: creds.clientId,
@@ -338,7 +436,10 @@ export function buildYouTubeOAuthUrl(requestOrigin?: string): { url: string; red
   };
 }
 
-export function parseRedirectUriFromState(stateParam?: string, fallbackOrigin?: string): string {
+export function parseRedirectUriFromState(
+  stateParam?: string,
+  fallbackOrigin?: string
+): string {
   if (stateParam) {
     try {
       const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf8'));
@@ -374,7 +475,11 @@ export async function exchangeYouTubeOAuthCode(
 
   const tokenJson: any = await tokenRes.json().catch(() => ({}));
   if (!tokenRes.ok || !tokenJson?.access_token) {
-    throw new Error(tokenJson?.error_description || tokenJson?.error || 'Failed to exchange Google OAuth code.');
+    throw new Error(
+      tokenJson?.error_description ||
+        tokenJson?.error ||
+        'Failed to exchange Google OAuth code.'
+    );
   }
 
   const accessToken = String(tokenJson.access_token);
@@ -395,10 +500,18 @@ export async function exchangeYouTubeOAuthCode(
   const channelId: string = channel.id;
   const snippet = channel.snippet || {};
   const stats = channel.statistics || {};
-  const uploadsPlaylistId: string | undefined = channel.contentDetails?.relatedPlaylists?.uploads;
-  const customUrl: string | null = snippet.customUrl ? (snippet.customUrl.startsWith('@') ? snippet.customUrl : `@${snippet.customUrl}`) : null;
+  const uploadsPlaylistId: string | undefined =
+    channel.contentDetails?.relatedPlaylists?.uploads;
+  const customUrl: string | null = snippet.customUrl
+    ? snippet.customUrl.startsWith('@')
+      ? snippet.customUrl
+      : `@${snippet.customUrl}`
+    : null;
   const avatarUrl: string | null =
-    snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || null;
+    snippet.thumbnails?.high?.url ||
+    snippet.thumbnails?.medium?.url ||
+    snippet.thumbnails?.default?.url ||
+    null;
   const subscriberCountText = stats.hiddenSubscriberCount
     ? null
     : formatCountCompact(stats.subscriberCount);

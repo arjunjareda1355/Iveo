@@ -51,6 +51,7 @@ interface ShareDialogProps {
   fontSettings?: FontSettings | null;
   buttonColors?: ButtonColors | null;
   businessCard?: BusinessCardConfig | null;
+  socials?: Record<string, string> | null;
   onSaveCardConfig?: (cfg: BusinessCardConfig) => Promise<void> | void;
   isPro?: boolean;
   isPublished?: boolean;
@@ -76,12 +77,14 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   fontSettings,
   buttonColors,
   businessCard,
+  socials,
   onSaveCardConfig,
   isPro = false,
   isPublished = true,
 }) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
+  const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
   const [copied, setCopied] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
   const [isDownloadingCard, setIsDownloadingCard] = useState(false);
@@ -273,7 +276,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     }
   };
 
-  const handleDownloadBusinessCard = async () => {
+  const handleDownloadBusinessCard = async (exportSide: 'front' | 'back' | 'both' = cardSide) => {
     setIsDownloadingCard(true);
     try {
       await downloadBusinessCardPng({
@@ -282,12 +285,18 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         bio,
         pageUrl: fullUrl,
         avatarUrl,
+        socials,
         isPro,
         qrDataUrl: qrPngDataUrl,
+        side: exportSide,
         theme: cardTheme,
         cardConfig,
       });
-      showToast('Business card (2040×1200 HD PNG) downloaded');
+      const label =
+        exportSide === 'both'
+          ? '2-sided studio sheet PNG downloaded'
+          : `${exportSide === 'front' ? 'Front' : 'Back'} card (2040×1200 HD PNG) downloaded`;
+      showToast(label);
     } catch {
       showToast('Could not generate card PNG. Try downloading the QR or .vcf.');
     } finally {
@@ -305,8 +314,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
           bio,
           pageUrl: fullUrl,
           avatarUrl,
+          socials,
           isPro,
           qrDataUrl: qrPngDataUrl,
+          side: cardSide,
           theme: cardTheme,
           cardConfig,
         });
@@ -406,8 +417,11 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
               displayName={displayName || username}
               bio={bio}
               avatarUrl={avatarUrl}
+              socials={socials}
               isPro={isPro}
               qrDataUrl={qrPngDataUrl}
+              side={cardSide}
+              onSideChange={setCardSide}
               vibeTheme={cardTheme}
               config={cardConfig}
             />
@@ -415,25 +429,39 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             <BusinessCardCustomizer
               value={cardConfig}
               onChange={setCardConfig}
+              onSelectSide={setCardSide}
               onSave={onSaveCardConfig ? handleSaveCardDesign : undefined}
               isSaving={isSavingCard}
             />
 
             <div className="flex flex-col gap-2">
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleDownloadBusinessCard}
-                disabled={isDownloadingCard}
-                fullWidth
-              >
-                <Download size={15} />
-                <span>
-                  {isDownloadingCard
-                    ? 'Rendering 2040×1200 PNG...'
-                    : 'Download HD Business Card (.png)'}
-                </span>
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => handleDownloadBusinessCard(cardSide)}
+                  disabled={isDownloadingCard}
+                  fullWidth
+                >
+                  <Download size={14} />
+                  <span>
+                    {isDownloadingCard
+                      ? 'Rendering HD...'
+                      : `Download ${cardSide === 'front' ? 'Front' : 'Back'}`}
+                  </span>
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => handleDownloadBusinessCard('both')}
+                  disabled={isDownloadingCard}
+                  fullWidth
+                >
+                  <Download size={14} />
+                  <span>Both Sides Sheet</span>
+                </Button>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="secondary" size="md" onClick={handleSaveContactVcf} fullWidth>
@@ -448,7 +476,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </div>
 
             <p className="text-center text-[12px] text-muted leading-relaxed">
-              Exports a pixel-true 2040×1200 HD PNG matching your card preview with an embedded scannable QR code.
+              Exports pixel-true 2040×1200 HD PNG for Front &amp; Back with brushed metallic tones, QR code &amp; social links.
             </p>
           </div>
         ) : (

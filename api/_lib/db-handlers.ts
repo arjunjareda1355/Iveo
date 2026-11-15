@@ -73,6 +73,26 @@ export async function handleDbReadiness(_req: ExpressReq, res: ExpressRes) {
   }
 }
 
+interface CachedPublicPageEntry {
+  status: number;
+  payload: Record<string, any>;
+  expiresAt: number;
+}
+
+const PUBLIC_PAGE_CACHE_TTL_MS = 20_000;
+const DISCOVER_CACHE_TTL_MS = 30_000;
+const publicPageCache = new Map<string, CachedPublicPageEntry>();
+const discoverCache = new Map<string, { payload: Record<string, any>; expiresAt: number }>();
+
+export function invalidatePublicPageCache(username?: string | null) {
+  if (username) {
+    publicPageCache.delete(username.toLowerCase().trim());
+  } else {
+    publicPageCache.clear();
+  }
+  discoverCache.clear();
+}
+
 /**
  * GET /api/public-page?u=username
  * Returns public page data for any browser / visitor
@@ -101,12 +121,20 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
+  const cached = publicPageCache.get(clean);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    return res.status(cached.status).json(cached.payload);
+  }
+
   try {
-    const [dbProf, fbProf] = await Promise.all([
+    // Query local SQL profile & blocks in parallel with bounded Firebase profile check
+    const [dbProf, dbBlocksInitial, fbProf] = await Promise.all([
       dbGetProfile(clean).catch(() => null),
+      dbGetBlocks(clean).catch(() => []),
       Promise.race([
         firebaseGetProfile(clean).catch(() => null),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 900)),
       ]),
     ]);
 
@@ -121,6 +149,11 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     }
 
     if (!profile || isSyntheticTestHandle(clean)) {
+      publicPageCache.set(clean, {
+        status: 404,
+        payload: { error: 'not_found' },
+        expiresAt: Date.now() + 8_000,
+      });
       return res.status(404).json({ error: 'not_found' });
     }
 
@@ -129,11 +162,11 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       return res.status(404).json({ error: 'not_found', status: effectiveStatus });
     }
 
-    let allBlocks = await dbGetBlocks(clean);
+    let allBlocks = dbBlocksInitial;
     if (cameFromFirebase || !allBlocks || allBlocks.length === 0) {
       const fbBlocks = await Promise.race([
         firebaseGetBlocks(clean).catch(() => []),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 900)),
       ]);
       if (fbBlocks && fbBlocks.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
         allBlocks = fbBlocks;
@@ -182,7 +215,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       isPrivilegedEmailServer(profile.primaryEmail)
     );
 
-    return res.status(200).json({
+    const responsePayload = {
       profile: {
         username: profile.username,
         displayName: profile.displayName || profile.username,
@@ -211,7 +244,15 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         layoutSettings: profile.layoutSettings || null,
       },
       links: filteredBlocks,
+    };
+
+    publicPageCache.set(clean, {
+      status: 200,
+      payload: responsePayload,
+      expiresAt: Date.now() + PUBLIC_PAGE_CACHE_TTL_MS,
     });
+    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    return res.status(200).json(responsePayload);
   } catch (err: any) {
     return res.status(500).json({ error: 'server_error', message: err?.message });
   }
@@ -300,6 +341,8 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
       ]);
 
       notifyProfileSeoChanged(releasedOld ? 'renamed' : 'created', result.username, releasedOld).catch(() => {});
+      invalidatePublicPageCache(result.username);
+      if (releasedOld) invalidatePublicPageCache(releasedOld);
     }
 
     return res.status(200).json({
@@ -479,6 +522,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     ]);
 
     notifyProfileSeoChanged('updated', username).catch(() => {});
+    invalidatePublicPageCache(username);
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -566,6 +610,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       new Promise((resolve) => setTimeout(resolve, 2000)),
     ]);
 
+    invalidatePublicPageCache(username);
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
   } catch (err: any) {
     return res.status(500).json({ error: 'upload_failed', message: err?.message });
@@ -655,6 +700,7 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
       new Promise((resolve) => setTimeout(resolve, 2500)),
     ]);
     notifyProfileSeoChanged('updated', username).catch(() => {});
+    invalidatePublicPageCache(username);
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
@@ -851,6 +897,7 @@ export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
     }
     await firebaseReleaseUsername(username, userId || undefined).catch(() => {});
     notifyProfileSeoChanged('deleted', username).catch(() => {});
+    invalidatePublicPageCache(username);
     return res.status(200).json({ ok: true });
   } catch (err: any) {
     return res.status(500).json({ error: 'delete_failed', message: err?.message });
@@ -1030,6 +1077,16 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
           window.opener.postMessage(data, '*');
         }
       } catch (e) {}
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          var bc = new BroadcastChannel('iveo_yt_oauth');
+          bc.postMessage(data);
+          bc.close();
+        }
+      } catch (e) {}
+      try {
+        localStorage.setItem('iveo_yt_oauth_result', JSON.stringify(data));
+      } catch (e) {}
       setTimeout(function(){ window.close(); }, 350);
     })();
   </script>
@@ -1067,6 +1124,12 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
 export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
   const q = String(req.query.q || '').toLowerCase().trim();
   const origin = getCanonicalSiteOrigin();
+  const cacheKey = q || '__all__';
+  const cachedDiscover = discoverCache.get(cacheKey);
+  if (cachedDiscover && cachedDiscover.expiresAt > Date.now()) {
+    res.setHeader('Cache-Control', 'public, max-age=20, stale-while-revalidate=60');
+    return res.status(200).json(cachedDiscover.payload);
+  }
 
   try {
     const all = await getAllUnifiedProfiles();
@@ -1094,7 +1157,10 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
       updatedAt: p.updatedAt,
     }));
 
-    return res.status(200).json({ ok: true, profiles: filtered, totalCount });
+    const payload = { ok: true, profiles: filtered, totalCount };
+    discoverCache.set(cacheKey, { payload, expiresAt: Date.now() + DISCOVER_CACHE_TTL_MS });
+    res.setHeader('Cache-Control', 'public, max-age=20, stale-while-revalidate=60');
+    return res.status(200).json(payload);
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'discover_failed', message: err?.message });
   }

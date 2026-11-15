@@ -31,6 +31,11 @@ import {
   parseBusinessCardConfig,
   mergeBusinessCardConfig,
   resolveBusinessCardAppearance,
+  resolveFrontCardAppearance,
+  resolveBackCardAppearance,
+  METALLIC_CARD_VIBES,
+  buildBackSocialLinks,
+  formatSocialHandleLabel,
   CARD_BASE_WIDTH,
   CARD_BASE_HEIGHT,
   CARD_EXPORT_SCALE,
@@ -45,7 +50,12 @@ import {
   BACKGROUND_PRESETS,
   isDarkBackgroundPreset,
 } from '../src/lib/backgrounds';
-import { parseYouTubeInput } from '../api/_lib/youtube';
+import {
+  parseYouTubeInput,
+  extractSubscriberCountFromHtml,
+} from '../api/_lib/youtube';
+import { normalizeYouTubeUrl } from '../src/lib/urls';
+import { parseEmbedUrl } from '../src/lib/embeds';
 
 test('Main domain SEO metadata contains brand title, canonical, and JSON-LD', () => {
   assert.equal(MAIN_SEO_TITLE, 'Iveo – One Link for Everything You Create');
@@ -334,6 +344,105 @@ test('Fake/demo personas and synthetic test handles are completely excluded', as
     assert.equal(fakeHandles.has(prof.username), false, `Fake handle ${prof.username} should not exist`);
     assert.equal(isSyntheticTestHandle(prof.username), false, `Synthetic handle ${prof.username} should not exist`);
   }
+});
+
+test('2-sided metallic business card resolves distinct dual-tone front/back faces and presets', () => {
+  assert.ok(METALLIC_CARD_VIBES.length >= 6);
+
+  const parsed = parseBusinessCardConfig({
+    metallicVibe: 'champagne',
+    metallicFinish: true,
+    bgColor: '#2B2115',
+    bgColor2: '#0E0A06',
+    backBgColor: '#FFFDF5',
+    backBgColor2: '#FDE68A',
+    backTextColor: '#292117',
+    backAccentColor: '#B45309',
+    backHeadline: 'Scan to',
+    backSubheadline: 'connect.',
+    showSocialsOnBack: true,
+  });
+  assert.ok(parsed);
+  assert.equal(parsed?.metallicVibe, 'champagne');
+  assert.equal(parsed?.backBgColor, '#FFFDF5');
+  assert.equal(parsed?.backBgColor2, '#FDE68A');
+  assert.equal(parsed?.backTextColor, '#292117');
+  assert.equal(parsed?.backAccentColor, '#B45309');
+  assert.equal(parsed?.backHeadline, 'Scan to');
+  assert.equal(parsed?.backSubheadline, 'connect.');
+  assert.equal(parsed?.showSocialsOnBack, true);
+
+  // Default obsidian metallic resolves dark obsidian front + pearl white back
+  const defaultFront = resolveFrontCardAppearance({});
+  const defaultBack = resolveBackCardAppearance({});
+  assert.equal(defaultFront.bgColor, '#1C1C21');
+  assert.equal(defaultFront.bgColor2, '#070709');
+  assert.equal(defaultFront.isLight, false);
+  assert.equal(defaultBack.bgColor, '#FFFFFF');
+  assert.equal(defaultBack.bgColor2, '#ECEFF4');
+  assert.equal(defaultBack.isLight, true);
+
+  // Page-vibe preset honors theme bg on front while keeping clean back fallback
+  const vibeFront = resolveFrontCardAppearance(
+    { metallicVibe: 'page-vibe' },
+    { bg: '#F4F1EA', text: '#1C1917', accent: '#B45309' }
+  );
+  assert.equal(vibeFront.bgColor, '#F4F1EA');
+  assert.equal(vibeFront.accentColor, '#B45309');
+
+  const cobaltBack = resolveBackCardAppearance({ metallicVibe: 'cobalt' });
+  assert.equal(cobaltBack.bgColor, '#F0F7FF');
+  assert.equal(cobaltBack.bgColor2, '#DBEAFE');
+});
+
+test('Back social links builder formats handles cleanly and caps at 6 links', () => {
+  assert.equal(formatSocialHandleLabel('instagram', 'https://instagram.com/arjun.creates/'), '@arjun.creates');
+  assert.equal(formatSocialHandleLabel('youtube', 'https://youtube.com/@MrBeast/videos'), '@MrBeast');
+  assert.equal(formatSocialHandleLabel('linkedin', 'https://linkedin.com/in/arjun-jareda'), 'in/arjun-jareda');
+  assert.equal(formatSocialHandleLabel('website', 'https://iveo.site/arjun'), 'iveo.site/arjun');
+
+  const links = buildBackSocialLinks(
+    {
+      instagram: 'https://instagram.com/arjun',
+      twitter: 'https://twitter.com/arjunx',
+      youtube: 'https://youtube.com/@arjunyt',
+      linkedin: 'https://linkedin.com/in/arjun',
+      github: 'https://github.com/arjun',
+      tiktok: 'https://tiktok.com/@arjun',
+      threads: 'https://threads.net/@arjun',
+    },
+    'https://arjun.dev',
+    'arjun'
+  );
+  assert.equal(links.length, 6);
+  assert.equal(links[0].platform, 'instagram');
+  assert.equal(links[1].platform, 'x');
+  assert.equal(links[2].platform, 'youtube');
+  assert.equal(links[3].platform, 'website');
+});
+
+test('YouTube subscriber scraper, URL normalizer, and embed parser handle edge formats', () => {
+  const polymerHtml =
+    '{"contentMetadataViewModel":{"metadataParts":[{"text":{"content":"@MrBeast"}},{"text":{"content":"526M subscribers"}}]}}';
+  assert.equal(extractSubscriberCountFromHtml(polymerHtml), '526M subscribers');
+
+  const classicHtml =
+    '{"subscriberCountText":{"simpleText":"1.24M subscribers"}}';
+  assert.equal(extractSubscriberCountFromHtml(classicHtml), '1.24M subscribers');
+
+  assert.equal(normalizeYouTubeUrl('UCX6OQ3DkcsbYNE6H8uQQuVA'), 'https://www.youtube.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA');
+  assert.equal(normalizeYouTubeUrl('music.youtube.com/watch?v=dQw4w9WgXcQ'), 'https://music.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(normalizeYouTubeUrl('@MrBeast?si=abc123'), 'https://www.youtube.com/@MrBeast');
+
+  assert.equal(parseYouTubeInput('https://music.youtube.com/watch?v=dQw4w9WgXcQ')?.value, 'dQw4w9WgXcQ');
+  assert.equal(parseYouTubeInput('https://www.youtube.com/v/dQw4w9WgXcQ')?.value, 'dQw4w9WgXcQ');
+
+  const musicEmbed = parseEmbedUrl('https://music.youtube.com/watch?v=dQw4w9WgXcQ&t=15');
+  assert.equal(musicEmbed?.provider, 'youtube');
+  assert.equal(musicEmbed?.embedSrc, 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&start=15');
+
+  const vEmbed = parseEmbedUrl('https://www.youtube.com/v/dQw4w9WgXcQ');
+  assert.equal(vEmbed?.canonicalUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 });
 
 after(async () => {

@@ -4,6 +4,7 @@ type ExpressReq = express.Request;
 type ExpressRes = express.Response;
 import path from 'node:path';
 import fs from 'node:fs';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,64 @@ const isProd =
   Boolean(process.env.K_REVISION) ||
   Boolean(process.env.CLOUD_RUN_JOB) ||
   hasBuiltDist;
+
+// Built-in gzip compression for text/JSON/JS/CSS/SVG responses (>= 1KB)
+app.use((req, res, next) => {
+  const acceptEncoding = String(req.headers['accept-encoding'] || '');
+  if (req.method === 'HEAD' || !/\bgzip\b/i.test(acceptEncoding)) {
+    return next();
+  }
+
+  const origSend = res.send.bind(res);
+  res.send = ((body?: any) => {
+    if (
+      res.headersSent ||
+      res.getHeader('Content-Encoding') ||
+      body === undefined ||
+      body === null
+    ) {
+      return origSend(body);
+    }
+
+    const ct = String(res.getHeader('Content-Type') || '').toLowerCase();
+    const isCompressibleType =
+      !ct ||
+      ct.includes('text/') ||
+      ct.includes('json') ||
+      ct.includes('javascript') ||
+      ct.includes('xml') ||
+      ct.includes('svg');
+
+    if (!isCompressibleType) {
+      return origSend(body);
+    }
+
+    const buf = Buffer.isBuffer(body)
+      ? body
+      : typeof body === 'string'
+        ? Buffer.from(body)
+        : Buffer.from(JSON.stringify(body));
+
+    if (buf.byteLength < 1024) {
+      return origSend(body);
+    }
+
+    try {
+      if (!ct && typeof body === 'object' && !Buffer.isBuffer(body)) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      }
+      const compressed = zlib.gzipSync(buf, { level: 6 });
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.removeHeader('Content-Length');
+      return origSend(compressed);
+    } catch {
+      return origSend(body);
+    }
+  }) as any;
+
+  next();
+});
 
 // Support JSON bodies for API requests
 app.use(express.json());
@@ -458,17 +517,84 @@ async function startServer() {
       }
     });
   } else {
-    app.use(express.static(distPath, { index: false }));
+    const prodIndexPath = path.resolve(distPath, 'index.html');
+    const cachedProdHtml = fs.existsSync(prodIndexPath)
+      ? fs.readFileSync(prodIndexPath, 'utf-8')
+      : '';
+
+    // Cache hashed JS/CSS/SVG bundle files with gzip compression + 7-day immutable cache
+    const assetsDir = path.resolve(distPath, 'assets');
+    const gzipAssetCache = new Map<string, { gz: Buffer; contentType: string; etag: string }>();
+    const ASSET_MIME: Record<string, string> = {
+      '.js': 'application/javascript; charset=UTF-8',
+      '.mjs': 'application/javascript; charset=UTF-8',
+      '.css': 'text/css; charset=UTF-8',
+      '.svg': 'image/svg+xml; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+    };
+
+    app.use('/assets', (req, res, next) => {
+      if (req.method !== 'GET') return next();
+      const acceptEncoding = String(req.headers['accept-encoding'] || '');
+      if (!/\bgzip\b/i.test(acceptEncoding)) return next();
+
+      const relPath = req.path.replace(/^\/+/, '');
+      if (!relPath || relPath.includes('..') || relPath.includes('\0')) return next();
+      const ext = path.extname(relPath).toLowerCase();
+      const contentType = ASSET_MIME[ext];
+      if (!contentType) return next();
+
+      const fullPath = path.resolve(assetsDir, relPath);
+      if (!fullPath.startsWith(assetsDir + path.sep) && fullPath !== assetsDir) return next();
+
+      let cached = gzipAssetCache.get(relPath);
+      if (!cached) {
+        if (!fs.existsSync(fullPath)) return next();
+        try {
+          const stat = fs.statSync(fullPath);
+          if (!stat.isFile() || stat.size < 1024) return next();
+          const raw = fs.readFileSync(fullPath);
+          const gz = zlib.gzipSync(raw, { level: 6 });
+          const etag = `W/"${stat.size}-${stat.mtimeMs}-gz"`;
+          cached = { gz, contentType, etag };
+          gzipAssetCache.set(relPath, cached);
+        } catch {
+          return next();
+        }
+      }
+
+      if (req.headers['if-none-match'] === cached.etag) {
+        return res.status(304).end();
+      }
+
+      res.setHeader('Content-Type', cached.contentType);
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      res.setHeader('ETag', cached.etag);
+      return res.status(200).end(cached.gz);
+    });
+
+    app.use(
+      '/assets',
+      express.static(assetsDir, {
+        index: false,
+        maxAge: '7d',
+        immutable: true,
+      })
+    );
+    app.use(express.static(distPath, { index: false, maxAge: '1h' }));
+
     app.get('*', async (req, res) => {
       try {
-        let template = fs.readFileSync(path.resolve(distPath, 'index.html'), 'utf-8');
+        const template = cachedProdHtml || fs.readFileSync(prodIndexPath, 'utf-8');
         const ssr = await applySsrSeoTags(req, template);
         if (ssr.status === 301 && ssr.redirectLocation) {
           return res.redirect(301, ssr.redirectLocation);
         }
-        return res.status(ssr.status).set({ 'Content-Type': 'text/html' }).send(ssr.html);
+        return res.status(ssr.status).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(ssr.html);
       } catch {
-        return res.sendFile(path.resolve(distPath, 'index.html'));
+        return res.sendFile(prodIndexPath);
       }
     });
   }

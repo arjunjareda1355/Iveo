@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Youtube, RefreshCw, CheckCircle2, Play, ExternalLink, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -46,6 +46,9 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedUrlRef = useRef<string>(
+    initialValues?.youtube ? normalizeYouTubeUrl(initialValues.url || '') || '' : ''
+  );
 
   const mapServerChannelToYouTubeData = (
     ch: any,
@@ -76,14 +79,18 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   };
 
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (!event.data || typeof event.data !== 'object') return;
-      if (event.data.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' && event.data.channel) {
-        const ch = event.data.channel;
+    const applyOAuthPayload = (payload: any) => {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' && payload.channel) {
+        const ch = payload.channel;
         const mapped = mapServerChannelToYouTubeData(ch, { forceLatestToggle: true });
         setYtData(mapped);
         setShowLatestVideo(true);
-        if (ch.channelUrl) setUrl(ch.channelUrl);
+        const resolvedUrl = ch.channelUrl ? normalizeYouTubeUrl(ch.channelUrl) || ch.channelUrl : '';
+        if (resolvedUrl) {
+          setUrl(resolvedUrl);
+          lastFetchedUrlRef.current = resolvedUrl;
+        }
         if (ch.channelTitle) setTitle(ch.channelTitle);
         if (ch.subscriberCountText) {
           setCaption(`${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ''}`);
@@ -95,14 +102,40 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
         );
         setError(null);
         setIsConnectingGoogle(false);
-      } else if (event.data.type === 'IVEO_YOUTUBE_OAUTH_ERROR') {
-        setError(event.data.error || 'Google YouTube authorization was cancelled.');
+      } else if (payload.type === 'IVEO_YOUTUBE_OAUTH_ERROR') {
+        setError(payload.error || 'Google YouTube authorization was cancelled.');
         setIsConnectingGoogle(false);
       }
     };
 
+    const handleMessage = (event: MessageEvent) => {
+      applyOAuthPayload(event.data);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'iveo_yt_oauth_result' && event.newValue) {
+        try {
+          applyOAuthPayload(JSON.parse(event.newValue));
+          localStorage.removeItem('iveo_yt_oauth_result');
+        } catch {}
+      }
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('iveo_yt_oauth');
+        bc.onmessage = (e) => applyOAuthPayload(e.data);
+      }
+    } catch {}
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      if (bc) bc.close();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buttonLabel, showLatestVideo]);
 
@@ -170,8 +203,12 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
 
       const ch = data.channel;
       const mapped = mapServerChannelToYouTubeData(ch);
+      const nextUrl = ch.channelUrl
+        ? normalizeYouTubeUrl(ch.channelUrl) || ch.channelUrl
+        : normalized;
+      lastFetchedUrlRef.current = nextUrl;
       setYtData(mapped);
-      if (ch.channelUrl) setUrl(ch.channelUrl);
+      if (ch.channelUrl) setUrl(nextUrl);
       if (ch.channelTitle && (!title || title === 'YouTube Channel')) {
         setTitle(ch.channelTitle);
       }
@@ -196,24 +233,64 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
     e.preventDefault();
     setError(null);
 
-    const normalizedUrl = normalizeYouTubeUrl(url);
+    let normalizedUrl = normalizeYouTubeUrl(url);
     if (!normalizedUrl) {
       setError('Please enter your YouTube @handle, channel, or video link.');
       return;
     }
 
+    let finalYt = ytData;
+    let finalTitle = title.trim();
+    let finalCaption = caption.trim();
+
+    // Auto-sync YouTube metadata on submit if the user hasn't clicked "Fetch Channel" for this URL yet
+    if (!finalYt || lastFetchedUrlRef.current !== normalizedUrl) {
+      setIsFetching(true);
+      try {
+        const res = await fetch(
+          `/api/integrations/youtube?url=${encodeURIComponent(normalizedUrl)}`
+        );
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.ok && data?.channel) {
+          const ch = data.channel;
+          finalYt = mapServerChannelToYouTubeData(ch);
+          setYtData(finalYt);
+          if (ch.channelUrl) {
+            normalizedUrl = normalizeYouTubeUrl(ch.channelUrl) || ch.channelUrl;
+            setUrl(normalizedUrl);
+          }
+          lastFetchedUrlRef.current = normalizedUrl;
+          if (ch.channelTitle && (!finalTitle || finalTitle === 'YouTube Channel')) {
+            finalTitle = ch.channelTitle;
+            setTitle(ch.channelTitle);
+          }
+          if (
+            ch.subscriberCountText &&
+            (!finalCaption || finalCaption === 'Subscribe for weekly videos & tutorials')
+          ) {
+            finalCaption = `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ' · Official Channel'}`;
+            setCaption(finalCaption);
+          }
+        }
+      } catch {
+        // Proceed gracefully with manual values if offline
+      } finally {
+        setIsFetching(false);
+      }
+    }
+
     const nextYoutube: YouTubeData = {
-      ...(ytData || {}),
-      channelTitle: title.trim() || ytData?.channelTitle || 'YouTube Channel',
+      ...(finalYt || {}),
+      channelTitle: finalTitle || finalYt?.channelTitle || 'YouTube Channel',
       showLatestVideo,
       buttonLabel: buttonLabel.trim() || 'Subscribe',
     };
 
     try {
       await onAdd({
-        title: title.trim() || 'YouTube Channel',
+        title: finalTitle || 'YouTube Channel',
         url: normalizedUrl,
-        badge: caption.trim() || undefined,
+        badge: finalCaption || undefined,
         youtube: nextYoutube,
       });
     } catch (err: any) {

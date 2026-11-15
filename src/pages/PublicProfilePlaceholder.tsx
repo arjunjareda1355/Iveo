@@ -21,6 +21,7 @@ import { formatExternalUrl } from '../lib/urls';
 import { getFontCssFamily, loadGoogleFonts } from '../lib/fonts';
 import { resolveEffectiveTokens } from '../lib/colors';
 import { getBackgroundPreset } from '../lib/backgrounds';
+import { isAllowedAvatarUrl } from '../lib/avatar';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -51,16 +52,57 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
   }
 
   const clean = normalizeUsername(rawUsername);
-  const [pageData, setPageData] = useState<PublicPageData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [pageData, setPageData] = useState<PublicPageData | null>(() => {
+    if (typeof window === 'undefined' || !clean) return null;
+    try {
+      const cached = localStorage.getItem(`iveo_profile_${clean}`);
+      if (!cached) return null;
+      const parsed = JSON.parse(cached);
+      const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
+      const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
+      return {
+        profile: {
+          username: clean,
+          displayName: parsed.displayName || clean,
+          bio: parsed.bio || '',
+          avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
+          vibeId: parsed.vibeId || 'clean',
+          plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
+          isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
+          isVerified: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
+          buttonShape: parsed.buttonShape || null,
+          socials: parsed.socials || {},
+          socialsPosition: parsed.socialsPosition || 'top',
+          hideFromSearch: Boolean(parsed.hideFromSearch),
+          hideFooter: Boolean(parsed.hideFooter),
+          background: parsed.background || null,
+          googleAnalyticsId: parsed.googleAnalyticsId || null,
+          metaPixelId: parsed.metaPixelId || null,
+          whatsappNumber: parsed.whatsappNumber || null,
+          customSeoTitle: parsed.customSeoTitle || null,
+          customSeoDescription: parsed.customSeoDescription || null,
+          fontSettings: parsed.fontSettings || null,
+          buttonColors: parsed.buttonColors || null,
+          layoutSettings: parsed.layoutSettings || null,
+          businessCard: parsed.businessCard || null,
+        },
+        links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
+      };
+    } catch {
+      return null;
+    }
+  });
+  const [isLoading, setIsLoading] = useState(() => pageData === null);
   const [unlockedUrls, setUnlockedUrls] = useState<Record<string, string>>({});
   const [unlockBlock, setUnlockBlock] = useState<PageBlock | null>(null);
 
   const session = useIveoSession();
   const viewTrackedRef = useRef(false);
   const ownerExclusionDoneRef = useRef(false);
+  const lastFetchedAtRef = useRef<number>(0);
 
   const loadData = useCallback(async () => {
+    lastFetchedAtRef.current = Date.now();
     try {
       const data = await fetchPublicPage(clean);
       setPageData(data);
@@ -81,7 +123,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     }, 60000);
 
     const handleVisibility = () => {
-      if (!document.hidden) {
+      if (!document.hidden && Date.now() - lastFetchedAtRef.current > 45000) {
         loadData();
       }
     };

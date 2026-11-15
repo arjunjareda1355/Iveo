@@ -401,6 +401,7 @@ export const SettingsTab: React.FC = () => {
           fontSettings={session.fontSettings}
           buttonColors={session.buttonColors}
           businessCard={session.businessCard}
+          socials={session.socials}
           onSaveCardConfig={async (cfg) => {
             await session.updatePreferences({ businessCard: cfg });
           }}

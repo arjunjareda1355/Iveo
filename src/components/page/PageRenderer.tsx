@@ -1344,6 +1344,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         bio={displayBio}
         avatarUrl={!avatarError && (profile?.avatarUrl ?? persona.avatarUrl) ? (profile?.avatarUrl ?? persona.avatarUrl) : null}
         vibe={effectiveVibe}
+        socials={profile?.socials}
         businessCard={profile?.businessCard}
         isPro={isVerified}
       />

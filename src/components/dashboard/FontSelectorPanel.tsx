@@ -9,7 +9,7 @@ import {
   canUseFont,
   getFontCssFamily,
   getFontOption,
-  loadAllCatalogFonts,
+  loadGoogleFonts,
 } from '../../lib/fonts';
 import { ProBadge } from '../plan/ProBadge';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
@@ -80,8 +80,24 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
   }, [currentFonts]);
 
   useEffect(() => {
-    loadAllCatalogFonts();
-  }, []);
+    // Load active & free fonts immediately, then defer Pro preview fonts asynchronously
+    const immediateIds = [
+      currentFonts?.nameFont,
+      currentFonts?.bioFont,
+      currentFonts?.buttonFont,
+      ...FONT_OPTIONS.filter((f) => !f.isPro).map((f) => f.id),
+    ];
+    loadGoogleFonts(immediateIds);
+
+    const proIds = FONT_OPTIONS.filter((f) => f.isPro).map((f) => f.id);
+    const w = window as any;
+    if (typeof w.requestIdleCallback === 'function') {
+      const handle = w.requestIdleCallback(() => loadGoogleFonts(proIds), { timeout: 600 });
+      return () => w.cancelIdleCallback?.(handle);
+    }
+    const timer = setTimeout(() => loadGoogleFonts(proIds), 180);
+    return () => clearTimeout(timer);
+  }, [currentFonts?.nameFont, currentFonts?.bioFont, currentFonts?.buttonFont]);
 
   const freeFonts = FONT_OPTIONS.filter((f) => !f.isPro);
   const proFonts = FONT_OPTIONS.filter((f) => f.isPro);

@@ -26,12 +26,15 @@ export function isSafeHref(url: string | null | undefined): boolean {
 export function normalizeYouTubeUrl(raw: string): string {
   const clean = (raw || '').trim();
   if (!clean) return '';
+  if (/^UC[a-zA-Z0-9_-]{20,26}$/.test(clean)) {
+    return `https://www.youtube.com/channel/${clean}`;
+  }
   if (/^https?:\/\//i.test(clean)) return clean;
-  if (/^(youtube\.com|www\.youtube\.com|youtu\.be|m\.youtube\.com)\b/i.test(clean)) {
+  if (/^(youtube\.com|www\.youtube\.com|youtu\.be|m\.youtube\.com|music\.youtube\.com)\b/i.test(clean)) {
     return `https://${clean}`;
   }
-  const handle = clean.replace(/^@/, '').replace(/^\/+/, '');
-  if (!handle.includes('/') && !handle.includes('.')) {
+  const handle = clean.split(/[/?#]/)[0].replace(/^@/, '');
+  if (!clean.includes('/') && !clean.includes('.')) {
     return `https://www.youtube.com/@${handle}`;
   }
   return clean.startsWith('@')

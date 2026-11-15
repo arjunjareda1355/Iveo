@@ -171,7 +171,7 @@
       #iveo-intro .iv-wipe {
         position: absolute; inset: 0; background: var(--iv-black);
         clip-path: circle(0 at 50% 50%);
-        animation: iv-wipe 1s 1.35s var(--iv-ease) forwards;
+        animation: iv-wipe .55s .42s var(--iv-ease) forwards;
       }
       #iveo-intro .iv-wipe::after { /* faint light bloom inside the black */
         content: ""; position: absolute; left: 50%; top: 50%; width: min(90vw, 720px); aspect-ratio: 1;
@@ -187,34 +187,34 @@
         width: min(34vw, 150px); height: auto; overflow: hidden; border-radius: 27%;
         filter: drop-shadow(0 24px 40px rgba(0,0,0,.28));
         opacity: 0; transform: scale(.5);
-        animation: iv-tile-in .95s .15s var(--iv-spring) forwards,
-                   iv-tile-out .55s 1.95s var(--iv-ease) forwards;
+        animation: iv-tile-in .45s .05s var(--iv-spring) forwards,
+                   iv-tile-out .35s .62s var(--iv-ease) forwards;
       }
       #iveo-intro .iv-t-body {
         fill: #fff; transform-box: fill-box; transform-origin: 50% 100%;
         transform: scaleY(0); opacity: 0;
-        animation: iv-grow .7s .5s var(--iv-out) forwards;
+        animation: iv-grow .38s .15s var(--iv-out) forwards;
       }
-      #iveo-intro .iv-t-fold { opacity: 0; animation: iv-fade .5s 1s ease forwards; }
+      #iveo-intro .iv-t-fold { opacity: 0; animation: iv-fade .3s .32s ease forwards; }
       #iveo-intro .iv-t-dot {
         fill: #fff; transform: translateY(-420px); opacity: 0;
-        animation: iv-drop .85s .85s var(--iv-spring) forwards;
+        animation: iv-drop .45s .25s var(--iv-spring) forwards;
       }
 
       /* ── official wordmark ── */
       #iveo-intro .iv-mark { width: min(72vw, 400px); height: auto; overflow: hidden; }
       #iveo-intro .iv-l {
         fill: var(--iv-white); transform: translateY(640px);
-        animation: iv-letter 1s calc(2.0s + var(--i) * .085s) var(--iv-out) forwards;
+        animation: iv-letter .48s calc(.65s + var(--i) * .045s) var(--iv-out) forwards;
       }
       #iveo-intro .iv-l-dot {
         transform: translateY(-420px);
-        animation: iv-drop .95s 2.45s var(--iv-spring) forwards;
+        animation: iv-drop .45s .82s var(--iv-spring) forwards;
       }
       #iveo-intro .iv-ping {
         fill: none; stroke: #fff; stroke-width: 5; opacity: 0;
         transform-box: fill-box; transform-origin: center;
-        animation: iv-ping 1s 2.95s ease-out forwards;
+        animation: iv-ping .55s .95s ease-out forwards;
       }
 
       /* tagline */
@@ -226,11 +226,11 @@
       }
       #iveo-intro .iv-tag span {
         display: inline-block; opacity: 0; transform: translateY(12px); filter: blur(5px);
-        animation: iv-rise .9s var(--iv-out) forwards;
+        animation: iv-rise .42s var(--iv-out) forwards;
       }
-      #iveo-intro .iv-tag span:nth-child(1) { animation-delay: 2.7s; }
-      #iveo-intro .iv-tag span:nth-child(2) { animation-delay: 2.82s; }
-      #iveo-intro .iv-tag span:nth-child(3) { animation-delay: 2.94s; }
+      #iveo-intro .iv-tag span:nth-child(1) { animation-delay: .86s; }
+      #iveo-intro .iv-tag span:nth-child(2) { animation-delay: .93s; }
+      #iveo-intro .iv-tag span:nth-child(3) { animation-delay: 1.00s; }
 
       /* progress (auto-contrast over light and dark) */
       #iveo-intro .iv-foot {
@@ -249,9 +249,9 @@
       }
 
       /* exit */
-      #iveo-intro.is-leaving { animation: iv-curtain 1s var(--iv-ease) forwards; pointer-events: none; }
-      #iveo-intro.is-leaving .iv-stage, #iveo-intro.is-leaving .iv-tag { animation: iv-stage-out .7s var(--iv-ease) forwards; }
-      #iveo-intro.is-leaving .iv-foot { animation: iv-fade-out .25s ease forwards; }
+      #iveo-intro.is-leaving { animation: iv-curtain .52s var(--iv-ease) forwards; pointer-events: none; }
+      #iveo-intro.is-leaving .iv-stage, #iveo-intro.is-leaving .iv-tag { animation: iv-stage-out .4s var(--iv-ease) forwards; }
+      #iveo-intro.is-leaving .iv-foot { animation: iv-fade-out .18s ease forwards; }
 
       @keyframes iv-tile-in  { to { opacity: 1; transform: none } }
       @keyframes iv-tile-out { to { opacity: 0; transform: scale(.78) } }
@@ -396,8 +396,8 @@
         if (!root) return;
 
         var CONFIG = {
-          duration: 3900,        // ms before curtain lifts
-          maxWait: 7000          // fail-safe: site always opens by then
+          duration: 1150,        // fast crisp intro before curtain lifts
+          maxWait: 2400          // fail-safe: site always opens quickly
         };
 
         var html = document.documentElement;
@@ -405,11 +405,11 @@
         var bar = root.querySelector('.iv-bar i');
         var count = root.querySelector('.iv-count');
         var leaving = false, start = performance.now();
-        var total = reduced ? 600 : CONFIG.duration;
+        var total = reduced ? 300 : CONFIG.duration;
 
         function tick(now) {
           if (leaving) return;
-          var t = Math.min((now - start) / (total - 400), 1);
+          var t = Math.min((now - start) / Math.max(150, total - 200), 1);
           var e = 1 - Math.pow(1 - t, 3);
           if (bar) bar.style.transform = 'scaleX(' + e + ')';
           if (count) count.textContent = String(Math.round(e * 100)).padStart(3, '0');
@@ -439,13 +439,15 @@
             root.removeEventListener('animationend', h);
             finish();
           });
-          setTimeout(finish, 1600);
+          setTimeout(finish, 700);
         }
+
+        root.addEventListener('click', leave, { once: true });
 
         var minTime = new Promise(function (r) { setTimeout(r, total); });
         var loaded = new Promise(function (r) {
-          if (document.readyState === 'complete') r();
-          else window.addEventListener('load', r, { once: true });
+          if (document.readyState === 'complete' || document.readyState === 'interactive') r();
+          else window.addEventListener('DOMContentLoaded', r, { once: true });
         });
         Promise.all([minTime, loaded]).then(leave);
         setTimeout(leave, CONFIG.maxWait);
