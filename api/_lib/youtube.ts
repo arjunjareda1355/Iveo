@@ -200,7 +200,91 @@ export function extractSubscriberCountFromHtml(html: string): string | null {
   return null;
 }
 
-async function fetchRssFeedVideos(channelId: string): Promise<YouTubeVideoItem[]> {
+export interface ExtractedYouTubeHtmlMeta {
+  channelId: string | null;
+  channelTitle: string | null;
+  handle: string | null;
+  avatarUrl: string | null;
+  subscriberCountText: string | null;
+}
+
+export function extractChannelMetaFromHtml(
+  html: string,
+  parsed: ParsedYouTubeInput
+): ExtractedYouTubeHtmlMeta {
+  const channelIdMatch =
+    html.match(/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/) ||
+    html.match(/"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/) ||
+    html.match(/<link\s+rel="canonical"\s+href="https?:\/\/(?:www\.)?youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{20,26})"/i) ||
+    html.match(/<meta\s+itemprop="identifier"\s+content="(UC[a-zA-Z0-9_-]{20,26})"/i) ||
+    html.match(/feeds\/videos\.xml\?channel_id=(UC[a-zA-Z0-9_-]{20,26})/i) ||
+    html.match(/channel_id=(UC[a-zA-Z0-9_-]{20,26})/) ||
+    html.match(/"browseId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/);
+
+  const ogTitle =
+    html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1] ||
+    html.match(/<meta\s+name="title"\s+content="([^"]+)"/i)?.[1] ||
+    html.match(/<title>([^<]+)<\/title>/i)?.[1];
+
+  const ogImage =
+    html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1] ||
+    html.match(/"avatar"\s*:\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"/)?.[1] ||
+    html.match(/"url"\s*:\s*"(https:\/\/yt3\.googleusercontent\.com\/[^"]+)"/)?.[1];
+
+  const handleFromUrl =
+    html.match(/"vanityChannelUrl"\s*:\s*"https?:\/\/(?:www\.)?youtube\.com\/(@[^"]+)"/i)?.[1] ||
+    html.match(/"canonicalBaseUrl"\s*:\s*"\/(@[^"]+)"/i)?.[1];
+
+  const rawTitle = ogTitle ? decodeXmlEntities(ogTitle).replace(/\s*-\s*YouTube$/i, '').trim() : '';
+  const subscriberCountText = extractSubscriberCountFromHtml(html);
+
+  return {
+    channelId: channelIdMatch?.[1] || (parsed.kind === 'channel_id' ? parsed.value : null),
+    channelTitle:
+      rawTitle && rawTitle.toLowerCase() !== 'youtube'
+        ? rawTitle
+        : parsed.kind === 'channel_id'
+          ? null
+          : parsed.value.replace(/^@/, ''),
+    handle: handleFromUrl || (parsed.kind === 'handle' ? parsed.value : null),
+    avatarUrl: ogImage ? decodeXmlEntities(ogImage) : null,
+    subscriberCountText,
+  };
+}
+
+export function parseRssFeedXml(xml: string): {
+  channelName: string | null;
+  videos: YouTubeVideoItem[];
+} {
+  if (!xml) return { channelName: null, videos: [] };
+  const feedAuthorMatch =
+    xml.match(/<author>\s*<name>([\s\S]*?)<\/name>/i) ||
+    xml.match(/<feed[^>]*>[\s\S]*?<title>([\s\S]*?)<\/title>/i);
+  const channelName = feedAuthorMatch?.[1] ? decodeXmlEntities(feedAuthorMatch[1]) : null;
+
+  const entries = xml.match(/<entry>[\s\S]*?<\/entry>/gi) || [];
+  const videos: YouTubeVideoItem[] = [];
+  for (const entry of entries.slice(0, 3)) {
+    const vidMatch = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/i);
+    const titleMatch = entry.match(/<title>([\s\S]*?)<\/title>/i);
+    const pubMatch = entry.match(/<published>([^<]+)<\/published>/i);
+    const thumbMatch = entry.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
+    const videoId = vidMatch?.[1]?.trim();
+    if (!videoId) continue;
+    videos.push({
+      videoId,
+      title: titleMatch?.[1] ? decodeXmlEntities(titleMatch[1]) : 'Watch on YouTube',
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      thumbnailUrl: thumbMatch?.[1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      publishedAt: pubMatch?.[1] || null,
+    });
+  }
+  return { channelName, videos };
+}
+
+async function fetchRssFeedVideos(
+  channelId: string
+): Promise<{ channelName: string | null; videos: YouTubeVideoItem[] }> {
   try {
     const res = await fetch(
       `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`,
@@ -209,29 +293,11 @@ async function fetchRssFeedVideos(channelId: string): Promise<YouTubeVideoItem[]
         headers: { 'User-Agent': 'iveo-showcase/1.0' },
       }
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { channelName: null, videos: [] };
     const xml = await res.text();
-    const entries = xml.match(/<entry>[\s\S]*?<\/entry>/gi) || [];
-    const items: YouTubeVideoItem[] = [];
-    for (const entry of entries.slice(0, 3)) {
-      const vidMatch = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/i);
-      const titleMatch = entry.match(/<title>([\s\S]*?)<\/title>/i);
-      const pubMatch = entry.match(/<published>([^<]+)<\/published>/i);
-      const thumbMatch = entry.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
-      const videoId = vidMatch?.[1]?.trim();
-      if (!videoId) continue;
-      items.push({
-        videoId,
-        title: titleMatch?.[1] ? decodeXmlEntities(titleMatch[1]) : 'Watch on YouTube',
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        thumbnailUrl:
-          thumbMatch?.[1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        publishedAt: pubMatch?.[1] || null,
-      });
-    }
-    return items;
+    return parseRssFeedXml(xml);
   } catch {
-    return [];
+    return { channelName: null, videos: [] };
   }
 }
 
@@ -247,53 +313,38 @@ async function fetchChannelDetailsByUrl(
 
     if (res.ok) {
       const html = await res.text();
-      const channelIdMatch =
-        html.match(/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/) ||
-        html.match(/<meta\s+itemprop="identifier"\s+content="(UC[a-zA-Z0-9_-]{20,26})"/i) ||
-        html.match(/channel_id=(UC[a-zA-Z0-9_-]{20,26})/) ||
-        html.match(/"browseId"\s*:\s*"(UC[a-zA-Z0-9_-]{20,26})"/);
-
-      const ogTitle =
-        html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1] ||
-        html.match(/<meta\s+name="title"\s+content="([^"]+)"/i)?.[1];
-      const ogImage = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1];
-      const handleFromUrl =
-        html.match(/"vanityChannelUrl"\s*:\s*"https?:\/\/(?:www\.)?youtube\.com\/(@[^"]+)"/i)?.[1] ||
-        html.match(/"canonicalBaseUrl"\s*:\s*"\/(@[^"]+)"/i)?.[1];
-
-      const subscriberCountText = extractSubscriberCountFromHtml(html);
-      const channelId =
-        channelIdMatch?.[1] || (parsed.kind === 'channel_id' ? parsed.value : null);
-      const latestVideos = channelId ? await fetchRssFeedVideos(channelId) : [];
+      const meta = extractChannelMetaFromHtml(html, parsed);
+      const rss = meta.channelId
+        ? await fetchRssFeedVideos(meta.channelId)
+        : { channelName: null, videos: [] };
 
       return {
-        channelId,
-        channelTitle: ogTitle
-          ? decodeXmlEntities(ogTitle).replace(/\s*-\s*YouTube$/i, '')
-          : parsed.value.replace(/^@/, ''),
-        handle: handleFromUrl || (parsed.kind === 'handle' ? parsed.value : null),
-        avatarUrl: ogImage ? decodeXmlEntities(ogImage) : null,
-        subscriberCountText,
-        channelUrl: handleFromUrl
-          ? `https://www.youtube.com/${handleFromUrl}`
+        channelId: meta.channelId,
+        channelTitle:
+          meta.channelTitle || rss.channelName || parsed.value.replace(/^@/, ''),
+        handle: meta.handle,
+        avatarUrl: meta.avatarUrl,
+        subscriberCountText: meta.subscriberCountText,
+        channelUrl: meta.handle
+          ? `https://www.youtube.com/${meta.handle}`
           : parsed.canonicalUrl,
-        latestVideos,
-        source: latestVideos.length > 0 ? 'channel_rss' : 'manual',
+        latestVideos: rss.videos,
+        source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
       };
     }
   } catch {}
 
   if (parsed.kind === 'channel_id') {
-    const videos = await fetchRssFeedVideos(parsed.value);
+    const rss = await fetchRssFeedVideos(parsed.value);
     return {
       channelId: parsed.value,
-      channelTitle: videos[0]?.title ? 'YouTube Channel' : parsed.value,
+      channelTitle: rss.channelName || parsed.value,
       handle: null,
       avatarUrl: null,
       subscriberCountText: null,
       channelUrl: parsed.canonicalUrl,
-      latestVideos: videos,
-      source: videos.length > 0 ? 'channel_rss' : 'manual',
+      latestVideos: rss.videos,
+      source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
     };
   }
 

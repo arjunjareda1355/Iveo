@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, Minus, ChevronRight, ChevronDown, FileDown } from 'lucide-react';
+import { Sparkles, Check, ChevronRight, FileDown } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { VerifiedTick } from '../ui/VerifiedTick';
@@ -7,13 +7,12 @@ import { ProBadge } from './ProBadge';
 import { useUpgradeDialog } from './UpgradeDialogProvider';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { downloadInvoicePdf } from '../../lib/invoicePdf';
-import { PLAN_COMPARISON_SECTIONS, PRO_PLAN_HIGHLIGHTS } from '../../lib/plan';
+import { PRO_PLAN_HIGHLIGHTS } from '../../lib/plan';
 
 export const SubscriptionCard: React.FC = () => {
   const session = useIvioSession();
   const { openUpgrade } = useUpgradeDialog();
   const [showReceiptDetails, setShowReceiptDetails] = useState(false);
-  const [showComparison, setShowComparison] = useState(false);
 
   const uname = session.username?.toLowerCase() || '';
   let subInfo: any = null;
@@ -36,7 +35,7 @@ export const SubscriptionCard: React.FC = () => {
           Subscription &amp; Billing
         </h3>
         {isPro && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-medium text-ink">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-medium text-ink whitespace-nowrap shrink-0">
             <VerifiedTick size={14} />
             <span>Verified Pro</span>
           </div>
@@ -185,87 +184,6 @@ export const SubscriptionCard: React.FC = () => {
         </div>
       )}
 
-      {/* Expandable Free vs. Pro Feature Breakdown */}
-      <div className="pt-2 border-t border-border">
-        <button
-          type="button"
-          onClick={() => setShowComparison((prev) => !prev)}
-          aria-expanded={showComparison}
-          className="w-full flex items-center justify-between py-1.5 text-[13px] font-medium text-ink hover:text-ink-2 transition-colors cursor-pointer"
-        >
-          <span>Compare Free vs. Pro features</span>
-          <ChevronDown
-            size={15}
-            className={`text-muted transition-transform duration-150 ${
-              showComparison ? 'rotate-180' : ''
-            }`}
-          />
-        </button>
-
-        {showComparison && (
-          <div className="mt-3 rounded-[10px] border border-border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-[12px]">
-                <thead>
-                  <tr className="bg-surface-2 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted">
-                    <th className="py-2 px-3">Feature</th>
-                    <th className="py-2 px-3 text-center">Free</th>
-                    <th className="py-2 px-3 text-center text-ink">Pro</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PLAN_COMPARISON_SECTIONS.map((section) => (
-                    <React.Fragment key={section.category}>
-                      <tr className="bg-surface-2/50 border-b border-border">
-                        <th
-                          colSpan={3}
-                          className="py-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted"
-                        >
-                          {section.category}
-                        </th>
-                      </tr>
-                      {section.rows.map((row) => {
-                        const renderVal = (val: string | boolean, isProCol: boolean) => {
-                          if (val === true) {
-                            return <Check size={13} strokeWidth={2.5} className="inline text-ink" />;
-                          }
-                          if (val === false) {
-                            return <Minus size={13} strokeWidth={2} className="inline text-subtle" />;
-                          }
-                          if (isProCol && row.feature.toLowerCase().includes('verified pro tick')) {
-                            return (
-                              <span className="inline-flex items-center justify-center gap-1 font-medium text-ink">
-                                <VerifiedTick size={12} />
-                                <span>{val}</span>
-                              </span>
-                            );
-                          }
-                          return (
-                            <span className={isProCol ? 'font-medium text-ink' : 'text-muted'}>
-                              {val}
-                            </span>
-                          );
-                        };
-
-                        return (
-                          <tr
-                            key={row.feature}
-                            className="border-b border-border/60 last:border-b-0"
-                          >
-                            <td className="py-2 px-3 text-ink">{row.feature}</td>
-                            <td className="py-2 px-3 text-center">{renderVal(row.free, false)}</td>
-                            <td className="py-2 px-3 text-center">{renderVal(row.pro, true)}</td>
-                          </tr>
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
     </Card>
   );
 };

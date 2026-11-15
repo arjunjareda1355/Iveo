@@ -283,9 +283,9 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between shrink-0 bg-surface">
-          <div>
-            <h2 className="text-[18px] font-semibold text-ink flex items-center gap-2">
+        <div className="p-4 sm:p-5 border-b border-border flex items-start sm:items-center justify-between gap-3 shrink-0 bg-surface">
+          <div className="min-w-0">
+            <h2 className="text-[18px] font-semibold text-ink flex items-center flex-wrap gap-2">
               <span>Add to your page</span>
               <span className="text-[12px] font-normal px-2 py-0.5 rounded-full bg-ink/5 text-muted">
                 {FEATURES.length} block types
@@ -393,7 +393,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
                     <span className="text-[14px] font-semibold text-ink group-hover:text-ink">
                       {feat.title}
                     </span>
-                    {feat.proRequired ? (
+                    {feat.proRequired && (
                       <>
                         <ProBadge className="scale-90 origin-left" />
                         {requiresUpgrade && (
@@ -402,10 +402,6 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
                           </span>
                         )}
                       </>
-                    ) : (
-                      <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 border border-border text-muted">
-                        Free
-                      </span>
                     )}
                     {feat.badge && (
                       <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800">

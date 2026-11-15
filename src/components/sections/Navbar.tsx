@@ -65,10 +65,10 @@ export const Navbar: React.FC = () => {
           <Logo tone="light" size="md" />
         </div>
 
-        {/* Center: Desktop Navigation Links (768px and up) */}
+        {/* Center: Desktop Navigation Links (1024px and up) */}
         <nav
           aria-label="Main Navigation"
-          className="hidden md:flex items-center gap-7 text-[14px] font-medium"
+          className="hidden lg:flex items-center gap-6 xl:gap-7 text-[14px] font-medium"
         >
           {copy.nav.links.map((link) => {
             const targetId = link.href.replace('#', '');
@@ -79,7 +79,7 @@ export const Navbar: React.FC = () => {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  'transition-colors duration-120 select-none py-1.5 focus-visible:outline-2 focus-visible:outline-ink rounded-xs',
+                  'transition-colors duration-120 select-none py-1.5 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-ink rounded-xs',
                   isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
                 )}
               >
@@ -90,7 +90,7 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Right: Desktop Actions */}
-        <div className="hidden md:flex items-center">
+        <div className="hidden lg:flex items-center shrink-0">
           {/* Iveo Social Media Accounts CTA */}
           <div className="flex items-center gap-1 mr-3 pr-3 border-r border-border">
             <a
@@ -137,12 +137,12 @@ export const Navbar: React.FC = () => {
           )}
         </div>
 
-        {/* Right: Mobile Trigger + CTA (below 768px) */}
-        <div className="flex md:hidden items-center gap-2">
+        {/* Right: Mobile & Tablet Trigger + CTA (below 1024px) */}
+        <div className="flex lg:hidden items-center gap-1.5 sm:gap-2 shrink-0">
           {!isLoaded ? (
-            <div className="w-[120px] h-10" aria-hidden="true" />
+            <div className="w-[100px] h-10" aria-hidden="true" />
           ) : isSignedIn ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <Button as={Link} to="/dashboard" variant="primary" size="md">
                 {copy.nav.dashboard}
               </Button>
@@ -173,7 +173,7 @@ export const Navbar: React.FC = () => {
       {/* Mobile Menu Backdrop & Sheet */}
       {mobileMenuOpen && (
         <div
-          className="md:hidden fixed inset-0 top-16 z-50 flex flex-col justify-between"
+          className="lg:hidden fixed inset-0 top-16 z-50 flex flex-col justify-between"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               closeMenu();

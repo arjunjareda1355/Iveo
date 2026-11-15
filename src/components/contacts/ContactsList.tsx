@@ -52,7 +52,7 @@ export const ContactsList: React.FC<ContactsListProps> = ({
               type="button"
               onClick={() => onDeleteContact(c)}
               aria-label={copy.contacts.deleteContactAria}
-              className="p-1.5 text-muted hover:text-error hover:bg-red-50 rounded-[8px] transition-colors shrink-0"
+              className="p-1.5 text-muted hover:text-error hover:bg-red-50 rounded-[8px] transition-colors shrink-0 cursor-pointer"
             >
               <Trash2 size={16} />
             </button>

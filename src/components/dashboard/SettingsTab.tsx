@@ -26,6 +26,7 @@ export const SettingsTab: React.FC = () => {
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   const fullUrl = session.username ? pageUrl(session.username) : '';
 
@@ -33,7 +34,9 @@ export const SettingsTab: React.FC = () => {
     if (!fullUrl) return;
     try {
       await navigator.clipboard.writeText(fullUrl);
+      setCopiedUrl(true);
       showToast('Link copied');
+      setTimeout(() => setCopiedUrl(false), 1800);
     } catch {}
   };
 
@@ -137,9 +140,9 @@ export const SettingsTab: React.FC = () => {
 
         <div className="divide-y divide-border">
           {/* Email row */}
-          <div className="h-14 flex items-center justify-between text-[14px]">
-            <span className="text-muted">Email</span>
-            <span className="text-[15px] font-medium text-ink">
+          <div className="min-h-14 py-2 flex items-center justify-between gap-3 text-[14px]">
+            <span className="text-muted shrink-0">Email</span>
+            <span className="text-[15px] font-medium text-ink min-w-0 truncate text-right">
               {session.primaryEmail || 'Not set'}
             </span>
           </div>
@@ -207,17 +210,17 @@ export const SettingsTab: React.FC = () => {
               </form>
             </div>
           ) : (
-            <div className="h-14 flex items-center justify-between text-[14px]">
-              <span className="text-muted">Username</span>
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 text-[15px] font-mono font-medium text-ink">
-                  <span>@{session.username || 'not_set'}</span>
+            <div className="min-h-14 py-2 flex items-center justify-between gap-3 text-[14px]">
+              <span className="text-muted shrink-0">Username</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="inline-flex items-center gap-1.5 text-[15px] font-mono font-medium text-ink min-w-0">
+                  <span className="truncate">@{session.username || 'not_set'}</span>
                   {session.isPro && session.username && <VerifiedTick size={14} />}
                 </span>
                 <button
                   type="button"
                   onClick={handleStartEditUsername}
-                  className="inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:text-ink-2 px-2 py-1 rounded-[6px] hover:bg-surface-2 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:text-ink-2 px-2 py-1 rounded-[6px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
                 >
                   <Pencil size={12} />
                   <span>Change</span>
@@ -275,32 +278,31 @@ export const SettingsTab: React.FC = () => {
           Your page
         </h3>
 
-        <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-2 border border-border">
-          <span className="font-mono text-[14px] text-ink select-all truncate flex-1">
+        <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-2 border border-border min-w-0">
+          <span className="font-mono text-[14px] text-ink select-all truncate flex-1 min-w-0">
             {fullUrl || 'https://iveo.site'}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopyLink}
-            aria-label="Copy page link"
-            className="text-muted hover:text-ink shrink-0"
-          >
-            <Copy size={15} />
-            <span className="ml-1 text-[13px]">Copy</span>
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            as="a"
-            href={session.username ? pageUrl(session.username) : '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0"
-          >
-            <span>Open page</span>
-            <ExternalLink size={13} className="ml-1 opacity-70" />
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <a
+              href={session.username ? pageUrl(session.username) : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open page"
+              title="Open page"
+              className="w-9 h-9 inline-flex items-center justify-center rounded-[8px] border border-border bg-surface text-ink hover:bg-surface-2 transition-colors cursor-pointer"
+            >
+              <ExternalLink size={16} strokeWidth={1.6} />
+            </a>
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              aria-label="Copy page link"
+              title="Copy page link"
+              className="w-9 h-9 inline-flex items-center justify-center rounded-[8px] border border-border bg-surface text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
+            >
+              {copiedUrl ? <Check size={16} strokeWidth={1.8} className="text-emerald-600" /> : <Copy size={16} strokeWidth={1.6} />}
+            </button>
+          </div>
         </div>
 
         {/* Remove the iveo mark switch */}

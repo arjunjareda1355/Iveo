@@ -52,7 +52,7 @@ export const VibesShowcase: React.FC = () => {
     <section
       id="vibes"
       aria-label="Vibes"
-      className="w-full bg-bg py-14 sm:py-20 lg:py-24 border-b border-border"
+      className="w-full bg-bg py-14 sm:py-20 lg:py-24 border-b border-border overflow-x-hidden"
     >
       <Container>
         {/* Header */}
@@ -100,7 +100,7 @@ export const VibesShowcase: React.FC = () => {
             <div
               role="radiogroup"
               aria-label="Select vibe"
-              className="w-screen -mx-6 px-6 mt-8 flex items-center gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar"
+              className="w-full max-w-full mt-8 flex items-center gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-1"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {VIBES.map((vibe) => {

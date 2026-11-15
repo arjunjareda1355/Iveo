@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Navbar } from '../components/sections/Navbar';
 import { Hero } from '../components/sections/Hero';
 import { MadeFor } from '../components/sections/MadeFor';
@@ -17,11 +17,17 @@ import { SITE_ORIGIN } from '../lib/site';
 import { copy } from '../content/copy';
 
 export const Landing: React.FC = () => {
+  const { pathname } = useLocation();
+  const isPricingRoute = pathname === '/pricing';
+
   usePageMeta({
-    title: 'Iveo – One Link for Everything You Create',
-    description:
-      'Create your personal space with Iveo. Share your social links, websites, projects and everything you create through one beautiful, customizable profile.',
-    canonical: `${SITE_ORIGIN}/`,
+    title: isPricingRoute
+      ? 'Pricing – Free & Pro Plans | Iveo'
+      : 'Iveo – One Link for Everything You Create',
+    description: isPricingRoute
+      ? 'Start free with unlimited links and custom vibes, or upgrade to Iveo Pro for custom fonts, advanced analytics, business cards, and SEO tools.'
+      : 'Create your personal space with Iveo. Share your social links, websites, projects and everything you create through one beautiful, customizable profile.',
+    canonical: `${SITE_ORIGIN}${isPricingRoute ? '/pricing' : '/'}`,
     robots: 'index, follow',
   });
   const [searchParams] = useSearchParams();
@@ -34,6 +40,14 @@ export const Landing: React.FC = () => {
       navigate('/', { replace: true });
     }
   }, [searchParams, navigate, showToast]);
+
+  useEffect(() => {
+    if (!isPricingRoute) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [isPricingRoute]);
   return (
     <div className="min-h-screen flex flex-col bg-bg text-ink selection:bg-ink selection:text-white">
       {/* Skip to content link */}

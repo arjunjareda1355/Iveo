@@ -137,8 +137,9 @@ export default function App() {
           {/* 5. Account (Signed in) */}
           <Route path="/account/*" element={<AccountPage />} />
 
-          {/* 6. Public Creator Directory & Legal Pages */}
+          {/* 6. Public Creator Directory, Pricing & Legal Pages */}
           <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/pricing" element={<Landing />} />
           <Route path="/legal" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
           <Route path="/terms" element={<Legal />} />

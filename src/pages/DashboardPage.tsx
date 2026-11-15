@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Eye, X, Share2 } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
@@ -52,6 +52,16 @@ const DashboardContent: React.FC = () => {
   );
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const tabsNavRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const nav = tabsNavRef.current;
+    if (!nav) return;
+    const active = nav.querySelector('a[aria-current="page"]') as HTMLElement | null;
+    if (active) {
+      active.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    }
+  }, [location.pathname]);
 
   // Sync state with session
   useEffect(() => {
@@ -173,16 +183,17 @@ const DashboardContent: React.FC = () => {
 
       {/* Tabs Row */}
       <nav
+        ref={tabsNavRef}
         aria-label="Dashboard Tabs"
         className="h-12 w-full bg-surface border-b border-border sticky top-16 z-30 overflow-x-auto no-scrollbar"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
-        <Container className="h-full flex items-center gap-6 sm:gap-8">
+        <Container className="h-full flex items-center gap-5 sm:gap-8">
           <NavLink
             to={`/dashboard${demoSearch}`}
             end
             className={({ isActive }) =>
-              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none shrink-0 whitespace-nowrap ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
               }`
             }
@@ -203,7 +214,7 @@ const DashboardContent: React.FC = () => {
           <NavLink
             to={`/dashboard/appearance${demoSearch}`}
             className={({ isActive }) =>
-              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none shrink-0 whitespace-nowrap ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
               }`
             }
@@ -224,7 +235,7 @@ const DashboardContent: React.FC = () => {
           <NavLink
             to={`/dashboard/contacts${demoSearch}`}
             className={({ isActive }) =>
-              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none shrink-0 whitespace-nowrap ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
               }`
             }
@@ -245,7 +256,7 @@ const DashboardContent: React.FC = () => {
           <NavLink
             to={`/dashboard/analytics${demoSearch}`}
             className={({ isActive }) =>
-              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none shrink-0 whitespace-nowrap ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
               }`
             }
@@ -266,7 +277,7 @@ const DashboardContent: React.FC = () => {
           <NavLink
             to={`/dashboard/settings${demoSearch}`}
             className={({ isActive }) =>
-              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none ${
+              `relative h-full flex items-center text-[14px] font-medium transition-colors duration-120 select-none shrink-0 whitespace-nowrap ${
                 isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
               }`
             }

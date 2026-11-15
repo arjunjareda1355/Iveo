@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Link2,
-  ShoppingBag,
-  Globe,
-  Mail,
-  Calendar,
   Lock,
+  Mail,
   Share2,
   Instagram,
   MessageCircle,
@@ -14,6 +10,7 @@ import { Vibe } from '../../lib/vibes';
 import { PageBlock } from '../../data/types';
 import { PhoneProfile } from '../phone/PhonePage';
 import { SocialIcon } from '../phone/SocialIcons';
+import { LinkFaviconOrFallback } from '../ui/LinkFaviconOrFallback';
 import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
 import { TipJarBlock } from '../public/TipJarBlock';
@@ -53,14 +50,15 @@ export interface PageRendererProps {
   hideFooterMark?: boolean;
   embedMode?: 'placeholder' | 'live';
   isPublicPage?: boolean;
+  isOwner?: boolean;
   scale?: number;
   onLinkClick?: (block: PageBlock) => void;
+  onSocialClick?: (platform: string, url: string) => void;
+  onWhatsAppClick?: (phone: string) => void;
   onUnlock?: (block: PageBlock) => void;
   renderSignupForm?: (block: PageBlock) => React.ReactNode;
   protectedIds?: ReadonlySet<string>;
 }
-
-const DEFAULT_BUTTON_ICONS = [Link2, ShoppingBag, Globe, Mail, Calendar];
 
 export const PageRenderer: React.FC<PageRendererProps> = ({
   vibe,
@@ -70,8 +68,11 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   hideFooterMark = false,
   embedMode = 'placeholder',
   isPublicPage = false,
+  isOwner = false,
   scale = 1,
   onLinkClick,
+  onSocialClick,
+  onWhatsAppClick,
   onUnlock,
   renderSignupForm,
   protectedIds,
@@ -272,7 +273,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
   return (
     <div
-      className="w-full flex-1 flex flex-col items-center select-none relative overflow-hidden"
+      className={`w-full min-h-full flex-1 flex flex-col items-center select-none relative ${
+        isPublicPage ? 'overflow-x-hidden' : ''
+      }`}
       style={containerBgStyle}
     >
       {/* Background Image Layer (for Dashboard/Onboarding phone preview; Public page renders full-viewport layer) */}
@@ -450,6 +453,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   href={cleanUrl}
                   target="_blank"
                   rel="noopener noreferrer nofollow"
+                  onClick={() => onSocialClick?.(platform, cleanUrl)}
+                  onAuxClick={() => onSocialClick?.(platform, cleanUrl)}
                   aria-label={platform}
                   title={platform.charAt(0).toUpperCase() + platform.slice(1)}
                   className="rounded-full flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
@@ -636,6 +641,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   fontFamily={buttonFontFamily}
                   scale={scale}
                   surfaceStyle={buttonSurfaceStyle}
+                  onAction={isPublicPage ? () => onLinkClick?.(block) : undefined}
                 />
               </div>
             );
@@ -669,6 +675,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   fontFamily={buttonFontFamily}
                   scale={scale}
                   surfaceStyle={buttonSurfaceStyle}
+                  onAction={isPublicPage ? () => onLinkClick?.(block) : undefined}
                 />
               </div>
             );
@@ -784,6 +791,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                         href={isPublicPage ? extra.url || coffeeUrl : undefined}
                         target={isPublicPage ? '_blank' : undefined}
                         rel={isPublicPage ? 'noopener noreferrer' : undefined}
+                        onClick={isPublicPage ? () => onLinkClick?.(block) : undefined}
                         className="px-2 py-0.5 border border-current/20 text-[10px] font-medium opacity-90 hover:opacity-100"
                         style={{ color: coffeeFg, borderRadius: `${innerRadius}px` }}
                       >
@@ -1056,10 +1064,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
-          // 6. Classic link (with or without thumbnail, with optional lock)
-          const DefaultIcon =
-            DEFAULT_BUTTON_ICONS[idx % DEFAULT_BUTTON_ICONS.length];
-
+          // 6. Classic link (with uploaded thumbnail or automatic site favicon + fallback icon, plus optional lock)
           const effectiveThumbUrl = block.thumbnailUrl || (block.thumbnailPath ? storagePublicUrl(block.thumbnailPath) : null);
           const hasThumb = Boolean(effectiveThumbUrl);
           if (hasThumb) imageCounter++;
@@ -1072,13 +1077,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           const lockSize = isPublicPage ? 16 : Math.round(14 * scale);
           const barRadius = resolveCardBorderRadius(effectiveRadius, scale, 'bar');
 
-          // Space reservation for centered text with icon/thumb on left and optional lock on right
+          // Space reservation for centered text with favicon/thumb on left and optional lock on right
           const baseSidePad = effectiveRadius >= 999 ? Math.round(18 * scale) : Math.round(14 * scale);
+          const iconSidePad = Math.max(baseSidePad, Math.round(36 * scale));
           const sidePadding = isProtected
             ? Math.max(hasThumb ? thumbSize + 18 : Math.round(38 * scale), Math.round(38 * scale))
             : hasThumb
             ? thumbSize + 18
-            : baseSidePad;
+            : iconSidePad;
 
           const animClass =
             block.animation === 'pulse'
@@ -1141,10 +1147,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 </div>
               ) : (
                 <span
-                  className="absolute left-3.5 flex items-center shrink-0 opacity-70"
-                  style={{ width: `${Math.round(16 * scale)}px` }}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center shrink-0"
+                  style={{ width: `${Math.round(18 * scale)}px`, height: `${Math.round(18 * scale)}px` }}
                 >
-                  <DefaultIcon size={Math.round(16 * scale)} strokeWidth={1.5} />
+                  <LinkFaviconOrFallback
+                    url={block.url}
+                    size={Math.round(16 * scale)}
+                    className="opacity-85"
+                  />
                 </span>
               )}
 
@@ -1236,6 +1246,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   href={cleanUrl}
                   target="_blank"
                   rel="noopener noreferrer nofollow"
+                  onClick={() => onSocialClick?.(platform, cleanUrl)}
+                  onAuxClick={() => onSocialClick?.(platform, cleanUrl)}
                   aria-label={platform}
                   title={platform.charAt(0).toUpperCase() + platform.slice(1)}
                   className="rounded-full flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
@@ -1326,6 +1338,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             href={`https://wa.me/${cleanDigits}`}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => onWhatsAppClick?.(cleanDigits)}
             aria-label="Chat on WhatsApp"
             className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#25D366] text-white font-semibold text-[13px] shadow-lg hover:scale-105 active:scale-95 transition-transform"
           >
@@ -1347,6 +1360,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         socials={profile?.socials}
         businessCard={profile?.businessCard}
         isPro={isVerified}
+        isOwner={isOwner}
       />
     </div>
   );

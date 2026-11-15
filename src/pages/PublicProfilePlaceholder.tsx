@@ -296,17 +296,21 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
         w.dataLayer.push(arguments);
       };
     }
+    const resolvedTitle =
+      pageData?.profile?.customSeoTitle ||
+      `${pageData?.profile?.displayName || `@${clean}`} – Links, Projects & Social Profiles | Iveo`;
     w.gtag('js', new Date());
     w.gtag('config', measurementId, {
       page_path: `/${clean}`,
-      page_title: document.title,
+      page_location: pageUrl(clean),
+      page_title: resolvedTitle,
     });
 
     return () => {
       const el = document.getElementById(scriptId);
       if (el) el.remove();
     };
-  }, [pageData?.profile?.googleAnalyticsId, clean]);
+  }, [pageData?.profile?.googleAnalyticsId, pageData?.profile?.customSeoTitle, pageData?.profile?.displayName, clean]);
 
   useEffect(() => {
     const rawPixelId = pageData?.profile?.metaPixelId;
@@ -532,6 +536,12 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                   hideFooterMark={pageData.profile.hideFooter}
                   embedMode="live"
                   isPublicPage={true}
+                  isOwner={
+                    Boolean(
+                      session.isSignedIn &&
+                        session.username?.toLowerCase() === clean.toLowerCase()
+                    )
+                  }
                   onLinkClick={(block) => {
                     trackLinkClick(block);
                     const w = window as any;
@@ -539,6 +549,25 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                       w.gtag('event', 'link_click', {
                         link_title: block.title,
                         link_url: block.url || '',
+                        creator: clean,
+                      });
+                    }
+                  }}
+                  onSocialClick={(platform, url) => {
+                    const w = window as any;
+                    if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
+                      w.gtag('event', 'social_click', {
+                        platform,
+                        link_url: url,
+                        creator: clean,
+                      });
+                    }
+                  }}
+                  onWhatsAppClick={(phone) => {
+                    const w = window as any;
+                    if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
+                      w.gtag('event', 'whatsapp_click', {
+                        phone,
                         creator: clean,
                       });
                     }

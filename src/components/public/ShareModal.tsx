@@ -41,6 +41,7 @@ interface ShareModalProps {
   socials?: Record<string, string> | null;
   businessCard?: BusinessCardConfig | null;
   isPro?: boolean;
+  isOwner?: boolean;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -54,6 +55,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   socials,
   businessCard,
   isPro = false,
+  isOwner = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
   const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
@@ -496,11 +498,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               config={cardConfig}
             />
 
-            <BusinessCardCustomizer
-              value={cardConfig}
-              onChange={setCardConfig}
-              onSelectSide={setCardSide}
-            />
+            {isOwner && (
+              <BusinessCardCustomizer
+                value={cardConfig}
+                onChange={setCardConfig}
+                onSelectSide={setCardSide}
+              />
+            )}
 
             <div className="flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-2">

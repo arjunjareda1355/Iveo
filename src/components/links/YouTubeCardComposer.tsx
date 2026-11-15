@@ -49,6 +49,10 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   const lastFetchedUrlRef = useRef<string>(
     initialValues?.youtube ? normalizeYouTubeUrl(initialValues.url || '') || '' : ''
   );
+  const lastAutoTitleRef = useRef<string>(initialValues?.title || 'YouTube Channel');
+  const lastAutoCaptionRef = useRef<string>(
+    initialValues?.badge || 'Subscribe for weekly videos & tutorials'
+  );
 
   const mapServerChannelToYouTubeData = (
     ch: any,
@@ -209,13 +213,23 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
       lastFetchedUrlRef.current = nextUrl;
       setYtData(mapped);
       if (ch.channelUrl) setUrl(nextUrl);
-      if (ch.channelTitle && (!title || title === 'YouTube Channel')) {
+      if (ch.channelTitle && (!title || title === 'YouTube Channel' || title === lastAutoTitleRef.current)) {
         setTitle(ch.channelTitle);
+        lastAutoTitleRef.current = ch.channelTitle;
       }
-      if (ch.subscriberCountText) {
-        setCaption(
-          `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ' · Official Channel'}`
-        );
+      const fetchedCaption = ch.subscriberCountText
+        ? `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ' · Official Channel'}`
+        : ch.handle
+          ? `${ch.handle} · Subscribe on YouTube`
+          : null;
+      if (
+        fetchedCaption &&
+        (!caption ||
+          caption === 'Subscribe for weekly videos & tutorials' ||
+          caption === lastAutoCaptionRef.current)
+      ) {
+        setCaption(fetchedCaption);
+        lastAutoCaptionRef.current = fetchedCaption;
       }
       setStatusMessage(
         ch.latestVideos?.length
@@ -260,15 +274,22 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
             setUrl(normalizedUrl);
           }
           lastFetchedUrlRef.current = normalizedUrl;
-          if (ch.channelTitle && (!finalTitle || finalTitle === 'YouTube Channel')) {
+          if (
+            ch.channelTitle &&
+            (!finalTitle || finalTitle === 'YouTube Channel' || finalTitle === lastAutoTitleRef.current)
+          ) {
             finalTitle = ch.channelTitle;
+            lastAutoTitleRef.current = ch.channelTitle;
             setTitle(ch.channelTitle);
           }
           if (
             ch.subscriberCountText &&
-            (!finalCaption || finalCaption === 'Subscribe for weekly videos & tutorials')
+            (!finalCaption ||
+              finalCaption === 'Subscribe for weekly videos & tutorials' ||
+              finalCaption === lastAutoCaptionRef.current)
           ) {
             finalCaption = `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ' · Official Channel'}`;
+            lastAutoCaptionRef.current = finalCaption;
             setCaption(finalCaption);
           }
         }
@@ -346,7 +367,7 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
           <label htmlFor="yt-url" className="text-[13px] font-medium text-ink">
             Channel @Handle, URL, or Video Link
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <input
               id="yt-url"
               type="text"
@@ -365,7 +386,7 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
               size="md"
               onClick={handleFetchChannel}
               disabled={isFetching || !url.trim()}
-              className="shrink-0"
+              className="shrink-0 w-full sm:w-auto"
             >
               <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
               <span>{isFetching ? 'Syncing...' : 'Fetch Channel'}</span>

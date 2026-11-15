@@ -340,11 +340,11 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
               <ArrowLeft size={15} />
               <span>Back</span>
             </button>
-            <div className="min-w-0">
-              <h2 className="text-[18px] sm:text-[20px] font-semibold text-ink leading-tight truncate">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[18px] sm:text-[20px] font-semibold text-ink leading-tight">
                 {meta.title}
               </h2>
-              <p className="text-[13px] text-muted truncate">{meta.subtitle}</p>
+              <p className="text-[13px] text-muted leading-snug">{meta.subtitle}</p>
             </div>
           </div>
         </div>
@@ -704,7 +704,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
           />
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-start sm:justify-end">
           <Button
             variant="primary"
             size="md"
@@ -735,34 +735,37 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
               key={feat.id}
               type="button"
               onClick={() => setActivePanel(feat.id)}
-              className="group w-full p-3.5 rounded-xl border border-border bg-surface hover:border-ink/40 hover:bg-surface-2/60 transition-all flex items-center justify-between gap-3 text-left cursor-pointer"
+              className="group w-full p-3 sm:p-3.5 rounded-xl border border-border bg-surface hover:border-ink/40 hover:bg-surface-2/60 transition-all flex items-center justify-between gap-2.5 sm:gap-3 text-left cursor-pointer min-w-0"
             >
-              <div className="flex items-center gap-3.5 min-w-0">
+              <div className="flex items-start sm:items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
                 <div className="w-10 h-10 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0 group-hover:bg-surface transition-colors">
                   {feat.icon}
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[14px] font-semibold text-ink leading-snug">
-                      {feat.label}
-                    </span>
-                    <span className="text-[11px] font-medium text-muted">
-                      {feat.tierNote}
-                    </span>
+                <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+                      <span className="text-[14px] font-semibold text-ink leading-snug">
+                        {feat.label}
+                      </span>
+                      <span className="text-[11px] font-medium text-muted leading-tight">
+                        {feat.tierNote}
+                      </span>
+                    </div>
+                    <p className="text-[12px] text-muted leading-snug mt-0.5 line-clamp-2 sm:line-clamp-1">
+                      {feat.description}
+                    </p>
                   </div>
-                  <div className="text-[12px] text-muted truncate">
-                    {feat.description}
+
+                  <div className="flex items-center shrink-0 max-w-full sm:max-w-[140px]">
+                    <div className="min-w-0 truncate flex items-center">{feat.accessory}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 shrink-0">
-                {feat.accessory}
-                <ChevronRight
-                  size={17}
-                  className="text-muted group-hover:text-ink group-hover:translate-x-0.5 transition-all"
-                />
-              </div>
+              <ChevronRight
+                size={17}
+                className="text-muted group-hover:text-ink group-hover:translate-x-0.5 transition-all shrink-0"
+              />
             </button>
           ))}
         </div>

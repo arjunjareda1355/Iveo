@@ -65,6 +65,7 @@ import { useClickCounts } from '../../data/hooks/useClickCounts';
 import { useProtectedLinkIds } from '../../data/hooks/useProtectedLinkIds';
 import { copy } from '../../content/copy';
 import { SocialLinksCard } from './SocialLinksCard';
+import { LinkFaviconOrFallback } from '../ui/LinkFaviconOrFallback';
 
 export const LinksTab: React.FC = () => {
   const clickCounts = useClickCounts();
@@ -371,7 +372,7 @@ export const LinksTab: React.FC = () => {
       {/* 1. Simple & Clean Action Bar */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-xl border border-border shadow-2xs">
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <Button
               variant="primary"
               size="md"
@@ -426,7 +427,7 @@ export const LinksTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFilterCategory('all')}
-                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                   filterCategory === 'all'
                     ? 'bg-ink text-white shadow-2xs'
                     : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
@@ -437,7 +438,7 @@ export const LinksTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFilterCategory('links')}
-                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                   filterCategory === 'links'
                     ? 'bg-ink text-white shadow-2xs'
                     : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
@@ -448,7 +449,7 @@ export const LinksTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFilterCategory('media_forms')}
-                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                   filterCategory === 'media_forms'
                     ? 'bg-ink text-white shadow-2xs'
                     : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
@@ -478,7 +479,7 @@ export const LinksTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFilterCategory('headers')}
-                className={`px-3 py-1 rounded-full font-medium transition-all ${
+                className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                   filterCategory === 'headers'
                     ? 'bg-ink text-white shadow-2xs'
                     : 'bg-surface border border-border text-muted hover:text-ink hover:border-ink/20'
@@ -494,7 +495,7 @@ export const LinksTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowArchived(!showArchived)}
-                className="ml-auto text-[12px] text-muted hover:text-ink font-medium px-2.5 py-1 rounded-full bg-surface border border-border hover:border-ink/20 shrink-0 transition-colors"
+                className="ml-auto text-[12px] text-muted hover:text-ink font-medium px-2.5 py-1 rounded-full bg-surface border border-border hover:border-ink/20 shrink-0 transition-colors cursor-pointer"
               >
                 {showArchived ? 'Hide Archived' : `Archived (${archivedBlocks.length})`}
               </button>
@@ -516,7 +517,7 @@ export const LinksTab: React.FC = () => {
                 type="button"
                 onClick={handleCloseComposer}
                 aria-label="Close"
-                className="text-muted hover:text-ink p-1 rounded-md transition-colors"
+                className="text-muted hover:text-ink p-1 rounded-md transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -869,16 +870,18 @@ export const LinksTab: React.FC = () => {
                           <Heading size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : isDivider ? (
                           <Minus size={18} className="text-subtle" strokeWidth={1.5} />
+                        ) : isLink ? (
+                          <LinkFaviconOrFallback url={block.url} size={18} className="text-subtle" strokeWidth={1.5} />
                         ) : (
                           <Link2 size={18} className="text-subtle" strokeWidth={1.5} />
                         )}
                       </div>
 
                       {/* Text info */}
-                      <div className="flex flex-col min-w-0">
-                        <div className="flex items-center gap-2 truncate">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                           <span
-                            className={`text-[15px] font-medium truncate ${
+                            className={`text-[15px] font-medium truncate max-w-full ${
                               !block.isActive ? 'text-muted' : 'text-ink'
                             }`}
                           >
@@ -1054,7 +1057,7 @@ export const LinksTab: React.FC = () => {
                     </div>
 
                     {/* Right controls */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                       {/* Active toggle */}
                       {!isDivider && (
                         <button
@@ -1062,7 +1065,7 @@ export const LinksTab: React.FC = () => {
                           role="switch"
                           aria-checked={block.isActive}
                           onClick={() => toggleActive(block.id)}
-                          className={`w-9 h-5 rounded-full flex items-center p-0.5 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-ink ${
+                          className={`w-9 h-5 rounded-full flex items-center p-0.5 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-ink cursor-pointer ${
                             block.isActive ? 'bg-ink' : 'bg-border'
                           }`}
                         >
@@ -1131,7 +1134,7 @@ export const LinksTab: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => toggleArchive(block.id)}
-                              className="w-full px-3 py-1.5 text-left text-[14px] text-ink hover:bg-surface-2 flex items-center gap-2"
+                              className="w-full px-3 py-1.5 text-left text-[14px] text-ink hover:bg-surface-2 flex items-center gap-2 cursor-pointer"
                             >
                               <Archive size={14} />
                               <span>Archive</span>
@@ -1139,7 +1142,7 @@ export const LinksTab: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setDeletingBlock(block)}
-                              className="w-full px-3 py-1.5 text-left text-[14px] text-error hover:bg-red-50 flex items-center gap-2"
+                              className="w-full px-3 py-1.5 text-left text-[14px] text-error hover:bg-red-50 flex items-center gap-2 cursor-pointer"
                             >
                               <Trash2 size={14} />
                               <span>Delete</span>

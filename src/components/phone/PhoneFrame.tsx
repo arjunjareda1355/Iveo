@@ -59,7 +59,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
           borderRadius: `${innerRadius}px`,
           backgroundColor: vibe.tokens.bg,
         }}
-        className="relative w-full h-full overflow-hidden flex flex-col pointer-events-none"
+        className="relative w-full h-full overflow-hidden flex flex-col"
       >
         {/* Dynamic Island */}
         <div
@@ -69,7 +69,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
             borderRadius: `${islandRadius}px`,
             top: `${islandTop}px`,
           }}
-          className="absolute left-1/2 -translate-x-1/2 bg-black z-30 shadow-xs"
+          className="absolute left-1/2 -translate-x-1/2 bg-black z-30 shadow-xs pointer-events-none"
         />
 
         {/* Status Bar */}
@@ -82,7 +82,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
             fontFamily: "'Inter', sans-serif",
             fontSize: `${Math.round(12 * scale)}px`,
           }}
-          className="relative z-20 w-full flex items-center justify-between shrink-0 font-semibold opacity-85 select-none"
+          className="relative z-20 w-full flex items-center justify-between shrink-0 font-semibold opacity-85 select-none pointer-events-none"
         >
           <span>9:41</span>
           <div className="flex items-center gap-1.5" style={{ height: `${Math.round(14 * scale)}px` }}>
@@ -123,8 +123,12 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
           </div>
         </div>
 
-        {/* Screen Content */}
-        <div className="relative w-full flex-1 min-h-0 overflow-hidden">
+        {/* Screen Content (scrollable vertically in live dashboard/onboarding previews) */}
+        <div
+          data-testid="phone-scroll-viewport"
+          className="relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(128,128,128,0.3)_transparent]"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {children}
         </div>
 

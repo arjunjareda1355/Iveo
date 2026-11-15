@@ -1,6 +1,7 @@
 import sql from 'mssql';
 import fs from 'node:fs';
 import path from 'node:path';
+import { mergeProfileForSave } from './profileMerge.ts';
 
 // Confirmed Azure SQL Infrastructure details
 const AZURE_SQL_SERVER = process.env.AZURE_SQL_SERVER || 'faneme.database.windows.net';
@@ -827,52 +828,50 @@ export async function dbSaveProfile(profile: {
   }
 
   const pool = await getAzureSqlPool();
-
-  const isOwner =
-    isPrivilegedEmailServer(profile.primaryEmail) ||
-    profile.plan === 'pro';
-  const effectivePlan = isOwner ? 'pro' : profile.plan || 'free';
-  const effectiveStatus = profile.status || (profile.isPublished === false ? 'unpublished' : 'active');
+  const existingProf = await dbGetProfile(cleanUsername);
+  const merged = mergeProfileForSave(
+    existingProf,
+    { ...profile, username: cleanUsername },
+    isPrivilegedEmailServer(profile.primaryEmail ?? existingProf?.primaryEmail)
+  );
 
   const socialsPayload = {
-    links: profile.socials || {},
-    position: profile.socialsPosition || 'top',
-    email: profile.primaryEmail || null,
-    background: profile.background !== undefined ? profile.background : null,
-    status: effectiveStatus,
+    links: merged.socials,
+    position: merged.socialsPosition,
+    email: merged.primaryEmail,
+    background: merged.background,
+    status: merged.status,
     integrations: {
-      googleAnalyticsId: profile.googleAnalyticsId ?? null,
-      metaPixelId: profile.metaPixelId ?? null,
-      whatsappNumber: profile.whatsappNumber ?? null,
-      customSeoTitle: profile.customSeoTitle ?? null,
-      customSeoDescription: profile.customSeoDescription ?? null,
+      googleAnalyticsId: merged.googleAnalyticsId,
+      metaPixelId: merged.metaPixelId,
+      whatsappNumber: merged.whatsappNumber,
+      customSeoTitle: merged.customSeoTitle,
+      customSeoDescription: merged.customSeoDescription,
     },
     appearance: {
-      fontSettings: profile.fontSettings ?? null,
-      buttonColors: profile.buttonColors ?? null,
-      businessCard: profile.businessCard ?? null,
-      layoutSettings: profile.layoutSettings ?? null,
+      fontSettings: merged.fontSettings,
+      buttonColors: merged.buttonColors,
+      businessCard: merged.businessCard,
+      layoutSettings: merged.layoutSettings,
     },
   };
-
-  const calculatedAvatarType = profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default'));
 
   if (pool) {
     try {
       const req = pool.request();
-      req.input('userId', sql.NVarChar(128), profile.userId || 'owner');
+      req.input('userId', sql.NVarChar(128), merged.userId);
       req.input('username', sql.NVarChar(64), cleanUsername);
-      req.input('displayName', sql.NVarChar(128), profile.displayName || cleanUsername);
-      req.input('bio', sql.NVarChar(500), profile.bio || '');
-      req.input('avatarUrl', sql.NVarChar(2048), profile.avatarUrl || null);
-      req.input('avatarType', sql.NVarChar(32), calculatedAvatarType);
-      req.input('avatarId', sql.NVarChar(64), profile.avatarId || null);
-      req.input('vibeId', sql.NVarChar(32), profile.vibeId || 'clean');
-      req.input('buttonShape', sql.NVarChar(32), profile.buttonShape === null ? null : (profile.buttonShape || 'rounded'));
+      req.input('displayName', sql.NVarChar(128), merged.displayName);
+      req.input('bio', sql.NVarChar(500), merged.bio);
+      req.input('avatarUrl', sql.NVarChar(2048), merged.avatarUrl);
+      req.input('avatarType', sql.NVarChar(32), merged.avatarType);
+      req.input('avatarId', sql.NVarChar(64), merged.avatarId);
+      req.input('vibeId', sql.NVarChar(32), merged.vibeId);
+      req.input('buttonShape', sql.NVarChar(32), merged.buttonShape);
       req.input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(socialsPayload));
-      req.input('plan', sql.NVarChar(32), effectivePlan);
-      req.input('hideFooter', sql.Bit, profile.hideFooter ? 1 : 0);
-      req.input('hideFromSearch', sql.Bit, profile.hideFromSearch ? 1 : 0);
+      req.input('plan', sql.NVarChar(32), merged.plan);
+      req.input('hideFooter', sql.Bit, merged.hideFooter ? 1 : 0);
+      req.input('hideFromSearch', sql.Bit, merged.hideFromSearch ? 1 : 0);
 
       await req.query(`
         MERGE iveo_profiles AS target
@@ -905,39 +904,16 @@ export async function dbSaveProfile(profile: {
 
   // Server store fallback
   const store = readServerStore();
-  const existingProf = store.profiles[cleanUsername];
-  const finalUserId = (existingProf?.userId && existingProf.userId !== 'owner') ? existingProf.userId : (profile.userId || 'owner');
-  const resolvedEmail = profile.primaryEmail !== undefined ? profile.primaryEmail : (existingProf?.primaryEmail || null);
-  const finalPlan = (isPrivilegedEmailServer(resolvedEmail) || effectivePlan === 'pro') ? 'pro' : 'free';
-
+  const storeExisting = store.profiles[cleanUsername];
   store.profiles[cleanUsername] = {
-    ...existingProf,
-    ...profile,
-    userId: finalUserId,
-    primaryEmail: resolvedEmail,
-    plan: finalPlan,
-    avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : (existingProf?.avatarUrl || null),
-    avatarType: calculatedAvatarType,
-    avatarId: profile.avatarId !== undefined ? profile.avatarId : (existingProf?.avatarId || null),
-    socials: profile.socials !== undefined ? (profile.socials || {}) : (existingProf?.socials || {}),
-    socialsPosition: profile.socialsPosition || existingProf?.socialsPosition || 'top',
-    buttonShape: profile.buttonShape !== undefined ? profile.buttonShape : (existingProf?.buttonShape ?? null),
-    background: profile.background !== undefined ? profile.background : (existingProf?.background ?? null),
-    googleAnalyticsId: profile.googleAnalyticsId !== undefined ? profile.googleAnalyticsId : (existingProf?.googleAnalyticsId ?? null),
-    metaPixelId: profile.metaPixelId !== undefined ? profile.metaPixelId : (existingProf?.metaPixelId ?? null),
-    whatsappNumber: profile.whatsappNumber !== undefined ? profile.whatsappNumber : (existingProf?.whatsappNumber ?? null),
-    customSeoTitle: profile.customSeoTitle !== undefined ? profile.customSeoTitle : (existingProf?.customSeoTitle ?? null),
-    customSeoDescription: profile.customSeoDescription !== undefined ? profile.customSeoDescription : (existingProf?.customSeoDescription ?? null),
-    fontSettings: profile.fontSettings !== undefined ? profile.fontSettings : (existingProf?.fontSettings ?? null),
-    buttonColors: profile.buttonColors !== undefined ? profile.buttonColors : (existingProf?.buttonColors ?? null),
-    businessCard: profile.businessCard !== undefined ? profile.businessCard : (existingProf?.businessCard ?? null),
-    layoutSettings: profile.layoutSettings !== undefined ? profile.layoutSettings : (existingProf?.layoutSettings ?? null),
+    ...storeExisting,
+    ...merged,
     username: cleanUsername,
     updatedAt: new Date().toISOString(),
   };
 
-  if (finalUserId && finalUserId !== 'owner') {
-    store.userToUsername[finalUserId] = cleanUsername;
+  if (merged.userId && merged.userId !== 'owner') {
+    store.userToUsername[merged.userId] = cleanUsername;
   }
 
   writeServerStore(store);

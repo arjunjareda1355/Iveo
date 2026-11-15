@@ -39,7 +39,7 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
         ariaLabel={ariaLabel}
         className={className}
       >
-        <div className="relative w-full h-full overflow-hidden">
+        <div className="relative w-full min-h-full flex flex-col">
           <PhonePage
             key={currentVibe.id}
             vibe={currentVibe}

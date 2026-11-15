@@ -15,6 +15,7 @@ interface VCardBlockProps {
   fontFamily?: string;
   scale?: number;
   surfaceStyle?: React.CSSProperties;
+  onAction?: () => void;
 }
 
 export const VCardBlock: React.FC<VCardBlockProps> = ({
@@ -24,6 +25,7 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
   fontFamily,
   scale = 1,
   surfaceStyle,
+  onAction,
 }) => {
   const [downloaded, setDownloaded] = useState(false);
   const barRadius = resolveCardBorderRadius(buttonRadius, scale, 'bar');
@@ -58,6 +60,7 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
   const handleDownloadVCard = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    onAction?.();
 
     const vcardData = buildVCardString({
       fullName: config.fullName,

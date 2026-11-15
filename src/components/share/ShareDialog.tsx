@@ -377,7 +377,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
           <button
             onClick={onClose}
             aria-label="Close share dialog"
-            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors duration-120"
+            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors duration-120 cursor-pointer"
           >
             <X size={18} strokeWidth={1.5} />
           </button>
@@ -554,10 +554,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
             {/* Any-Color Pickers + Hex + ECC */}
             <div className="p-3 rounded-xl bg-surface-2/70 border border-border flex flex-col gap-2.5">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                <div className="flex flex-col gap-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+                <div className="flex flex-col gap-1 min-w-0">
                   <span className="text-[11px] font-medium text-muted">QR Dots Color</span>
-                  <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border border-border bg-surface">
+                  <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border border-border bg-surface min-w-0">
                     <input
                       type="color"
                       aria-label="QR Foreground Color Picker"
@@ -574,7 +574,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                         const norm = normalizeHexColor(e.target.value);
                         if (norm) setQrFgColor(norm);
                       }}
-                      className="w-full text-[11px] font-mono text-ink bg-transparent outline-none uppercase"
+                      className="w-full min-w-0 text-[11px] font-mono text-ink bg-transparent outline-none uppercase"
                     />
                   </div>
                 </div>
@@ -587,14 +587,14 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                     setQrBgColor(prevFg);
                   }}
                   title="Swap QR colors"
-                  className="h-8 w-8 rounded-lg border border-border bg-surface hover:bg-surface-2 flex items-center justify-center text-muted hover:text-ink cursor-pointer"
+                  className="h-8 w-8 rounded-lg border border-border bg-surface hover:bg-surface-2 flex items-center justify-center text-muted hover:text-ink cursor-pointer shrink-0"
                 >
                   <ArrowLeftRight size={13} />
                 </button>
 
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 min-w-0">
                   <span className="text-[11px] font-medium text-muted">QR Background</span>
-                  <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border border-border bg-surface">
+                  <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border border-border bg-surface min-w-0">
                     <input
                       type="color"
                       aria-label="QR Background Color Picker"
@@ -611,13 +611,13 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
                         const norm = normalizeHexColor(e.target.value);
                         if (norm) setQrBgColor(norm);
                       }}
-                      className="w-full text-[11px] font-mono text-ink bg-transparent outline-none uppercase"
+                      className="w-full min-w-0 text-[11px] font-mono text-ink bg-transparent outline-none uppercase"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <span className="text-[11px] text-muted">Error Correction</span>
                 <div className="flex items-center gap-1 p-0.5 rounded-md bg-surface border border-border">
                   {(

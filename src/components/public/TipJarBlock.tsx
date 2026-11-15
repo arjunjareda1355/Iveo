@@ -14,6 +14,7 @@ interface TipJarBlockProps {
   fontFamily?: string;
   scale?: number;
   surfaceStyle?: React.CSSProperties;
+  onAction?: () => void;
 }
 
 export const TipJarBlock: React.FC<TipJarBlockProps> = ({
@@ -23,6 +24,7 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
   fontFamily,
   scale = 1,
   surfaceStyle,
+  onAction,
 }) => {
   const currency = config.currency || '$';
   const amounts = config.amounts && config.amounts.length > 0 ? config.amounts : [3, 5, 10, 25];
@@ -147,6 +149,8 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         href={paymentHref}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() => onAction?.()}
+        onAuxClick={() => onAction?.()}
         className="w-full font-medium py-2 px-4 flex items-center justify-center gap-2 transition-transform duration-150 active:scale-[0.98] cursor-pointer"
         style={{
           borderRadius: `${controlRadius}px`,
