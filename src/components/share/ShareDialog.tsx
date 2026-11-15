@@ -52,6 +52,7 @@ interface ShareDialogProps {
   buttonColors?: ButtonColors | null;
   businessCard?: BusinessCardConfig | null;
   onSaveCardConfig?: (cfg: BusinessCardConfig) => Promise<void> | void;
+  isPro?: boolean;
   isPublished?: boolean;
 }
 
@@ -76,6 +77,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   buttonColors,
   businessCard,
   onSaveCardConfig,
+  isPro = false,
   isPublished = true,
 }) => {
   const { showToast } = useToast();
@@ -280,6 +282,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         bio,
         pageUrl: fullUrl,
         avatarUrl,
+        isPro,
         qrDataUrl: qrPngDataUrl,
         theme: cardTheme,
         cardConfig,
@@ -302,6 +305,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
           bio,
           pageUrl: fullUrl,
           avatarUrl,
+          isPro,
           qrDataUrl: qrPngDataUrl,
           theme: cardTheme,
           cardConfig,
@@ -402,6 +406,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
               displayName={displayName || username}
               bio={bio}
               avatarUrl={avatarUrl}
+              isPro={isPro}
               qrDataUrl={qrPngDataUrl}
               vibeTheme={cardTheme}
               config={cardConfig}

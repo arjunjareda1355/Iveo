@@ -11,6 +11,7 @@ import {
 } from './businessCardConfig';
 import { ensureCanvasFontLoaded } from './fonts';
 import { isLightHexColor } from './colors';
+import { VERIFIED_TICK_IMAGE_URL } from '../components/ui/VerifiedTick';
 
 export interface BusinessCardData {
   displayName: string;
@@ -18,6 +19,7 @@ export interface BusinessCardData {
   bio?: string;
   pageUrl: string;
   avatarUrl?: string | null;
+  isPro?: boolean;
   qrDataUrl?: string | null;
   cardConfig?: BusinessCardConfig | null;
   theme?: {
@@ -228,6 +230,10 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
       ? await loadCanvasSafeAvatar(data.avatarUrl)
       : null;
 
+  const verifiedImg = data.isPro
+    ? await loadCanvasSafeAvatar(VERIFIED_TICK_IMAGE_URL)
+    : null;
+
   const cleanUsername = (data.username || 'creator').toLowerCase().trim();
   const initials = (data.displayName || cleanUsername).slice(0, 2).toUpperCase();
 
@@ -431,7 +437,50 @@ export async function generateBusinessCardPng(data: BusinessCardData): Promise<s
       drawInlineSubPart('·', app.mutedColor, `500 12px ${fontPrimary}`);
     }
     if (showHandle) {
-      drawInlineSubPart(`@${cleanUsername}`, app.mutedColor, `400 12px ${monoFont}`);
+      const handleText = `@${cleanUsername}`;
+      const tickSize = 13;
+      const tickGap = 4;
+      ctx.font = `400 12px ${monoFont}`;
+      const handleWidth = ctx.measureText(handleText).width;
+      const totalHandleW = handleWidth + (data.isPro ? tickGap + tickSize : 0);
+      if (subX > textStartX && subX + totalHandleW > textStartX + maxNameWidth) {
+        subX = textStartX;
+        subY += 16;
+      }
+      const maxTextW = Math.max(40, maxNameWidth - (subX - textStartX) - (data.isPro ? tickGap + tickSize : 0));
+      ctx.fillStyle = app.mutedColor;
+      ctx.fillText(handleText, subX, subY, maxTextW);
+      const renderedHandleW = Math.min(handleWidth, maxTextW);
+      if (data.isPro) {
+        const tickX = subX + renderedHandleW + tickGap;
+        const tickY = subY - 0.5;
+        ctx.save();
+        if (!app.isLight) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.beginPath();
+          ctx.arc(tickX + tickSize / 2, tickY + tickSize / 2, tickSize / 2 + 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (verifiedImg) {
+          ctx.drawImage(verifiedImg, tickX + (!app.isLight ? 1 : 0), tickY + (!app.isLight ? 1 : 0), tickSize - (!app.isLight ? 2 : 0), tickSize - (!app.isLight ? 2 : 0));
+        } else {
+          ctx.fillStyle = '#0A0A0A';
+          ctx.beginPath();
+          ctx.arc(tickX + tickSize / 2, tickY + tickSize / 2, tickSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1.6;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(tickX + tickSize * 0.28, tickY + tickSize * 0.52);
+          ctx.lineTo(tickX + tickSize * 0.44, tickY + tickSize * 0.68);
+          ctx.lineTo(tickX + tickSize * 0.74, tickY + tickSize * 0.34);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      subX += renderedHandleW + (data.isPro ? tickGap + tickSize : 0) + 6;
     }
     if ((showRole || showHandle) && showLoc) {
       drawInlineSubPart('·', app.mutedColor, `500 12px ${fontPrimary}`);

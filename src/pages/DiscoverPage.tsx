@@ -5,6 +5,7 @@ import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
 import { Container } from '../components/ui/Container';
 import { Footer } from '../components/sections/Footer';
+import { VerifiedTick } from '../components/ui/VerifiedTick';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { SITE_ORIGIN } from '../lib/site';
 import { VIBES } from '../lib/vibes';
@@ -15,6 +16,8 @@ interface DiscoverProfile {
   bio: string;
   avatarUrl: string | null;
   vibeId: string;
+  isPro?: boolean;
+  isVerified?: boolean;
   url: string;
   updatedAt?: string;
 }
@@ -224,8 +227,9 @@ export const DiscoverPage: React.FC = () => {
                           <h2 className="text-[16px] font-semibold text-ink truncate group-hover:underline underline-offset-2">
                             {profile.displayName}
                           </h2>
-                          <p className="text-[12px] font-mono text-muted truncate">
-                            iveo.site/{profile.username}
+                          <p className="inline-flex items-center gap-1.5 text-[12px] font-mono text-muted max-w-full">
+                            <span className="truncate">iveo.site/{profile.username}</span>
+                            {(profile.isVerified || profile.isPro) && <VerifiedTick size={13} />}
                           </p>
                         </div>
                       </div>

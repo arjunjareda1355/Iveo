@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canUseReservedUsername, isOwnerEmail } from './plan';
+import {
+  canUseReservedUsername,
+  FREE_PLAN_HIGHLIGHTS,
+  isOwnerEmail,
+  PLAN_COMPARISON_SECTIONS,
+  PRO_FEATURE_NAMES,
+  PRO_FEATURES,
+  PRO_PLAN_HIGHLIGHTS,
+} from './plan';
+import { VIBES } from './vibes';
+import { FONT_OPTIONS } from './fonts';
+import { BACKGROUND_PRESETS } from './backgrounds';
 import { validateUsername } from './username-rules';
 import { validateUsernameSync } from './username';
 import {
@@ -63,4 +74,35 @@ test('validateUsernameSync forwards email for reserved handles', () => {
   assert.equal(validateUsernameSync('support', { email: 'example@iveo.site' }).status, 'available');
   assert.equal(validateUsernameSync('iveo', { email: 'arjunjareda2007@gmail.com' }).status, 'available');
   assert.equal(validateUsernameSync('login', { email: 'example@iveo.site' }).status, 'unavailable');
+});
+
+test('Free vs Pro features, Vibes, Fonts, and Backgrounds maintain exact clean separation', () => {
+  const freeVibes = VIBES.filter((v) => !v.isPro);
+  const proVibes = VIBES.filter((v) => v.isPro);
+  assert.equal(freeVibes.length, 6);
+  assert.equal(proVibes.length, 6);
+
+  const freeFonts = FONT_OPTIONS.filter((f) => !f.isPro);
+  const proFonts = FONT_OPTIONS.filter((f) => f.isPro);
+  assert.equal(freeFonts.length, 8);
+  assert.equal(proFonts.length, 11);
+
+  const freeBgPresets = BACKGROUND_PRESETS.filter((b) => !b.isPro && b.id !== 'none');
+  const proBgPresets = BACKGROUND_PRESETS.filter((b) => b.isPro);
+  assert.equal(freeBgPresets.length, 5);
+  assert.equal(proBgPresets.length, 10);
+
+  for (const feat of PRO_FEATURES) {
+    assert.ok(PRO_FEATURE_NAMES[feat], `Missing label for ${feat}`);
+  }
+  assert.ok(PRO_FEATURES.includes('pro_vibes'));
+  assert.ok(PRO_FEATURES.includes('verified_badge'));
+  assert.ok(FREE_PLAN_HIGHLIGHTS.some((line) => line.includes('6 Free Vibes')));
+  assert.ok(PRO_PLAN_HIGHLIGHTS.some((line) => line.includes('Verified Pro tick')));
+  assert.ok(PLAN_COMPARISON_SECTIONS.length >= 4);
+  assert.ok(
+    PLAN_COMPARISON_SECTIONS.some((s) =>
+      s.rows.some((r) => r.feature.toLowerCase().includes('verified pro tick') && r.free === false && r.pro === 'Included')
+    )
+  );
 });

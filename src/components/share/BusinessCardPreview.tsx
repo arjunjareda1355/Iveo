@@ -11,12 +11,14 @@ import {
 import { getCanvasFontName, loadGoogleFonts } from '../../lib/fonts';
 import { isLightHexColor } from '../../lib/colors';
 import { makeQrPngDataUrl } from '../../lib/qr';
+import { VerifiedTick } from '../ui/VerifiedTick';
 
 export interface BusinessCardPreviewProps {
   username: string;
   displayName: string;
   bio?: string | null;
   avatarUrl?: string | null;
+  isPro?: boolean;
   qrDataUrl?: string | null;
   vibeTheme: {
     bg: string;
@@ -33,6 +35,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
   displayName,
   bio,
   avatarUrl,
+  isPro = false,
   qrDataUrl,
   vibeTheme,
   config,
@@ -288,11 +291,15 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                 {resolved.showHandle !== false && (
                   <span
                     style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
                       fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
                       color: app.mutedColor,
                     }}
                   >
-                    @{cleanUsername}
+                    <span>@{cleanUsername}</span>
+                    {isPro && <VerifiedTick size={13} onDark={!app.isLight} />}
                   </span>
                 )}
                 {resolved.companyOrLocation && (

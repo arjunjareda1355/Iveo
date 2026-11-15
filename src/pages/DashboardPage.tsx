@@ -121,6 +121,8 @@ const DashboardContent: React.FC = () => {
     handle: session.username || 'yourname',
     avatarUrl: session.imageUrl,
     bio: session.bio || 'Your bio goes here.',
+    isPro: session.isPro,
+    isVerified: session.isPro,
     socials: session.socials,
     socialsPosition: session.socialsPosition,
     whatsappNumber: session.whatsappNumber,
@@ -147,7 +149,9 @@ const DashboardContent: React.FC = () => {
         <Container className="h-full flex items-center justify-between">
           <div className="flex items-center gap-4 sm:gap-6">
             <Logo tone="light" size="md" />
-            {session.username && <AddressPill username={session.username} />}
+            {session.username && (
+              <AddressPill username={session.username} isPro={session.isPro} />
+            )}
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -398,6 +402,7 @@ const DashboardContent: React.FC = () => {
           onSaveCardConfig={async (cfg) => {
             await session.updatePreferences({ businessCard: cfg });
           }}
+          isPro={session.isPro}
           isPublished={true}
         />
       )}

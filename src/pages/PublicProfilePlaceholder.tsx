@@ -474,6 +474,8 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                     handle: pageData.profile.username,
                     bio: pageData.profile.bio,
                     avatarUrl: pageData.profile.avatarUrl,
+                    isPro: Boolean(pageData.profile.isPro),
+                    isVerified: Boolean(pageData.profile.isVerified ?? pageData.profile.isPro),
                     socials: pageData.profile.socials,
                     socialsPosition: pageData.profile.socialsPosition || 'top',
                     whatsappNumber: pageData.profile.whatsappNumber || null,

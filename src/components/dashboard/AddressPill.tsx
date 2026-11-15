@@ -1,14 +1,16 @@
 import React from 'react';
 import { Copy } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { VerifiedTick } from '../ui/VerifiedTick';
 import { pageUrl } from '../../lib/site';
 import { copy } from '../../content/copy';
 
 interface AddressPillProps {
   username: string;
+  isPro?: boolean;
 }
 
-export const AddressPill: React.FC<AddressPillProps> = ({ username }) => {
+export const AddressPill: React.FC<AddressPillProps> = ({ username, isPro = false }) => {
   const { showToast } = useToast();
 
   const handleCopy = async () => {
@@ -28,9 +30,10 @@ export const AddressPill: React.FC<AddressPillProps> = ({ username }) => {
         target="_blank"
         rel="noopener noreferrer"
         title="Open your public page in a new tab"
-        className="hidden sm:flex h-9 items-center rounded-full bg-surface border border-border px-3 text-[13px] font-mono text-ink shadow-xs hover:border-ink transition-colors cursor-pointer"
+        className="hidden sm:inline-flex h-9 items-center gap-1.5 rounded-full bg-surface border border-border px-3 text-[13px] font-mono text-ink shadow-xs hover:border-ink transition-colors cursor-pointer"
       >
-        iveo.site/{username}
+        <span>iveo.site/{username}</span>
+        {isPro && <VerifiedTick size={13} />}
       </a>
 
       {/* Copy icon button (both desktop and mobile) */}

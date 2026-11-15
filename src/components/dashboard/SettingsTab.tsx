@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Copy, ExternalLink, Share2, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { VerifiedTick } from '../ui/VerifiedTick';
 import { ProBadge } from '../plan/ProBadge';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { ShareDialog } from '../share/ShareDialog';
@@ -209,8 +210,9 @@ export const SettingsTab: React.FC = () => {
             <div className="h-14 flex items-center justify-between text-[14px]">
               <span className="text-muted">Username</span>
               <div className="flex items-center gap-2.5">
-                <span className="text-[15px] font-mono font-medium text-ink">
-                  @{session.username || 'not_set'}
+                <span className="inline-flex items-center gap-1.5 text-[15px] font-mono font-medium text-ink">
+                  <span>@{session.username || 'not_set'}</span>
+                  {session.isPro && session.username && <VerifiedTick size={14} />}
                 </span>
                 <button
                   type="button"
@@ -402,6 +404,7 @@ export const SettingsTab: React.FC = () => {
           onSaveCardConfig={async (cfg) => {
             await session.updatePreferences({ businessCard: cfg });
           }}
+          isPro={session.isPro}
           isPublished={true}
         />
       )}

@@ -27,6 +27,7 @@ import {
 import { pageUrl as buildCanonicalPageUrl } from '../../lib/site';
 import { BusinessCardPreview } from '../share/BusinessCardPreview';
 import { BusinessCardCustomizer } from '../share/BusinessCardCustomizer';
+import { VerifiedTick } from '../ui/VerifiedTick';
 import type { Vibe } from '../../lib/vibes';
 
 interface ShareModalProps {
@@ -38,6 +39,7 @@ interface ShareModalProps {
   avatarUrl?: string | null;
   vibe?: Vibe;
   businessCard?: BusinessCardConfig | null;
+  isPro?: boolean;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -49,6 +51,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   avatarUrl,
   vibe,
   businessCard,
+  isPro = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
   const [copied, setCopied] = useState(false);
@@ -179,6 +182,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         bio,
         pageUrl,
         avatarUrl,
+        isPro,
         qrDataUrl: qrPngUrl,
         theme: cardTheme,
         cardConfig,
@@ -203,6 +207,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           bio,
           pageUrl,
           avatarUrl,
+          isPro,
           qrDataUrl: qrPngUrl,
           theme: cardTheme,
           cardConfig,
@@ -307,7 +312,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               <h3 className="text-[16px] font-semibold text-ink leading-tight">
                 {displayName || cleanUsername}
               </h3>
-              <p className="text-[12px] font-mono text-muted">iveo.site/{cleanUsername}</p>
+              <p className="inline-flex items-center gap-1.5 text-[12px] font-mono text-muted">
+                <span>iveo.site/{cleanUsername}</span>
+                {isPro && <VerifiedTick size={13} />}
+              </p>
             </div>
           </div>
           <button
@@ -472,6 +480,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               displayName={displayName || cleanUsername}
               bio={bio}
               avatarUrl={avatarUrl}
+              isPro={isPro}
               qrDataUrl={qrPngUrl}
               vibeTheme={cardTheme}
               config={cardConfig}
