@@ -2,9 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractChannelMetaFromHtml,
+  getYouTubeApiKey,
   parseRssFeedXml,
   parseYouTubeInput,
 } from './youtube';
+
+test('getYouTubeApiKey resolves configured server API key cleanly', () => {
+  const key = getYouTubeApiKey();
+  assert.ok(key.length > 20);
+  assert.equal(key.startsWith('AIzaSy'), true);
+});
 
 test('parseYouTubeInput resolves handles, channel IDs, custom URLs, shorts, and watch links', () => {
   assert.deepEqual(parseYouTubeInput('@mkbhd'), {

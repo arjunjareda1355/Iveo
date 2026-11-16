@@ -13,7 +13,7 @@ import { VIBES } from '../lib/vibes';
 import { pageUrl, SITE_ORIGIN } from '../lib/site';
 import { copy } from '../content/copy';
 import { useIveoSession } from '../auth/useIvioSession';
-import { setAnalyticsContext, trackView } from '../lib/analytics/track';
+import { setAnalyticsContext, trackView, trackClick } from '../lib/analytics/track';
 import { resolveSource } from '../lib/analytics/sources';
 import { trackLinkClick } from '../lib/analytics-seam';
 import { normalizeGoogleAnalyticsId, normalizeMetaPixelId } from '../lib/integrations';
@@ -40,7 +40,8 @@ function upsertMetaTag(attr: 'name' | 'property', key: string, content: string):
 
 export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> = ({ usernameOverride }) => {
   const { username } = useParams<{ username: string }>();
-  const rawUsername = (usernameOverride || username || '').trim();
+  const rawParam = (usernameOverride || username || '').trim();
+  const rawUsername = rawParam.replace(/^@+/, '');
   const cleanLower = rawUsername.toLowerCase();
   const syntaxValidation = validateUsername(rawUsername, { allowReserved: true });
   const publicValidation = validateUsername(rawUsername);
@@ -301,7 +302,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       `${pageData?.profile?.displayName || `@${clean}`} – Links, Projects & Social Profiles | Iveo`;
     w.gtag('js', new Date());
     w.gtag('config', measurementId, {
-      page_path: `/${clean}`,
+      page_path: `/@${clean}`,
       page_location: pageUrl(clean),
       page_title: resolvedTitle,
     });
@@ -554,6 +555,13 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                     }
                   }}
                   onSocialClick={(platform, url) => {
+                    const isOwnerViewer = Boolean(
+                      session.isSignedIn &&
+                        session.username?.toLowerCase() === clean.toLowerCase()
+                    );
+                    if (!isOwnerViewer) {
+                      trackClick(clean, `social:${platform}`, resolveSource());
+                    }
                     const w = window as any;
                     if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
                       w.gtag('event', 'social_click', {
@@ -564,6 +572,13 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                     }
                   }}
                   onWhatsAppClick={(phone) => {
+                    const isOwnerViewer = Boolean(
+                      session.isSignedIn &&
+                        session.username?.toLowerCase() === clean.toLowerCase()
+                    );
+                    if (!isOwnerViewer) {
+                      trackClick(clean, 'whatsapp', resolveSource());
+                    }
                     const w = window as any;
                     if (typeof w.gtag === 'function' && pageData?.profile?.googleAnalyticsId) {
                       w.gtag('event', 'whatsapp_click', {
@@ -612,7 +627,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
         <Logo tone="light" size="lg" />
 
         <div className="mt-5 font-mono text-[20px] font-medium text-ink">
-          iveo.site/{clean}
+          iveo.site/@{clean}
         </div>
 
         <h1 className="mt-3 text-[24px] font-medium text-ink leading-tight tracking-[-0.02em]">

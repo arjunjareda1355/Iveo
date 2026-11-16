@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   Block,
   BlockLayout,
+  EmbedMetaData,
   EmbedProvider,
   SignupConfig,
   TipJarConfig,
@@ -37,7 +38,7 @@ interface BlocksContextValue {
   blocks: Block[];
   isLoading: boolean;
   addLink: (title: string, url: string) => Promise<void>;
-  addEmbed: (url: string, caption: string, provider: EmbedProvider) => Promise<void>;
+  addEmbed: (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
   addCoffee: (title?: string, url?: string, badge?: string, coffee?: CoffeeData | null) => Promise<void>;
@@ -150,7 +151,7 @@ export const BlocksProvider: React.FC<{
     }
   };
 
-  const addEmbed = async (url: string, caption: string, provider: EmbedProvider) => {
+  const addEmbed = async (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) => {
     const prev = [...blocks];
     try {
       const newBlock = await createBlock(token, userId, {
@@ -158,6 +159,7 @@ export const BlocksProvider: React.FC<{
         title: caption,
         url,
         embedProvider: provider,
+        embedMeta: embedMeta || null,
         layout: 'classic',
         position: blocks.length,
       }, authCtx);
@@ -540,11 +542,11 @@ export const BlocksProvider: React.FC<{
     try {
       await apiDeleteBlock(token, userId, id, authCtx);
       if (!isDemoMode) {
-        await deleteBlockFromFirebase(userId, id).catch(() => {});
+        deleteBlockFromFirebase(userId, id).catch(() => {});
         if (ownerUserId && ownerUserId !== userId) {
-          await deleteBlockFromFirebase(ownerUserId, id).catch(() => {});
+          deleteBlockFromFirebase(ownerUserId, id).catch(() => {});
         }
-        await syncAllTargets(next).catch(() => {});
+        syncAllTargets(next).catch(() => {});
       }
       showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
     } catch {

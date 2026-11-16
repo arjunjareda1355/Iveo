@@ -2,19 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   canUseReservedUsername,
+  EARLY_BIRD_PRO_DEADLINE_MS,
   FREE_PLAN_HIGHLIGHTS,
+  isEarlyBirdEligible,
   isOwnerEmail,
   PLAN_COMPARISON_SECTIONS,
   PRO_FEATURE_NAMES,
   PRO_FEATURES,
   PRO_PLAN_HIGHLIGHTS,
+  resolveEffectivePlan,
 } from './plan';
 import { VIBES } from './vibes';
 import { FONT_OPTIONS } from './fonts';
 import { BACKGROUND_PRESETS } from './backgrounds';
-import { validateUsername } from './username-rules';
+import { normalizeUsername, validateUsername } from './username-rules';
 import { validateUsernameSync } from './username';
+import { isUserPageLocation } from './intro';
 import {
+  classifySegment,
   isPrivilegedEmailServer,
   validateUsernameServer,
 } from '../../api/_lib/usernames';
@@ -106,3 +111,64 @@ test('Free vs Pro features, Vibes, Fonts, and Backgrounds maintain exact clean s
     )
   );
 });
+
+test('Early-Bird Pro grants Pro automatically before 01/01/2027 and disables after deadline', () => {
+  const beforeCutoff = '2026-11-16T12:00:00.000Z';
+  const atCutoff = '2027-01-01T00:00:00.000Z';
+  const afterCutoff = '2027-02-01T00:00:00.000Z';
+
+  assert.equal(isEarlyBirdEligible(beforeCutoff), true);
+  assert.equal(isEarlyBirdEligible(atCutoff), false);
+  assert.equal(isEarlyBirdEligible(afterCutoff), false);
+  assert.equal(isEarlyBirdEligible(null, EARLY_BIRD_PRO_DEADLINE_MS - 1000), true);
+  assert.equal(isEarlyBirdEligible(null, EARLY_BIRD_PRO_DEADLINE_MS), false);
+
+  const pre2027 = resolveEffectivePlan({
+    email: 'creator@gmail.com',
+    storedPlan: 'free',
+    createdAt: beforeCutoff,
+    nowMs: Date.parse(afterCutoff),
+  });
+  assert.equal(pre2027.plan, 'pro');
+  assert.equal(pre2027.isPro, true);
+  assert.equal(pre2027.planSource, 'early_bird');
+
+  const post2027 = resolveEffectivePlan({
+    email: 'creator@gmail.com',
+    storedPlan: 'free',
+    createdAt: afterCutoff,
+    nowMs: Date.parse(afterCutoff),
+  });
+  assert.equal(post2027.plan, 'free');
+  assert.equal(post2027.isPro, false);
+  assert.equal(post2027.planSource, 'free');
+
+  const cancelledEarlyBird = resolveEffectivePlan({
+    email: 'creator@gmail.com',
+    storedPlan: 'free',
+    createdAt: beforeCutoff,
+    subscription: { status: 'cancelled' },
+  });
+  assert.equal(cancelledEarlyBird.plan, 'free');
+  assert.equal(cancelledEarlyBird.planSource, 'free');
+
+  const ownerAfterCutoff = resolveEffectivePlan({
+    email: 'founder@iveo.site',
+    createdAt: afterCutoff,
+    nowMs: Date.parse(afterCutoff),
+  });
+  assert.equal(ownerAfterCutoff.planSource, 'owner');
+  assert.equal(ownerAfterCutoff.isPro, true);
+});
+
+test('Routing & @username normalization ignores Vite dev internals and handles @prefix', () => {
+  assert.equal(normalizeUsername('@MayaStudio'), 'mayastudio');
+  assert.equal(classifySegment('@maya'), 'username');
+  assert.equal(classifySegment('@vite'), 'invalid');
+  assert.equal(classifySegment('@react-refresh'), 'invalid');
+  assert.equal(isUserPageLocation({ pathname: '/@maya', hostname: 'iveo.site', search: '' }), true);
+  assert.equal(isUserPageLocation({ pathname: '/@vite/client', hostname: 'localhost', search: '' }), false);
+  assert.equal(isUserPageLocation({ pathname: '/@react-refresh', hostname: 'localhost', search: '' }), false);
+  assert.equal(isUserPageLocation({ pathname: '/dashboard', hostname: 'iveo.site', search: '' }), false);
+});
+

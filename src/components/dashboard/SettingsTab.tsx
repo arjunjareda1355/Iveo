@@ -164,7 +164,7 @@ export const SettingsTab: React.FC = () => {
               <form onSubmit={handleSaveUsername} className="flex flex-col gap-2">
                 <div className="flex items-center rounded-[8px] border border-border bg-surface px-2.5 h-10 focus-within:border-ink">
                   <span className="text-[14px] text-muted font-mono select-none pl-1 pr-0.5 font-medium">
-                    iveo.site/
+                    iveo.site/@
                   </span>
                   <input
                     type="text"
@@ -368,26 +368,29 @@ export const SettingsTab: React.FC = () => {
         </Card>
       )}
 
-      {/* 4. Your Data Card */}
+      {/* 4. Compact Account Utility Strip (Your Data, Session, Delete Account) */}
       <ExportDataCard />
 
-      {/* 4. Session Card */}
-      <Card className="flex flex-col items-start gap-4">
-        <div>
-          <h3 className="text-[20px] font-semibold text-ink leading-tight">
+      <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[15px] font-semibold text-ink leading-tight">
             Session
           </h3>
-          <p className="mt-1 text-[14px] text-muted">
+          <p className="text-[12px] text-muted mt-0.5">
             Signed in on this device.
           </p>
         </div>
 
-        <Button variant="secondary" size="md" onClick={handleSignOut}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleSignOut}
+          className="shrink-0 self-start sm:self-center"
+        >
           Sign out
         </Button>
       </Card>
 
-      {/* 5. Delete Account Card */}
       <DeleteAccountCard username={session.username || session.primaryEmail?.split('@')[0] || 'account'} />
 
       {/* Share Dialog */}

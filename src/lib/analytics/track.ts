@@ -20,11 +20,11 @@ export function setAnalyticsContext(ctx: Partial<AnalyticsContextState>): void {
   Object.assign(analyticsState, ctx);
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BLOCK_ID_PATTERN = /^[a-zA-Z0-9_.:-]{1,128}$/;
 
-function schedule(task: () => void): void {
+function scheduleView(task: () => void): void {
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-    (window as any).requestIdleCallback(task, { timeout: 2000 });
+    (window as any).requestIdleCallback(task, { timeout: 600 });
   } else {
     setTimeout(task, 0);
   }
@@ -35,7 +35,8 @@ function schedule(task: () => void): void {
  */
 export function trackView(username: string, source: TrackSource): void {
   try {
-    if (!username || !validateUsername(username).ok) {
+    const clean = (username || '').replace(/^@+/, '').trim();
+    if (!clean || !validateUsername(clean).ok) {
       return;
     }
     if (!shouldTrack()) {
@@ -45,9 +46,9 @@ export function trackView(username: string, source: TrackSource): void {
     const device =
       typeof navigator !== 'undefined' ? detectDevice(navigator.userAgent || '') : 'other';
 
-    schedule(() => {
+    scheduleView(() => {
       recordPageEvent({
-        username,
+        username: clean,
         event: 'view',
         linkId: null,
         source: source || '',
@@ -62,14 +63,15 @@ export function trackView(username: string, source: TrackSource): void {
 }
 
 /**
- * Fires a link or embed click event. Never throws, blocks or logs.
+ * Fires a link, social icon, or embed click event immediately (keepalive-safe).
  */
 export function trackClick(username: string, linkId: string, source: TrackSource): void {
   try {
-    if (!username || !validateUsername(username).ok) {
+    const clean = (username || '').replace(/^@+/, '').trim();
+    if (!clean || !validateUsername(clean).ok) {
       return;
     }
-    if (!linkId || !UUID_PATTERN.test(linkId)) {
+    if (!linkId || !BLOCK_ID_PATTERN.test(linkId)) {
       return;
     }
     if (!shouldTrack()) {
@@ -79,16 +81,15 @@ export function trackClick(username: string, linkId: string, source: TrackSource
     const device =
       typeof navigator !== 'undefined' ? detectDevice(navigator.userAgent || '') : 'other';
 
-    schedule(() => {
-      recordPageEvent({
-        username,
-        event: 'click',
-        linkId,
-        source: source || '',
-        device,
-      }).catch(() => {
-        // Silently drop
-      });
+    // Dispatch immediately so keepalive survives navigation away from the profile page
+    recordPageEvent({
+      username: clean,
+      event: 'click',
+      linkId,
+      source: source || '',
+      device,
+    }).catch(() => {
+      // Silently drop
     });
   } catch {
     // Fire-and-forget

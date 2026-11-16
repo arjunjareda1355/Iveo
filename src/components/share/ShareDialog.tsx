@@ -120,7 +120,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
   const fullUrl = pageUrl(username);
   const qrUrl = pageUrl(username, { src: 'qr' });
-  const displayAddress = `iveo.site/${username}`;
+  const displayAddress = `iveo.site/@${username}`;
   const activeVibe = VIBES.find((v) => v.id === vibeId) || VIBES[0];
   const effectiveTokens = resolveEffectiveTokens(activeVibe.tokens, buttonColors);
   const cardTheme = {
@@ -736,7 +736,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
               {showBrandedFrame && (
                 <div className="mt-3 pt-2.5 border-t border-border/60 w-full flex items-center justify-center gap-1.5">
                   <span className="text-[11px] font-semibold text-ink tracking-tight font-sans">iveo</span>
-                  <span className="text-[10px] text-muted">· iveo.site/{username}</span>
+                  <span className="text-[10px] text-muted">· iveo.site/@{username}</span>
                 </div>
               )}
             </div>
@@ -763,7 +763,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             </div>
 
             <p className="text-center text-[12px] text-muted leading-relaxed">
-              Scans directly to iveo.site/{username}. Any custom color &amp; print-ready vector SVG/PNG.
+              Scans directly to iveo.site/@{username}. Any custom color &amp; print-ready vector SVG/PNG.
             </p>
           </div>
 

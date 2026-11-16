@@ -1,0 +1,1257 @@
+MASTER IMPLEMENTATION PROMPT: COMPLETE SEO SYSTEM FOR IVEO.SITE
+
+1. PROJECT OVERVIEW
+
+Project: Iveo
+Website: https://iveo.site
+Project type: Developer platform / Web application
+Objective: Implement a complete, professional, production-grade SEO infrastructure across the entire Iveo website.
+
+The objective is to transform Iveo.Site into a technically optimized, search-engine-friendly, discoverable, indexable, and search-performance-oriented platform.
+
+SEO implementation must cover:
+
+- Google Search
+- Bing Search
+- Yahoo Search (where supported through Bing indexing)
+- DuckDuckGo
+- Other major search engines
+- AI-powered search and discovery platforms
+- Social media link previews
+- Search engine crawlers and bots
+
+This is an SEO enhancement project, NOT a website redesign or redevelopment project.
+
+---
+
+2. CRITICAL PRESERVATION RULES
+
+THESE RULES ARE MANDATORY.
+
+Do not remove, disable, replace, redesign, or unnecessarily modify any existing website functionality.
+
+Preserve:
+
+- Existing UI/UX design.
+- Existing layout and component structure.
+- Existing colors, typography, spacing, and animations.
+- Existing navigation and footer.
+- Existing buttons and interactions.
+- Existing authentication system.
+- Existing Clerk integration.
+- Existing user accounts and profiles.
+- Existing developer dashboard.
+- Existing application management system.
+- Existing API key generation and management.
+- Existing API integrations and endpoints.
+- Existing backend functionality.
+- Existing database structure and records.
+- Existing pricing and subscription functionality.
+- Existing contact and support functionality.
+- Existing admin functionality.
+- Existing routes and URL structures.
+- Existing responsive behavior.
+- Existing permissions and security policies.
+
+Do not introduce breaking changes.
+
+Do not change existing URLs unless absolutely necessary for a verified SEO issue. If a URL migration is unavoidable, implement permanent redirects and preserve all existing functionality.
+
+Do not delete existing metadata or configuration without first understanding its purpose.
+
+Do not replace working components with newly created components unnecessarily.
+
+Implementation approach
+
+1. Inspect the entire existing project.
+2. Understand the current architecture, framework, routing, rendering strategy, and database.
+3. Audit existing SEO implementation.
+4. Identify missing and incorrect SEO configurations.
+5. Create a detailed implementation plan.
+6. Implement SEO improvements incrementally.
+7. Test all existing website functionality.
+8. Verify the complete SEO implementation.
+
+SEO improvements must be integrated into the existing architecture.
+
+---
+
+3. COMPLETE TECHNICAL SEO INFRASTRUCTURE
+
+Implement a comprehensive technical SEO foundation.
+
+3.1 Search engine accessibility
+
+Ensure that legitimate search engine crawlers can access all intended public pages.
+
+Support:
+
+- Googlebot
+- Googlebot Smartphone
+- Bingbot
+- DuckDuckBot
+- Other legitimate search crawlers.
+
+Requirements:
+
+- Correct HTTP response codes.
+- No accidental crawler blocking.
+- No unnecessary authentication barriers on public pages.
+- Correct canonical URLs.
+- Correct robots directives.
+- No accidental noindex directives.
+- No infinite crawling loops.
+- No unnecessary redirect chains.
+- No broken internal links.
+- No duplicate URL variations.
+- No inaccessible public content.
+
+Never expose private user data, private API information, admin pages, or authenticated dashboard content to search engines.
+
+3.2 Server-side rendering and crawlability
+
+Inspect the existing rendering architecture.
+
+Where supported by the current framework, ensure that important public SEO content is available in the initial HTML response.
+
+Requirements:
+
+- Server-render important public page content.
+- Avoid relying entirely on client-side JavaScript for essential SEO content.
+- Generate metadata server-side where appropriate.
+- Ensure dynamic routes return meaningful HTML.
+- Avoid empty HTML shells for public landing pages.
+- Ensure crawlers can discover important content without requiring user interaction.
+
+Do not migrate the entire application architecture just to implement SEO.
+
+3.3 HTTP and URL optimization
+
+Verify:
+
+- HTTPS is enforced.
+- HTTP redirects to HTTPS.
+- www/non-www behavior is consistent.
+- Trailing slash behavior is consistent.
+- Duplicate URL variations resolve correctly.
+- Canonical URLs use the preferred domain.
+- Redirects use appropriate status codes.
+- Internal links use canonical URLs.
+
+Preferred domain:
+
+https://iveo.site
+
+Avoid duplicate indexable versions of the same content.
+
+---
+
+4. ADVANCED METADATA SYSTEM
+
+Create a centralized, scalable metadata management system.
+
+Every indexable public page must have unique and relevant metadata.
+
+4.1 Title tags
+
+Requirements:
+
+- Unique title for every public page.
+- Descriptive and relevant titles.
+- Primary keyword placement where natural.
+- Brand inclusion where appropriate.
+- Avoid keyword stuffing.
+- Avoid duplicate titles.
+- Avoid unnecessarily long titles.
+
+Suggested examples:
+
+Homepage:
+Iveo – One Link for Everything You Create
+
+Developer Platform:
+Iveo Developers – Build, Integrate & Manage Applications
+
+Documentation:
+Iveo Documentation – Developer Guides & API References
+
+Support:
+Iveo Help Center – Support, Guides & Assistance
+
+These are examples. Inspect actual pages and create accurate titles matching their content.
+
+4.2 Meta descriptions
+
+Generate unique, meaningful descriptions for all indexable pages.
+
+Requirements:
+
+- Describe the actual page content.
+- Include relevant search terms naturally.
+- Communicate the page's purpose.
+- Avoid duplicate descriptions.
+- Avoid keyword stuffing.
+- Use appropriate lengths.
+- Never generate misleading descriptions.
+
+4.3 Additional metadata
+
+Implement where appropriate:
+
+- Meta robots.
+- Meta viewport.
+- Meta description.
+- Meta keywords only if required for legacy compatibility; do not treat them as a ranking strategy.
+- Theme color.
+- Application name.
+- Author metadata where appropriate.
+- Language metadata.
+- Canonical URL.
+- Referrer policy.
+- Open Graph metadata.
+- Twitter/X card metadata.
+
+4.4 Dynamic metadata
+
+For dynamic public routes:
+
+- Generate metadata from actual page content.
+- Generate unique titles and descriptions.
+- Generate correct canonical URLs.
+- Generate social sharing images where appropriate.
+- Handle missing pages correctly.
+- Avoid duplicate metadata across dynamic pages.
+
+Never expose private application data through metadata generation.
+
+---
+
+5. ADVANCED ROBOTS.TXT MANAGEMENT
+
+Create or improve:
+
+https://iveo.site/robots.txt
+
+The robots.txt file must:
+
+- Allow legitimate crawlers to access public content.
+- Block private application routes from crawling where appropriate.
+- Protect sensitive internal areas from unnecessary crawling.
+- Reference the correct sitemap.
+- Avoid accidentally blocking CSS, JavaScript, or essential resources.
+
+Inspect actual route structures before writing rules.
+
+Example structure:
+
+User-agent: *
+Allow: /
+
+Sitemap: https://iveo.site/sitemap.xml
+
+Add specific disallow rules only after verifying the existing routes and their intended visibility.
+
+IMPORTANT:
+
+robots.txt is not a security mechanism and does not guarantee that private URLs remain undiscoverable.
+
+Use authentication, authorization, and noindex controls where appropriate.
+
+Do not block a page in robots.txt when search engines need to read its noindex directive.
+
+---
+
+6. AUTOMATED XML SITEMAP SYSTEM
+
+Implement a complete dynamic XML sitemap system.
+
+Primary sitemap:
+
+https://iveo.site/sitemap.xml
+
+If the website has many URLs, use a sitemap index with separate sitemaps.
+
+Potential sitemap categories:
+
+- Main public pages.
+- Developer documentation.
+- Help and support pages.
+- Public blog articles, if available.
+- Public resources.
+- Other valuable public landing pages.
+
+Requirements:
+
+1. Include only canonical, indexable, public URLs.
+2. Exclude private dashboards.
+3. Exclude authentication pages where they provide no search value.
+4. Exclude admin routes.
+5. Exclude private application pages.
+6. Exclude API endpoints.
+7. Exclude duplicate URLs.
+8. Exclude noindex pages.
+9. Exclude redirected and broken URLs.
+10. Use valid XML formatting.
+
+Dynamic sitemap features:
+
+- Automatically discover eligible public routes.
+- Update when new public content is published.
+- Remove deleted or unpublished content.
+- Update lastmod when content materially changes.
+- Use accurate modification timestamps.
+- Support sitemap splitting when necessary.
+- Validate all sitemap URLs.
+
+Do not artificially update lastmod on every request.
+
+Include image sitemap information only where useful.
+
+If the project has no blog or documentation system, do not invent those routes.
+
+---
+
+7. CANONICAL URL SYSTEM
+
+Implement canonical URL generation throughout the website.
+
+Requirements:
+
+- Every indexable public page must have a self-referencing canonical URL unless there is a legitimate alternate canonical.
+- Use HTTPS.
+- Use the preferred domain.
+- Remove unnecessary query parameters.
+- Prevent duplicate trailing slash variations.
+- Avoid canonical loops.
+- Avoid pointing unrelated pages to the homepage.
+- Ensure sitemap URLs match canonical URLs.
+- Ensure internal links point to canonical versions.
+
+Handle pagination, filters, tracking parameters, and other query parameters according to their actual SEO purpose.
+
+---
+
+8. STRUCTURED DATA AND SCHEMA.ORG
+
+Implement structured data using valid Schema.org JSON-LD.
+
+Use schemas only when the corresponding content actually exists.
+
+Recommended schema types
+
+Organization
+
+Include:
+
+- Organization name.
+- Website URL.
+- Logo.
+- Description.
+- Official social profiles, if available.
+- Contact details, if publicly displayed.
+
+WebSite
+
+Include:
+
+- Website name.
+- URL.
+- Publisher.
+- Language.
+
+Implement SearchAction only if the website actually provides a suitable search feature.
+
+SoftwareApplication
+
+Use for relevant public product pages.
+
+Include available information such as:
+
+- Application name.
+- Application category.
+- Description.
+- Operating system compatibility, if applicable.
+- Application URL.
+- Publisher.
+- Pricing information only when accurate.
+
+Do not invent ratings, reviews, prices, or user counts.
+
+WebPage
+
+Use appropriate page-level structured data.
+
+BreadcrumbList
+
+Implement for pages with meaningful breadcrumb navigation.
+
+Article / BlogPosting
+
+Only for actual published editorial content.
+
+TechArticle
+
+Use for technical tutorials and developer documentation where appropriate.
+
+FAQPage
+
+Use only when a genuinely eligible FAQ page exists and follows Google's current structured data requirements.
+
+ContactPage
+
+For the actual contact page, if available.
+
+ProfilePage
+
+Only where appropriate for genuinely public profile pages.
+
+Requirements:
+
+- Valid JSON-LD.
+- No fabricated information.
+- No misleading schema.
+- No duplicate schema entities.
+- Correct entity relationships.
+- Correct URLs.
+- Correct logo URLs.
+- Consistency between structured data and visible page content.
+
+Validate schemas using Google's Rich Results Test and Schema.org Validator.
+
+Do not assume every schema type qualifies for a Google rich result.
+
+---
+
+9. GOOGLE SEARCH CONSOLE INTEGRATION
+
+Set up and verify Google Search Console.
+
+Use the existing environment configuration wherever available.
+
+Required configuration:
+
+GOOGLE_SITE_VERIFICATION
+GSC_SITE_URL
+GSC_SERVICE_ACCOUNT_JSON
+
+Requirements:
+
+1. Verify the correct website property.
+2. Support domain property verification where possible.
+3. Support HTML meta verification where configured.
+4. Ensure verification metadata is rendered correctly.
+5. Connect the Google Search Console API securely.
+6. Submit the XML sitemap.
+7. Retrieve search performance information.
+8. Retrieve indexing information where supported.
+9. Monitor coverage and indexing errors.
+10. Monitor crawl-related issues where available.
+
+If service account authentication is used:
+
+- Parse the JSON securely.
+- Validate required fields.
+- Use server-side authentication only.
+- Never expose the private key.
+- Never send credentials to client-side JavaScript.
+- Never include credentials in HTML or API responses.
+- Never commit credentials to Git.
+- Handle token expiration and API errors properly.
+
+Do not assume that successful API authentication automatically grants Search Console access. Verify that the service account has the necessary property permissions.
+
+---
+
+10. BING WEBMASTER TOOLS INTEGRATION
+
+Implement Bing Webmaster Tools verification and integration.
+
+Use:
+
+BING_SITE_VERIFICATION
+BING_WEBMASTER_API_KEY
+
+Requirements:
+
+- Verify website ownership.
+- Submit sitemap.
+- Support URL inspection where available.
+- Retrieve supported indexing information.
+- Monitor crawl errors.
+- Monitor search performance where supported.
+- Handle API errors.
+- Store credentials securely.
+
+Do not expose API keys in frontend code.
+
+Support Yahoo and other search engines that rely on Bing's indexing infrastructure where applicable.
+
+---
+
+11. INDEXNOW INTEGRATION
+
+Implement IndexNow for supported search engines.
+
+Environment variable:
+
+INDEXNOW_KEY
+
+Requirements:
+
+- Generate and configure a valid IndexNow key.
+- Publish the required key verification file at the appropriate root URL.
+- Verify the key file is publicly accessible.
+- Submit URLs when eligible content is created, updated, or deleted.
+- Support batch submissions within provider limits.
+- Avoid submitting duplicate URLs unnecessarily.
+- Log submission results.
+- Implement retries with sensible limits.
+- Handle rate limits and errors.
+
+Submit only legitimate public URLs.
+
+Do not submit private user dashboards, API keys, private applications, or authenticated content.
+
+IndexNow submission does not guarantee indexing.
+
+---
+
+12. ADVANCED OPEN GRAPH AND SOCIAL SEO
+
+Implement social sharing metadata for every relevant public page.
+
+Platforms:
+
+- Facebook.
+- LinkedIn.
+- X.
+- WhatsApp.
+- Discord.
+- Telegram.
+- Other platforms supporting Open Graph.
+
+Metadata should include:
+
+- og:title
+- og:description
+- og:type
+- og:url
+- og:image
+- og:image:alt
+- og:site_name
+- og:locale
+
+Implement X/Twitter cards:
+
+- twitter:card
+- twitter:title
+- twitter:description
+- twitter:image
+- twitter:image:alt
+
+Requirements:
+
+- Use high-quality branded sharing images.
+- Use absolute HTTPS image URLs.
+- Ensure images are publicly accessible.
+- Optimize image dimensions and file size.
+- Prevent broken preview images.
+- Provide meaningful fallback images.
+- Generate dynamic previews where appropriate.
+
+Preserve Iveo's existing branding.
+
+Do not redesign website graphics or replace the existing logo.
+
+---
+
+13. ADVANCED ON-PAGE SEO
+
+Audit every public page and improve its content structure.
+
+Requirements:
+
+- One clear primary H1 per page.
+- Logical H2/H3 hierarchy.
+- Descriptive page headings.
+- Meaningful paragraph content.
+- Descriptive anchor text.
+- Relevant internal links.
+- Proper image alt attributes.
+- Accessible content structure.
+- Clear page purpose.
+- Natural keyword usage.
+- No keyword stuffing.
+- No hidden SEO text.
+- No automatically generated spam content.
+
+Optimize existing content without changing its intended meaning.
+
+Do not add irrelevant paragraphs just to increase word count.
+
+Do not hide keywords using CSS.
+
+Do not create doorway pages or duplicate location-based pages.
+
+---
+
+14. KEYWORD AND SEARCH INTENT OPTIMIZATION
+
+Build an SEO keyword strategy around Iveo's actual products and services.
+
+Potential keyword themes:
+
+- One link for everything.
+- Personal link management.
+- Developer platform.
+- Application management.
+- Developer API management.
+- API key management.
+- Web developer tools.
+- Application integration.
+- Developer resources.
+- API documentation.
+- Online developer platform.
+- Digital profile and link management.
+
+These are initial keyword ideas, not guaranteed ranking opportunities.
+
+Research actual keyword demand, search intent, competition, and relevance before assigning primary keywords.
+
+For each indexable public page:
+
+- Identify primary keyword.
+- Identify secondary keywords.
+- Identify related search phrases.
+- Identify search intent.
+- Optimize page title.
+- Optimize meta description.
+- Optimize headings.
+- Improve relevant internal links.
+
+Avoid targeting the same primary search intent with multiple competing pages.
+
+---
+
+15. IMAGE SEO
+
+Optimize all publicly accessible website images.
+
+Requirements:
+
+- Descriptive filenames where practical.
+- Meaningful alt text.
+- Correct image dimensions.
+- Responsive images.
+- Modern image formats such as WebP or AVIF where supported.
+- Lazy loading for below-the-fold images.
+- Appropriate eager loading for important above-the-fold images.
+- Explicit image dimensions to reduce layout shifts.
+- Proper image compression.
+- Correct social sharing image metadata.
+
+Do not apply lazy loading indiscriminately to the main hero image.
+
+Do not change the appearance or branding of existing images.
+
+Do not use keyword-stuffed alt attributes.
+
+Decorative images should have empty alt attributes where appropriate.
+
+---
+
+16. PERFORMANCE AND CORE WEB VITALS
+
+Optimize the website without changing its visual appearance.
+
+Target strong performance across:
+
+- Largest Contentful Paint (LCP).
+- Interaction to Next Paint (INP).
+- Cumulative Layout Shift (CLS).
+
+Google's current good thresholds:
+
+LCP: 2.5 seconds or less.
+INP: 200 milliseconds or less.
+CLS: 0.1 or less.
+
+Implement improvements where needed:
+
+Loading performance
+
+- Optimize critical rendering paths.
+- Reduce unnecessary JavaScript.
+- Optimize fonts.
+- Optimize image delivery.
+- Avoid render-blocking resources.
+- Use appropriate caching.
+- Improve server response times.
+
+JavaScript
+
+- Remove unnecessary duplicate scripts.
+- Avoid excessive third-party scripts.
+- Split code where appropriate.
+- Preserve existing application interactions.
+
+Caching
+
+- Use suitable HTTP caching headers.
+- Cache static assets effectively.
+- Use safe caching for public content.
+- Never publicly cache private authenticated responses.
+
+Performance monitoring
+
+Use:
+
+- Google PageSpeed Insights.
+- Lighthouse.
+- Chrome DevTools.
+- Search Console Core Web Vitals.
+
+Do not sacrifice functionality or visual fidelity for artificial performance scores.
+
+---
+
+17. MOBILE-FIRST SEO
+
+Ensure the complete website works correctly on mobile devices.
+
+Requirements:
+
+- Responsive layouts.
+- Correct viewport metadata.
+- Readable text.
+- Accessible navigation.
+- Proper tap targets.
+- No horizontal overflow.
+- No intrusive interstitials.
+- No missing mobile content.
+- Consistent desktop/mobile metadata.
+- Correct mobile rendering.
+
+Preserve the existing responsive design.
+
+---
+
+18. INTERNAL LINKING AND WEBSITE ARCHITECTURE
+
+Build a logical internal linking system.
+
+Ensure users and crawlers can discover important public pages.
+
+Requirements:
+
+- Homepage links to important public sections.
+- Developer pages link to relevant documentation.
+- Documentation pages link to related resources.
+- Support pages link to relevant help resources.
+- Breadcrumbs where appropriate.
+- No broken internal links.
+- No unnecessary orphan pages.
+- Logical navigation hierarchy.
+
+Use descriptive link text.
+
+Avoid excessive internal linking or irrelevant links.
+
+Do not expose private dashboard routes through public navigation or SEO-generated links.
+
+---
+
+19. 404, REDIRECT AND ERROR MANAGEMENT
+
+Implement professional technical error handling.
+
+Requirements:
+
+- Proper 404 responses for genuinely missing pages.
+- No soft 404 pages.
+- Useful branded error pages using the existing design system.
+- Correct 301 redirects for permanently moved pages.
+- Correct 302/307 redirects for temporary changes.
+- No redirect chains.
+- No redirect loops.
+- No unnecessary redirects to the homepage.
+- Proper handling of removed public content.
+
+Preserve all existing valid URLs.
+
+Audit the website for broken links and incorrect response codes.
+
+---
+
+20. AI SEARCH AND GENERATIVE ENGINE OPTIMIZATION
+
+Prepare Iveo's public content for modern AI-powered search and discovery.
+
+Optimize factual clarity and content accessibility for:
+
+- ChatGPT search.
+- Google AI search experiences.
+- Microsoft Copilot.
+- Perplexity.
+- Other AI-powered discovery systems.
+
+Requirements:
+
+- Clear organization information.
+- Accurate product descriptions.
+- Consistent brand identity.
+- Well-structured documentation.
+- Clear explanations of features.
+- Descriptive headings.
+- Useful public FAQs.
+- Correct structured data.
+- Accessible public content.
+- Reliable canonical URLs.
+- Consistent official website references.
+
+Create an llms.txt file only if it provides useful, accurate navigation to public resources.
+
+Do not assume llms.txt is an official search ranking factor.
+
+Do not create fake reviews, fabricated testimonials, or misleading claims.
+
+Do not expose private data or confidential documentation.
+
+Do not block legitimate crawlers indiscriminately.
+
+---
+
+21. ADVANCED SEO ADMIN DASHBOARD
+
+If Iveo already has an admin dashboard, integrate SEO management into its existing architecture.
+
+Do not redesign or replace the existing admin dashboard.
+
+Create a dedicated SEO management section, accessible only to authorized administrators.
+
+Use the existing SEO_ADMIN_EMAILS environment configuration.
+
+SEO dashboard should include:
+
+A. SEO Overview
+
+Display:
+
+- Total discovered public URLs.
+- Total indexable URLs.
+- Total noindex URLs.
+- Sitemap status.
+- Robots.txt status.
+- Canonical URL status.
+- Google verification status.
+- Bing verification status.
+- IndexNow configuration status.
+- Structured data validation status.
+- Last SEO audit date.
+- Latest detected SEO issues.
+
+Distinguish between verified, configured, pending, and unavailable statuses.
+
+Do not display fabricated metrics.
+
+B. Metadata Management
+
+Authorized administrators should be able to:
+
+- View page metadata.
+- Edit SEO titles.
+- Edit meta descriptions.
+- View canonical URLs.
+- Manage robots directives.
+- Preview social sharing metadata.
+- View metadata duplication warnings.
+
+Any overrides must be stored safely and must not overwrite unrelated application content.
+
+C. Sitemap Management
+
+Display:
+
+- Sitemap URL.
+- Sitemap generation status.
+- Last generation time.
+- Number of submitted URLs.
+- Number of valid URLs.
+- Number of excluded URLs.
+- Sitemap errors.
+
+Allow authorized administrators to regenerate and validate sitemaps.
+
+D. Search Engine Integrations
+
+Display integration status for:
+
+- Google Search Console.
+- Bing Webmaster Tools.
+- IndexNow.
+
+Provide appropriate configuration validation and error reporting.
+
+Never display private API keys or service account credentials.
+
+E. SEO Audit
+
+Provide an automated SEO audit that identifies:
+
+- Missing titles.
+- Duplicate titles.
+- Missing descriptions.
+- Duplicate descriptions.
+- Missing H1 headings.
+- Multiple H1 headings where unintended.
+- Missing canonical tags.
+- Broken internal links.
+- Broken images.
+- Missing image alt attributes.
+- Incorrect robots directives.
+- Invalid sitemap URLs.
+- Redirect chains.
+- HTTP errors.
+- Structured data errors.
+- Unoptimized images.
+- Missing social metadata.
+
+Allow administrators to review issues and their affected URLs.
+
+F. SEO Activity Logs
+
+Record:
+
+- Sitemap generation.
+- IndexNow submissions.
+- Verification checks.
+- Metadata changes.
+- SEO audit results.
+- API failures.
+- Integration status changes.
+
+Use appropriate access controls and avoid logging secrets.
+
+---
+
+22. ENVIRONMENT VARIABLES AND CONFIGURATION
+
+Inspect the existing environment configuration before implementation.
+
+The following configuration names may already be used:
+
+SEO_ADMIN_EMAILS
+GOOGLE_SITE_VERIFICATION
+BING_SITE_VERIFICATION
+INDEXNOW_KEY
+BING_WEBMASTER_API_KEY
+GSC_SITE_URL
+GSC_SERVICE_ACCOUNT_JSON
+BUYMEACOFFEE_ACCESS_TOKEN
+
+Requirements:
+
+1. Reuse existing variables wherever appropriate.
+2. Do not rename working environment variables unnecessarily.
+3. Do not overwrite existing credentials.
+4. Do not create fake credentials.
+5. Do not expose secrets to the frontend.
+6. Do not hardcode private credentials.
+7. Validate missing and malformed values.
+8. Provide clear configuration errors.
+9. Use server-side environment access.
+10. Keep environment examples free of real secrets.
+
+BUYMEACOFFEE_ACCESS_TOKEN must remain untouched unless the existing application explicitly uses it for a relevant purpose. It is not an SEO requirement.
+
+For GSC_SERVICE_ACCOUNT_JSON:
+
+- Validate JSON syntax.
+- Validate service account configuration.
+- Ensure server-only access.
+- Confirm the account has the necessary Search Console permissions.
+- Handle authentication errors safely.
+
+If a configuration is missing, show a clear setup warning rather than breaking the website.
+
+---
+
+23. SECURITY AND PRIVACY
+
+SEO implementation must never compromise application security.
+
+Requirements:
+
+- Keep private dashboards private.
+- Protect API routes.
+- Protect administrative SEO functionality.
+- Validate all user input.
+- Sanitize metadata overrides.
+- Prevent XSS through metadata fields.
+- Protect service account credentials.
+- Protect API keys.
+- Avoid exposing user-specific information.
+- Never index private application content.
+- Never expose private user profiles or records.
+- Preserve existing Clerk authentication and authorization.
+- Maintain existing security headers.
+
+Use server-side authorization for administrative actions.
+
+Do not rely solely on hiding admin controls in the frontend.
+
+---
+
+24. AUTOMATED SEO MAINTENANCE
+
+Create reliable automation where supported by the existing hosting environment.
+
+Automate:
+
+- Sitemap generation.
+- Sitemap validation.
+- IndexNow submissions.
+- SEO health checks.
+- Broken link detection.
+- Metadata audits.
+- Structured data validation.
+- Integration health checks.
+
+Trigger appropriate SEO updates when public content is:
+
+- Created.
+- Updated.
+- Published.
+- Unpublished.
+- Permanently deleted.
+
+Avoid excessive API requests.
+
+Use retry limits, logging, and rate-limit handling.
+
+Do not run expensive SEO scans on every website request.
+
+Use scheduled jobs or existing background infrastructure where available.
+
+---
+
+25. SEO ANALYTICS AND TRACKING
+
+Prepare the platform for professional SEO performance monitoring.
+
+Support integration with:
+
+- Google Search Console.
+- Google Analytics 4, if configured.
+- Bing Webmaster Tools.
+- PageSpeed Insights.
+- Lighthouse.
+
+Track meaningful information such as:
+
+- Organic search clicks.
+- Search impressions.
+- Average search position.
+- Click-through rate.
+- Top-performing pages.
+- Search queries.
+- Indexing trends.
+- Core Web Vitals.
+- Technical SEO issues.
+
+Respect user privacy and applicable consent requirements.
+
+Do not install duplicate analytics scripts if an integration already exists.
+
+Do not fabricate search traffic or ranking data.
+
+---
+
+26. SEO CONTENT QUALITY
+
+Review all existing public-facing content.
+
+Improve:
+
+- Homepage descriptions.
+- Product descriptions.
+- Developer platform descriptions.
+- Feature explanations.
+- Documentation.
+- Support content.
+- Public FAQs.
+- About information.
+- Contact information.
+
+Content must be:
+
+- Accurate.
+- Useful.
+- Original.
+- Clearly written.
+- Search-intent aligned.
+- Consistent with Iveo's actual functionality.
+
+Do not generate hundreds of low-quality pages.
+
+Do not publish automatically generated SEO articles without editorial review.
+
+Prioritize genuinely useful content over keyword quantity.
+
+---
+
+27. TESTING AND VALIDATION
+
+After implementation, perform a complete SEO and application regression audit.
+
+Technical tests
+
+- Homepage returns correct status.
+- All intended public routes load.
+- Metadata is unique and valid.
+- Canonical URLs are correct.
+- robots.txt is accessible.
+- sitemap.xml is accessible.
+- Sitemap XML is valid.
+- Sitemap URLs are indexable.
+- No accidental noindex tags.
+- No broken redirects.
+- No redirect loops.
+- Structured data is valid.
+- Open Graph tags work.
+- Social sharing images load.
+- Image alt attributes are appropriate.
+- No important public content is hidden from crawlers.
+
+Integration tests
+
+- Google verification works.
+- Bing verification works.
+- Search Console authentication works.
+- Bing API authentication works.
+- IndexNow key verification works.
+- IndexNow submission works.
+- Missing credentials are handled gracefully.
+- Private credentials never appear in client responses.
+
+Existing application regression tests
+
+Verify that:
+
+- Clerk login works.
+- Registration works.
+- User profiles work.
+- Developer dashboard works.
+- Application creation works.
+- Application management works.
+- API key creation works.
+- API key management works.
+- Existing API endpoints work.
+- Existing integrations work.
+- Admin access works.
+- Existing forms work.
+- Existing buttons work.
+- Mobile navigation works.
+- All existing features remain functional.
+
+No existing functionality should be broken by the SEO implementation.
+
+---
+
+28. FINAL DELIVERABLES
+
+At the end of implementation, provide a comprehensive report containing:
+
+1. Existing SEO audit findings.
+2. Implemented SEO features.
+3. Updated files and components.
+4. New files created.
+5. Environment variables required.
+6. Environment variables already configured.
+7. Google Search Console integration status.
+8. Bing Webmaster Tools integration status.
+9. IndexNow integration status.
+10. Sitemap status.
+11. Robots.txt status.
+12. Structured data validation results.
+13. Metadata coverage.
+14. Core Web Vitals assessment.
+15. Security verification.
+16. Application regression test results.
+17. Outstanding issues.
+18. Recommended next steps.
+
+Clearly distinguish completed features from features requiring external credentials, permissions, or manual verification.
+
+---
+
+29. IMPLEMENTATION PRIORITY
+
+Follow this implementation order:
+
+PHASE 1 — Existing project inspection and SEO audit.
+
+PHASE 2 — Technical SEO foundation, URL handling, robots.txt, sitemap, and canonical URLs.
+
+PHASE 3 — Metadata and dynamic page SEO.
+
+PHASE 4 — Structured data and social sharing optimization.
+
+PHASE 5 — Google Search Console, Bing Webmaster Tools, and IndexNow.
+
+PHASE 6 — On-page SEO, internal linking, and image optimization.
+
+PHASE 7 — Performance, mobile optimization, and Core Web Vitals.
+
+PHASE 8 — AI search optimization.
+
+PHASE 9 — SEO admin dashboard and automation.
+
+PHASE 10 — Complete testing, security verification, and regression audit.
+
+Do not skip critical phases.
+
+---
+
+30. FINAL NON-NEGOTIABLE INSTRUCTIONS
+
+This project is strictly an SEO infrastructure and SEO optimization upgrade.
+
+DO NOT:
+
+- Redesign Iveo.
+- Change its branding.
+- Change its existing UI/UX.
+- Remove existing features.
+- Change authentication behavior.
+- Replace the existing database.
+- Break existing APIs.
+- Delete existing routes.
+- Remove existing integrations.
+- Modify unrelated application functionality.
+- Expose private information.
+- Add fake SEO data.
+- Generate spam pages.
+- Create unnecessary duplicate components.
+- Change existing application behavior for SEO scoring purposes.
+
+DO:
+
+- Inspect before modifying.
+- Reuse existing architecture.
+- Reuse existing environment variables.
+- Preserve all existing functionality.
+- Implement production-grade SEO.
+- Use official search engine documentation.
+- Validate all integrations.
+- Test the entire application after implementation.
+
+SUCCESS CRITERIA:
+
+Iveo.Site should have a technically sound, comprehensive, maintainable SEO system that makes all appropriate public content discoverable and understandable by search engines and modern AI-powered discovery platforms.
+
+The implementation must be production-ready, secure, scalable, and maintainable.
+
+Most importantly, the existing Iveo website must look and function exactly as it did before this SEO upgrade, except for the behind-the-scenes SEO improvements and any SEO-specific administrative controls added without disrupting the existing interface.
+
+Start by inspecting the complete existing project. Do not begin by blindly replacing files or rewriting the application.

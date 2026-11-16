@@ -9,10 +9,8 @@ import {
   Type,
 } from 'lucide-react';
 import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { VibeTileGroup } from '../onboarding/VibeTileGroup';
-import { ProfilePhotoUploader } from '../profile/ProfilePhotoUploader';
 import { BackgroundSelectorCard } from './BackgroundSelectorCard';
 import { FontSelectorPanel } from './FontSelectorPanel';
 import { ButtonColorsPanel } from './ButtonColorsPanel';
@@ -106,11 +104,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     session.layoutSettings || null
   );
 
-  // Profile fields state
-  const [displayName, setDisplayName] = useState(session.displayName || '');
-  const [bio, setBio] = useState(session.bio || '');
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-
   // Sync local state when session hydrates asynchronously from /api/me
   useEffect(() => {
     setCurrentVibeId(session.vibeId);
@@ -119,14 +112,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   useEffect(() => {
     setCurrentShape(session.buttonShape || getNativeShape(session.vibeId));
   }, [session.buttonShape, session.vibeId]);
-
-  useEffect(() => {
-    setDisplayName(session.displayName || '');
-  }, [session.displayName]);
-
-  useEffect(() => {
-    setBio(session.bio || '');
-  }, [session.bio]);
 
   useEffect(() => {
     setCurrentFonts(session.fontSettings || null);
@@ -230,45 +215,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
       setCurrentLayout(previous);
       onPreviewLayoutChange?.(previous);
       throw err;
-    }
-  };
-
-  const handleAvatarChange = async (url: string | null) => {
-    try {
-      await session.updateProfile({ avatarUrl: url });
-    } catch {
-      showToast("Couldn't update photo");
-    }
-  };
-
-  const handleAvatarPayloadChange = async (payload: {
-    avatarUrl: string | null;
-    avatarType: 'default' | 'uploaded';
-    avatarId: string | null;
-  }) => {
-    try {
-      await session.updateProfile({
-        avatarUrl: payload.avatarUrl,
-        avatarType: payload.avatarType,
-        avatarId: payload.avatarId,
-      });
-    } catch {
-      showToast("Couldn't update photo");
-    }
-  };
-
-  const handleSaveProfileInfo = async () => {
-    setIsSavingProfile(true);
-    try {
-      await session.updateProfile({
-        displayName: displayName.trim() || undefined,
-        bio: bio.trim(),
-      });
-      showToast('Profile info updated');
-    } catch {
-      showToast("Couldn't save profile info");
-    } finally {
-      setIsSavingProfile(false);
     }
   };
 
@@ -646,77 +592,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 1. Profile Photo & Info Card */}
-      <Card className="flex flex-col gap-5">
-        <div>
-          <h3 className="text-[20px] font-semibold text-ink leading-tight">
-            Profile &amp; Photo
-          </h3>
-          <p className="mt-1 text-[14px] text-muted">
-            Customize how your avatar, name, and bio appear to visitors.
-          </p>
-        </div>
-
-        {/* Photo Uploader */}
-        <div>
-          <label className="block text-[13px] font-medium text-ink mb-2">
-            Profile Picture
-          </label>
-          <ProfilePhotoUploader
-            currentAvatarUrl={session.imageUrl}
-            avatarType={session.avatarType}
-            avatarId={session.avatarId}
-            initials={displayName || session.username || 'ME'}
-            username={session.username}
-            onAvatarChange={handleAvatarChange}
-            onAvatarPayloadChange={handleAvatarPayloadChange}
-          />
-        </div>
-
-        {/* Display Name */}
-        <div>
-          <label className="block text-[13px] font-medium text-ink mb-1.5">
-            Display Name
-          </label>
-          <input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="e.g. Maya Ellis"
-            className="w-full h-11 px-3.5 rounded-[10px] bg-surface-2 border border-border text-[14px] text-ink outline-none focus:border-ink transition-colors"
-          />
-        </div>
-
-        {/* Bio */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[13px] font-medium text-ink">
-              Bio
-            </label>
-            <span className="text-[11px] text-muted">{bio.length}/160</span>
-          </div>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value.slice(0, 160))}
-            rows={2}
-            placeholder="A short sentence about what you make..."
-            className="w-full p-3 rounded-[10px] bg-surface-2 border border-border text-[14px] text-ink outline-none focus:border-ink transition-colors resize-none"
-          />
-        </div>
-
-        <div className="flex justify-start sm:justify-end">
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleSaveProfileInfo}
-            loading={isSavingProfile}
-          >
-            Save profile
-          </Button>
-        </div>
-      </Card>
-
-      {/* 2. Minimized Page Design Feature Buttons */}
+      {/* Minimized Page Design Feature Buttons */}
       <Card className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <div>

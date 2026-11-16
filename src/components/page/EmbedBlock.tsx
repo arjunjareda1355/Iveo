@@ -1,5 +1,14 @@
 import React from 'react';
-import { Play, Music, Headphones } from 'lucide-react';
+import {
+  Play,
+  Music,
+  Headphones,
+  MessageSquare,
+  Github,
+  Linkedin,
+  Globe,
+  ExternalLink,
+} from 'lucide-react';
 import { PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
 import { parseEmbedUrl } from '../../lib/embeds';
@@ -21,6 +30,12 @@ interface EmbedBlockProps {
   surfaceStyle?: React.CSSProperties;
 }
 
+const XMarkIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
 export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   block,
   vibe,
@@ -36,20 +51,43 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   const { tokens } = vibe;
   const parsed = parseEmbedUrl(block.url || '');
   const provider = parsed?.provider || block.embedProvider || 'youtube';
+  const meta = block.embedMeta;
+
+  const isSocialCardProvider =
+    provider === 'discord' ||
+    provider === 'github' ||
+    provider === 'linkedin' ||
+    provider === 'x';
 
   const providerLabel =
     provider === 'youtube'
       ? 'YouTube'
       : provider === 'spotify'
         ? 'Spotify'
-        : 'SoundCloud';
+        : provider === 'soundcloud'
+          ? 'SoundCloud'
+          : provider === 'discord'
+            ? 'Discord'
+            : provider === 'github'
+              ? 'GitHub'
+              : provider === 'linkedin'
+                ? 'LinkedIn'
+                : 'X';
 
   const ProviderIcon =
     provider === 'youtube'
       ? Play
       : provider === 'spotify'
         ? Music
-        : Headphones;
+        : provider === 'soundcloud'
+          ? Headphones
+          : provider === 'discord'
+            ? MessageSquare
+            : provider === 'github'
+              ? Github
+              : provider === 'linkedin'
+                ? Linkedin
+                : Globe;
 
   const isActivePlayer = activeEmbedId === block.id;
   const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
@@ -64,7 +102,150 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
     boxShadow: tokens.buttonShadow || 'none',
   };
 
-  // Height calculations
+  // Rich interactive social / developer card (Discord, GitHub, LinkedIn, X)
+  if (isSocialCardProvider) {
+    const targetUrl = parsed?.canonicalUrl || block.url || '#';
+    const cardTitle = meta?.title || block.title || parsed?.label || `${providerLabel} link`;
+    const cardSubtitle = meta?.subtitle || (parsed?.identifier ? `@${parsed.identifier}` : undefined);
+    const cardDesc = meta?.description;
+    const badgeText = meta?.badgeText || providerLabel;
+    const ctaText =
+      provider === 'discord'
+        ? 'Join Server'
+        : provider === 'github'
+          ? 'View on GitHub'
+          : provider === 'linkedin'
+            ? 'View Profile'
+            : 'View on X';
+
+    const innerContent = (
+      <div
+        className="w-full flex flex-col gap-2.5 text-left transition-all duration-150"
+        style={{
+          ...baseSurface,
+          fontFamily: fontFamily || vibe.fontFamily,
+          borderRadius: `${cardRadius}px`,
+          padding: `${Math.round(14 * scale)}px`,
+        }}
+      >
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {meta?.avatarUrl ? (
+              <img
+                src={meta.avatarUrl}
+                alt={cardTitle}
+                className="rounded-full object-cover border border-current/20 shrink-0"
+                style={{
+                  width: `${Math.round(38 * scale)}px`,
+                  height: `${Math.round(38 * scale)}px`,
+                }}
+              />
+            ) : (
+              <div
+                className="rounded-full flex items-center justify-center shrink-0"
+                style={{
+                  width: `${Math.round(36 * scale)}px`,
+                  height: `${Math.round(36 * scale)}px`,
+                  backgroundColor: tokens.text,
+                  color: tokens.bg,
+                }}
+              >
+                {provider === 'x' ? (
+                  <XMarkIcon size={Math.round(16 * scale)} />
+                ) : (
+                  <ProviderIcon size={Math.round(18 * scale)} strokeWidth={1.7} />
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className="font-semibold leading-tight truncate"
+                  style={{ fontSize: `${Math.max(13, Math.round(14 * scale))}px` }}
+                >
+                  {cardTitle}
+                </span>
+              </div>
+              {cardSubtitle && (
+                <span
+                  className="opacity-75 truncate leading-tight mt-0.5"
+                  style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px` }}
+                >
+                  {cardSubtitle}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <span
+            className="px-2 py-0.5 border border-current/20 font-medium shrink-0 whitespace-nowrap"
+            style={{
+              fontSize: `${Math.max(10, Math.round(11 * scale))}px`,
+              borderRadius: `${controlRadius}px`,
+              opacity: 0.9,
+            }}
+          >
+            {badgeText}
+          </span>
+        </div>
+
+        {cardDesc && (
+          <p
+            className="opacity-85 line-clamp-2 leading-snug"
+            style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px` }}
+          >
+            {cardDesc}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          {meta?.statsLabel ? (
+            <span
+              className="opacity-80 font-medium truncate"
+              style={{ fontSize: `${Math.max(10, Math.round(11 * scale))}px` }}
+            >
+              {meta.statsLabel}
+            </span>
+          ) : (
+            <span />
+          )}
+
+          <span
+            className="inline-flex items-center gap-1 font-semibold px-3 py-1 shrink-0"
+            style={{
+              backgroundColor: tokens.text,
+              color: tokens.bg,
+              borderRadius: `${controlRadius}px`,
+              fontSize: `${Math.max(11, Math.round(12 * scale))}px`,
+            }}
+          >
+            <span>{ctaText}</span>
+            <ExternalLink size={Math.max(10, Math.round(11 * scale))} />
+          </span>
+        </div>
+      </div>
+    );
+
+    if (embedMode === 'placeholder') {
+      return innerContent;
+    }
+
+    return (
+      <a
+        href={targetUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onLinkClick?.(block)}
+        className="block w-full hover:scale-[1.01] transition-transform duration-150"
+        aria-label={`${cardTitle} on ${providerLabel}`}
+      >
+        {innerContent}
+      </a>
+    );
+  }
+
+  // Height calculations for media players (YouTube, Spotify, SoundCloud)
   const defaultHeight =
     provider === 'youtube'
       ? Math.round(200 * scale)

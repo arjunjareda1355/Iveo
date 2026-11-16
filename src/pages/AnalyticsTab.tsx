@@ -102,6 +102,17 @@ export const AnalyticsTab: React.FC = () => {
     return items;
   }, [data]);
 
+  // Countries breakdown items
+  const countryItems: BreakdownItem[] | null = useMemo(() => {
+    if (!data || !data.countries) return null;
+    return data.countries.map((c) => ({
+      key: c.country || 'Unknown',
+      label: c.country || 'Unknown',
+      views: c.views,
+      clicks: c.clicks,
+    }));
+  }, [data]);
+
   return (
     <div className="w-full max-w-[880px] mx-auto flex flex-col gap-6">
       {/* 1. Header Row */}
@@ -178,6 +189,16 @@ export const AnalyticsTab: React.FC = () => {
           isPro={session.isPro}
         />
       </div>
+
+      {/* 6b. Countries Breakdown */}
+      {countryItems && countryItems.length > 0 && (
+        <BreakdownCard
+          title="Visitor Locations"
+          items={countryItems}
+          totalViews={views}
+          isPro={session.isPro}
+        />
+      )}
 
       {/* 7. Privacy Footnote */}
       <p className="text-[13px] text-muted leading-relaxed max-w-[64ch] mt-2 mb-8 select-none">

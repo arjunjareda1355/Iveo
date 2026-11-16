@@ -23,9 +23,11 @@ export interface IntroCheckInput {
   sessionSeen?: string | null;
 }
 
+const VITE_INTERNAL_PREFIXES = new Set(['@vite', '@react-refresh', '@fs', '@id']);
+
 /**
  * Determines whether the incoming request/URL corresponds to a user's public page
- * (`/:username` or `<username>.iveo.site` / `?subdomain=<username>`).
+ * (`/@:username`, legacy `/:username`, or `<username>.iveo.site` / `?subdomain=<username>`).
  */
 export function isUserPageLocation(input: {
   pathname: string;
@@ -35,6 +37,10 @@ export function isUserPageLocation(input: {
   const rawPath = (input.pathname || '/').trim();
   const cleanPath = rawPath.replace(/^\/+|\/+$/g, '');
   const firstSegment = cleanPath.split('/')[0]?.toLowerCase() || '';
+
+  if (VITE_INTERNAL_PREFIXES.has(firstSegment)) {
+    return false;
+  }
 
   // 1. Check host subdomain (e.g. maya.iveo.site, maya.localhost, maya---xyz.run.app)
   const host = (input.hostname || '').toLowerCase().trim().split(':')[0];
@@ -64,12 +70,17 @@ export function isUserPageLocation(input: {
     }
   }
 
-  // 3. Root landing page or known marketing/app routes are NOT user pages
+  // 3. Explicit /@username handle route is always a user page
+  if (firstSegment.startsWith('@') && firstSegment.length > 1) {
+    return true;
+  }
+
+  // 4. Root landing page or known marketing/app routes are NOT user pages
   if (!firstSegment || SITE_APP_ROOT_SEGMENTS.has(firstSegment)) {
     return false;
   }
 
-  // Any other path (e.g., /maya, /arjun, /devsharma) is a user page
+  // Legacy single-segment public profile route (e.g., /maya) -> also treated as user page (redirects to /@maya)
   return true;
 }
 

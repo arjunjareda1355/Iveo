@@ -100,23 +100,24 @@ export const ExportDataCard: React.FC = () => {
   };
 
   return (
-    <Card className="flex flex-col items-start gap-4 p-5 sm:p-6">
-      <h3 className="text-[17px] sm:text-[18px] font-semibold text-ink">
-        {copy.exportData.cardTitle}
-      </h3>
-
-      <p className="text-[14px] text-muted leading-relaxed">
-        {copy.exportData.cardBody}
-      </p>
+    <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="text-[15px] font-semibold text-ink leading-tight">
+          {copy.exportData.cardTitle}
+        </h3>
+        <p className="text-[12px] text-muted mt-0.5">
+          {copy.exportData.cardBody}
+        </p>
+      </div>
 
       <Button
         variant="secondary"
-        size="md"
+        size="sm"
         onClick={handleExport}
         disabled={isExporting}
-        className="flex items-center gap-2"
+        className="flex items-center gap-1.5 shrink-0 self-start sm:self-center"
       >
-        <Download size={16} strokeWidth={1.5} />
+        <Download size={14} strokeWidth={1.6} />
         <span>
           {isExporting ? 'Exporting...' : copy.exportData.exportButton}
         </span>

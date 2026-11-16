@@ -1319,7 +1319,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         {/* "Report this page" (always visible on public page) */}
         {isPublicPage && displayHandle && (
           <a
-            href={`mailto:help@iveo.site?subject=Report%20page%20iveo.site/${displayHandle}`}
+            href={`mailto:help@iveo.site?subject=Report%20page%20iveo.site/@${displayHandle}`}
             className="text-[10px] opacity-25 hover:opacity-70 underline underline-offset-2 transition-opacity"
             style={{ color: tokens.muted }}
           >

@@ -583,7 +583,7 @@ function drawFrontCardFace(
   ctx.textAlign = 'left';
   ctx.fillStyle = app.textColor;
   ctx.font = `500 13.5px ${monoFont}`;
-  ctx.fillText(cfg.websiteUrl || `iveo.site/${cleanUsername}`, padX, footerTextY, 410);
+  ctx.fillText(cfg.websiteUrl || `iveo.site/@${cleanUsername}`, padX, footerTextY, 410);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = app.mutedColor;
@@ -671,7 +671,7 @@ function drawBackCardFace(
   ctx.fillText(cfg.backSubheadline || 'open my page.', rightX, curY, rightW);
   curY += 42;
 
-  const urlLabel = `iveo.site/${cleanUsername}`;
+  const urlLabel = `iveo.site/@${cleanUsername}`;
   ctx.font = `500 13.5px ${monoFont}`;
   ctx.fillStyle = app.mutedColor;
   const maxUrlW = data.isPro ? rightW - 22 : rightW;

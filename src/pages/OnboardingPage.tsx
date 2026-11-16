@@ -360,7 +360,7 @@ export const OnboardingPage: React.FC = () => {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-ink truncate">
-                      iveo.site/{session.username} is claimed
+                      iveo.site/@{session.username} is claimed
                     </p>
                     <p className="text-[12px] text-muted truncate">
                       Follow these steps to complete setting up your profile
@@ -395,7 +395,7 @@ export const OnboardingPage: React.FC = () => {
                   <form onSubmit={handleUsernameNext} className="mt-6">
                     <div className="relative flex h-14 w-full items-center rounded-[14px] px-3 bg-surface border border-border-strong hover:border-[#A3A3A3] focus-within:border-ink focus-within:shadow-[0_0_0_3px_rgba(10,10,10,0.08)] transition-all duration-120">
                       <span className="font-mono text-[16px] text-muted select-none pointer-events-none shrink-0 pl-1 pr-1 font-medium">
-                        iveo.site/
+                        iveo.site/@
                       </span>
                       <input
                         type="text"
@@ -779,7 +779,7 @@ export const OnboardingPage: React.FC = () => {
                         onClick={copyAddress}
                         className="font-mono text-[14px] font-semibold text-ink hover:underline flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>iveo.site/{session.username || usernameInput}</span>
+                        <span>iveo.site/@{session.username || usernameInput}</span>
                         <Copy size={13} className="text-muted" />
                       </button>
                     </div>

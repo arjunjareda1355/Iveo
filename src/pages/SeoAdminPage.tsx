@@ -264,26 +264,30 @@ export const SeoAdminPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col">
-      <header className="sticky top-0 z-30 h-16 border-b border-border bg-surface">
-        <Container className="h-full flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-30 min-h-16 py-2 sm:py-0 border-b border-border bg-surface">
+        <Container className="h-full flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
             <Logo tone="light" size="md" />
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-2 border border-border text-[12px] font-mono text-muted">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-2 border border-border text-[11px] sm:text-[12px] font-mono text-muted truncate">
               SEO Health Console
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="secondary"
               size="sm"
               onClick={handleRegenerate}
               disabled={isRegenerating}
+              className="gap-1.5 whitespace-nowrap"
             >
               <RefreshCw size={14} className={isRegenerating ? 'animate-spin' : ''} />
-              <span>{isRegenerating ? 'Regenerating...' : 'Regenerate & Ping'}</span>
+              <span className="hidden xs:inline sm:inline">
+                {isRegenerating ? 'Regenerating...' : 'Regenerate & Ping'}
+              </span>
+              <span className="sm:hidden xs:hidden">Sync</span>
             </Button>
-            <Button as={Link} to="/dashboard" variant="ghost" size="sm">
+            <Button as={Link} to="/dashboard" variant="ghost" size="sm" className="gap-1.5 whitespace-nowrap">
               <ArrowLeft size={14} />
               <span>Dashboard</span>
             </Button>
@@ -381,9 +385,9 @@ export const SeoAdminPage: React.FC = () => {
 
                   <form
                     onSubmit={(e) => handleValidateProfile(e)}
-                    className="flex flex-wrap sm:flex-nowrap items-center gap-2"
+                    className="flex flex-col sm:flex-row sm:items-center gap-2"
                   >
-                    <div className="relative flex-1 min-w-[200px]">
+                    <div className="relative flex-1 min-w-0">
                       <Search
                         size={15}
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
@@ -392,23 +396,32 @@ export const SeoAdminPage: React.FC = () => {
                         type="text"
                         value={inspectUsername}
                         onChange={(e) => setInspectUsername(e.target.value)}
-                        placeholder="Enter username (e.g. yourhandle)"
+                        placeholder="Enter handle (e.g. maya or @maya)"
                         aria-label="Username to validate"
                         className="w-full h-10 pl-9 pr-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                       />
                     </div>
-                    <Button type="submit" variant="primary" size="md" disabled={validating}>
-                      {validating ? 'Checking...' : 'Validate SEO'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="md"
-                      onClick={handleInspectGsc}
-                      disabled={validating}
-                    >
-                      GSC Inspect
-                    </Button>
+                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0">
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="md"
+                        disabled={validating}
+                        className="h-10 whitespace-nowrap"
+                      >
+                        {validating ? 'Checking...' : 'Validate SEO'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={handleInspectGsc}
+                        disabled={validating}
+                        className="h-10 whitespace-nowrap"
+                      >
+                        GSC Inspect
+                      </Button>
+                    </div>
                   </form>
 
                   {validation && (
@@ -447,7 +460,7 @@ export const SeoAdminPage: React.FC = () => {
                             Google Search Snippet Preview
                           </span>
                           <div className="text-[12px] text-[#202124] dark:text-neutral-300 truncate">
-                            {validation.canonical || `https://iveo.site/${validation.username}`}
+                            {validation.canonical || `https://iveo.site/@${validation.username}`}
                           </div>
                           <div className="text-[18px] text-[#1a0dab] dark:text-blue-400 font-medium leading-snug mt-0.5">
                             {validation.title}
@@ -536,9 +549,9 @@ export const SeoAdminPage: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2 border border-border">
-                      <span className="font-medium text-ink">Robots &amp; XML Endpoints</span>
-                      <div className="flex items-center gap-3 text-[12px] font-mono">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-surface-2 border border-border">
+                      <span className="font-medium text-ink shrink-0">XML Sitemaps &amp; Crawlers</span>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-mono">
                         <a
                           href="/robots.txt"
                           target="_blank"
@@ -554,6 +567,30 @@ export const SeoAdminPage: React.FC = () => {
                           className="underline text-ink"
                         >
                           sitemap.xml
+                        </a>
+                        <a
+                          href="/sitemap-pages.xml"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline text-ink"
+                        >
+                          sitemap-pages.xml
+                        </a>
+                        <a
+                          href="/sitemap-profiles.xml"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline text-ink"
+                        >
+                          sitemap-profiles.xml
+                        </a>
+                        <a
+                          href="/llms.txt"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline text-ink"
+                        >
+                          llms.txt
                         </a>
                       </div>
                     </div>
@@ -613,12 +650,12 @@ export const SeoAdminPage: React.FC = () => {
                         <tr key={p.username} className="hover:bg-surface-2/60">
                           <td className="py-2.5 pr-4 font-mono text-ink">
                             <a
-                              href={`/${encodeURIComponent(p.username)}`}
+                              href={`/@${encodeURIComponent(p.username)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="hover:underline"
                             >
-                              /{p.username}
+                              /@{p.username}
                             </a>
                           </td>
                           <td className="py-2.5 pr-4 text-ink">{p.displayName}</td>

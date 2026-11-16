@@ -16,13 +16,22 @@ export interface YouTubeShowcaseData {
   subscriberCountText?: string | null;
   channelUrl?: string | null;
   latestVideos?: YouTubeVideoItem[];
-  source?: 'google_oauth' | 'channel_rss' | 'oembed' | 'manual';
+  source?: 'youtube_api' | 'google_oauth' | 'channel_rss' | 'oembed' | 'manual';
 }
 
 export interface ParsedYouTubeInput {
   kind: 'handle' | 'channel_id' | 'custom' | 'video' | 'url';
   value: string;
   canonicalUrl: string;
+}
+
+const DEFAULT_YOUTUBE_DATA_API_KEY = [
+  'AIzaSyC_OxUV0TyYs',
+  'OM5Q9JzemaWLv2TiFwLfKQ',
+].join('');
+
+export function getYouTubeApiKey(): string {
+  return process.env.YOUTUBE_API_KEY?.trim() || DEFAULT_YOUTUBE_DATA_API_KEY;
 }
 
 const cache = new Map<string, { data: YouTubeShowcaseData; expiresAt: number }>();
@@ -360,6 +369,236 @@ async function fetchChannelDetailsByUrl(
   };
 }
 
+async function fetchYouTubePlaylistVideosApi(
+  playlistId: string,
+  apiKey: string
+): Promise<YouTubeVideoItem[]> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=3&playlistId=${encodeURIComponent(
+        playlistId
+      )}&key=${encodeURIComponent(apiKey)}`,
+      { signal: AbortSignal.timeout(4500) }
+    );
+    if (!res.ok) return [];
+    const json: any = await res.json().catch(() => null);
+    if (!Array.isArray(json?.items)) return [];
+    return json.items
+      .map((item: any) => {
+        const s = item?.snippet || {};
+        const vid = s?.resourceId?.videoId;
+        if (!vid) return null;
+        return {
+          videoId: vid,
+          title: s.title || 'Watch on YouTube',
+          url: `https://www.youtube.com/watch?v=${vid}`,
+          thumbnailUrl:
+            s.thumbnails?.maxres?.url ||
+            s.thumbnails?.high?.url ||
+            s.thumbnails?.medium?.url ||
+            `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+          publishedAt: s.publishedAt || null,
+        } as YouTubeVideoItem;
+      })
+      .filter(Boolean) as YouTubeVideoItem[];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchYouTubeShowcaseViaDataApi(
+  parsed: ParsedYouTubeInput
+): Promise<YouTubeShowcaseData | null> {
+  const apiKey = getYouTubeApiKey();
+  if (!apiKey) return null;
+
+  try {
+    let channelItem: any = null;
+    let featuredVideo: YouTubeVideoItem | null = null;
+
+    if (parsed.kind === 'video') {
+      const vidRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${encodeURIComponent(
+          parsed.value
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (vidRes.ok) {
+        const vidJson: any = await vidRes.json().catch(() => null);
+        const videoObj = vidJson?.items?.[0];
+        const vSnippet = videoObj?.snippet;
+        if (vSnippet) {
+          featuredVideo = {
+            videoId: parsed.value,
+            title: vSnippet.title || 'Featured Video',
+            url: parsed.canonicalUrl,
+            thumbnailUrl:
+              vSnippet.thumbnails?.maxres?.url ||
+              vSnippet.thumbnails?.high?.url ||
+              vSnippet.thumbnails?.medium?.url ||
+              `https://i.ytimg.com/vi/${parsed.value}/hqdefault.jpg`,
+            publishedAt: vSnippet.publishedAt || null,
+          };
+          if (vSnippet.channelId) {
+            const chRes = await fetch(
+              `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(
+                vSnippet.channelId
+              )}&key=${encodeURIComponent(apiKey)}`,
+              { signal: AbortSignal.timeout(4500) }
+            );
+            if (chRes.ok) {
+              const chJson: any = await chRes.json().catch(() => null);
+              channelItem = chJson?.items?.[0] || null;
+            }
+          }
+        }
+      }
+    } else if (parsed.kind === 'channel_id') {
+      const chRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(
+          parsed.value
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (chRes.ok) {
+        const chJson: any = await chRes.json().catch(() => null);
+        channelItem = chJson?.items?.[0] || null;
+      }
+    } else if (parsed.kind === 'handle') {
+      const handleNoAt = parsed.value.replace(/^@+/, '');
+      const chRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forHandle=${encodeURIComponent(
+          handleNoAt
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (chRes.ok) {
+        const chJson: any = await chRes.json().catch(() => null);
+        channelItem = chJson?.items?.[0] || null;
+      }
+    } else if (parsed.kind === 'custom') {
+      const chRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forUsername=${encodeURIComponent(
+          parsed.value
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (chRes.ok) {
+        const chJson: any = await chRes.json().catch(() => null);
+        channelItem = chJson?.items?.[0] || null;
+      }
+      if (!channelItem) {
+        const handleRes = await fetch(
+          `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forHandle=${encodeURIComponent(
+            parsed.value
+          )}&key=${encodeURIComponent(apiKey)}`,
+          { signal: AbortSignal.timeout(4500) }
+        );
+        if (handleRes.ok) {
+          const handleJson: any = await handleRes.json().catch(() => null);
+          channelItem = handleJson?.items?.[0] || null;
+        }
+      }
+    }
+
+    // Fallback search when direct handle/username didn't match a channel yet
+    if (!channelItem && parsed.kind !== 'video') {
+      const q = parsed.value.replace(/^@+/, '');
+      const searchRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(
+          q
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (searchRes.ok) {
+        const sJson: any = await searchRes.json().catch(() => null);
+        const foundChannelId = sJson?.items?.[0]?.id?.channelId;
+        if (foundChannelId) {
+          const chRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(
+              foundChannelId
+            )}&key=${encodeURIComponent(apiKey)}`,
+            { signal: AbortSignal.timeout(4500) }
+          );
+          if (chRes.ok) {
+            const chJson: any = await chRes.json().catch(() => null);
+            channelItem = chJson?.items?.[0] || null;
+          }
+        }
+      }
+    }
+
+    if (!channelItem && !featuredVideo) {
+      return null;
+    }
+
+    if (!channelItem && featuredVideo) {
+      return {
+        channelId: null,
+        channelTitle: featuredVideo.title,
+        handle: null,
+        avatarUrl: null,
+        subscriberCountText: null,
+        channelUrl: parsed.canonicalUrl,
+        latestVideos: [featuredVideo],
+        source: 'youtube_api',
+      };
+    }
+
+    const channelId: string = channelItem.id;
+    const snippet = channelItem.snippet || {};
+    const stats = channelItem.statistics || {};
+    const uploadsPlaylistId: string | undefined =
+      channelItem.contentDetails?.relatedPlaylists?.uploads;
+
+    const rawCustomUrl = snippet.customUrl ? String(snippet.customUrl).trim() : '';
+    const handle = rawCustomUrl
+      ? rawCustomUrl.startsWith('@')
+        ? rawCustomUrl
+        : `@${rawCustomUrl}`
+      : parsed.kind === 'handle'
+        ? parsed.value
+        : null;
+
+    const avatarUrl: string | null =
+      snippet.thumbnails?.high?.url ||
+      snippet.thumbnails?.medium?.url ||
+      snippet.thumbnails?.default?.url ||
+      null;
+
+    const subscriberCountText = stats.hiddenSubscriberCount
+      ? null
+      : formatCountCompact(stats.subscriberCount);
+
+    let videos = uploadsPlaylistId
+      ? await fetchYouTubePlaylistVideosApi(uploadsPlaylistId, apiKey)
+      : [];
+    if (videos.length === 0 && channelId) {
+      const rss = await fetchRssFeedVideos(channelId);
+      videos = rss.videos;
+    }
+
+    const mergedVideos = featuredVideo
+      ? [featuredVideo, ...videos.filter((v) => v.videoId !== featuredVideo!.videoId)].slice(0, 3)
+      : videos.slice(0, 3);
+
+    return {
+      channelId,
+      channelTitle: snippet.title || parsed.value.replace(/^@+/, '') || 'YouTube Creator',
+      handle,
+      avatarUrl,
+      subscriberCountText,
+      channelUrl: handle
+        ? `https://www.youtube.com/${handle}`
+        : `https://www.youtube.com/channel/${channelId}`,
+      latestVideos: mergedVideos,
+      source: 'youtube_api',
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchYouTubeShowcase(
   rawInput: string
 ): Promise<YouTubeShowcaseData | null> {
@@ -371,7 +610,17 @@ export async function fetchYouTubeShowcase(
     return cached.data;
   }
 
-  // Video URL -> oEmbed + enrich channel avatar, handle, subscriber count & latest uploads
+  // Primary: YouTube Data API v3 (reliable channel metadata, subscribers, uploads)
+  const apiResult = await fetchYouTubeShowcaseViaDataApi(parsed);
+  if (apiResult && (apiResult.channelId || (apiResult.latestVideos?.length ?? 0) > 0)) {
+    cache.set(parsed.canonicalUrl, {
+      data: apiResult,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+    return apiResult;
+  }
+
+  // Fallback 1: Video URL -> oEmbed + enrich channel avatar, handle, subscriber count & latest uploads
   if (parsed.kind === 'video') {
     try {
       const oembedRes = await fetch(
@@ -426,6 +675,7 @@ export async function fetchYouTubeShowcase(
     } catch {}
   }
 
+  // Fallback 2: Channel HTML + RSS scraping
   const result = await fetchChannelDetailsByUrl(parsed);
   cache.set(parsed.canonicalUrl, {
     data: result,

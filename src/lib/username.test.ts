@@ -29,11 +29,18 @@ test('validateUsernameSync: rejects reserved usernames and contains zero fake de
   }
 });
 
-test('validateUsernameSync: accepts valid available usernames', () => {
+test('validateUsernameSync: accepts valid available usernames and strips leading @', () => {
   const res = validateUsernameSync('new-creator-99');
   assert.equal(res.status, 'available');
   if (res.status === 'available') {
     assert.equal(res.username, 'new-creator-99');
-    assert.equal(res.message, 'iveo.site/new-creator-99 is available');
+    assert.equal(res.message, 'iveo.site/@new-creator-99 is available');
+  }
+
+  const resAt = validateUsernameSync('@maya-studio');
+  assert.equal(resAt.status, 'available');
+  if (resAt.status === 'available') {
+    assert.equal(resAt.username, 'maya-studio');
+    assert.equal(resAt.message, 'iveo.site/@maya-studio is available');
   }
 });

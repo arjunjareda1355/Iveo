@@ -229,7 +229,7 @@ export const ClaimNameAnimation: React.FC = () => {
       >
         <div className="ic-field">
           <span className="ic-text">
-            <span>iveo.site/</span>
+            <span>iveo.site/@</span>
             <span ref={nameRef} className="ic-name" />
             <span className="ic-caret" />
           </span>

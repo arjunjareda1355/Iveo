@@ -322,7 +322,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 {displayName || cleanUsername}
               </h3>
               <p className="inline-flex items-center gap-1.5 text-[12px] font-mono text-muted">
-                <span>iveo.site/{cleanUsername}</span>
+                <span>iveo.site/@{cleanUsername}</span>
                 {isPro && <VerifiedTick size={13} />}
               </p>
             </div>

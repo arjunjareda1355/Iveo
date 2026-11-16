@@ -8,7 +8,7 @@ export async function GET(request: Request): Promise<Response> {
   const raw = url.searchParams.get('u') || url.searchParams.get('username') || '';
   const requestingUserId = (url.searchParams.get('userId') || request.headers.get('x-user-id') || '').trim();
   const requestingEmail = (url.searchParams.get('email') || request.headers.get('x-user-email') || '').trim().toLowerCase();
-  const clean = raw.trim().toLowerCase();
+  const clean = raw.trim().replace(/^@+/, '').toLowerCase();
   const allowReserved = isPrivilegedEmailServer(requestingEmail);
 
   const validation = validateUsernameServer(clean, { allowReserved });
@@ -32,16 +32,16 @@ export async function GET(request: Request): Promise<Response> {
           ok: true,
           available: true,
           username: clean,
-          profileUrl: `https://iveo.site/${clean}`,
-          subdomainUrl: `https://iveo.site/${clean}`,
-          message: `iveo.site/${clean} is your address`,
+          profileUrl: `https://iveo.site/@${clean}`,
+          subdomainUrl: `https://iveo.site/@${clean}`,
+          message: `iveo.site/@${clean} is your address`,
         });
       }
       return Response.json({
         ok: true,
         available: false,
         reason: 'taken',
-        message: `iveo.site/${clean} is already claimed. Try another.`,
+        message: `iveo.site/@${clean} is already claimed. Try another.`,
       });
     }
   } catch {
@@ -57,16 +57,16 @@ export async function GET(request: Request): Promise<Response> {
           ok: true,
           available: true,
           username: clean,
-          profileUrl: `https://iveo.site/${clean}`,
-          subdomainUrl: `https://iveo.site/${clean}`,
-          message: `iveo.site/${clean} is your address`,
+          profileUrl: `https://iveo.site/@${clean}`,
+          subdomainUrl: `https://iveo.site/@${clean}`,
+          message: `iveo.site/@${clean} is your address`,
         });
       }
       return Response.json({
         ok: true,
         available: false,
         reason: 'taken',
-        message: `iveo.site/${clean} is already claimed. Try another.`,
+        message: `iveo.site/@${clean} is already claimed. Try another.`,
       });
     }
   } catch {
@@ -91,16 +91,16 @@ export async function GET(request: Request): Promise<Response> {
             ok: true,
             available: true,
             username: clean,
-            profileUrl: `https://iveo.site/${clean}`,
-            subdomainUrl: `https://iveo.site/${clean}`,
-            message: `iveo.site/${clean} is your address`,
+            profileUrl: `https://iveo.site/@${clean}`,
+            subdomainUrl: `https://iveo.site/@${clean}`,
+            message: `iveo.site/@${clean} is your address`,
           });
         }
         return Response.json({
           ok: true,
           available: false,
           reason: 'taken',
-          message: `iveo.site/${clean} is already claimed. Try another.`,
+          message: `iveo.site/@${clean} is already claimed. Try another.`,
         });
       }
     } catch {
@@ -124,9 +124,9 @@ export async function GET(request: Request): Promise<Response> {
     ok: true,
     available: true,
     username: clean,
-    profileUrl: `https://iveo.site/${clean}`,
-    subdomainUrl: `https://iveo.site/${clean}`,
-    message: `iveo.site/${clean} is available`,
+    profileUrl: `https://iveo.site/@${clean}`,
+    subdomainUrl: `https://iveo.site/@${clean}`,
+    message: `iveo.site/@${clean} is available`,
   });
 }
 

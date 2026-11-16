@@ -29,8 +29,8 @@ function resolveSiteOrigin(): string {
 export const SITE_ORIGIN = resolveSiteOrigin();
 
 /**
- * Returns canonical public profile URL in format: https://iveo.site/{username}
- * or same-origin /{username} in development
+ * Returns canonical public profile URL in format: https://iveo.site/@{username}
+ * or same-origin /@{username} in development
  */
 export function pageUrl(username: string, options?: { src?: TrackSource }): string {
   if (!username) return 'https://iveo.site';
@@ -45,7 +45,7 @@ export function pageUrl(username: string, options?: { src?: TrackSource }): stri
     }
   }
 
-  const base = `${origin}/${clean}`;
+  const base = `${origin}/@${clean}`;
   if (options?.src) {
     return `${base}?src=${encodeURIComponent(options.src)}`;
   }
@@ -53,12 +53,12 @@ export function pageUrl(username: string, options?: { src?: TrackSource }): stri
 }
 
 /**
- * Returns display-friendly label in format: iveo.site/{username}
+ * Returns display-friendly label in format: iveo.site/@{username}
  */
 export function pageDisplayUrl(username: string): string {
   if (!username) return 'iveo.site';
   const clean = username.replace(/^[@/]+/, '').toLowerCase().trim();
-  return `iveo.site/${clean}`;
+  return `iveo.site/@${clean}`;
 }
 
 /**

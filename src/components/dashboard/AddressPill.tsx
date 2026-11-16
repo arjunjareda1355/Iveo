@@ -17,7 +17,7 @@ export const AddressPill: React.FC<AddressPillProps> = ({ username, isPro = fals
         title="Open your public page in a new tab"
         className="hidden sm:inline-flex h-9 items-center gap-1.5 rounded-full bg-surface border border-border px-3 text-[13px] font-mono text-ink shadow-xs hover:border-ink transition-colors cursor-pointer max-w-[240px]"
       >
-        <span className="truncate">iveo.site/{username}</span>
+        <span className="truncate">iveo.site/@{username}</span>
         {isPro && <VerifiedTick size={13} />}
       </a>
     </div>

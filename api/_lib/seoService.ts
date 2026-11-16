@@ -6,6 +6,7 @@ import { ogImageAddress, pageAddress } from './site.ts';
 import { loadPublicPage, version, type PublicPageServerData } from './publicPage.ts';
 import { appendSeoEvent, getSearchEngineStatus, notifyIndexNow, submitSitemapsToSearchEngines } from './searchEngines.ts';
 import { classifySegment, isPrivilegedEmailServer, PRIVATE_ROUTES, PUBLIC_INFO_ROUTES } from './usernames.ts';
+import { normalizeSocialUrl } from '../../src/lib/urls.ts';
 
 export const MAIN_SEO_TITLE = 'Iveo – One Link for Everything You Create';
 export const MAIN_SEO_DESCRIPTION =
@@ -91,14 +92,15 @@ export async function notifyProfileSeoChanged(
   username: string,
   previousUsername?: string | null
 ): Promise<void> {
-  const clean = (username || '').toLowerCase().trim();
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
   invalidateSitemapCache(`${action}:${clean}`);
   appendSeoEvent(`profile_${action}`, clean, 'sitemap_invalidated', previousUsername ? `from:${previousUsername}` : undefined);
 
   const origin = getCanonicalSiteOrigin();
-  const urls: string[] = [`${origin}/${encodeURIComponent(clean)}`];
+  const urls: string[] = [`${origin}/@${encodeURIComponent(clean)}`];
   if (previousUsername && previousUsername !== clean) {
-    urls.push(`${origin}/${encodeURIComponent(previousUsername.toLowerCase().trim())}`);
+    const prevClean = previousUsername.replace(/^@+/, '').toLowerCase().trim();
+    urls.push(`${origin}/@${encodeURIComponent(prevClean)}`);
   }
 
   // Non-blocking background IndexNow notification when configured
@@ -318,7 +320,7 @@ export function buildMainDomainHeadTags(requestOrigin?: string): string {
         name: 'What is Iveo?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Iveo is a personal link-in-bio and digital creator profile platform where you share all your social links, websites, embeds, and projects through one customizable iveo.site/username address.',
+          text: 'Iveo is a personal link-in-bio and digital creator profile platform where you share all your social links, websites, embeds, and projects through one customizable iveo.site/@username address.',
         },
       },
       {
@@ -378,9 +380,14 @@ export async function buildProfileSeoPayload(
     ? page.avatarUrl
     : ogImageAddress(requestOrigin, page.username, pageVersion);
 
-  const sameAs = Object.values(page.socials || {})
-    .filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
-    .map((u) => (/^https?:\/\//i.test(u.trim()) ? u.trim() : `https://${u.trim()}`));
+  const sameAs = Array.from(
+    new Set(
+      Object.entries(page.socials || {})
+        .filter(([, u]) => typeof u === 'string' && u.trim().length > 0)
+        .map(([plat, u]) => normalizeSocialUrl(plat.toLowerCase().trim(), String(u)))
+        .filter((u) => /^https?:\/\//i.test(u))
+    )
+  );
 
   const blocks = await dbGetBlocks(page.username).catch(() => []);
   const publicLinks = (blocks || []).filter(
@@ -454,7 +461,7 @@ export async function buildProfileSeoPayload(
   const ssrSocialsHtml = Object.entries(page.socials || {})
     .filter(([, val]) => typeof val === 'string' && val.trim().length > 0)
     .map(([plat, val]) => {
-      const href = /^https?:\/\//i.test(String(val).trim()) ? String(val).trim() : `https://${String(val).trim()}`;
+      const href = normalizeSocialUrl(plat.toLowerCase().trim(), String(val));
       return `<li><a href="${escapeHtml(href)}" rel="noopener noreferrer me">${escapeHtml(plat)}</a></li>`;
     })
     .join('');
@@ -498,7 +505,7 @@ export function buildNotFoundProfileResult(origin: string, cleanSegment: string)
   ssrBodyHtml: string;
   httpStatus: 404;
 } {
-  const safeSeg = escapeHtml(cleanSegment);
+  const safeSeg = escapeHtml(cleanSegment.replace(/^@+/, ''));
   const ogImg = ogImageAddress(origin);
   const tags = `<title>Page not found (@${safeSeg}) | Iveo</title>
     <meta name="description" content="This Iveo profile could not be found." />
@@ -510,17 +517,20 @@ export function buildNotFoundProfileResult(origin: string, cleanSegment: string)
 
   const ssrBodyHtml = `<main id="iveo-ssr-404" style="max-width:560px;margin:64px auto;padding:24px;font-family:system-ui,sans-serif;text-align:center;">
     <h1>Profile not found</h1>
-    <p>No active Iveo page exists at iveo.site/${safeSeg}.</p>
-    <p><a href="/">Claim iveo.site/${safeSeg}</a> or <a href="/discover">discover creators on Iveo</a>.</p>
+    <p>No active Iveo page exists at iveo.site/@${safeSeg}.</p>
+    <p><a href="/">Claim iveo.site/@${safeSeg}</a> or <a href="/discover">discover creators on Iveo</a>.</p>
   </main>`;
 
   return { tags, ssrBodyHtml, httpStatus: 404 };
 }
 
 export function buildRobotsTxt(origin: string): string {
+  const cleanOrigin = origin.replace(/\/$/, '');
   return [
     'User-agent: *',
     'Allow: /',
+    'Allow: /@*',
+    'Allow: /discover',
     'Disallow: /api/',
     'Disallow: /dashboard',
     'Disallow: /admin',
@@ -531,7 +541,9 @@ export function buildRobotsTxt(origin: string): string {
     'Disallow: /signup',
     'Disallow: /sso-callback',
     '',
-    `Sitemap: ${origin.replace(/\/$/, '')}/sitemap.xml`,
+    `Sitemap: ${cleanOrigin}/sitemap.xml`,
+    `Sitemap: ${cleanOrigin}/sitemap-pages.xml`,
+    `Sitemap: ${cleanOrigin}/sitemap-profiles.xml`,
   ].join('\n');
 }
 
@@ -542,11 +554,7 @@ export interface SitemapEntry {
   priority: string;
 }
 
-export async function collectSitemapEntries(origin: string): Promise<{
-  entries: SitemapEntry[];
-  indexableProfiles: number;
-  excludedProfiles: number;
-}> {
+export async function collectStaticSitemapEntries(origin: string): Promise<SitemapEntry[]> {
   const cleanOrigin = origin.replace(/\/$/, '');
   const today = new Date().toISOString().split('T')[0];
   const entries = new Map<string, SitemapEntry>();
@@ -567,6 +575,18 @@ export async function collectSitemapEntries(origin: string): Promise<{
     });
   }
 
+  return Array.from(entries.values());
+}
+
+export async function collectProfileSitemapEntries(origin: string): Promise<{
+  entries: SitemapEntry[];
+  indexableProfiles: number;
+  excludedProfiles: number;
+}> {
+  const cleanOrigin = origin.replace(/\/$/, '');
+  const today = new Date().toISOString().split('T')[0];
+  const entries = new Map<string, SitemapEntry>();
+
   const allProfiles = await getAllUnifiedProfiles();
   let indexableProfiles = 0;
   let excludedProfiles = 0;
@@ -579,7 +599,7 @@ export async function collectSitemapEntries(origin: string): Promise<{
     }
 
     indexableProfiles += 1;
-    const loc = `${cleanOrigin}/${encodeURIComponent(prof.username)}`;
+    const loc = `${cleanOrigin}/@${encodeURIComponent(prof.username.replace(/^@+/, ''))}`;
     const lastmod =
       typeof prof.updatedAt === 'string' && prof.updatedAt.length >= 10
         ? prof.updatedAt.slice(0, 10)
@@ -600,6 +620,22 @@ export async function collectSitemapEntries(origin: string): Promise<{
   };
 }
 
+export async function collectSitemapEntries(origin: string): Promise<{
+  entries: SitemapEntry[];
+  indexableProfiles: number;
+  excludedProfiles: number;
+}> {
+  const staticEntries = await collectStaticSitemapEntries(origin);
+  const { entries: profileEntries, indexableProfiles, excludedProfiles } =
+    await collectProfileSitemapEntries(origin);
+
+  return {
+    entries: [...staticEntries, ...profileEntries],
+    indexableProfiles,
+    excludedProfiles,
+  };
+}
+
 function renderUrlsetXml(entries: SitemapEntry[]): string {
   const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const body = entries
@@ -611,35 +647,69 @@ function renderUrlsetXml(entries: SitemapEntry[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`;
 }
 
+export async function generatePagesSitemapXml(origin: string): Promise<{ xml: string; totalUrls: number }> {
+  const cleanOrigin = origin.replace(/\/$/, '');
+  const entries = await collectStaticSitemapEntries(cleanOrigin);
+  const xml = renderUrlsetXml(entries);
+  sitemapState.cachedXml.set('pages', { xml, createdAt: Date.now() });
+  return { xml, totalUrls: entries.length };
+}
+
+export async function generateProfilesSitemapXml(
+  origin: string,
+  pageNum: number = 1,
+  pageSize: number = DEFAULT_SITEMAP_PAGE_SIZE
+): Promise<{ xml: string; found: boolean; totalProfiles: number }> {
+  const cleanOrigin = origin.replace(/\/$/, '');
+  const { entries } = await collectProfileSitemapEntries(cleanOrigin);
+  const start = (pageNum - 1) * pageSize;
+  if (pageNum < 1 || (entries.length > 0 && start >= entries.length) || (entries.length === 0 && pageNum > 1)) {
+    return { xml: '', found: false, totalProfiles: entries.length };
+  }
+  const slice = entries.slice(start, start + pageSize);
+  const xml = renderUrlsetXml(slice);
+  return { xml, found: true, totalProfiles: entries.length };
+}
+
 export async function generateSitemapXml(
   origin: string,
   pageSize: number = DEFAULT_SITEMAP_PAGE_SIZE
 ): Promise<{ xml: string; totalUrls: number; pages: number; isIndex: boolean }> {
   const cleanOrigin = origin.replace(/\/$/, '');
-  const { entries, indexableProfiles, excludedProfiles } = await collectSitemapEntries(cleanOrigin);
-  const totalUrls = entries.length;
-  const pages = Math.max(1, Math.ceil(totalUrls / pageSize));
+  const [staticEntries, profileResult] = await Promise.all([
+    collectStaticSitemapEntries(cleanOrigin),
+    collectProfileSitemapEntries(cleanOrigin),
+  ]);
+  const totalUrls = staticEntries.length + profileResult.entries.length;
+  const profilePages = Math.max(1, Math.ceil(profileResult.entries.length / pageSize));
+  const pages = 1 + profilePages;
 
   sitemapState.lastGeneratedAt = new Date().toISOString();
   sitemapState.totalUrls = totalUrls;
-  sitemapState.indexableProfiles = indexableProfiles;
-  sitemapState.excludedProfiles = excludedProfiles;
+  sitemapState.indexableProfiles = profileResult.indexableProfiles;
+  sitemapState.excludedProfiles = profileResult.excludedProfiles;
   sitemapState.sitemapPages = pages;
-
-  if (pages === 1) {
-    const xml = renderUrlsetXml(entries);
-    sitemapState.cachedXml.set('root', { xml, createdAt: Date.now() });
-    return { xml, totalUrls, pages: 1, isIndex: false };
-  }
 
   const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const today = new Date().toISOString().split('T')[0];
-  const indexBody = Array.from({ length: pages }, (_, i) => {
-    const loc = `${cleanOrigin}/sitemap-${i + 1}.xml`;
-    return `  <sitemap>\n    <loc>${escXml(loc)}</loc>\n    <lastmod>${today}</lastmod>\n  </sitemap>`;
-  }).join('\n');
 
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${indexBody}\n</sitemapindex>`;
+  const childSitemaps: string[] = [
+    `  <sitemap>\n    <loc>${escXml(`${cleanOrigin}/sitemap-pages.xml`)}</loc>\n    <lastmod>${today}</lastmod>\n  </sitemap>`,
+  ];
+
+  if (profilePages === 1) {
+    childSitemaps.push(
+      `  <sitemap>\n    <loc>${escXml(`${cleanOrigin}/sitemap-profiles.xml`)}</loc>\n    <lastmod>${today}</lastmod>\n  </sitemap>`
+    );
+  } else {
+    for (let i = 1; i <= profilePages; i += 1) {
+      childSitemaps.push(
+        `  <sitemap>\n    <loc>${escXml(`${cleanOrigin}/sitemap-profiles-${i}.xml`)}</loc>\n    <lastmod>${today}</lastmod>\n  </sitemap>`
+      );
+    }
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${childSitemaps.join('\n')}\n</sitemapindex>`;
   sitemapState.cachedXml.set('root', { xml, createdAt: Date.now() });
   return { xml, totalUrls, pages, isIndex: true };
 }
@@ -649,6 +719,14 @@ export async function generateSitemapPageXml(
   pageNum: number,
   pageSize: number = DEFAULT_SITEMAP_PAGE_SIZE
 ): Promise<{ xml: string; found: boolean }> {
+  if (pageNum === 1) {
+    const pagesRes = await generatePagesSitemapXml(origin);
+    const profilesRes = await collectProfileSitemapEntries(origin);
+    return {
+      xml: renderUrlsetXml([...(await collectStaticSitemapEntries(origin)), ...profilesRes.entries.slice(0, pageSize)]),
+      found: Boolean(pagesRes.xml),
+    };
+  }
   const { entries } = await collectSitemapEntries(origin);
   const start = (pageNum - 1) * pageSize;
   if (pageNum < 1 || start >= entries.length) {
@@ -656,6 +734,36 @@ export async function generateSitemapPageXml(
   }
   const slice = entries.slice(start, start + pageSize);
   return { xml: renderUrlsetXml(slice), found: true };
+}
+
+export async function buildLlmsTxt(origin: string): Promise<string> {
+  const cleanOrigin = origin.replace(/\/$/, '');
+  const profiles = await getAllUnifiedProfiles();
+  const eligible = profiles.filter((p) => evaluateProfileIndexability(p).indexable).slice(0, 50);
+
+  const lines: string[] = [
+    '# Iveo',
+    '',
+    '> Iveo is a personal link-in-bio, creator portfolio, and digital business card platform.',
+    '',
+    '## Core Pages',
+    `- [Home](${cleanOrigin}/): Claim your Iveo @username page`,
+    `- [Discover Creators](${cleanOrigin}/discover): Directory of public Iveo creator profiles`,
+    `- [Pricing](${cleanOrigin}/pricing): Plans and creator features`,
+    `- [Sitemap Index](${cleanOrigin}/sitemap.xml): XML sitemap index for pages and creator profiles`,
+    `- [Pages Sitemap](${cleanOrigin}/sitemap-pages.xml): Platform marketing and legal URLs`,
+    `- [Profiles Sitemap](${cleanOrigin}/sitemap-profiles.xml): Public iveo.site/@username profiles`,
+    '',
+    '## Public Creator Profiles',
+    ...eligible.map(
+      (p) =>
+        `- [${p.displayName || `@${p.username}`} (@${p.username})](${cleanOrigin}/@${encodeURIComponent(
+          p.username.replace(/^@+/, '')
+        )})${p.bio ? `: ${p.bio.replace(/\s+/g, ' ').slice(0, 120)}` : ''}`
+    ),
+  ];
+
+  return lines.join('\n');
 }
 
 export async function validateProfileSeo(origin: string, username: string) {

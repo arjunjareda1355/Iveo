@@ -437,7 +437,7 @@ export const BusinessCardCustomizer: React.FC<BusinessCardCustomizerProps> = ({
                   type="text"
                   value={value.websiteUrl || ''}
                   onChange={(e) => update({ websiteUrl: e.target.value.slice(0, 80) })}
-                  placeholder="Website label (defaults to iveo.site/you)"
+                  placeholder="Website label (defaults to iveo.site/@you)"
                   className="h-9 px-2.5 rounded-lg border border-border bg-surface text-[12px] text-ink outline-none focus:border-ink"
                 />
                 <input

@@ -87,11 +87,13 @@ export function isPrivilegedEmailServer(email: string | null | undefined): boole
   return OWNER_EMAILS_LIST.includes(clean);
 }
 
+const SYSTEM_AT_PREFIXES = new Set(['@vite', '@react-refresh', '@fs', '@id']);
+
 export function validateUsernameServer(
   input: string,
   options?: { allowReserved?: boolean }
 ): { ok: boolean; reason?: string; message?: string } {
-  const clean = (input || '').trim().toLowerCase();
+  const clean = (input || '').trim().replace(/^@+/, '').toLowerCase();
   if (clean.length < USERNAME_MIN) {
     return { ok: false, reason: 'too_short', message: 'Use 3 to 30 characters.' };
   }
@@ -121,14 +123,17 @@ export function validateUsernameServer(
 
 export function normalizeUsername(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const lower = raw.trim().toLowerCase();
+  const lower = raw.trim().replace(/^@+/, '').toLowerCase();
+  if (!lower) return null;
   return lower.slice(0, USERNAME_MAX);
 }
 
 export type SegmentKind = 'private' | 'info' | 'reserved' | 'username' | 'invalid';
 
 export function classifySegment(segment: string): SegmentKind {
-  const clean = (segment || '').trim().toLowerCase();
+  const rawLower = (segment || '').trim().toLowerCase();
+  if (!rawLower || SYSTEM_AT_PREFIXES.has(rawLower)) return 'invalid';
+  const clean = rawLower.replace(/^@+/, '');
   if (!clean) return 'invalid';
 
   if (PRIVATE_ROUTES.includes(clean)) {

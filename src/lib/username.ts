@@ -26,7 +26,7 @@ export function validateUsernameSync(
   raw: string,
   options?: { allowReserved?: boolean; email?: string | null }
 ): UsernameValidationResult {
-  const lower = (raw || '').toLowerCase().trim();
+  const lower = (raw || '').toLowerCase().trim().replace(/^@+/, '');
   const allowReserved = Boolean(options?.allowReserved || isOwnerEmail(options?.email));
 
   if (lower.length === 0) {
@@ -60,7 +60,7 @@ export function validateUsernameSync(
 
   return {
     status: 'available',
-    message: `iveo.site/${sanitized} is available`,
+    message: `iveo.site/@${sanitized} is available`,
     username: sanitized,
   };
 }
@@ -104,7 +104,7 @@ export async function checkUsernameAvailability(
       }
       return {
         status: 'available',
-        message: data.message || `iveo.site/${clean} is available`,
+        message: data.message || `iveo.site/@${clean} is available`,
         username: clean,
       };
     }

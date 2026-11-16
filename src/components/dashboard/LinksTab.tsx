@@ -31,6 +31,7 @@ import {
   Ticket,
   MapPin,
   FileDown,
+  Globe,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -320,7 +321,7 @@ export const LinksTab: React.FC = () => {
     } else if (block.kind === 'embed') {
       const parsed = parseEmbedUrl(editUrl.trim());
       if (!parsed) {
-        setEditError('Use a YouTube, Spotify or SoundCloud link.');
+        setEditError('Use a YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, or X link.');
         return;
       }
 
@@ -574,8 +575,8 @@ export const LinksTab: React.FC = () => {
 
       {activeComposer === 'embed' && (
         <EmbedComposer
-          onAdd={async ({ url, caption, provider }) => {
-            await addEmbed(url, caption, provider);
+          onAdd={async ({ url, caption, provider, embedMeta }) => {
+            await addEmbed(url, caption, provider, embedMeta);
             handleCloseComposer();
           }}
           onCancel={handleCloseComposer}
@@ -816,7 +817,9 @@ export const LinksTab: React.FC = () => {
                 ? Play
                 : block.embedProvider === 'spotify'
                   ? Music
-                  : Headphones;
+                  : block.embedProvider === 'soundcloud'
+                    ? Headphones
+                    : Globe;
 
             return (
               <Card

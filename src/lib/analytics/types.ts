@@ -11,6 +11,7 @@ export interface AnalyticsDay {
 
 export interface AnalyticsLinkStat {
   linkId: string;
+  title?: string;
   clicks: number;
 }
 
@@ -22,6 +23,12 @@ export interface AnalyticsSourceStat {
 
 export interface AnalyticsDeviceStat {
   device: DeviceType;
+  views: number;
+  clicks: number;
+}
+
+export interface AnalyticsCountryStat {
+  country: string;
   views: number;
   clicks: number;
 }
@@ -41,6 +48,7 @@ export interface AnalyticsResult {
   links: AnalyticsLinkStat[];
   sources: AnalyticsSourceStat[] | null;
   devices: AnalyticsDeviceStat[] | null;
+  countries?: AnalyticsCountryStat[] | null;
 }
 
 const VALID_DEVICES = new Set<string>(['mobile', 'tablet', 'desktop', 'other']);
@@ -81,6 +89,7 @@ export function analyticsFromJson(raw: unknown): AnalyticsResult | null {
           .filter((l: any) => l && typeof l === 'object' && (l.link_id || l.linkId))
           .map((l: any) => ({
             linkId: String(l.link_id || l.linkId),
+            title: typeof l.title === 'string' ? l.title : undefined,
             clicks: typeof l.clicks === 'number' ? Math.max(0, l.clicks) : 0,
           }))
       : [];
@@ -119,6 +128,17 @@ export function analyticsFromJson(raw: unknown): AnalyticsResult | null {
         });
     }
 
+    let countries: AnalyticsCountryStat[] | null = null;
+    if (Array.isArray(data.countries)) {
+      countries = data.countries
+        .filter((c: any) => c && typeof c === 'object')
+        .map((c: any) => ({
+          country: String(c.country || 'Unknown'),
+          views: typeof c.views === 'number' ? Math.max(0, c.views) : 0,
+          clicks: typeof c.clicks === 'number' ? Math.max(0, c.clicks) : 0,
+        }));
+    }
+
     return {
       range: {
         from,
@@ -134,6 +154,7 @@ export function analyticsFromJson(raw: unknown): AnalyticsResult | null {
       links,
       sources,
       devices,
+      countries,
     };
   } catch {
     return null;

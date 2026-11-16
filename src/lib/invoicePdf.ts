@@ -111,7 +111,7 @@ export function generateInvoicePdf(data: InvoiceData): jsPDF {
   doc.setTextColor(60, 60, 60);
   doc.text(`Name: ${data.customerName || data.username}`, 25, 97);
   doc.text(`Email: ${data.customerEmail || 'Registered iveo User'}`, 25, 103);
-  doc.text(`Iveo Profile: iveo.site/${data.username}`, 115, 97);
+  doc.text(`Iveo Profile: iveo.site/@${data.username}`, 115, 97);
   doc.text(`Subscription Period: ${dateStr} - ${expiresStr}`, 115, 103);
 
   // 4. Itemized Table Header

@@ -33,17 +33,20 @@
  */
 
 export interface ParsedEmbed {
-  provider: 'youtube' | 'spotify' | 'soundcloud';
+  provider: 'youtube' | 'spotify' | 'soundcloud' | 'discord' | 'github' | 'linkedin' | 'x';
   canonicalUrl: string;
   embedSrc: string;
   label: string;
   height: number | null;
   aspect: string | null;
+  identifier?: string | null;
+  subtype?: string | null;
 }
 
 const YOUTUBE_ID_REGEX = /^[A-Za-z0-9_-]{11}$/;
 const SPOTIFY_ID_REGEX = /^[A-Za-z0-9]{22}$/;
 const SOUNDCLOUD_SEGMENT_REGEX = /^[A-Za-z0-9_-]+$/;
+const SAFE_SEGMENT_REGEX = /^[A-Za-z0-9._-]+$/;
 
 export function parseEmbedUrl(input: string): ParsedEmbed | null {
   if (!input || typeof input !== 'string') return null;
@@ -124,12 +127,13 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
       label: 'YouTube video',
       height: null,
       aspect: '16 / 9',
+      identifier: videoId,
+      subtype: 'video',
     };
   }
 
   // 2. Spotify
   if (host === 'open.spotify.com') {
-    // Path: /<type>/<id> with optional locale like /intl-de/
     let path = parsed.pathname;
     const localeMatch = path.match(/^\/intl-[a-z]{2}(?:\/|$)/i);
     if (localeMatch) {
@@ -152,6 +156,8 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
           label: `Spotify ${type}`,
           height: isTall ? 352 : 152,
           aspect: null,
+          identifier: id,
+          subtype: type,
         };
       }
     }
@@ -162,7 +168,6 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
   if (host === 'soundcloud.com') {
     const segments = parsed.pathname.split('/').filter(Boolean);
 
-    // Track: /<user>/<track> (2 segments)
     if (
       segments.length === 2 &&
       SOUNDCLOUD_SEGMENT_REGEX.test(segments[0]) &&
@@ -180,10 +185,11 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
         label: 'SoundCloud track',
         height: 166,
         aspect: null,
+        identifier: `${segments[0]}/${segments[1]}`,
+        subtype: 'track',
       };
     }
 
-    // Set: /<user>/sets/<set> (3 segments)
     if (
       segments.length === 3 &&
       segments[1] === 'sets' &&
@@ -202,9 +208,148 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
         label: 'SoundCloud set',
         height: 300,
         aspect: null,
+        identifier: `${segments[0]}/sets/${segments[2]}`,
+        subtype: 'set',
       };
     }
 
+    return null;
+  }
+
+  // 4. Discord invites & user/server links
+  if (['discord.gg', 'www.discord.gg', 'discord.com', 'www.discord.com', 'discordapp.com', 'www.discordapp.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (host.includes('discord.gg') && segments[0] && SAFE_SEGMENT_REGEX.test(segments[0])) {
+      const code = segments[0];
+      const canonicalUrl = `https://discord.gg/${code}`;
+      return {
+        provider: 'discord',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Discord server invite',
+        height: null,
+        aspect: null,
+        identifier: code,
+        subtype: 'invite',
+      };
+    }
+    if (segments[0] === 'invite' && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const code = segments[1];
+      const canonicalUrl = `https://discord.com/invite/${code}`;
+      return {
+        provider: 'discord',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Discord server invite',
+        height: null,
+        aspect: null,
+        identifier: code,
+        subtype: 'invite',
+      };
+    }
+    if (segments[0] === 'users' && segments[1] && /^\d{15,22}$/.test(segments[1])) {
+      const canonicalUrl = `https://discord.com/users/${segments[1]}`;
+      return {
+        provider: 'discord',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Discord profile',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: 'user',
+      };
+    }
+    return null;
+  }
+
+  // 5. GitHub profile or repository
+  if (['github.com', 'www.github.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const ignored = new Set(['features', 'enterprise', 'pricing', 'topics', 'trending', 'explore', 'settings', 'login', 'signup', 'orgs']);
+    if (segments.length === 1 && SAFE_SEGMENT_REGEX.test(segments[0]) && !ignored.has(segments[0].toLowerCase())) {
+      const canonicalUrl = `https://github.com/${segments[0]}`;
+      return {
+        provider: 'github',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'GitHub profile',
+        height: null,
+        aspect: null,
+        identifier: segments[0],
+        subtype: 'profile',
+      };
+    }
+    if (segments.length >= 2 && SAFE_SEGMENT_REGEX.test(segments[0]) && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const canonicalUrl = `https://github.com/${segments[0]}/${segments[1]}`;
+      return {
+        provider: 'github',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'GitHub repository',
+        height: null,
+        aspect: null,
+        identifier: `${segments[0]}/${segments[1]}`,
+        subtype: 'repo',
+      };
+    }
+    return null;
+  }
+
+  // 6. LinkedIn profile or company
+  if (['linkedin.com', 'www.linkedin.com', 'in.linkedin.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length >= 2 && (segments[0] === 'in' || segments[0] === 'company') && segments[1]) {
+      const canonicalUrl = `https://www.linkedin.com/${segments[0]}/${segments[1]}`;
+      return {
+        provider: 'linkedin',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: segments[0] === 'company' ? 'LinkedIn company' : 'LinkedIn profile',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: segments[0],
+      };
+    }
+    return null;
+  }
+
+  // 7. X (Twitter) post or profile
+  if (['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const ignored = new Set(['home', 'explore', 'notifications', 'messages', 'i', 'search', 'settings', 'intent', 'share']);
+    if (segments.length >= 3 && segments[1] === 'status' && /^\d{6,25}$/.test(segments[2])) {
+      const handle = segments[0].replace(/^@+/, '');
+      const statusId = segments[2];
+      const canonicalUrl = `https://x.com/${handle}/status/${statusId}`;
+      return {
+        provider: 'x',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'X post',
+        height: null,
+        aspect: null,
+        identifier: `${handle}/status/${statusId}`,
+        subtype: 'post',
+      };
+    }
+    if (segments.length === 1 && !ignored.has(segments[0].toLowerCase())) {
+      const handle = segments[0].replace(/^@+/, '');
+      if (/^[A-Za-z0-9_]{1,20}$/.test(handle)) {
+        const canonicalUrl = `https://x.com/${handle}`;
+        return {
+          provider: 'x',
+          canonicalUrl,
+          embedSrc: canonicalUrl,
+          label: 'X profile',
+          height: null,
+          aspect: null,
+          identifier: handle,
+          subtype: 'profile',
+        };
+      }
+    }
     return null;
   }
 

@@ -239,7 +239,7 @@ async function startServer() {
           <text x="304" y="252" font-family="ui-monospace,monospace" font-size="30" fill="${escapeXml(vibe.muted)}">${safeHandle}</text>
           <text x="96" y="395" font-family="Inter,system-ui,sans-serif" font-size="30" fill="${escapeXml(vibe.muted)}">${safeBio}</text>
           <line x1="96" y1="496" x2="1104" y2="496" stroke="${escapeXml(vibe.muted)}" stroke-opacity="0.22" stroke-width="2"/>
-          <text x="96" y="556" font-family="ui-monospace,monospace" font-size="26" fill="${escapeXml(vibe.muted)}">iveo.site/${escapeXml(page.username)}</text>
+          <text x="96" y="556" font-family="ui-monospace,monospace" font-size="26" fill="${escapeXml(vibe.muted)}">iveo.site/@${escapeXml(page.username)}</text>
           <text x="1104" y="556" text-anchor="end" font-family="Inter,system-ui,sans-serif" font-size="36" font-weight="700" letter-spacing="-1.5" fill="${escapeXml(vibe.text)}">iveo</text>
         </svg>`
       );
@@ -283,8 +283,14 @@ async function startServer() {
   app.get('/api/analytics', dbHandlers.handleGetAnalytics);
   app.get('/api/integrations/buymeacoffee', dbHandlers.handleBuyMeACoffee);
   app.get('/api/integrations/youtube', dbHandlers.handleYouTubeShowcase);
+  app.get('/api/integrations/embed', dbHandlers.handleSocialEmbedLookup);
   app.get('/api/oauth/youtube/url', dbHandlers.handleYouTubeOAuthUrl);
   app.get(['/api/oauth/youtube/callback', '/api/oauth/youtube/callback/'], dbHandlers.handleYouTubeOAuthCallback);
+  app.get('/api/oauth/:provider/url', dbHandlers.handleSocialOAuthUrl);
+  app.get(['/api/oauth/:provider/callback', '/api/oauth/:provider/callback/'], dbHandlers.handleSocialOAuthCallback);
+  app.get('/api/subscription', dbHandlers.handleGetSubscription);
+  app.post('/api/subscription/cancel', dbHandlers.handleCancelSubscription);
+  app.post('/api/subscription/reactivate', dbHandlers.handleReactivateSubscription);
   app.get('/api/discover', dbHandlers.handleDiscoverProfiles);
   app.get('/api/seo/admin/overview', dbHandlers.handleSeoAdminOverview);
   app.post('/api/seo/admin/regenerate-sitemap', dbHandlers.handleSeoAdminRegenerate);
@@ -369,15 +375,22 @@ async function startServer() {
       if (!RESERVED.has(candidate) && USERNAME_PATTERN.test(candidate)) {
         const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
         const pathSuffix = req.path === '/' ? '' : req.path;
-        return res.redirect(301, `https://iveo.site/${candidate}${pathSuffix}${queryString}`);
+        return res.redirect(301, `https://iveo.site/@${candidate}${pathSuffix}${queryString}`);
       }
     }
     next();
   });
 
-  // 4.6 SEO: robots.txt, paginated sitemaps, and IndexNow verification file
+  // 4.6 SEO: robots.txt, categorized sitemaps, llms.txt, and IndexNow verification file
   const { getCanonicalSiteOrigin, getIndexNowKey } = await import('./api/_lib/env.ts');
-  const { buildRobotsTxt, generateSitemapXml, generateSitemapPageXml } = await import('./api/_lib/seoService.ts');
+  const {
+    buildLlmsTxt,
+    buildRobotsTxt,
+    generatePagesSitemapXml,
+    generateProfilesSitemapXml,
+    generateSitemapPageXml,
+    generateSitemapXml,
+  } = await import('./api/_lib/seoService.ts');
 
   const resolveRequestOrigin = (req: ExpressReq) => {
     const host = req.get('host') || 'iveo.site';
@@ -395,6 +408,18 @@ async function startServer() {
     res.status(200).send(buildRobotsTxt(origin));
   });
 
+  app.get('/llms.txt', async (req, res) => {
+    try {
+      const origin = resolveRequestOrigin(req);
+      const txt = await buildLlmsTxt(origin);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+      res.status(200).send(txt);
+    } catch {
+      res.status(500).send('# Iveo\n');
+    }
+  });
+
   app.get('/sitemap.xml', async (req, res) => {
     try {
       const origin = resolveRequestOrigin(req);
@@ -404,6 +429,49 @@ async function startServer() {
       res.status(200).send(xml);
     } catch {
       res.status(500).send('Sitemap generation error');
+    }
+  });
+
+  app.get('/sitemap-pages.xml', async (req, res) => {
+    try {
+      const origin = resolveRequestOrigin(req);
+      const { xml } = await generatePagesSitemapXml(origin);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    } catch {
+      return res.status(500).send('Pages sitemap error');
+    }
+  });
+
+  app.get('/sitemap-profiles.xml', async (req, res) => {
+    try {
+      const origin = resolveRequestOrigin(req);
+      const { xml } = await generateProfilesSitemapXml(origin, 1);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    } catch {
+      return res.status(500).send('Profiles sitemap error');
+    }
+  });
+
+  app.get('/sitemap-profiles-:page.xml', async (req, res) => {
+    const pageNum = parseInt(req.params.page, 10);
+    if (!Number.isFinite(pageNum) || pageNum < 1) {
+      return res.status(404).send('Not found');
+    }
+    try {
+      const origin = resolveRequestOrigin(req);
+      const { xml, found } = await generateProfilesSitemapXml(origin, pageNum);
+      if (!found) {
+        return res.status(404).send('Profiles sitemap page not found');
+      }
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    } catch {
+      return res.status(500).send('Profiles sitemap error');
     }
   });
 

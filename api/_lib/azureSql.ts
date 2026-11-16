@@ -2,6 +2,7 @@ import sql from 'mssql';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mergeProfileForSave } from './profileMerge.ts';
+import { resolveEffectivePlan, type SubscriptionRecord } from '../../src/lib/plan.ts';
 
 // Confirmed Azure SQL Infrastructure details
 const AZURE_SQL_SERVER = process.env.AZURE_SQL_SERVER || 'faneme.database.windows.net';
@@ -432,8 +433,8 @@ export async function dbClaimUsername(
   previousUsername?: string | null;
   profileUrl?: string;
 }> {
-  const clean = username.toLowerCase().trim();
-  const cleanPrevHint = previousUsernameHint ? previousUsernameHint.toLowerCase().trim() : null;
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  const cleanPrevHint = previousUsernameHint ? previousUsernameHint.replace(/^@+/, '').toLowerCase().trim() : null;
   const isOwnerEmailMatch = isPrivilegedEmailServer(primaryEmail);
 
   const validation = validateUsernameServer(clean, { allowReserved: isOwnerEmailMatch });
@@ -460,7 +461,7 @@ export async function dbClaimUsername(
         const existingUserId = existing.recordset[0].user_id;
         if (existingUserId && existingUserId !== userId && existingUserId !== 'owner' && !isOwnerEmailMatch) {
           await transaction.rollback();
-          return { ok: false, error: 'already_claimed', message: `iveo.site/${clean} is already claimed by another creator. Please pick another address.` };
+          return { ok: false, error: 'already_claimed', message: `iveo.site/@${clean} is already claimed by another creator. Please pick another address.` };
         }
       }
 
@@ -501,7 +502,14 @@ export async function dbClaimUsername(
       }
 
       // Insert or update profile
-      const effectivePlan = isOwnerEmailMatch ? 'pro' : (profileData?.plan || 'free');
+      const claimCreatedAt = profileData?.createdAt || new Date().toISOString();
+      const resolvedClaimPlan = resolveEffectivePlan({
+        email: primaryEmail,
+        storedPlan: profileData?.plan,
+        createdAt: claimCreatedAt,
+        subscription: profileData?.subscription,
+      });
+      const effectivePlan = resolvedClaimPlan.plan;
       const insReq = new sql.Request(transaction);
       insReq.input('userId', sql.NVarChar(128), userId);
       insReq.input('username', sql.NVarChar(64), clean);
@@ -518,6 +526,8 @@ export async function dbClaimUsername(
         email: primaryEmail || null,
         background: profileData?.background || null,
         status: profileData?.status || 'active',
+        createdAt: claimCreatedAt,
+        subscription: profileData?.subscription || null,
         integrations: {
           googleAnalyticsId: profileData?.googleAnalyticsId || null,
           metaPixelId: profileData?.metaPixelId || null,
@@ -569,7 +579,7 @@ export async function dbClaimUsername(
       }
       writeServerStore(storeSync);
 
-      return { ok: true, username: clean, previousUsername: releasedUsername, profileUrl: `https://iveo.site/${clean}` };
+      return { ok: true, username: clean, previousUsername: releasedUsername, profileUrl: `https://iveo.site/@${clean}` };
     } catch {
       // Gracefully fall through to server store
     }
@@ -585,7 +595,7 @@ export async function dbClaimUsername(
     existingProfile.userId !== 'owner' &&
     !isOwnerEmailMatch
   ) {
-    return { ok: false, error: 'already_claimed', message: `iveo.site/${clean} is already claimed by another creator. Please pick another address.` };
+    return { ok: false, error: 'already_claimed', message: `iveo.site/@${clean} is already claimed by another creator. Please pick another address.` };
   }
 
   // Clear any old redirect pointing away from the newly claimed handle
@@ -646,6 +656,15 @@ export async function dbClaimUsername(
   };
 
   const basePrev = store.profiles[clean] || oldProfSnapshot || {};
+  const fallbackCreatedAt = basePrev?.createdAt || basePrev?.claimedAt || profileData?.createdAt || new Date().toISOString();
+  const fallbackSubscription = profileData?.subscription !== undefined ? profileData.subscription : (basePrev?.subscription || null);
+  const fallbackPlan = resolveEffectivePlan({
+    email: primaryEmail || basePrev?.primaryEmail,
+    storedPlan: profileData?.plan || basePrev?.plan,
+    createdAt: fallbackCreatedAt,
+    subscription: fallbackSubscription,
+  });
+
   store.profiles[clean] = {
     ...basePrev,
     userId,
@@ -660,7 +679,10 @@ export async function dbClaimUsername(
     socials: profileData?.socials || basePrev?.socials || {},
     socialsPosition: profileData?.socialsPosition || basePrev?.socialsPosition || 'top',
     primaryEmail: primaryEmail || basePrev?.primaryEmail || null,
-    plan: isOwnerEmailMatch ? 'pro' : (profileData?.plan || basePrev?.plan || 'free'),
+    plan: fallbackPlan.plan,
+    planSource: fallbackPlan.planSource,
+    createdAt: fallbackCreatedAt,
+    subscription: fallbackSubscription,
     status: profileData?.status || basePrev?.status || 'active',
     isPublished: profileData?.isPublished ?? basePrev?.isPublished ?? true,
     hideFooter: Boolean(profileData?.hideFooter ?? basePrev?.hideFooter),
@@ -675,7 +697,7 @@ export async function dbClaimUsername(
     buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (basePrev?.buttonColors || null),
     businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (basePrev?.businessCard || null),
     layoutSettings: profileData?.layoutSettings !== undefined ? profileData.layoutSettings : (basePrev?.layoutSettings || null),
-    claimedAt: basePrev?.claimedAt || new Date().toISOString(),
+    claimedAt: basePrev?.claimedAt || fallbackCreatedAt,
     updatedAt: new Date().toISOString(),
   };
 
@@ -684,7 +706,7 @@ export async function dbClaimUsername(
     ok: true,
     username: clean,
     previousUsername: previousUsername && previousUsername !== clean ? previousUsername : null,
-    profileUrl: `https://iveo.site/${clean}`,
+    profileUrl: `https://iveo.site/@${clean}`,
   };
 }
 
@@ -708,6 +730,8 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         let socialsPosition: 'top' | 'bottom' | 'both' = 'top';
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
+        let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
+        let subscription: SubscriptionRecord | null = null;
         let integrations: Record<string, any> = {};
         let appearance: Record<string, any> = {};
         try {
@@ -718,6 +742,8 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
               socialsPosition = parsed.position === 'bottom' ? 'bottom' : parsed.position === 'both' ? 'both' : 'top';
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
+              if (parsed.createdAt) createdAt = String(parsed.createdAt);
+              if (parsed.subscription) subscription = parsed.subscription;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
               appearance = (parsed.appearance && typeof parsed.appearance === 'object') ? parsed.appearance : {};
             } else if (parsed && typeof parsed === 'object') {
@@ -725,6 +751,12 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
             }
           }
         } catch {}
+        const resolved = resolveEffectivePlan({
+          email: primaryEmail || email,
+          storedPlan: row.plan,
+          createdAt,
+          subscription,
+        });
         return {
           userId: row.user_id,
           username: row.username,
@@ -738,7 +770,11 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           socials,
           socialsPosition,
           primaryEmail,
-          plan: isPrivilegedEmailServer(primaryEmail || email) ? 'pro' : row.plan,
+          plan: resolved.plan,
+          isPro: resolved.isPro,
+          planSource: resolved.planSource,
+          createdAt,
+          subscription,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
@@ -761,13 +797,28 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
 
   const store = readServerStore();
   const cleanEmail = email ? email.toLowerCase().trim() : null;
+  const applyStorePlan = (found: any) => {
+    const resolved = resolveEffectivePlan({
+      email: found.primaryEmail || cleanEmail,
+      storedPlan: found.plan,
+      createdAt: found.createdAt || found.claimedAt,
+      subscription: found.subscription,
+    });
+    return {
+      ...found,
+      plan: resolved.plan,
+      isPro: resolved.isPro,
+      planSource: resolved.planSource,
+      createdAt: found.createdAt || found.claimedAt || null,
+      subscription: found.subscription || null,
+    };
+  };
 
   // Direct userToUsername lookup
   if (userId && store.userToUsername[userId]) {
     const uname = store.userToUsername[userId];
     if (store.profiles[uname]) {
-      const found = store.profiles[uname];
-      return isPrivilegedEmailServer(found.primaryEmail || cleanEmail) ? { ...found, plan: 'pro' } : found;
+      return applyStorePlan(store.profiles[uname]);
     }
   }
 
@@ -775,7 +826,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
   for (const [uname, p] of Object.entries(store.profiles)) {
     if (userId && p.userId === userId) {
       store.userToUsername[userId] = uname;
-      return isPrivilegedEmailServer(p.primaryEmail || cleanEmail) ? { ...p, plan: 'pro' } : p;
+      return applyStorePlan(p);
     }
     if (cleanEmail && p.primaryEmail && p.primaryEmail.toLowerCase().trim() === cleanEmail) {
       if (userId && (!p.userId || p.userId === 'owner')) {
@@ -783,7 +834,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         store.userToUsername[userId] = uname;
         writeServerStore(store);
       }
-      return isPrivilegedEmailServer(p.primaryEmail || cleanEmail) ? { ...p, plan: 'pro' } : p;
+      return applyStorePlan(p);
     }
   }
 
@@ -804,6 +855,8 @@ export async function dbSaveProfile(profile: {
   socialsPosition?: 'top' | 'bottom' | 'both';
   primaryEmail?: string | null;
   plan?: string;
+  createdAt?: string | null;
+  subscription?: Partial<SubscriptionRecord> | null;
   status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
   isPublished?: boolean;
   hideFooter?: boolean;
@@ -819,7 +872,7 @@ export async function dbSaveProfile(profile: {
   businessCard?: any;
   layoutSettings?: any;
 }): Promise<{ ok: boolean; error?: string }> {
-  const cleanUsername = profile.username.toLowerCase().trim();
+  const cleanUsername = profile.username.replace(/^@+/, '').toLowerCase().trim();
 
   // Ownership verification check
   const isAuthorized = await dbVerifyOwnership(cleanUsername, profile.userId, profile.primaryEmail);
@@ -841,6 +894,8 @@ export async function dbSaveProfile(profile: {
     email: merged.primaryEmail,
     background: merged.background,
     status: merged.status,
+    createdAt: merged.createdAt,
+    subscription: merged.subscription,
     integrations: {
       googleAnalyticsId: merged.googleAnalyticsId,
       metaPixelId: merged.metaPixelId,
@@ -921,7 +976,7 @@ export async function dbSaveProfile(profile: {
 }
 
 export async function dbGetProfile(username: string): Promise<any | null> {
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
   const pool = await getAzureSqlPool();
 
   if (pool) {
@@ -938,6 +993,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
         let parsedStatus = 'active';
+        let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
+        let subscription: SubscriptionRecord | null = null;
         let integrations: Record<string, any> = {};
         let appearance: Record<string, any> = {};
         try {
@@ -949,6 +1006,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
               if (parsed.status) parsedStatus = parsed.status;
+              if (parsed.createdAt) createdAt = String(parsed.createdAt);
+              if (parsed.subscription) subscription = parsed.subscription;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
               appearance = (parsed.appearance && typeof parsed.appearance === 'object') ? parsed.appearance : {};
             } else if (parsed && typeof parsed === 'object') {
@@ -956,6 +1015,12 @@ export async function dbGetProfile(username: string): Promise<any | null> {
             }
           }
         } catch {}
+        const resolved = resolveEffectivePlan({
+          email: primaryEmail,
+          storedPlan: row.plan,
+          createdAt,
+          subscription,
+        });
         return {
           userId: row.user_id,
           username: row.username,
@@ -969,7 +1034,11 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           socials,
           socialsPosition,
           primaryEmail,
-          plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : row.plan,
+          plan: resolved.plan,
+          isPro: resolved.isPro,
+          planSource: resolved.planSource,
+          createdAt,
+          subscription,
           status: parsedStatus,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
@@ -995,9 +1064,19 @@ export async function dbGetProfile(username: string): Promise<any | null> {
   const store = readServerStore();
   const prof = store.profiles[clean];
   if (!prof) return null;
+  const resolved = resolveEffectivePlan({
+    email: prof.primaryEmail,
+    storedPlan: prof.plan,
+    createdAt: prof.createdAt || prof.claimedAt,
+    subscription: prof.subscription,
+  });
   return {
     ...prof,
-    plan: isPrivilegedEmailServer(prof.primaryEmail) ? 'pro' : (prof.plan || 'free'),
+    plan: resolved.plan,
+    isPro: resolved.isPro,
+    planSource: resolved.planSource,
+    createdAt: prof.createdAt || prof.claimedAt || null,
+    subscription: prof.subscription || null,
     status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
     avatarType: prof.avatarType || (prof.avatarId ? 'default' : (prof.avatarUrl ? 'uploaded' : 'default')),
     avatarId: prof.avatarId || null,
@@ -1010,7 +1089,7 @@ export async function dbSaveBlocks(
   userId?: string,
   primaryEmail?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
 
   if (userId) {
     const isAuthorized = await dbVerifyOwnership(clean, userId, primaryEmail);
@@ -1044,6 +1123,7 @@ export async function dbSaveBlocks(
         insReq.input('layout', sql.NVarChar(32), b.layout || 'classic');
         insReq.input('embedProvider', sql.NVarChar(32), b.embedProvider || null);
         const extraPayload = {
+          embedMeta: b.embedMeta || null,
           signup: b.signup || null,
           tipJar: b.tipJar || null,
           coffee: b.coffee || null,
@@ -1098,7 +1178,7 @@ export async function dbSaveBlocks(
 }
 
 export async function dbGetBlocks(username: string): Promise<any[]> {
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
   const pool = await getAzureSqlPool();
 
   if (pool) {
@@ -1109,6 +1189,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
         .query('SELECT * FROM iveo_blocks WHERE username = @username ORDER BY position ASC, created_at ASC');
 
       return res.recordset.map((r) => {
+        let embedMeta = null;
         let signup = null;
         let tipJar = null;
         let coffee = null;
@@ -1129,6 +1210,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
             const parsed = JSON.parse(r.signup_config_json);
             if (parsed && typeof parsed === 'object') {
               if (
+                'embedMeta' in parsed ||
                 'signup' in parsed ||
                 'tipJar' in parsed ||
                 'coffee' in parsed ||
@@ -1142,6 +1224,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
                 'location' in parsed ||
                 'download' in parsed
               ) {
+                embedMeta = parsed.embedMeta || null;
                 signup = parsed.signup || null;
                 tipJar = parsed.tipJar || null;
                 coffee = parsed.coffee || null;
@@ -1174,6 +1257,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           thumbnailUrl: r.thumbnail_url,
           layout: r.layout,
           embedProvider: r.embed_provider,
+          embedMeta,
           signup,
           tipJar,
           coffee,
@@ -1500,12 +1584,14 @@ export async function dbListAllProfiles(): Promise<any[]> {
     try {
       const res = await pool.request().query('SELECT * FROM iveo_profiles');
       for (const row of res.recordset) {
-        const uname = String(row.username || '').toLowerCase().trim();
+        const uname = String(row.username || '').replace(/^@+/, '').toLowerCase().trim();
         if (!uname) continue;
         let parsedStatus = 'active';
         let integrations: Record<string, any> = {};
         let socials: Record<string, string> = {};
         let primaryEmail: string | null = null;
+        let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
+        let subscription: SubscriptionRecord | null = null;
         try {
           if (row.socials_json) {
             const parsed = JSON.parse(row.socials_json);
@@ -1513,11 +1599,18 @@ export async function dbListAllProfiles(): Promise<any[]> {
               socials = parsed.links || {};
               if (parsed.status) parsedStatus = parsed.status;
               if (parsed.email) primaryEmail = parsed.email;
+              if (parsed.createdAt) createdAt = String(parsed.createdAt);
+              if (parsed.subscription) subscription = parsed.subscription;
               if (parsed.integrations) integrations = parsed.integrations;
             }
           }
         } catch {}
-        const isPro = Boolean(row.plan === 'pro' || isPrivilegedEmailServer(primaryEmail));
+        const resolved = resolveEffectivePlan({
+          email: primaryEmail,
+          storedPlan: row.plan,
+          createdAt,
+          subscription,
+        });
         byUsername.set(uname, {
           userId: row.user_id,
           username: uname,
@@ -1527,8 +1620,11 @@ export async function dbListAllProfiles(): Promise<any[]> {
           vibeId: row.vibe_id,
           socials,
           primaryEmail,
-          plan: isPro ? 'pro' : (row.plan || 'free'),
-          isPro,
+          plan: resolved.plan,
+          isPro: resolved.isPro,
+          planSource: resolved.planSource,
+          createdAt,
+          subscription,
           status: parsedStatus,
           hideFromSearch: Boolean(row.hide_from_search),
           isPublished: Boolean(row.is_published),
@@ -1542,15 +1638,22 @@ export async function dbListAllProfiles(): Promise<any[]> {
 
   const store = readServerStore();
   for (const [uname, prof] of Object.entries<any>(store.profiles)) {
-    const clean = uname.toLowerCase().trim();
+    const clean = uname.replace(/^@+/, '').toLowerCase().trim();
     if (!clean) continue;
     if (!byUsername.has(clean)) {
-      const isPro = Boolean(prof.plan === 'pro' || isPrivilegedEmailServer(prof.primaryEmail));
+      const resolved = resolveEffectivePlan({
+        email: prof.primaryEmail,
+        storedPlan: prof.plan,
+        createdAt: prof.createdAt || prof.claimedAt,
+        subscription: prof.subscription,
+      });
       byUsername.set(clean, {
         ...prof,
         username: clean,
-        plan: isPro ? 'pro' : (prof.plan || 'free'),
-        isPro,
+        plan: resolved.plan,
+        isPro: resolved.isPro,
+        planSource: resolved.planSource,
+        createdAt: prof.createdAt || prof.claimedAt || null,
         status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
         isPublished: prof.isPublished !== false,
       });
@@ -1568,13 +1671,13 @@ export async function dbRecordAnalyticsEvent(event: {
   referrer?: string | null;
   device?: string | null;
 }): Promise<void> {
-  const clean = (event.username || '').toLowerCase().trim();
+  const clean = (event.username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return;
 
   const id = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const country = event.country || 'Unknown';
-  const referrer = event.referrer || 'Direct';
-  const device = event.device || 'Desktop';
+  const referrer = event.referrer || 'direct';
+  const device = event.device || 'desktop';
   const createdAt = new Date().toISOString();
 
   const pool = await getAzureSqlPool();
@@ -1609,7 +1712,6 @@ export async function dbRecordAnalyticsEvent(event: {
     device,
     createdAt,
   });
-  // Cap per-user raw event buffer cleanly to last 10,000 events
   if (store.analytics[clean].length > 10000) {
     store.analytics[clean] = store.analytics[clean].slice(-10000);
   }
@@ -1620,9 +1722,9 @@ export async function dbGetAnalytics(
   username: string,
   fromDate: Date,
   toDate: Date,
-  isPro: boolean
+  _isPro: boolean
 ): Promise<any> {
-  const clean = (username || '').toLowerCase().trim();
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return null;
 
   let events: any[] = [];
@@ -1643,8 +1745,8 @@ export async function dbGetAnalytics(
         eventType: r.event_type,
         blockId: r.block_id,
         country: r.country || 'Unknown',
-        referrer: r.referrer || 'Direct',
-        device: r.device || 'Desktop',
+        referrer: r.referrer || 'direct',
+        device: r.device || 'desktop',
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
       }));
     } catch {}
@@ -1665,26 +1767,41 @@ export async function dbGetAnalytics(
   let clicks = 0;
   const byDayMap = new Map<string, { views: number; clicks: number }>();
   const linkClickMap = new Map<string, number>();
-  const refMap = new Map<string, number>();
-  const countryMap = new Map<string, number>();
-  const deviceMap = new Map<string, number>();
+  const refMap = new Map<string, { views: number; clicks: number }>();
+  const countryMap = new Map<string, { views: number; clicks: number }>();
+  const deviceMap = new Map<string, { views: number; clicks: number }>();
 
   for (const ev of events) {
     const day = String(ev.createdAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
     const dayEntry = byDayMap.get(day) || { views: 0, clicks: 0 };
+    const refKey = String(ev.referrer || 'direct').trim() || 'direct';
+    const countryKey = String(ev.country || 'Unknown').trim() || 'Unknown';
+    const deviceKey = String(ev.device || 'desktop').trim().toLowerCase() || 'desktop';
+
+    const refStats = refMap.get(refKey) || { views: 0, clicks: 0 };
+    const countryStats = countryMap.get(countryKey) || { views: 0, clicks: 0 };
+    const deviceStats = deviceMap.get(deviceKey) || { views: 0, clicks: 0 };
+
     if (ev.eventType === 'page_view') {
       views += 1;
       dayEntry.views += 1;
-      refMap.set(ev.referrer || 'Direct', (refMap.get(ev.referrer || 'Direct') || 0) + 1);
-      countryMap.set(ev.country || 'Unknown', (countryMap.get(ev.country || 'Unknown') || 0) + 1);
-      deviceMap.set(ev.device || 'Desktop', (deviceMap.get(ev.device || 'Desktop') || 0) + 1);
+      refStats.views += 1;
+      countryStats.views += 1;
+      deviceStats.views += 1;
     } else if (ev.eventType === 'link_click') {
       clicks += 1;
       dayEntry.clicks += 1;
+      refStats.clicks += 1;
+      countryStats.clicks += 1;
+      deviceStats.clicks += 1;
       if (ev.blockId) {
         linkClickMap.set(ev.blockId, (linkClickMap.get(ev.blockId) || 0) + 1);
       }
     }
+
+    refMap.set(refKey, refStats);
+    countryMap.set(countryKey, countryStats);
+    deviceMap.set(deviceKey, deviceStats);
     byDayMap.set(day, dayEntry);
   }
 
@@ -1706,6 +1823,16 @@ export async function dbGetAnalytics(
     if (b.id) titleById.set(b.id, b.title || b.kind || 'Link');
   });
 
+  const resolveLinkTitle = (blockId: string) => {
+    if (titleById.has(blockId)) return titleById.get(blockId)!;
+    if (blockId.startsWith('social:')) {
+      const plat = blockId.slice('social:'.length);
+      return `${plat.charAt(0).toUpperCase()}${plat.slice(1)} icon`;
+    }
+    if (blockId === 'whatsapp') return 'WhatsApp chat';
+    return 'Link';
+  };
+
   const ctr = views > 0 ? Math.round((clicks / views) * 1000) / 10 : 0;
 
   return {
@@ -1716,20 +1843,20 @@ export async function dbGetAnalytics(
     top_links: Array.from(linkClickMap.entries())
       .map(([block_id, c]) => ({
         block_id,
-        title: titleById.get(block_id) || 'Link',
+        title: resolveLinkTitle(block_id),
         clicks: c,
       }))
       .sort((a, b) => b.clicks - a.clicks)
       .slice(0, 8),
-    referrers: isPro
-      ? Array.from(refMap.entries()).map(([referrer, c]) => ({ referrer, clicks: c })).sort((a, b) => b.clicks - a.clicks)
-      : [],
-    countries: isPro
-      ? Array.from(countryMap.entries()).map(([country, c]) => ({ country, clicks: c })).sort((a, b) => b.clicks - a.clicks)
-      : [],
-    devices: isPro
-      ? Array.from(deviceMap.entries()).map(([device, c]) => ({ device, clicks: c })).sort((a, b) => b.clicks - a.clicks)
-      : [],
+    referrers: Array.from(refMap.entries())
+      .map(([referrer, s]) => ({ referrer, views: s.views, clicks: s.clicks }))
+      .sort((a, b) => (b.views + b.clicks) - (a.views + a.clicks)),
+    countries: Array.from(countryMap.entries())
+      .map(([country, s]) => ({ country, views: s.views, clicks: s.clicks }))
+      .sort((a, b) => (b.views + b.clicks) - (a.views + a.clicks)),
+    devices: Array.from(deviceMap.entries())
+      .map(([device, s]) => ({ device, views: s.views, clicks: s.clicks }))
+      .sort((a, b) => (b.views + b.clicks) - (a.views + a.clicks)),
     isCapped: false,
   };
 }

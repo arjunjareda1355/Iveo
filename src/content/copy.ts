@@ -35,7 +35,7 @@ export const copy = {
     claimButton: 'Claim',
     goToDashboard: 'Go to dashboard',
     continueSetup: 'Continue setup',
-    floatingChipTop: 'iveo.site/maya',
+    floatingChipTop: 'iveo.site/@maya',
     floatingChipBottom: 'Updated just now',
   },
   madeFor: {
@@ -174,7 +174,7 @@ export const copy = {
       },
       {
         question: 'Can I use my own domain?',
-        answer: 'Custom domains are on our roadmap. For now, every page lives at iveo.site/yourname.',
+        answer: 'Custom domains are on our roadmap. For now, every page lives at iveo.site/@yourname.',
       },
       {
         question: 'Do I need a website to use iveo?',
@@ -401,7 +401,7 @@ export const copy = {
   placeholders: {
     accountSetup: 'Account setup arrives in the next step.',
     backHome: 'Back to home',
-    reservingPrefix: 'Reserving iveo.site/',
+    reservingPrefix: 'Reserving iveo.site/@',
     proPlanSelected: 'Pro plan selected',
     legalPlaceholder: 'Official terms and privacy policy for iveo.',
     questionsPrefix: 'Questions? Email',
@@ -496,7 +496,7 @@ export const copy = {
       shareSubject: 'My page on iveo',
       downloadPng: 'Download PNG',
       downloadSvg: 'Download SVG',
-      qrPrintHelper: 'Scans to iveo.site/<username>. Print it at least 2 cm (0.8 in) wide.',
+      qrPrintHelper: 'Scans to iveo.site/@<username>. Print it at least 2 cm (0.8 in) wide.',
       hiddenNotice: 'Your page is hidden, so visitors will see an unavailable message.',
       openSettings: 'Open settings',
       qrError: "We couldn't create the QR code. Try again.",

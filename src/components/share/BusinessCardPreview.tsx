@@ -101,7 +101,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
   useEffect(() => {
     if (resolved.showQr === false) return;
     let mounted = true;
-    const targetUrl = `https://iveo.site/${cleanUsername}?src=qr`;
+    const targetUrl = `https://iveo.site/@${cleanUsername}?src=qr`;
     makeQrPngDataUrl(targetUrl, {
       darkColor: backApp.qrFg,
       lightColor: backApp.qrBg,
@@ -122,7 +122,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
   const editorialItalicFont = "'Instrument Serif', 'Playfair Display', Georgia, serif";
   const initials = (displayName || cleanUsername).slice(0, 2).toUpperCase();
   const displayQrSrc = cardQrUrl || qrDataUrl;
-  const footerWebsite = resolved.websiteUrl || `iveo.site/${cleanUsername}`;
+  const footerWebsite = resolved.websiteUrl || `iveo.site/@${cleanUsername}`;
   const backLinks =
     resolved.showSocialsOnBack !== false
       ? buildBackSocialLinks(socials, resolved.websiteUrl, cleanUsername)
@@ -596,7 +596,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                   >
                     <img
                       src={displayQrSrc}
-                      alt={`QR code for iveo.site/${cleanUsername}`}
+                      alt={`QR code for iveo.site/@${cleanUsername}`}
                       style={{
                         width: '100%',
                         height: '100%',
@@ -678,7 +678,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                     color: backApp.mutedColor,
                   }}
                 >
-                  <span className="truncate">iveo.site/{cleanUsername}</span>
+                  <span className="truncate">iveo.site/@{cleanUsername}</span>
                   {isPro && <VerifiedTick size={14} onDark={!backApp.isLight} />}
                 </div>
 

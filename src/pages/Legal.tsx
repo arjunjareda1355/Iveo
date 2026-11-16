@@ -82,7 +82,7 @@ export const Legal: React.FC = () => {
                     1. Account & Your Address
                   </h2>
                   <p>
-                    When you claim a username (e.g., iveo.site/yourname), you represent that you have the right to use that identifier. Usernames that infringe on trademarks, impersonate public figures or organizations, or remain dormant for extended periods may be reclaimed or reassigned.
+                    When you claim a username (e.g., iveo.site/@yourname), you represent that you have the right to use that identifier. Usernames that infringe on trademarks, impersonate public figures or organizations, or remain dormant for extended periods may be reclaimed or reassigned.
                   </p>
                 </section>
 

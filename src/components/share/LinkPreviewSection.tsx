@@ -86,7 +86,7 @@ export const LinkPreviewSection: React.FC<LinkPreviewSectionProps> = ({
               }}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono opacity-75">iveo.site/{cleanUsername}</span>
+                <span className="text-[11px] font-mono opacity-75">iveo.site/@{cleanUsername}</span>
                 <span
                   className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                   style={{

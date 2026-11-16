@@ -54,7 +54,7 @@ export const SignupPage: React.FC = () => {
       <div className="inline-flex h-9 items-center gap-2 rounded-full bg-surface border border-border px-3.5 text-[14px] shadow-xs">
         <LinkIcon size={14} strokeWidth={1.5} className="text-subtle" />
         <span className="text-muted">{copy.auth.claimPillPrefix}</span>
-        <span className="font-mono font-medium text-ink">iveo.site/{claim}</span>
+        <span className="font-mono font-medium text-ink">iveo.site/@{claim}</span>
       </div>
       <span className="text-[13px] text-muted text-center">
         {copy.auth.claimPillHelper}

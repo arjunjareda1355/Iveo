@@ -87,6 +87,7 @@ export function normalizeUsername(input: string): string {
   return input
     .toLowerCase()
     .trim()
+    .replace(/^@+/, '')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .slice(0, USERNAME_MAX);
@@ -101,12 +102,24 @@ export type UsernameValidationResult =
     };
 
 export const PRIVATE_ROUTES = new Set(['login', 'signup', 'dashboard', 'onboarding', 'account', 'admin']);
+export const PUBLIC_INFO_ROUTES = new Set([
+  'about',
+  'discover',
+  'help',
+  'legal',
+  'privacy',
+  'terms',
+  'pricing',
+  'robots.txt',
+  'sitemap.xml',
+  'llms.txt',
+]);
 
 export function validateUsername(
   input: string,
   options?: { allowReserved?: boolean }
 ): UsernameValidationResult {
-  const lower = (input || '').toLowerCase().trim();
+  const lower = (input || '').toLowerCase().trim().replace(/^@+/, '');
 
   if (lower.length < USERNAME_MIN) {
     return { ok: false, reason: 'too_short', message: 'Use 3 to 30 characters.' };

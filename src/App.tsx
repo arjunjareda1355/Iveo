@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, useParams, Navigate } from 'react-router-dom';
 import { Landing } from './pages/Landing';
 import {
   RequireOnboarded,
@@ -7,6 +7,7 @@ import {
 } from './auth/guards';
 import { AccountDeletionProvider } from './components/account/AccountDeletionProvider';
 import { getSubdomainFromHostname } from './lib/site';
+import { PRIVATE_ROUTES, PUBLIC_INFO_ROUTES, normalizeUsername, validateUsername } from './lib/username-rules';
 
 // Lazy-load every route except the landing page
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -42,6 +43,36 @@ function LoadingBar() {
       aria-hidden="true"
     />
   );
+}
+
+// Handles canonical /@username routes and redirects legacy /username -> /@username
+function ProfileRouteHandler() {
+  const { username } = useParams<{ username: string }>();
+  const location = useLocation();
+  const raw = (username || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (!raw || ['@vite', '@react-refresh', '@fs', '@id'].includes(lower)) {
+    return <NotFound />;
+  }
+
+  if (raw.startsWith('@')) {
+    const clean = raw.slice(1);
+    if (!clean) return <NotFound />;
+    return <PublicProfilePlaceholder usernameOverride={clean} />;
+  }
+
+  const clean = normalizeUsername(raw);
+  if (
+    clean &&
+    !PRIVATE_ROUTES.has(clean) &&
+    !PUBLIC_INFO_ROUTES.has(clean) &&
+    validateUsername(clean, { allowReserved: true }).ok
+  ) {
+    return <Navigate to={`/@${clean}${location.search}${location.hash}`} replace />;
+  }
+
+  return <NotFound />;
 }
 
 export default function App() {
@@ -147,8 +178,8 @@ export default function App() {
           {/* 7. Protected SEO Admin Console */}
           <Route path="/admin/seo" element={<SeoAdminPage />} />
 
-          {/* 8. Public Profile Placeholder (after all static routes) */}
-          <Route path="/:username" element={<PublicProfilePlaceholder />} />
+          {/* 8. Canonical /@username Public Profiles & Legacy /username Redirect */}
+          <Route path="/:username" element={<ProfileRouteHandler />} />
 
           {/* 9. Fallback 404 */}
           <Route path="*" element={<NotFound />} />

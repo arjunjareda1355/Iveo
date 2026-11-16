@@ -2,6 +2,7 @@ import {
   Block,
   BlockKind,
   BlockLayout,
+  EmbedMetaData,
   EmbedProvider,
   SignupConfig,
   LinkAnimation,
@@ -30,6 +31,7 @@ export interface CreateBlockInput {
   thumbnailPath?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
+  embedMeta?: EmbedMetaData | null;
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
@@ -58,6 +60,7 @@ export interface UpdateBlockInput {
   thumbnailUrl?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
+  embedMeta?: EmbedMetaData | null;
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
@@ -113,6 +116,7 @@ export async function syncBlocksToServer(
     const res = await fetch('/api/blocks', {
       method: 'POST',
       headers,
+      keepalive: true,
       body: JSON.stringify({
         username: clean,
         blocks,
@@ -130,6 +134,7 @@ export async function syncBlocksToServer(
       await fetch('/api/blocks', {
         method: 'POST',
         headers,
+        keepalive: true,
         body: JSON.stringify({
           username: currentUsername.toLowerCase(),
           blocks,
@@ -143,6 +148,8 @@ export async function syncBlocksToServer(
   }
 }
 
+const blockSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export async function saveLocalBlocks(
   userId: string,
   blocks: Block[],
@@ -151,11 +158,17 @@ export async function saveLocalBlocks(
   try {
     localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocks));
   } catch {}
-  try {
-    await syncBlocksToServer(userId, blocks, auth);
-  } catch {
-    // Allow local persistence even if offline
-  }
+  if (auth?.isDemo) return;
+  const key = (userId || 'owner').trim().toLowerCase();
+  const prevTimer = blockSyncTimers.get(key);
+  if (prevTimer) clearTimeout(prevTimer);
+  blockSyncTimers.set(
+    key,
+    setTimeout(() => {
+      blockSyncTimers.delete(key);
+      syncBlocksToServer(userId, blocks, auth).catch(() => {});
+    }, 120)
+  );
 }
 
 export async function seedStarterLinks(
@@ -301,6 +314,7 @@ export async function createBlock(
     thumbnailUrl: storagePublicUrl(input.thumbnailPath),
     layout: input.layout || 'classic',
     embedProvider: input.embedProvider || null,
+    embedMeta: input.embedMeta || null,
     signup: input.signup || null,
     tipJar: input.tipJar || null,
     faq: input.faq || null,

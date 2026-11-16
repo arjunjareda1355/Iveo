@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth, useUser, useClerk } from '@clerk/react';
 import { HAS_CLERK_KEY } from '../lib/env';
 import { VibeId } from '../lib/vibes';
@@ -15,7 +15,12 @@ import type { ButtonColors } from '../lib/colors';
 import type { BusinessCardConfig } from '../lib/businessCardConfig';
 import { validateUsername, normalizeUsername } from '../lib/username-rules';
 import { isAllowedAvatarUrl } from '../lib/avatar';
-import { isOwnerEmail } from '../lib/plan';
+import {
+  isOwnerEmail,
+  resolveEffectivePlan,
+  type PlanSource,
+  type SubscriptionRecord,
+} from '../lib/plan';
 import { getSubdomainFromHostname } from '../lib/site';
 import { syncProfileToFirebase } from '../lib/firebaseSync';
 
@@ -48,6 +53,9 @@ export interface IveoSession {
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
   isPro: boolean;
+  planSource: PlanSource;
+  createdAt: string | null;
+  subscription: SubscriptionRecord | null;
   hideIveoFooter: boolean;
   hideIvioFooter: boolean;
   updateUsername: (newUsername: string) => Promise<void>;
@@ -62,6 +70,7 @@ export interface IveoSession {
     background?: BackgroundConfig | null;
   }) => Promise<void>;
   updateSocials: (socials: Record<string, string>) => Promise<void>;
+  refreshSession: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -96,12 +105,16 @@ const FALLBACK_SESSION: IveoSession = {
   onboardingComplete: false,
   plan: 'free',
   isPro: false,
+  planSource: 'free',
+  createdAt: null,
+  subscription: null,
   hideIveoFooter: false,
   hideIvioFooter: false,
   updateUsername: async () => {},
   updatePreferences: async () => {},
   updateProfile: async () => {},
   updateSocials: async () => {},
+  refreshSession: async () => {},
   signOut: async () => {},
 };
 
@@ -116,6 +129,25 @@ function useClerkSession(): IveoSession {
   // Server-side profile data retrieved via /api/me for cross-browser synchronization
   const [serverProfile, setServerProfile] = useState<any | null>(null);
   const [hasFetchedServerProfile, setHasFetchedServerProfile] = useState(false);
+  const syncQueueRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialSyncDoneRef = useRef(false);
+
+  const refreshServerProfile = useCallback(async () => {
+    if (!activeUser?.id) return;
+    try {
+      const email = activeUser.primaryEmailAddress?.emailAddress || '';
+      const res = await fetch(
+        `/api/me?userId=${encodeURIComponent(activeUser.id)}&email=${encodeURIComponent(email)}&_t=${Date.now()}`,
+        { cache: 'no-cache' }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.claimed && data.username) {
+          setServerProfile(data.profile);
+        }
+      }
+    } catch {}
+  }, [activeUser?.id, activeUser?.primaryEmailAddress?.emailAddress]);
 
   useEffect(() => {
     const onSync = (e: Event) => {
@@ -133,6 +165,7 @@ function useClerkSession(): IveoSession {
     if (!activeUser?.id) {
       setServerProfile(null);
       setHasFetchedServerProfile(false);
+      initialSyncDoneRef.current = false;
       return;
     }
 
@@ -148,21 +181,19 @@ function useClerkSession(): IveoSession {
           if (data && data.claimed && data.username && isMounted) {
             setServerProfile(data.profile);
 
-            // Sync username back to Clerk unsafeMetadata if it was missing or out of sync
+            // Sync username back to Clerk unsafeMetadata asynchronously if out of sync
             const currentMeta = (activeUser.unsafeMetadata && typeof activeUser.unsafeMetadata === 'object'
               ? activeUser.unsafeMetadata
               : {}) as Record<string, unknown>;
 
             if (currentMeta.username !== data.username) {
-              try {
-                await activeUser.update({
-                  unsafeMetadata: {
-                    ...currentMeta,
-                    username: data.username,
-                    onboardingComplete: true,
-                  },
-                });
-              } catch {}
+              activeUser.update({
+                unsafeMetadata: {
+                  ...currentMeta,
+                  username: data.username,
+                  onboardingComplete: true,
+                },
+              }).catch(() => {});
             }
           }
         }
@@ -226,8 +257,20 @@ function useClerkSession(): IveoSession {
       )));
   const onboardingComplete = Boolean(isProfileSetup);
 
-  const plan: 'free' | 'pro' = isOwner || serverProfile?.plan === 'pro' ? 'pro' : preferences.plan;
-  const isPro = isOwner || plan === 'pro';
+  const createdAtIso: string | null =
+    serverProfile?.createdAt ||
+    (activeUser?.createdAt ? new Date(activeUser.createdAt).toISOString() : null);
+  const subscriptionRecord: SubscriptionRecord | null = serverProfile?.subscription || null;
+  const resolvedPlan = resolveEffectivePlan({
+    email: primaryEmail,
+    storedPlan: serverProfile?.plan || preferences.plan,
+    isProFlag: serverProfile?.isPro,
+    createdAt: createdAtIso,
+    subscription: subscriptionRecord,
+  });
+  const plan: 'free' | 'pro' = resolvedPlan.plan;
+  const isPro = resolvedPlan.isPro;
+  const planSource: PlanSource = resolvedPlan.planSource;
   const hideFooter = serverProfile?.hideFooter ?? (preferences.hideIveoFooter || preferences.hideIvioFooter || false);
   const socialsPosition: 'top' | 'bottom' | 'both' =
     serverProfile?.socialsPosition || preferences.socialsPosition || 'top';
@@ -332,59 +375,35 @@ function useClerkSession(): IveoSession {
     }
   }, [activeUser?.id, username, primaryEmail]);
 
-  // Automatic sync after initial server profile hydration completes
+  // Single initial sync once server hydration finishes (does not re-trigger on every keystroke or toggle)
   useEffect(() => {
-    if (hasFetchedServerProfile && activeUser?.id && username) {
-      syncToServer({
-        username,
-        displayName: displayName || username,
-        bio,
-        avatarUrl: imageUrl,
-        vibeId,
-        buttonShape,
-        socials,
-        socialsPosition,
-        background: effectiveBackground,
-        googleAnalyticsId,
-        metaPixelId,
-        whatsappNumber,
-        customSeoTitle,
-        customSeoDescription,
-        fontSettings,
-        buttonColors,
-        layoutSettings,
-        businessCard,
-        primaryEmail,
-        plan: isPro ? 'pro' : plan,
-        hideFooter,
-      });
-    }
-  }, [
-    hasFetchedServerProfile,
-    activeUser?.id,
-    username,
-    displayName,
-    bio,
-    imageUrl,
-    vibeId,
-    buttonShape,
-    socials,
-    socialsPosition,
-    effectiveBackground,
-    googleAnalyticsId,
-    metaPixelId,
-    whatsappNumber,
-    customSeoTitle,
-    customSeoDescription,
-    fontSettings,
-    buttonColors,
-    layoutSettings,
-    businessCard,
-    primaryEmail,
-    isPro,
-    plan,
-    hideFooter,
-  ]);
+    if (!hasFetchedServerProfile || !activeUser?.id || !username || initialSyncDoneRef.current) return;
+    initialSyncDoneRef.current = true;
+    syncToServer({
+      username,
+      displayName: displayName || username,
+      bio,
+      avatarUrl: imageUrl,
+      vibeId,
+      buttonShape,
+      socials,
+      socialsPosition,
+      background: effectiveBackground,
+      googleAnalyticsId,
+      metaPixelId,
+      whatsappNumber,
+      customSeoTitle,
+      customSeoDescription,
+      fontSettings,
+      buttonColors,
+      layoutSettings,
+      businessCard,
+      createdAt: createdAtIso,
+      primaryEmail,
+      plan: isPro ? 'pro' : plan,
+      hideFooter,
+    });
+  }, [hasFetchedServerProfile, activeUser?.id, username]);
 
   if (!activeUser) {
     return {
@@ -406,12 +425,16 @@ function useClerkSession(): IveoSession {
       onboardingComplete: false,
       plan: 'free',
       isPro: false,
+      planSource: 'free',
+      createdAt: null,
+      subscription: null,
       hideIveoFooter: false,
       hideIvioFooter: false,
       updateUsername: async () => {},
       updatePreferences: async () => {},
       updateProfile: async () => {},
       updateSocials: async () => {},
+      refreshSession: async () => {},
       signOut: async () => {
         await signOut();
       },
@@ -554,13 +577,12 @@ function useClerkSession(): IveoSession {
       };
     }
 
-    try {
-      await currentUser.update({
-        unsafeMetadata: clerkMerged,
-      });
-    } catch (metaErr) {
+    // Persist to Clerk metadata in background so UI toggles respond instantly
+    currentUser.update({
+      unsafeMetadata: clerkMerged,
+    }).catch((metaErr) => {
       console.warn('Clerk metadata update note:', metaErr);
-    }
+    });
 
     if (safePatch.onboardingComplete) {
       try {
@@ -580,7 +602,7 @@ function useClerkSession(): IveoSession {
     const nextBusinessCard =
       merged.businessCard !== undefined ? merged.businessCard : businessCard;
 
-    // Mirror to localStorage for offline fallback
+    // Mirror to localStorage immediately
     if (username) {
       try {
         const raw = localStorage.getItem(`iveo_profile_${username}`) || '{}';
@@ -619,8 +641,7 @@ function useClerkSession(): IveoSession {
         );
       } catch {}
 
-      // Await sync to Azure SQL / Server database
-      await syncToServer({
+      const syncPayload = {
         username,
         displayName: merged.displayName !== undefined ? merged.displayName : displayName,
         bio: merged.bio !== undefined ? merged.bio : bio,
@@ -641,41 +662,25 @@ function useClerkSession(): IveoSession {
         buttonColors: nextButtonColors,
         layoutSettings: nextLayoutSettings,
         businessCard: nextBusinessCard,
+        createdAt: createdAtIso,
         primaryEmail,
         plan: isPro ? 'pro' : plan,
         hideFooter:
           merged.hideIveoFooter !== undefined
             ? Boolean(merged.hideIveoFooter)
             : (merged.hideIvioFooter !== undefined ? Boolean(merged.hideIvioFooter) : hideFooter),
-      });
+      };
 
-      // Background Firestore persistence
-      if (username || currentUser.id) {
-        syncProfileToFirebase(username || currentUser.id, {
-          username,
-          displayName: merged.displayName !== undefined ? merged.displayName : displayName,
-          bio: merged.bio !== undefined ? merged.bio : bio,
-          avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : imageUrl,
-          avatarType: merged.avatarType || (merged.avatarId ? 'default' : (merged.avatarUrl ? 'uploaded' : 'default')),
-          avatarId: merged.avatarId || null,
-          vibeId: merged.vibeId || preferences.vibeId,
-          buttonShape: nextButtonShape,
-          socials: merged.socials !== undefined ? merged.socials : socials,
-          socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
-          background: nextBackground,
-          googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : googleAnalyticsId,
-          metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : metaPixelId,
-          whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
-          customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : customSeoTitle,
-          customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
-          fontSettings: nextFontSettings,
-          buttonColors: nextButtonColors,
-          layoutSettings: nextLayoutSettings,
-          businessCard: nextBusinessCard,
-          primaryEmail,
-          plan: isPro ? 'pro' : plan,
-        }).catch(() => {});
+      // Coalesce rapid updates (100ms debounce) so buttons feel instantaneous without race conditions
+      if (syncQueueRef.current) {
+        clearTimeout(syncQueueRef.current);
       }
+      syncQueueRef.current = setTimeout(() => {
+        syncToServer(syncPayload);
+        if (username || currentUser.id) {
+          syncProfileToFirebase(username || currentUser.id, syncPayload).catch(() => {});
+        }
+      }, 100);
     }
   };
 
@@ -781,12 +786,16 @@ function useClerkSession(): IveoSession {
     onboardingComplete,
     plan,
     isPro,
+    planSource,
+    createdAt: createdAtIso,
+    subscription: subscriptionRecord,
     hideIveoFooter: hideFooter,
     hideIvioFooter: hideFooter,
     updateUsername,
     updatePreferences,
     updateProfile,
     updateSocials,
+    refreshSession: refreshServerProfile,
     signOut: async () => {
       await signOut();
     },
@@ -902,8 +911,12 @@ function useDemoSession(): IveoSession {
     businessCard: demoState.businessCard,
     isPro: true,
     plan: 'pro',
+    planSource: 'early_bird',
+    createdAt: '2026-06-01T00:00:00.000Z',
+    subscription: null,
     hideIveoFooter: demoState.hideFooter,
     hideIvioFooter: demoState.hideFooter,
+    refreshSession: async () => {},
     updateUsername: async (newUsername: string) => {
       const clean = normalizeUsername(newUsername);
       if (clean) {

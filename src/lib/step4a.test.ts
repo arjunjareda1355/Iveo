@@ -84,6 +84,38 @@ test('embeds: rejects invalid SoundCloud links', () => {
   assert.equal(parseEmbedUrl('https://m.soundcloud.com/artist/track'), null);
 });
 
+// 3b. Social Embeds (Discord, GitHub, LinkedIn, X)
+test('embeds: parses Discord, GitHub, LinkedIn, and X links correctly', () => {
+  const discordInvite = parseEmbedUrl('https://discord.gg/iveo');
+  assert.equal(discordInvite?.provider, 'discord');
+  assert.equal(discordInvite?.subtype, 'invite');
+  assert.equal(discordInvite?.identifier, 'iveo');
+
+  const githubRepo = parseEmbedUrl('https://github.com/vercel/next.js');
+  assert.equal(githubRepo?.provider, 'github');
+  assert.equal(githubRepo?.subtype, 'repo');
+  assert.equal(githubRepo?.identifier, 'vercel/next.js');
+
+  const githubUser = parseEmbedUrl('https://github.com/torvalds');
+  assert.equal(githubUser?.provider, 'github');
+  assert.equal(githubUser?.subtype, 'profile');
+  assert.equal(githubUser?.identifier, 'torvalds');
+
+  const linkedinProfile = parseEmbedUrl('https://www.linkedin.com/in/maya-ellis/');
+  assert.equal(linkedinProfile?.provider, 'linkedin');
+  assert.equal(linkedinProfile?.subtype, 'in');
+  assert.equal(linkedinProfile?.identifier, 'maya-ellis');
+
+  const xPost = parseEmbedUrl('https://x.com/iveosite/status/184567890123456');
+  assert.equal(xPost?.provider, 'x');
+  assert.equal(xPost?.subtype, 'post');
+
+  const xProfile = parseEmbedUrl('https://twitter.com/iveosite');
+  assert.equal(xProfile?.provider, 'x');
+  assert.equal(xProfile?.subtype, 'profile');
+  assert.equal(xProfile?.canonicalUrl, 'https://x.com/iveosite');
+});
+
 // 4. Scheduling & Time
 test('time: getScheduleState correctly determines state', () => {
   const now = new Date('2026-10-20T12:00:00Z');
@@ -177,9 +209,10 @@ test('time: isBlockVisibleNow enforces Pro and scheduling status', () => {
 });
 
 // 5. Site Origin & Plan
-test('site: pageUrl generates clean url without duplicate slashes in format iveo.site/username', () => {
-  assert.equal(pageUrl('maya'), 'https://iveo.site/maya');
-  assert.equal(pageUrl('/maya'), 'https://iveo.site/maya');
+test('site: pageUrl generates clean url without duplicate slashes in format iveo.site/@username', () => {
+  assert.equal(pageUrl('maya'), 'https://iveo.site/@maya');
+  assert.equal(pageUrl('/maya'), 'https://iveo.site/@maya');
+  assert.equal(pageUrl('@maya'), 'https://iveo.site/@maya');
 });
 
 test('plan: defines all pro features and labels', () => {

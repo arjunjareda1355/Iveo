@@ -117,21 +117,29 @@ export async function getAnalytics(
               links: Array.isArray(srv.top_links)
                 ? srv.top_links.map((l: any) => ({
                     linkId: String(l.block_id || l.linkId || ''),
+                    title: typeof l.title === 'string' ? l.title : undefined,
                     clicks: typeof l.clicks === 'number' ? l.clicks : 0,
                   }))
                 : [],
               sources: isPro && Array.isArray(srv.referrers)
                 ? srv.referrers.map((r: any) => ({
                     source: normalizeSource(String(r.referrer || '')),
-                    views: typeof r.clicks === 'number' ? r.clicks : 0,
-                    clicks: 0,
+                    views: typeof r.views === 'number' ? r.views : 0,
+                    clicks: typeof r.clicks === 'number' ? r.clicks : 0,
                   }))
                 : null,
               devices: isPro && Array.isArray(srv.devices)
                 ? srv.devices.map((dv: any) => ({
                     device: normalizeDevice(String(dv.device || 'desktop')),
-                    views: typeof dv.clicks === 'number' ? dv.clicks : 0,
-                    clicks: 0,
+                    views: typeof dv.views === 'number' ? dv.views : 0,
+                    clicks: typeof dv.clicks === 'number' ? dv.clicks : 0,
+                  }))
+                : null,
+              countries: isPro && Array.isArray(srv.countries)
+                ? srv.countries.map((c: any) => ({
+                    country: String(c.country || 'Unknown'),
+                    views: typeof c.views === 'number' ? c.views : 0,
+                    clicks: typeof c.clicks === 'number' ? c.clicks : 0,
                   }))
                 : null,
             };

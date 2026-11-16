@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Minus, Play, Music, Headphones, Link2 } from 'lucide-react';
+import { Minus, Play, Music, Headphones, Link2, MessageCircle, Globe, Share2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { BarRow } from './BarRow';
@@ -9,6 +9,7 @@ import { copy } from '../../content/copy';
 
 interface LinkClickItem {
   linkId: string;
+  title?: string;
   clicks: number;
 }
 
@@ -17,6 +18,25 @@ interface TopLinksCardProps {
   totalClicks: number;
   isLoading?: boolean;
 }
+
+const SOCIAL_LABELS: Record<string, string> = {
+  instagram: 'Instagram',
+  x: 'X (Twitter)',
+  twitter: 'X (Twitter)',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  linkedin: 'LinkedIn',
+  github: 'GitHub',
+  discord: 'Discord',
+  spotify: 'Spotify',
+  website: 'Website',
+  email: 'Email',
+  threads: 'Threads',
+  facebook: 'Facebook',
+  snapchat: 'Snapchat',
+  twitch: 'Twitch',
+  telegram: 'Telegram',
+};
 
 export const TopLinksCard: React.FC<TopLinksCardProps> = ({
   links,
@@ -70,12 +90,19 @@ export const TopLinksCard: React.FC<TopLinksCardProps> = ({
         <ul className="flex flex-col divide-y divide-border/60 -my-1">
           {visibleLinks.map((item) => {
             const block = blocksMap.get(item.linkId);
-            const isDeleted = !block;
+            const isSocial = item.linkId.startsWith('social:');
+            const isWhatsApp = item.linkId === 'whatsapp';
+            const socialPlatform = isSocial ? item.linkId.slice('social:'.length).toLowerCase() : '';
+            const isDeleted = !block && !isSocial && !isWhatsApp && !item.title;
 
             // Title & Icon
-            const title = isDeleted
-              ? copy.dashboard.analytics.topLinks.deletedLink
-              : block.title || (block.kind === 'embed' ? 'Embed' : 'Untitled');
+            const title = block
+              ? block.title || (block.kind === 'embed' ? 'Embed' : 'Untitled')
+              : isSocial
+                ? `${SOCIAL_LABELS[socialPlatform] || socialPlatform} social icon`
+                : isWhatsApp
+                  ? 'WhatsApp Quick-Chat'
+                  : item.title || copy.dashboard.analytics.topLinks.deletedLink;
 
             const isEmbed = block?.kind === 'embed';
             const ProviderGlyph =
@@ -83,7 +110,9 @@ export const TopLinksCard: React.FC<TopLinksCardProps> = ({
                 ? Play
                 : block?.embedProvider === 'spotify'
                   ? Music
-                  : Headphones;
+                  : block?.embedProvider === 'soundcloud'
+                    ? Headphones
+                    : Globe;
 
             // Ratio & Percentage
             const ratio = maxClicks > 0 ? item.clicks / maxClicks : 0;
@@ -107,7 +136,11 @@ export const TopLinksCard: React.FC<TopLinksCardProps> = ({
                 <div className="w-9 h-9 rounded-[10px] bg-surface-2 border border-border flex items-center justify-center shrink-0 overflow-hidden">
                   {isDeleted ? (
                     <Minus size={16} className="text-muted" strokeWidth={1.5} />
-                  ) : block.thumbnailUrl ? (
+                  ) : isWhatsApp ? (
+                    <MessageCircle size={18} className="text-emerald-600" strokeWidth={1.6} />
+                  ) : isSocial ? (
+                    <Share2 size={17} className="text-ink" strokeWidth={1.6} />
+                  ) : block?.thumbnailUrl ? (
                     <img
                       src={block.thumbnailUrl}
                       alt=""

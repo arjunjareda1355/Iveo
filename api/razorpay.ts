@@ -8,6 +8,10 @@ import {
 } from './_lib/razorpay.ts';
 import { getRazorpayKeyId } from './_lib/env.ts';
 import { adminClient } from './_lib/supabase.ts';
+import { dbGetProfile, dbGetProfileByUserId, dbSaveProfile } from './_lib/azureSql.ts';
+import { firebaseSaveProfile } from './_lib/firebaseServer.ts';
+import { invalidatePublicPageCache } from './_lib/db-handlers.ts';
+import type { SubscriptionRecord } from '../src/lib/plan.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,8 +144,55 @@ export async function handleVerifyPayment(request: Request): Promise<Response> {
     const durationDays = period === 'yearly' ? 365 : 30;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+    const amountInr =
+      typeof payment?.amount === 'number'
+        ? Math.round(payment.amount / 100)
+        : (period === 'yearly' ? 1990 : 199);
 
-    // 3. Update database profile if Supabase is connected
+    const subscriptionRecord: SubscriptionRecord = {
+      status: 'active',
+      cycle: period,
+      startedAt: now.toISOString(),
+      currentPeriodEnd: expiresAt,
+      cancelledAt: null,
+      cancelAtPeriodEnd: false,
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      amountInr,
+    };
+
+    // 3. Persist Pro plan & subscription details to server store / Azure SQL / Firebase
+    try {
+      const cleanUname = typeof username === 'string' ? username.replace(/^@+/, '').toLowerCase().trim() : '';
+      const existing = cleanUname
+        ? await dbGetProfile(cleanUname).catch(() => null)
+        : userId
+          ? await dbGetProfileByUserId(String(userId)).catch(() => null)
+          : null;
+
+      if (existing) {
+        await dbSaveProfile({
+          userId: existing.userId || String(userId || 'owner'),
+          username: existing.username,
+          primaryEmail: existing.primaryEmail || null,
+          plan: 'pro',
+          subscription: subscriptionRecord,
+        });
+        await Promise.race([
+          firebaseSaveProfile(
+            existing.username,
+            { ...existing, plan: 'pro', subscription: subscriptionRecord },
+            existing.userId
+          ).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+        invalidatePublicPageCache(existing.username);
+      }
+    } catch (err) {
+      console.error('Error persisting subscription to dbSaveProfile:', err);
+    }
+
+    // 4. Update database profile if Supabase is connected
     const supabase = adminClient();
     if (supabase && (userId || username)) {
       try {
@@ -152,7 +203,7 @@ export async function handleVerifyPayment(request: Request): Promise<Response> {
         if (userId) {
           query = query.eq('user_id', userId);
         } else if (username) {
-          query = query.eq('username', String(username).toLowerCase());
+          query = query.eq('username', String(username).replace(/^@+/, '').toLowerCase());
         }
 
         const { error: dbError } = await query;
@@ -169,11 +220,13 @@ export async function handleVerifyPayment(request: Request): Promise<Response> {
         ok: true,
         verified: true,
         plan: 'pro',
+        planSource: 'paid',
         period,
         subscribedAt: now.toISOString(),
         expiresAt,
         paymentId: razorpay_payment_id,
         orderId: razorpay_order_id,
+        subscription: subscriptionRecord,
       },
       {
         status: 200,
@@ -226,12 +279,43 @@ export async function handleWebhook(request: Request): Promise<Response> {
       const notes = paymentEntity?.notes || event?.payload?.order?.entity?.notes || {};
       const userId = notes?.userId;
       const username = notes?.username;
+      const period: PlanPeriod = notes?.period === 'yearly' ? 'yearly' : 'monthly';
+      const now = new Date();
+      const durationDays = period === 'yearly' ? 365 : 30;
+      const subscriptionRecord: SubscriptionRecord = {
+        status: 'active',
+        cycle: period,
+        startedAt: now.toISOString(),
+        currentPeriodEnd: new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString(),
+        cancelledAt: null,
+        cancelAtPeriodEnd: false,
+        paymentId: paymentEntity?.id || null,
+        orderId: paymentEntity?.order_id || null,
+        amountInr: typeof paymentEntity?.amount === 'number' ? Math.round(paymentEntity.amount / 100) : null,
+      };
+
+      const cleanUname = username ? String(username).replace(/^@+/, '').toLowerCase().trim() : '';
+      const existing = cleanUname
+        ? await dbGetProfile(cleanUname).catch(() => null)
+        : userId
+          ? await dbGetProfileByUserId(String(userId)).catch(() => null)
+          : null;
+      if (existing) {
+        await dbSaveProfile({
+          userId: existing.userId || String(userId || 'owner'),
+          username: existing.username,
+          primaryEmail: existing.primaryEmail || null,
+          plan: 'pro',
+          subscription: subscriptionRecord,
+        }).catch(() => {});
+        invalidatePublicPageCache(existing.username);
+      }
 
       const supabase = adminClient();
       if (supabase && (userId || username)) {
         let query = supabase.from('profiles').update({ plan: 'pro' });
         if (userId) query = query.eq('user_id', userId);
-        else if (username) query = query.eq('username', String(username).toLowerCase());
+        else if (username) query = query.eq('username', cleanUname);
         await query;
       }
     }

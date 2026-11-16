@@ -86,8 +86,22 @@ export function getSearchEngineStatus() {
     } catch {}
   }
 
+  const siteUrl = getCanonicalSiteOrigin();
+  const bingConfigured = Boolean(bingApiKey);
+  const indexNowConfigured = Boolean(indexNowKey);
+
   return {
-    siteUrl: getCanonicalSiteOrigin(),
+    siteUrl,
+    gscConfigured,
+    gscSiteUrl: siteUrl,
+    bingConfigured,
+    indexNowConfigured,
+    recentSubmissions: telemetry.recentEvents.map((e) => ({
+      engine: e.action,
+      status: e.status,
+      detail: e.detail ? `${e.target} (${e.detail})` : e.target,
+      timestamp: e.at,
+    })),
     googleSearchConsole: {
       configured: gscConfigured,
       verificationMetaConfigured: Boolean(googleVerification),
@@ -96,12 +110,12 @@ export function getSearchEngineStatus() {
         'Google Search Console Sitemaps & URL Inspection API supported. Google Indexing API is intentionally NOT used for creator profiles per Google guidelines.',
     },
     bingWebmaster: {
-      configured: Boolean(bingApiKey),
+      configured: bingConfigured,
       verificationMetaConfigured: Boolean(bingVerification),
     },
     indexNow: {
-      configured: Boolean(indexNowKey),
-      keyFileUrl: indexNowKey ? `${getCanonicalSiteOrigin()}/${indexNowKey}.txt` : null,
+      configured: indexNowConfigured,
+      keyFileUrl: indexNowKey ? `${siteUrl}/${indexNowKey}.txt` : null,
     },
     telemetry,
   };

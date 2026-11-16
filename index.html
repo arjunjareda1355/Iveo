@@ -94,7 +94,7 @@
             "name": "Can I use my own domain?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Custom domains are on our roadmap. For now, every page lives at iveo.site/yourname."
+              "text": "Custom domains are on our roadmap. For now, every page lives at iveo.site/@yourname."
             }
           },
           {
@@ -369,7 +369,10 @@
             if (sp && !RESERVED_SUBS[sp]) isUserSub = true;
           }
 
-          var isUserPage = isUserSub || (firstSeg !== '' && !SITE_ROUTES[firstSeg]);
+          var VITE_INTERNALS = {
+            '@vite': 1, '@react-refresh': 1, '@fs': 1, '@id': 1
+          };
+          var isUserPage = isUserSub || (firstSeg !== '' && !SITE_ROUTES[firstSeg] && !VITE_INTERNALS[firstSeg]);
           var forceIntro = params.has('intro') || params.has('replay-intro');
           var alreadySeen = localStorage.getItem('iveo-intro-seen') === '1' || sessionStorage.getItem('iveo-intro-seen') === '1';
 

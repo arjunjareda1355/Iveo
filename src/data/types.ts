@@ -3,6 +3,7 @@ import { ButtonShape, BackgroundConfig, LayoutSettings } from '../lib/preference
 import type { FontSettings } from '../lib/fonts';
 import type { ButtonColors } from '../lib/colors';
 import type { BusinessCardConfig } from '../lib/businessCardConfig';
+import type { PlanSource, SubscriptionRecord } from '../lib/plan';
 
 export type {
   BackgroundConfig,
@@ -32,8 +33,29 @@ export type BlockKind =
   | 'download';
 
 export type BlockLayout = 'classic' | 'featured';
-export type EmbedProvider = 'youtube' | 'spotify' | 'soundcloud';
+export type EmbedProvider =
+  | 'youtube'
+  | 'spotify'
+  | 'soundcloud'
+  | 'discord'
+  | 'github'
+  | 'linkedin'
+  | 'x';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
+
+export interface EmbedMetaData {
+  provider: EmbedProvider;
+  title?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
+  avatarUrl?: string | null;
+  badgeText?: string | null;
+  statsLabel?: string | null;
+  handle?: string | null;
+  htmlSnippet?: string | null;
+  connectedViaOAuth?: boolean;
+  fetchedAt?: string | null;
+}
 
 export type SignupCollectMode = 'email' | 'phone' | 'both';
 
@@ -185,6 +207,7 @@ export interface Block {
   thumbnailUrl: string | null;
   layout: BlockLayout;
   embedProvider: EmbedProvider | null;
+  embedMeta?: EmbedMetaData | null;
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
   faq?: FaqConfig | null;
@@ -217,6 +240,7 @@ export interface PublicBlock {
   thumbnailUrl: string | null;
   layout: BlockLayout;
   embedProvider: EmbedProvider | null;
+  embedMeta?: EmbedMetaData | null;
   isProtected?: boolean;
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
@@ -244,6 +268,7 @@ export interface PageBlock {
   thumbnailUrl?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
+  embedMeta?: EmbedMetaData | null;
   isProtected?: boolean;
   signup?: SignupConfig | null;
   tipJar?: TipJarConfig | null;
@@ -292,6 +317,9 @@ export interface Profile {
   hideFromSearch: boolean;
   onboardingComplete: boolean;
   plan: 'free' | 'pro';
+  planSource?: PlanSource;
+  createdAt?: string | null;
+  subscription?: SubscriptionRecord | null;
   hideIveoFooter: boolean;
   hideIvioFooter: boolean;
   background?: BackgroundConfig | null;

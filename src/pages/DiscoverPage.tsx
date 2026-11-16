@@ -166,7 +166,7 @@ export const DiscoverPage: React.FC = () => {
               <h2 className="text-[18px] font-semibold text-ink">No matching profiles found</h2>
               <p className="mt-1 text-[14px] text-muted">
                 {query.trim()
-                  ? `Nothing matched "${query.trim()}". Want to claim iveo.site/${query
+                  ? `Nothing matched "${query.trim()}". Want to claim iveo.site/@${query
                       .trim()
                       .toLowerCase()
                       .replace(/[^a-z0-9-]/g, '')}?`
@@ -194,7 +194,7 @@ export const DiscoverPage: React.FC = () => {
                 return (
                   <Link
                     key={profile.username}
-                    to={`/${encodeURIComponent(profile.username)}`}
+                    to={`/@${encodeURIComponent(profile.username)}`}
                     className="group rounded-2xl border border-border bg-surface p-5 flex flex-col justify-between gap-4 hover:border-ink/40 hover:shadow-sm transition-all"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -228,7 +228,7 @@ export const DiscoverPage: React.FC = () => {
                             {profile.displayName}
                           </h2>
                           <p className="inline-flex items-center gap-1.5 text-[12px] font-mono text-muted max-w-full">
-                            <span className="truncate">iveo.site/{profile.username}</span>
+                            <span className="truncate">iveo.site/@{profile.username}</span>
                             {(profile.isVerified || profile.isPro) && <VerifiedTick size={13} />}
                           </p>
                         </div>

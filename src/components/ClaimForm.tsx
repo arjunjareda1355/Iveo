@@ -120,10 +120,10 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
         )}
       >
         <Link
-          to={username ? `/${username}` : '/dashboard'}
+          to={username ? `/@${username}` : '/dashboard'}
           target={username ? '_blank' : undefined}
           rel={username ? 'noopener noreferrer' : undefined}
-          title={username ? `View live profile iveo.site/${username}` : undefined}
+          title={username ? `View live profile iveo.site/@${username}` : undefined}
           className={cn(
             'h-12 px-4 rounded-[10px] flex items-center justify-center font-mono text-[15px] border transition-opacity hover:opacity-85 cursor-pointer',
             isDark
@@ -131,7 +131,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               : 'bg-surface text-ink border-border-strong'
           )}
         >
-          iveo.site/{username || 'you'}
+          iveo.site/@{username || 'you'}
         </Link>
 
         <Button
@@ -197,7 +197,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
           )}
         >
           <Check size={16} strokeWidth={2} className="shrink-0" />
-          <span>iveo.site/{availableUsername} is available</span>
+          <span>iveo.site/@{availableUsername} is available</span>
         </span>
       );
     }
@@ -238,7 +238,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               isDark ? 'text-inverse-muted' : 'text-muted'
             )}
           >
-            iveo.site/
+            iveo.site/@
           </span>
           <input
             ref={inputRef}

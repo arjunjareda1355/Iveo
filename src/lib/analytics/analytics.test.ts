@@ -6,6 +6,7 @@ import { niceMax, yTicks, formatCtr } from './chart.ts';
 import { todayUtc, addDaysUtc, formatCount } from './dates.ts';
 import { rangeToDates, RANGES } from './ranges.ts';
 import { buildBuckets } from './buckets.ts';
+import { analyticsFromJson } from './types.ts';
 
 test('sources: parseSourceParam handles src, utm_source, ref with priority', () => {
   assert.equal(parseSourceParam('?src=instagram'), 'instagram');
@@ -24,7 +25,7 @@ test('sources: classifyReferrer maps android app packages and hosts correctly', 
   assert.equal(classifyReferrer('https://web.whatsapp.com/', 'iveo.site'), 'whatsapp');
   assert.equal(classifyReferrer('android-app://com.discord', 'iveo.site'), 'discord');
   assert.equal(classifyReferrer('https://random-blog.net/post', 'iveo.site'), 'other');
-  assert.equal(classifyReferrer('https://iveo.site/maya', 'iveo.site'), '');
+  assert.equal(classifyReferrer('https://iveo.site/@maya', 'iveo.site'), '');
   assert.equal(classifyReferrer('', 'iveo.site'), '');
 });
 
@@ -78,4 +79,27 @@ test('buckets: groups daily counters into day, week, and month', () => {
   assert.equal(dayBuckets.length, 2);
   assert.equal(dayBuckets[0].views, 10);
   assert.equal(dayBuckets[1].views, 20);
+});
+
+test('analyticsFromJson: maps link titles, views, clicks, sources, devices, and countries cleanly', () => {
+  const parsed = analyticsFromJson({
+    range: { from: '2026-11-01', to: '2026-11-16', max_days: 90, is_pro: true },
+    totals: { views: 420, clicks: 84 },
+    daily: [{ day: '2026-11-16', views: 42, clicks: 9 }],
+    links: [{ link_id: 'social:instagram', title: 'Instagram (@maya)', clicks: 25 }],
+    sources: [{ source: 'google', views: 200, clicks: 50 }],
+    devices: [{ device: 'mobile', views: 300, clicks: 65 }],
+    countries: [{ country: 'United States', views: 180, clicks: 40 }],
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed.totals.views, 420);
+  assert.equal(parsed.totals.clicks, 84);
+  assert.equal(parsed.links[0]?.linkId, 'social:instagram');
+  assert.equal(parsed.links[0]?.title, 'Instagram (@maya)');
+  assert.equal(parsed.sources?.[0]?.source, 'google');
+  assert.equal(parsed.sources?.[0]?.views, 200);
+  assert.equal(parsed.devices?.[0]?.device, 'mobile');
+  assert.equal(parsed.countries?.[0]?.country, 'United States');
+  assert.equal(parsed.countries?.[0]?.clicks, 40);
 });

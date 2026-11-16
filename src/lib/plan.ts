@@ -31,7 +31,7 @@ export function getProFeatureName(feature: ProFeature): string {
 }
 
 export const FREE_PLAN_HIGHLIGHTS: readonly string[] = [
-  '1 public iveo.site/username page with live preview',
+  '1 public iveo.site/@username page with live preview',
   'Unlimited standard links, section headers & dividers',
   '15 showcase blocks (YouTube, Instagram, Buy Me a Coffee, Products, Bookings, Countdowns, Coupons, vCard, FAQ)',
   '6 Free Vibes + all 3 button shapes (Square, Rounded, Pill)',
@@ -67,7 +67,7 @@ export const PLAN_COMPARISON_SECTIONS: readonly PlanComparisonSection[] = [
   {
     category: 'Identity & Verified Status',
     rows: [
-      { feature: 'Public iveo.site/username page', free: true, pro: true },
+      { feature: 'Public iveo.site/@username page', free: true, pro: true },
       { feature: 'Verified Pro tick beside @username', free: false, pro: 'Included' },
       { feature: 'Custom SEO title, meta & automatic sitemap', free: true, pro: true },
       { feature: 'Remove the iveo footer mark', free: false, pro: true },
@@ -125,4 +125,86 @@ export function isOwnerEmail(email: string | null | undefined): boolean {
 export function canUseReservedUsername(email: string | null | undefined): boolean {
   return isOwnerEmail(email);
 }
+
+/**
+ * Accounts registered strictly before 01/01/2027 (UTC midnight) receive Pro
+ * automatically in the background without any UI promo clutter.
+ */
+export const EARLY_BIRD_PRO_DEADLINE_ISO = '2027-01-01T00:00:00.000Z';
+export const EARLY_BIRD_PRO_DEADLINE_MS = Date.parse(EARLY_BIRD_PRO_DEADLINE_ISO);
+
+export type PlanSource = 'owner' | 'paid' | 'early_bird' | 'free';
+export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'none';
+export type SubscriptionCycle = 'monthly' | 'yearly';
+
+export interface SubscriptionRecord {
+  status: SubscriptionStatus;
+  cycle: SubscriptionCycle | null;
+  startedAt: string | null;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  paymentId: string | null;
+  orderId: string | null;
+  amountInr: number | null;
+}
+
+export function isEarlyBirdEligible(
+  createdAt?: string | number | Date | null,
+  fallbackNowMs: number = Date.now()
+): boolean {
+  if (createdAt !== undefined && createdAt !== null && createdAt !== '') {
+    const ms =
+      createdAt instanceof Date
+        ? createdAt.getTime()
+        : typeof createdAt === 'number'
+          ? createdAt
+          : Date.parse(String(createdAt));
+    if (Number.isFinite(ms)) {
+      return ms < EARLY_BIRD_PRO_DEADLINE_MS;
+    }
+  }
+  return fallbackNowMs < EARLY_BIRD_PRO_DEADLINE_MS;
+}
+
+export function resolveEffectivePlan(params: {
+  email?: string | null;
+  storedPlan?: string | null;
+  isProFlag?: boolean | null;
+  createdAt?: string | number | Date | null;
+  subscription?: Partial<SubscriptionRecord> | null;
+  nowMs?: number;
+}): { plan: 'free' | 'pro'; isPro: boolean; planSource: PlanSource } {
+  const nowMs = params.nowMs ?? Date.now();
+
+  if (isOwnerEmail(params.email)) {
+    return { plan: 'pro', isPro: true, planSource: 'owner' };
+  }
+
+  const sub = params.subscription;
+  const subEndMs = sub?.currentPeriodEnd ? Date.parse(sub.currentPeriodEnd) : NaN;
+  const hasPaidPeriodRemaining =
+    sub?.status === 'active' ||
+    (sub?.status === 'cancelled' && Number.isFinite(subEndMs) && subEndMs > nowMs);
+
+  if (hasPaidPeriodRemaining || params.storedPlan === 'pro' || params.isProFlag === true) {
+    // Distinguish explicit paid subscription from early-bird granted accounts
+    if (sub?.paymentId || sub?.orderId || sub?.status === 'active' || hasPaidPeriodRemaining) {
+      return { plan: 'pro', isPro: true, planSource: 'paid' };
+    }
+  }
+
+  // If subscription was explicitly cancelled and expired, fall through to early-bird only if user did not explicitly cancel an early-bird plan
+  const explicitCancelWithoutPaid = sub?.status === 'cancelled' && !sub?.paymentId && !sub?.orderId;
+  if (!explicitCancelWithoutPaid && isEarlyBirdEligible(params.createdAt, nowMs)) {
+    return { plan: 'pro', isPro: true, planSource: 'early_bird' };
+  }
+
+  if (params.storedPlan === 'pro' || params.isProFlag === true) {
+    return { plan: 'pro', isPro: true, planSource: 'paid' };
+  }
+
+  return { plan: 'free', isPro: false, planSource: 'free' };
+}
+
 

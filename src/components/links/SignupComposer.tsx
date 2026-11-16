@@ -43,6 +43,7 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -81,6 +82,7 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
     if (!validate() || isSubmitting) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await onSave({
         heading: heading.trim(),
@@ -89,8 +91,12 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
         button: buttonLabel.trim(),
         consent: consent.trim(),
       });
-    } catch {
-      // Error handled by parent
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'pro_required') {
+        setSubmitError('Upgrade to Pro to add an Audience Signup form.');
+      } else {
+        setSubmitError(err instanceof Error ? err.message : "Couldn't save signup form. Try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -254,6 +260,12 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
         <p className="text-[12px] text-muted">
           {copy.signup.dashboard.responsibilityNotice}
         </p>
+
+        {submitError && (
+          <p className="text-[13px] text-red-600 font-medium" role="alert">
+            {submitError}
+          </p>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">

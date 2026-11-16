@@ -1,3 +1,5 @@
+import type { SubscriptionRecord } from '../../src/lib/plan.ts';
+
 export interface ProfileSaveInput {
   userId: string;
   username: string;
@@ -12,6 +14,8 @@ export interface ProfileSaveInput {
   socialsPosition?: 'top' | 'bottom' | 'both';
   primaryEmail?: string | null;
   plan?: string;
+  createdAt?: string | null;
+  subscription?: Partial<SubscriptionRecord> | null;
   status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
   isPublished?: boolean;
   hideFooter?: boolean;
@@ -42,6 +46,8 @@ export interface MergedProfileSave {
   socialsPosition: 'top' | 'bottom' | 'both';
   primaryEmail: string | null;
   plan: string;
+  createdAt: string;
+  subscription: SubscriptionRecord | null;
   status: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
   isPublished: boolean;
   hideFooter: boolean;
@@ -63,7 +69,7 @@ export function mergeProfileForSave(
   incoming: ProfileSaveInput,
   isPrivilegedEmail: boolean
 ): MergedProfileSave {
-  const cleanUsername = (incoming.username || '').toLowerCase().trim();
+  const cleanUsername = (incoming.username || '').replace(/^@+/, '').toLowerCase().trim();
   const prev = existing || {};
 
   const finalUserId =
@@ -75,6 +81,31 @@ export function mergeProfileForSave(
     incoming.primaryEmail !== undefined
       ? incoming.primaryEmail
       : (prev.primaryEmail ?? null);
+
+  const createdAt: string =
+    prev.createdAt ||
+    prev.claimedAt ||
+    incoming.createdAt ||
+    new Date().toISOString();
+
+  const mergedSubscription: SubscriptionRecord | null =
+    incoming.subscription === null
+      ? null
+      : incoming.subscription
+        ? {
+            status: incoming.subscription.status || prev.subscription?.status || 'none',
+            cycle: incoming.subscription.cycle ?? prev.subscription?.cycle ?? null,
+            startedAt: incoming.subscription.startedAt ?? prev.subscription?.startedAt ?? null,
+            currentPeriodEnd:
+              incoming.subscription.currentPeriodEnd ?? prev.subscription?.currentPeriodEnd ?? null,
+            cancelledAt: incoming.subscription.cancelledAt ?? prev.subscription?.cancelledAt ?? null,
+            cancelAtPeriodEnd:
+              incoming.subscription.cancelAtPeriodEnd ?? prev.subscription?.cancelAtPeriodEnd ?? false,
+            paymentId: incoming.subscription.paymentId ?? prev.subscription?.paymentId ?? null,
+            orderId: incoming.subscription.orderId ?? prev.subscription?.orderId ?? null,
+            amountInr: incoming.subscription.amountInr ?? prev.subscription?.amountInr ?? null,
+          }
+        : (prev.subscription ?? null);
 
   const rawPlan =
     incoming.plan !== undefined ? incoming.plan : (prev.plan || 'free');
@@ -131,6 +162,8 @@ export function mergeProfileForSave(
         : prev.socialsPosition || 'top',
     primaryEmail,
     plan,
+    createdAt,
+    subscription: mergedSubscription,
     status,
     isPublished,
     hideFooter:

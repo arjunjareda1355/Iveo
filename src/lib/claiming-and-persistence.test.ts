@@ -41,7 +41,7 @@ test('dbClaimUsername: atomically claims username and enforces case-insensitive 
   });
   assert.equal(claimA.ok, true);
   assert.equal(claimA.username, username.toLowerCase());
-  assert.equal(claimA.profileUrl, `https://iveo.site/${username.toLowerCase()}`);
+  assert.equal(claimA.profileUrl, `https://iveo.site/@${username.toLowerCase()}`);
 
   // 2. User B tries to claim the same username (uppercase variant) -> must be rejected
   const claimB = await dbClaimUsername(testUserB, username.toUpperCase());

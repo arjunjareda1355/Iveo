@@ -171,7 +171,7 @@ export async function resolveSeoHeadForSegment(
   const cleanFull = (rawSegment || '').replace(/^\/+|\/+$/g, '').toLowerCase();
   const firstSegment = cleanFull.split('/')[0] || '';
 
-  if (!cleanFull) {
+  if (!cleanFull || ['@vite', '@react-refresh', '@fs', '@id'].includes(firstSegment)) {
     return {
       tags: buildMainDomainHeadTags(origin),
       ssrBodyHtml: '',
@@ -182,6 +182,7 @@ export async function resolveSeoHeadForSegment(
     };
   }
 
+  const hasAtPrefix = firstSegment.startsWith('@');
   const segmentKind = classifySegment(firstSegment);
   let pageData: PublicPageServerData | null = null;
   let failed = false;
@@ -205,9 +206,22 @@ export async function resolveSeoHeadForSegment(
             failed: false,
             foundProfile: false,
             httpStatus: 301,
-            redirectLocation: `${origin}/${encodeURIComponent(redirectTarget)}`,
+            redirectLocation: `/@${encodeURIComponent(redirectTarget.replace(/^@+/, ''))}`,
           };
         }
+      }
+
+      // Legacy path /username -> permanently 301 redirect to /@username when profile exists
+      if (!hasAtPrefix && pageData) {
+        return {
+          tags: '',
+          ssrBodyHtml: '',
+          cacheControl: 'public, max-age=300',
+          failed: false,
+          foundProfile: true,
+          httpStatus: 301,
+          redirectLocation: `/@${encodeURIComponent(pageData.username.replace(/^@+/, ''))}`,
+        };
       }
     }
   }

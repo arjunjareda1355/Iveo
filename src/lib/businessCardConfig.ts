@@ -646,7 +646,7 @@ export function buildBackSocialLinks(
   }
 
   if (!seen.has('website') && cleanUsername && items.length < 4) {
-    pushEntry('website', `https://iveo.site/${cleanUsername}`);
+    pushEntry('website', `https://iveo.site/@${cleanUsername}`);
   }
 
   return items.slice(0, 6);

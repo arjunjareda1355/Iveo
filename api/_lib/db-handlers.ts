@@ -55,6 +55,18 @@ import {
   validateProfileSeo,
 } from './seoService.ts';
 import { inspectUrlWithGsc } from './searchEngines.ts';
+import {
+  EARLY_BIRD_PRO_DEADLINE_ISO,
+  resolveEffectivePlan,
+  type SubscriptionRecord,
+} from '../../src/lib/plan.ts';
+import {
+  buildSocialOAuthUrl,
+  exchangeSocialOAuthCode,
+  fetchSocialEmbedMetadata,
+  isValidSocialOAuthProvider,
+  parseSocialOAuthState,
+} from './socialIntegrations.ts';
 
 /**
  * GET /api/db/readiness
@@ -116,7 +128,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     }
   }
 
-  const clean = raw.toLowerCase().trim();
+  const clean = raw.replace(/^@+/, '').toLowerCase().trim();
   if (!clean) {
     return res.status(400).json({ error: 'missing_username' });
   }
@@ -192,6 +204,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         thumbnailUrl: b.thumbnailUrl || null,
         layout: b.layout || 'classic',
         embedProvider: b.embedProvider || null,
+        embedMeta: b.embedMeta || null,
         isProtected: Boolean(b.isProtected),
         signup: b.signup || null,
         tipJar: b.tipJar || null,
@@ -209,11 +222,14 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         download: b.download || null,
       }));
 
-    const isPro = Boolean(
-      profile.isPro ||
-      profile.plan === 'pro' ||
-      isPrivilegedEmailServer(profile.primaryEmail)
-    );
+    const resolvedPlan = resolveEffectivePlan({
+      email: profile.primaryEmail,
+      storedPlan: profile.plan,
+      isProFlag: profile.isPro,
+      createdAt: profile.createdAt || profile.claimedAt || null,
+      subscription: profile.subscription || null,
+    });
+    const isPro = resolvedPlan.isPro;
 
     const responsePayload = {
       profile: {
@@ -224,8 +240,9 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         avatarType: profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default')),
         avatarId: profile.avatarId || null,
         vibeId: profile.vibeId || 'clean',
-        plan: isPro ? 'pro' : 'free',
+        plan: resolvedPlan.plan,
         isPro,
+        planSource: resolvedPlan.planSource,
         isVerified: isPro,
         buttonShape: profile.buttonShape ?? null,
         socials: profile.socials || {},
@@ -265,8 +282,8 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
 export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
   const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
-  const username = (body.username as string || '').toLowerCase().trim();
-  const previousUsernameHint = (body.previousUsername as string || '').toLowerCase().trim() || null;
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
+  const previousUsernameHint = (body.previousUsername as string || '').replace(/^@+/, '').toLowerCase().trim() || null;
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
   const profileData = body.profile || body.profileData || body;
 
@@ -291,7 +308,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
         return res.status(409).json({
           ok: false,
           error: 'already_claimed',
-          message: `iveo.site/${username} is already claimed by another creator. Please pick another address.`,
+          message: `iveo.site/@${username} is already claimed by another creator. Please pick another address.`,
         });
       }
     } catch {
@@ -326,14 +343,22 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
           new Promise((resolve) => setTimeout(resolve, 2000)),
         ]);
       }
+      const claimCreatedAt = profileData?.createdAt || new Date().toISOString();
+      const resolvedClaimPlan = resolveEffectivePlan({
+        email: primaryEmail,
+        storedPlan: profileData?.plan,
+        createdAt: claimCreatedAt,
+        subscription: profileData?.subscription,
+      });
       // Sync new claim and profile to Firebase (bounded await so subsequent renames never race)
       await Promise.race([
         firebaseSaveProfile(
           result.username,
           {
             ...(profileData || {}),
+            createdAt: claimCreatedAt,
             primaryEmail,
-            plan: isPrivilegedEmailServer(primaryEmail) ? 'pro' : (profileData?.plan || 'free'),
+            plan: resolvedClaimPlan.plan,
           },
           userId
         ).catch(() => {}),
@@ -350,7 +375,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
       username: result.username,
       releasedUsername: releasedOld,
       profileUrl: result.profileUrl,
-      message: `iveo.site/${result.username} successfully claimed!`,
+      message: `iveo.site/@${result.username} successfully claimed!`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: 'claim_failed', message: err?.message });
@@ -392,16 +417,22 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
       return res.status(200).json({ ok: true, claimed: false });
     }
 
-    const isPro = Boolean(
-      profile.isPro ||
-      profile.plan === 'pro' ||
-      isPrivilegedEmailServer(email || profile.primaryEmail)
-    );
+    const createdAt = profile.createdAt || profile.claimedAt || null;
+    const resolvedPlan = resolveEffectivePlan({
+      email: email || profile.primaryEmail,
+      storedPlan: profile.plan,
+      isProFlag: profile.isPro,
+      createdAt,
+      subscription: profile.subscription || null,
+    });
     profile = {
       ...profile,
-      plan: isPro ? 'pro' : 'free',
-      isPro,
-      isVerified: isPro,
+      plan: resolvedPlan.plan,
+      isPro: resolvedPlan.isPro,
+      planSource: resolvedPlan.planSource,
+      createdAt,
+      subscription: profile.subscription || null,
+      isVerified: resolvedPlan.isPro,
     };
 
     let blocks = await dbGetBlocks(profile.username);
@@ -466,14 +497,21 @@ export async function handleMigrateLegacy(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
-  const username = (body.username as string || '').toLowerCase().trim();
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
   try {
-    const resolvedEmail = body.primaryEmail || req.headers['x-user-email'] as string || null;
-    const resolvedPlan = isPrivilegedEmailServer(resolvedEmail) ? 'pro' : body.plan;
+    const existing = await dbGetProfile(username).catch(() => null);
+    const resolvedEmail = body.primaryEmail || existing?.primaryEmail || req.headers['x-user-email'] as string || null;
+    const resolvedPlanInfo = resolveEffectivePlan({
+      email: resolvedEmail,
+      storedPlan: body.plan ?? existing?.plan,
+      createdAt: body.createdAt ?? existing?.createdAt ?? null,
+      subscription: body.subscription !== undefined ? body.subscription : existing?.subscription,
+    });
+    const resolvedPlan = resolvedPlanInfo.plan;
     const saveResult = await dbSaveProfile({
       userId: body.userId || req.headers['x-user-id'] as string || 'owner',
       username,
@@ -488,6 +526,8 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       socialsPosition: body.socialsPosition,
       primaryEmail: resolvedEmail,
       plan: resolvedPlan,
+      createdAt: body.createdAt,
+      subscription: body.subscription,
       status: body.status,
       isPublished: body.isPublished,
       hideFooter: body.hideFooter,
@@ -524,7 +564,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, plan: resolvedPlan, isPro: resolvedPlanInfo.isPro, planSource: resolvedPlanInfo.planSource });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
   }
@@ -910,7 +950,7 @@ export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleRecordAnalyticsEvent(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
-  const username = (body.username as string || '').toLowerCase().trim();
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   const isClick =
     body.eventType === 'link_click' ||
     body.eventType === 'click' ||
@@ -944,7 +984,7 @@ export async function handleRecordAnalyticsEvent(req: ExpressReq, res: ExpressRe
  * GET /api/analytics?username=...&from=...&to=...&isPro=...
  */
 export async function handleGetAnalytics(req: ExpressReq, res: ExpressRes) {
-  const username = (req.query.username as string || '').toLowerCase().trim();
+  const username = (req.query.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
@@ -1118,6 +1158,332 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
 }
 
 /**
+ * GET /api/integrations/embed?url=...
+ * Server-side metadata enrichment for Discord, GitHub, LinkedIn, and X embeds
+ */
+export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) {
+  const rawUrl = String(req.query.url || '').trim();
+  if (!rawUrl) {
+    return res.status(400).json({ ok: false, error: 'missing_url', message: 'Paste a link URL to inspect.' });
+  }
+  try {
+    const result = await fetchSocialEmbedMetadata(rawUrl);
+    if (!result) {
+      return res.status(400).json({
+        ok: false,
+        error: 'unsupported_embed_url',
+        message: 'Paste a valid YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, or X URL.',
+      });
+    }
+    return res.status(200).json({
+      ok: true,
+      provider: result.parsed.provider,
+      canonicalUrl: result.parsed.canonicalUrl,
+      suggestedTitle: result.suggestedTitle,
+      embedMeta: result.embedMeta,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'embed_lookup_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/oauth/:provider/url?origin=...
+ * Generates authorization URL for Discord, GitHub, LinkedIn, or X popup OAuth
+ */
+export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
+  const providerRaw = String(req.params.provider || '').toLowerCase().trim();
+  if (!isValidSocialOAuthProvider(providerRaw)) {
+    return res.status(400).json({ ok: false, error: 'unsupported_provider' });
+  }
+  const clientOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
+  const origin = /^https?:\/\//i.test(clientOrigin) ? clientOrigin : getExpressRequestOrigin(req);
+  const built = buildSocialOAuthUrl(providerRaw, origin);
+  return res.status(200).json({
+    ok: true,
+    provider: providerRaw,
+    url: built.url,
+    redirectUri: built.redirectUri,
+  });
+}
+
+/**
+ * GET /api/oauth/:provider/callback (and trailing slash)
+ */
+export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes) {
+  const providerRaw = String(req.params.provider || '').toLowerCase().trim();
+  const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
+  const oauthError = typeof req.query.error === 'string' ? req.query.error.trim() : '';
+  const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
+
+  const sendPopupHtml = (payload: Record<string, any>) => {
+    const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Social Account Connection</title></head>
+<body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#111;">
+  <div style="text-align:center;padding:24px;">
+    <p style="font-size:15px;font-weight:600;margin:0 0 8px;">${payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' ? 'Account connected to Iveo' : 'Could not connect account'}</p>
+    <p style="font-size:13px;color:#666;margin:0;">This window will close automatically.</p>
+  </div>
+  <script>
+    (function(){
+      var data = ${safeJson};
+      try { if (window.opener) { window.opener.postMessage(data, '*'); } } catch (e) {}
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          var bc = new BroadcastChannel('iveo_social_oauth');
+          bc.postMessage(data);
+          bc.close();
+        }
+      } catch (e) {}
+      try { localStorage.setItem('iveo_social_oauth_result', JSON.stringify(data)); } catch (e) {}
+      setTimeout(function(){ window.close(); }, 350);
+    })();
+  </script>
+</body>
+</html>`);
+  };
+
+  if (!isValidSocialOAuthProvider(providerRaw)) {
+    return sendPopupHtml({
+      type: 'IVEO_SOCIAL_OAUTH_ERROR',
+      error: 'Unsupported OAuth provider.',
+    });
+  }
+
+  if (oauthError || !code) {
+    return sendPopupHtml({
+      type: 'IVEO_SOCIAL_OAUTH_ERROR',
+      provider: providerRaw,
+      error: oauthError || 'Authorization was cancelled.',
+    });
+  }
+
+  try {
+    const fallbackOrigin = getExpressRequestOrigin(req);
+    const { redirectUri, nonce } = parseSocialOAuthState(stateParam, fallbackOrigin, providerRaw);
+    const connected = await exchangeSocialOAuthCode(providerRaw, code, redirectUri, nonce);
+    return sendPopupHtml({
+      type: 'IVEO_SOCIAL_OAUTH_SUCCESS',
+      provider: providerRaw,
+      connection: connected,
+    });
+  } catch (err: any) {
+    return sendPopupHtml({
+      type: 'IVEO_SOCIAL_OAUTH_ERROR',
+      provider: providerRaw,
+      error: err?.message || 'Failed to read profile details.',
+    });
+  }
+}
+
+/**
+ * GET /api/subscription
+ * POST /api/subscription/cancel
+ * POST /api/subscription/reactivate
+ */
+export async function handleGetSubscription(req: ExpressReq, res: ExpressRes) {
+  const rawUsername = String(req.query.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const userId = String(req.query.userId || req.headers['x-user-id'] || '').trim();
+  const email = String(req.query.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+
+  try {
+    const profile = rawUsername
+      ? await dbGetProfile(rawUsername)
+      : (userId || email)
+        ? await dbGetProfileByUserId(userId, email)
+        : null;
+
+    if (!profile) {
+      const fallback = resolveEffectivePlan({ email });
+      return res.status(200).json({
+        ok: true,
+        plan: fallback.plan,
+        isPro: fallback.isPro,
+        planSource: fallback.planSource,
+        createdAt: null,
+        earlyBirdDeadline: EARLY_BIRD_PRO_DEADLINE_ISO,
+        subscription: null,
+      });
+    }
+
+    const resolved = resolveEffectivePlan({
+      email: email || profile.primaryEmail,
+      storedPlan: profile.plan,
+      isProFlag: profile.isPro,
+      createdAt: profile.createdAt || profile.claimedAt || null,
+      subscription: profile.subscription || null,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      username: profile.username,
+      plan: resolved.plan,
+      isPro: resolved.isPro,
+      planSource: resolved.planSource,
+      createdAt: profile.createdAt || profile.claimedAt || null,
+      earlyBirdDeadline: EARLY_BIRD_PRO_DEADLINE_ISO,
+      subscription: profile.subscription || null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'subscription_fetch_failed', message: err?.message });
+  }
+}
+
+export async function handleCancelSubscription(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const rawUsername = String(body.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const userId = String(body.userId || req.headers['x-user-id'] || '').trim();
+  const email = String(body.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+
+  if (!rawUsername && !userId) {
+    return res.status(400).json({ ok: false, error: 'missing_identifier' });
+  }
+
+  try {
+    const existing = rawUsername
+      ? await dbGetProfile(rawUsername)
+      : await dbGetProfileByUserId(userId, email);
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: 'profile_not_found' });
+    }
+
+    const authorized = await dbVerifyOwnership(existing.username, userId || existing.userId, email || existing.primaryEmail);
+    if (!authorized) {
+      return res.status(403).json({ ok: false, error: 'unauthorized' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const prevSub: Partial<SubscriptionRecord> = existing.subscription || {};
+    const hasPaidPeriod = Boolean(prevSub.paymentId || prevSub.orderId);
+    const updatedSubscription: SubscriptionRecord = {
+      status: 'cancelled',
+      cycle: prevSub.cycle || null,
+      startedAt: prevSub.startedAt || existing.createdAt || nowIso,
+      currentPeriodEnd: prevSub.currentPeriodEnd || null,
+      cancelledAt: nowIso,
+      cancelAtPeriodEnd: true,
+      paymentId: prevSub.paymentId || null,
+      orderId: prevSub.orderId || null,
+      amountInr: prevSub.amountInr ?? null,
+    };
+
+    const nextPlanInfo = resolveEffectivePlan({
+      email: email || existing.primaryEmail,
+      storedPlan: hasPaidPeriod ? 'pro' : 'free',
+      createdAt: existing.createdAt || null,
+      subscription: updatedSubscription,
+    });
+
+    await dbSaveProfile({
+      userId: userId || existing.userId,
+      username: existing.username,
+      primaryEmail: email || existing.primaryEmail,
+      plan: nextPlanInfo.plan,
+      subscription: updatedSubscription,
+    });
+
+    await Promise.race([
+      firebaseSaveProfile(
+        existing.username,
+        { ...existing, plan: nextPlanInfo.plan, subscription: updatedSubscription },
+        existing.userId
+      ).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+
+    invalidatePublicPageCache(existing.username);
+
+    return res.status(200).json({
+      ok: true,
+      plan: nextPlanInfo.plan,
+      isPro: nextPlanInfo.isPro,
+      planSource: nextPlanInfo.planSource,
+      subscription: updatedSubscription,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'subscription_cancel_failed', message: err?.message });
+  }
+}
+
+export async function handleReactivateSubscription(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const rawUsername = String(body.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const userId = String(body.userId || req.headers['x-user-id'] || '').trim();
+  const email = String(body.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+
+  if (!rawUsername && !userId) {
+    return res.status(400).json({ ok: false, error: 'missing_identifier' });
+  }
+
+  try {
+    const existing = rawUsername
+      ? await dbGetProfile(rawUsername)
+      : await dbGetProfileByUserId(userId, email);
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: 'profile_not_found' });
+    }
+
+    const authorized = await dbVerifyOwnership(existing.username, userId || existing.userId, email || existing.primaryEmail);
+    if (!authorized) {
+      return res.status(403).json({ ok: false, error: 'unauthorized' });
+    }
+
+    const prevSub: Partial<SubscriptionRecord> = existing.subscription || {};
+    const hasPaidPeriod = Boolean(prevSub.paymentId || prevSub.orderId);
+    const updatedSubscription: SubscriptionRecord = {
+      status: 'active',
+      cycle: prevSub.cycle || null,
+      startedAt: prevSub.startedAt || existing.createdAt || new Date().toISOString(),
+      currentPeriodEnd: prevSub.currentPeriodEnd || null,
+      cancelledAt: null,
+      cancelAtPeriodEnd: false,
+      paymentId: prevSub.paymentId || null,
+      orderId: prevSub.orderId || null,
+      amountInr: prevSub.amountInr ?? null,
+    };
+
+    const nextPlanInfo = resolveEffectivePlan({
+      email: email || existing.primaryEmail,
+      storedPlan: hasPaidPeriod ? 'pro' : existing.plan,
+      createdAt: existing.createdAt || null,
+      subscription: updatedSubscription,
+    });
+
+    await dbSaveProfile({
+      userId: userId || existing.userId,
+      username: existing.username,
+      primaryEmail: email || existing.primaryEmail,
+      plan: nextPlanInfo.plan,
+      subscription: updatedSubscription,
+    });
+
+    await Promise.race([
+      firebaseSaveProfile(
+        existing.username,
+        { ...existing, plan: nextPlanInfo.plan, subscription: updatedSubscription },
+        existing.userId
+      ).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+
+    invalidatePublicPageCache(existing.username);
+
+    return res.status(200).json({
+      ok: true,
+      plan: nextPlanInfo.plan,
+      isPro: nextPlanInfo.isPro,
+      planSource: nextPlanInfo.planSource,
+      subscription: updatedSubscription,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'subscription_reactivate_failed', message: err?.message });
+  }
+}
+
+/**
  * GET /api/discover
  * Returns public indexable creator profiles for crawlable internal linking & search discovery
  */
@@ -1153,7 +1519,7 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
       vibeId: p.vibeId || 'clean',
       isPro: Boolean(p.isPro || p.plan === 'pro'),
       isVerified: Boolean(p.isPro || p.plan === 'pro'),
-      url: `${origin}/${encodeURIComponent(p.username)}`,
+      url: `${origin}/@${encodeURIComponent(p.username.replace(/^@+/, ''))}`,
       updatedAt: p.updatedAt,
     }));
 
@@ -1240,15 +1606,15 @@ export async function handleSeoAdminInspect(req: ExpressReq, res: ExpressRes) {
     return res.status(403).json({ ok: false, error: 'forbidden' });
   }
 
-  const username = String(req.body?.username || '').toLowerCase().trim();
-  if (!username) {
+  const rawUsername = String(req.body?.username || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!rawUsername) {
     return res.status(400).json({ ok: false, error: 'missing_username' });
   }
 
   try {
-    const canonical = `${getCanonicalSiteOrigin()}/${encodeURIComponent(username)}`;
+    const canonical = `${getCanonicalSiteOrigin()}/@${encodeURIComponent(rawUsername)}`;
     const [localValidation, gsc] = await Promise.all([
-      validateProfileSeo(getCanonicalSiteOrigin(), username),
+      validateProfileSeo(getCanonicalSiteOrigin(), rawUsername),
       inspectUrlWithGsc(canonical),
     ]);
     return res.status(200).json({ ok: true, targetUrl: canonical, localValidation, gsc });
