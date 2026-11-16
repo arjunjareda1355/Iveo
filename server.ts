@@ -79,9 +79,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Support JSON bodies for API requests
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Support JSON bodies (including up to 5MB base64 background uploads)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 /**
  * Adapts standard Web Request/Response handlers for Express
@@ -274,6 +274,8 @@ async function startServer() {
   app.post('/api/profile', dbHandlers.handleSaveProfile);
   app.post('/api/avatar', dbHandlers.handleUploadAvatar);
   app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);
+  app.post('/api/background/upload', dbHandlers.handleUploadBackground);
+  app.get('/api/backgrounds/:username/:file', dbHandlers.handleServeBackground);
   app.get('/api/blocks', dbHandlers.handleGetBlocks);
   app.post('/api/blocks', dbHandlers.handleSaveBlocks);
   app.post('/api/contacts', dbHandlers.handleSaveContact);
@@ -296,8 +298,10 @@ async function startServer() {
   app.post('/api/seo/admin/regenerate-sitemap', dbHandlers.handleSeoAdminRegenerate);
   app.get('/api/seo/admin/validate', dbHandlers.handleSeoAdminValidate);
   app.post('/api/seo/admin/inspect', dbHandlers.handleSeoAdminInspect);
+  app.post('/api/seo/admin/moderate-background', dbHandlers.handleSeoAdminModerateBackground);
   app.post('/api/unlock-link', dbHandlers.handleUnlockLink);
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
+  app.get('/api/link-password/status', dbHandlers.handleGetProtectedLinkIds);
   app.post('/api/account/delete', dbHandlers.handleDeleteAccount);
 
   // 4.1 Safe CORS image proxy for HD Canvas business card export (external avatars)

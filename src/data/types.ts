@@ -1,12 +1,24 @@
 import { VibeId } from '../lib/vibes';
-import { ButtonShape, BackgroundConfig, LayoutSettings } from '../lib/preferences';
+import {
+  ButtonShape,
+  BackgroundConfig,
+  BackgroundType,
+  GradientDirection,
+  BackgroundImageFit,
+  DEFAULT_BACKGROUND_CONFIG,
+  LayoutSettings,
+} from '../lib/preferences';
 import type { FontSettings } from '../lib/fonts';
 import type { ButtonColors } from '../lib/colors';
 import type { BusinessCardConfig } from '../lib/businessCardConfig';
 import type { PlanSource, SubscriptionRecord } from '../lib/plan';
 
+export { DEFAULT_BACKGROUND_CONFIG };
 export type {
   BackgroundConfig,
+  BackgroundType,
+  GradientDirection,
+  BackgroundImageFit,
   FontSettings,
   ButtonColors,
   BusinessCardConfig,

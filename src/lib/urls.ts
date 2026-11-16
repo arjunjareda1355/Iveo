@@ -57,33 +57,99 @@ const SOCIAL_BASE_URLS: Record<string, string> = {
   substack: 'https://substack.com/@',
 };
 
-export function normalizeSocialUrl(platform: string, raw: string): string {
-  const clean = (raw || '').trim();
-  if (!clean) return '';
+const SOCIAL_ALLOWED_DOMAINS: Record<string, string[]> = {
+  instagram: ['instagram.com', 'instagr.am'],
+  youtube: ['youtube.com', 'youtu.be'],
+  twitter: ['x.com', 'twitter.com'],
+  x: ['x.com', 'twitter.com'],
+  tiktok: ['tiktok.com', 'vm.tiktok.com'],
+  threads: ['threads.net', 'threads.com'],
+  github: ['github.com'],
+  linkedin: ['linkedin.com', 'lnkd.in'],
+  twitch: ['twitch.tv'],
+  telegram: ['t.me', 'telegram.me', 'telegram.org'],
+  discord: ['discord.gg', 'discord.com', 'discordapp.com'],
+  spotify: ['open.spotify.com', 'spotify.com'],
+  patreon: ['patreon.com'],
+  substack: ['substack.com'],
+  whatsapp: ['wa.me', 'api.whatsapp.com', 'whatsapp.com'],
+  facebook: ['facebook.com', 'fb.com', 'fb.me'],
+  snapchat: ['snapchat.com', 't.snapchat.com'],
+  pinterest: ['pinterest.com', 'pin.it'],
+};
 
-  if (platform === 'mail' || platform === 'email') {
-    if (!clean.startsWith('mailto:') && clean.includes('@')) {
-      return `mailto:${clean}`;
-    }
-    return clean;
+function matchesAllowedDomain(hostname: string, allowed: string[]): boolean {
+  const host = hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+  return allowed.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+export function validateAndFormatSocialInput(
+  platform: string,
+  raw: string
+): { ok: true; url: string } | { ok: false; error: string } {
+  const clean = (raw || '').trim();
+  if (!clean) {
+    return { ok: true, url: '' };
   }
 
-  if (/^https?:\/\//i.test(clean)) return clean;
+  if (/^(javascript|data|vbscript):/i.test(clean)) {
+    return { ok: false, error: 'Unsupported link scheme.' };
+  }
+
+  if (platform === 'mail' || platform === 'email') {
+    const emailRaw = clean.replace(/^mailto:/i, '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+      return { ok: false, error: 'Enter a valid email address (e.g. you@example.com).' };
+    }
+    return { ok: true, url: `mailto:${emailRaw}` };
+  }
 
   if (platform === 'whatsapp') {
-    const digits = clean.replace(/[^\d]/g, '');
-    if (digits && !clean.includes('.')) {
-      return `https://wa.me/${digits}`;
+    if (!clean.includes('.') && !clean.startsWith('http')) {
+      const digits = clean.replace(/[^\d]/g, '');
+      if (digits.length < 6) {
+        return { ok: false, error: 'Enter a valid WhatsApp phone number or wa.me link.' };
+      }
+      return { ok: true, url: `https://wa.me/${digits}` };
     }
+  }
+
+  const allowed = SOCIAL_ALLOWED_DOMAINS[platform];
+  const looksLikeUrlOrDomain = /^https?:\/\//i.test(clean) || clean.includes('.');
+
+  if (looksLikeUrlOrDomain) {
+    const normalizedCandidate = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    let parsed: URL;
+    try {
+      parsed = new URL(normalizedCandidate);
+    } catch {
+      return { ok: false, error: 'Enter a valid URL or @handle.' };
+    }
+    if (allowed && !matchesAllowedDomain(parsed.hostname, allowed)) {
+      const expected = allowed[0];
+      return {
+        ok: false,
+        error: `This looks like ${parsed.hostname}, not ${expected}. Use a ${expected} link or @handle.`,
+      };
+    }
+    return { ok: true, url: normalizedCandidate };
   }
 
   const base = SOCIAL_BASE_URLS[platform];
   if (base) {
-    const isHandle = clean.startsWith('@') || (!clean.includes('.') && !clean.includes('/'));
-    if (isHandle) {
-      return `${base}${clean.replace(/^@/, '')}`;
+    const handle = clean.replace(/^@+/, '').trim();
+    if (!handle || /\s/.test(handle)) {
+      return { ok: false, error: 'Handle cannot contain spaces.' };
     }
+    return { ok: true, url: `${base}${handle}` };
   }
 
-  return formatExternalUrl(clean);
+  return { ok: true, url: formatExternalUrl(clean) };
+}
+
+export function normalizeSocialUrl(platform: string, raw: string): string {
+  const res = validateAndFormatSocialInput(platform, raw);
+  if (res.ok) return res.url;
+  const clean = (raw || '').trim();
+  return clean ? formatExternalUrl(clean) : '';
 }

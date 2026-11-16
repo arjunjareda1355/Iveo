@@ -18,9 +18,20 @@ import {
   dbSetLinkPassword,
   dbClearLinkPassword,
   dbVerifyLinkPassword,
+  dbFindBlockForUnlock,
+  dbGetProtectedLinkIds,
   dbRecordAnalyticsEvent,
   dbGetAnalytics,
 } from './azureSql.ts';
+import {
+  saveUploadedBackgroundImage,
+  resolveBackgroundFilePath,
+  deleteUserUploadedBackgrounds,
+} from './backgroundUpload.ts';
+import {
+  DEFAULT_BACKGROUND_CONFIG,
+  parseBackgroundConfig,
+} from '../../src/lib/preferences.ts';
 import { isAllowedAvatarHost } from './publicPage.ts';
 import { RESERVED, isPrivilegedEmailServer } from './usernames.ts';
 import { getCanonicalSiteOrigin, getSiteOrigin } from './env.ts';
@@ -140,13 +151,19 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    // Query local SQL profile & blocks in parallel with bounded Firebase profile check
+    // Query local SQL/isolated profile & blocks in parallel with bounded Firebase profile check
+    let fbTimedOut = false;
     const [dbProf, dbBlocksInitial, fbProf] = await Promise.all([
       dbGetProfile(clean).catch(() => null),
       dbGetBlocks(clean).catch(() => []),
       Promise.race([
         firebaseGetProfile(clean).catch(() => null),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 900)),
+        new Promise<null>((resolve) =>
+          setTimeout(() => {
+            fbTimedOut = true;
+            resolve(null);
+          }, 2500)
+        ),
       ]),
     ]);
 
@@ -161,12 +178,18 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     }
 
     if (!profile || isSyntheticTestHandle(clean)) {
-      publicPageCache.set(clean, {
-        status: 404,
-        payload: { error: 'not_found' },
-        expiresAt: Date.now() + 8_000,
-      });
+      if (!fbTimedOut) {
+        publicPageCache.set(clean, {
+          status: 404,
+          payload: { error: 'not_found' },
+          expiresAt: Date.now() + 1_500,
+        });
+      }
       return res.status(404).json({ error: 'not_found' });
+    }
+
+    if (cameFromFirebase && !dbProf && profile.username) {
+      dbSaveProfile({ ...profile, username: clean }).catch(() => {});
     }
 
     const effectiveStatus = profile.status || (profile.isPublished === false ? 'unpublished' : 'active');
@@ -178,12 +201,19 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     if (cameFromFirebase || !allBlocks || allBlocks.length === 0) {
       const fbBlocks = await Promise.race([
         firebaseGetBlocks(clean).catch(() => []),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 900)),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
       ]);
       if (fbBlocks && fbBlocks.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
         allBlocks = fbBlocks;
+        if (!dbBlocksInitial || dbBlocksInitial.length === 0) {
+          dbSaveBlocks(clean, fbBlocks, profile.userId, profile.primaryEmail).catch(() => {});
+        }
       }
     }
+    const protectedIdsSet = new Set(await dbGetProtectedLinkIds(clean).catch(() => []));
+    allBlocks = allBlocks.map((b) =>
+      protectedIdsSet.has(String(b.id)) && !b.isProtected ? { ...b, isProtected: true } : b
+    );
     const now = new Date();
 
     // Map public blocks (strip URLs from protected links until unlocked)
@@ -249,7 +279,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         socialsPosition: profile.socialsPosition || 'top',
         hideFromSearch: Boolean(profile.hideFromSearch),
         hideFooter: Boolean(profile.hideFooter),
-        background: profile.background || null,
+        background: parseBackgroundConfig(profile.background) || { ...DEFAULT_BACKGROUND_CONFIG },
         googleAnalyticsId: profile.googleAnalyticsId || null,
         metaPixelId: profile.metaPixelId || null,
         whatsappNumber: profile.whatsappNumber || null,
@@ -532,7 +562,12 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       isPublished: body.isPublished,
       hideFooter: body.hideFooter,
       hideFromSearch: body.hideFromSearch,
-      background: body.background,
+      background:
+        body.background === undefined
+          ? undefined
+          : body.background === null
+            ? null
+            : parseBackgroundConfig(body.background) || { ...DEFAULT_BACKGROUND_CONFIG },
       googleAnalyticsId: body.googleAnalyticsId,
       metaPixelId: body.metaPixelId,
       whatsappNumber: body.whatsappNumber,
@@ -685,11 +720,77 @@ export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
 }
 
 /**
+ * POST /api/background/upload
+ * Validates & stores custom uploaded background image (PNG/JPG/WebP/AVIF <= 5MB)
+ */
+export async function handleUploadBackground(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
+  const dataUrl = body.dataUrl as string;
+  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
+
+  if (!username) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return res.status(400).json({ ok: false, error: 'missing_data_url' });
+  }
+
+  try {
+    const existing = await dbGetProfile(username).catch(() => null);
+    if (existing) {
+      const authorized = await dbVerifyOwnership(username, userId || existing.userId, primaryEmail || existing.primaryEmail);
+      if (!authorized) {
+        return res.status(403).json({ ok: false, error: 'unauthorized', message: 'Not authorized to upload background for this profile.' });
+      }
+    }
+
+    const saved = saveUploadedBackgroundImage(username, dataUrl);
+    if (!saved.ok) {
+      return res.status(saved.status).json({ ok: false, error: saved.error });
+    }
+    return res.status(200).json({ ok: true, url: saved.url, mime: saved.mime, size: saved.size });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'upload_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/backgrounds/:username/:file
+ * Securely serves uploaded profile background image
+ */
+export async function handleServeBackground(req: ExpressReq, res: ExpressRes) {
+  const username = (req.params.username as string || '').replace(/^@+/, '').toLowerCase().trim();
+  const file = String(req.params.file || '').trim();
+  if (!username || !file) {
+    return res.status(400).end();
+  }
+
+  const found = resolveBackgroundFilePath(username, file);
+  if (!found) {
+    return res.status(404).end();
+  }
+
+  const stats = fs.statSync(found.filePath);
+  const etag = `"${Math.floor(stats.mtimeMs).toString(36)}-${stats.size.toString(36)}"`;
+  res.setHeader('Content-Type', found.mime);
+  res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('ETag', etag);
+
+  if (req.headers['if-none-match'] === etag) {
+    return res.status(304).end();
+  }
+  return res.sendFile(found.filePath);
+}
+
+/**
  * GET /api/blocks?username=...
  * Retrieves owner's blocks
  */
 export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
-  const username = (req.query.username as string || '').toLowerCase().trim();
+  const username = (req.query.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
@@ -699,13 +800,18 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
     if (!blocks || blocks.length === 0) {
       const fbBlocks = await Promise.race([
         firebaseGetBlocks(username).catch(() => []),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
       ]);
       if (fbBlocks && fbBlocks.length > 0) {
         blocks = fbBlocks;
+        dbSaveBlocks(username, fbBlocks).catch(() => {});
       }
     }
-    return res.status(200).json(blocks);
+    const protectedSet = new Set(await dbGetProtectedLinkIds(username).catch(() => []));
+    const synced = blocks.map((b) =>
+      protectedSet.has(String(b.id)) && !b.isProtected ? { ...b, isProtected: true } : b
+    );
+    return res.status(200).json(synced);
   } catch (err: any) {
     return res.status(500).json({ error: 'fetch_failed', message: err?.message });
   }
@@ -864,22 +970,38 @@ export async function handleDeleteContacts(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleUnlockLink(req: ExpressReq, res: ExpressRes) {
   const { linkId, password, username } = req.body || {};
-  if (!linkId || !password) {
+  const cleanLinkId = typeof linkId === 'string' ? linkId.trim() : '';
+  const cleanPwd = typeof password === 'string' ? password.trim() : '';
+  const cleanUser = typeof username === 'string' ? username.replace(/^@+/, '').toLowerCase().trim() : '';
+
+  if (!cleanLinkId || !cleanPwd) {
     return res.status(400).json({ ok: false, reason: 'wrong_password' });
   }
 
   try {
-    const isMatch = await dbVerifyLinkPassword(linkId, password.trim());
+    const isMatch = await dbVerifyLinkPassword(cleanLinkId, cleanPwd, cleanUser || undefined);
     if (!isMatch) {
       return res.status(200).json({ ok: false, reason: 'wrong_password' });
     }
 
-    // Find the real link URL from database
-    let realUrl = 'https://iveo.site';
-    if (username) {
-      const blocks = await dbGetBlocks(username.toLowerCase().trim());
-      const target = blocks.find((b) => b.id === linkId);
-      if (target?.url) realUrl = target.url;
+    // Locate real target URL across local per-user store and Firebase fallback
+    const localFound = await dbFindBlockForUnlock(cleanLinkId, cleanUser || undefined);
+    let realUrl: string | null = localFound.block?.url || null;
+    const ownerUsername = localFound.username || cleanUser || null;
+
+    if (!realUrl && ownerUsername) {
+      const fbBlocks = await Promise.race([
+        firebaseGetBlocks(ownerUsername).catch(() => []),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
+      ]);
+      const fbTarget = fbBlocks.find((b) => b.id === cleanLinkId);
+      if (fbTarget?.url) {
+        realUrl = fbTarget.url;
+      }
+    }
+
+    if (!realUrl) {
+      return res.status(200).json({ ok: false, reason: 'not_found' });
     }
 
     return res.status(200).json({ ok: true, url: realUrl });
@@ -890,26 +1012,58 @@ export async function handleUnlockLink(req: ExpressReq, res: ExpressRes) {
 
 /**
  * POST /api/link-password
- * Owner sets or removes password on a link
+ * Owner sets or removes password on a link and syncs block.isProtected state
  */
 export async function handleSetLinkPassword(req: ExpressReq, res: ExpressRes) {
-  const { linkId, password, remove } = req.body || {};
-  if (!linkId) {
-    return res.status(400).json({ error: 'missing_link_id' });
+  const { linkId, password, remove, username } = req.body || {};
+  const cleanLinkId = typeof linkId === 'string' ? linkId.trim() : '';
+  const cleanUser = typeof username === 'string' ? username.replace(/^@+/, '').toLowerCase().trim() : '';
+  if (!cleanLinkId) {
+    return res.status(400).json({ ok: false, error: 'missing_link_id' });
   }
 
   try {
+    let resolvedOwner: string | null = cleanUser || null;
     if (remove) {
-      await dbClearLinkPassword(linkId);
+      resolvedOwner = (await dbClearLinkPassword(cleanLinkId, cleanUser || undefined)) || resolvedOwner;
     } else {
-      if (!password || password.length < 4 || password.length > 64) {
-        return res.status(400).json({ error: 'invalid_password' });
+      if (!password || typeof password !== 'string' || password.trim().length < 4 || password.trim().length > 64) {
+        return res.status(400).json({ ok: false, error: 'invalid_password' });
       }
-      await dbSetLinkPassword(linkId, password);
+      resolvedOwner = (await dbSetLinkPassword(cleanLinkId, password.trim(), cleanUser || undefined)) || resolvedOwner;
     }
-    return res.status(200).json({ ok: true });
+
+    if (resolvedOwner) {
+      const updatedBlocks = await dbGetBlocks(resolvedOwner).catch(() => []);
+      if (updatedBlocks.length > 0) {
+        await Promise.race([
+          firebaseSaveBlocks(resolvedOwner, updatedBlocks).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 1800)),
+        ]);
+      }
+      invalidatePublicPageCache(resolvedOwner);
+    }
+
+    return res.status(200).json({ ok: true, isProtected: !remove });
   } catch (err: any) {
-    return res.status(500).json({ error: 'password_failed', message: err?.message });
+    return res.status(500).json({ ok: false, error: 'password_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/link-password/status?username=...
+ * Returns list of block IDs currently password-protected for the user
+ */
+export async function handleGetProtectedLinkIds(req: ExpressReq, res: ExpressRes) {
+  const username = String(req.query.username || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!username) {
+    return res.status(200).json({ ok: true, protectedIds: [] });
+  }
+  try {
+    const protectedIds = await dbGetProtectedLinkIds(username);
+    return res.status(200).json({ ok: true, protectedIds });
+  } catch {
+    return res.status(200).json({ ok: true, protectedIds: [] });
   }
 }
 
@@ -1620,6 +1774,47 @@ export async function handleSeoAdminInspect(req: ExpressReq, res: ExpressRes) {
     return res.status(200).json({ ok: true, targetUrl: canonical, localValidation, gsc });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'inspect_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/seo/admin/moderate-background
+ * Allows SEO/Platform admin to reset a user's custom/uploaded background to Pure White default
+ */
+export async function handleSeoAdminModerateBackground(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden' });
+  }
+
+  const username = String(req.body?.username || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!username) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+
+  try {
+    const existing = await dbGetProfile(username);
+    if (!existing) {
+      return res.status(404).json({ ok: false, error: 'profile_not_found' });
+    }
+    deleteUserUploadedBackgrounds(username);
+    await dbSaveProfile({
+      userId: existing.userId || 'owner',
+      username,
+      primaryEmail: existing.primaryEmail,
+      background: { ...DEFAULT_BACKGROUND_CONFIG },
+    });
+    await Promise.race([
+      firebaseSaveProfile(
+        username,
+        { ...existing, background: { ...DEFAULT_BACKGROUND_CONFIG } },
+        existing.userId
+      ).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+    invalidatePublicPageCache(username);
+    return res.status(200).json({ ok: true, username, background: { ...DEFAULT_BACKGROUND_CONFIG } });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'moderate_failed', message: err?.message });
   }
 }
 

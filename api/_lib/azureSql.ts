@@ -318,74 +318,253 @@ export async function checkDatabaseReadiness(): Promise<{
 import { isPrivilegedEmailServer, validateUsernameServer } from './usernames.ts';
 
 // ============================================================================
-// Server-Side Persistent Store Fallback (Ensures cross-browser functionality)
+// Isolated Per-User Atomic Disk Store (Zero cross-user overwrite / race risk)
 // ============================================================================
-const STORE_PATH = path.resolve(process.cwd(), 'data', 'server_store.json');
-
-export interface ServerStoreData {
-  profiles: Record<string, any>;
-  userToUsername: Record<string, string>;
-  claims: Record<string, { userId: string; username: string; claimedAt: string }>;
-  blocks: Record<string, any[]>;
-  contacts: Record<string, any[]>;
+export interface UserRecord {
+  profile: any | null;
+  blocks: any[];
+  contacts: any[];
   passwords: Record<string, string>;
-  analytics: Record<string, any[]>;
-  redirects: Record<string, { to: string; updatedAt: string }>;
+  analytics: any[];
 }
 
-function readServerStore(): ServerStoreData {
+type IndexPasswordEntry = { password: string; username?: string };
+
+const migratedDirs = new Set<string>();
+const userWriteQueues = new Map<string, Promise<unknown>>();
+
+function getDataDir(): string {
+  return process.env.IVEO_DATA_DIR
+    ? path.resolve(process.env.IVEO_DATA_DIR)
+    : path.resolve(process.cwd(), 'data');
+}
+
+function getUsersDir(): string {
+  return path.join(getDataDir(), 'users');
+}
+
+function sanitizeUserFileKey(username: string): string {
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
+  const safe = clean.replace(/[^a-z0-9._-]/g, '_');
+  return safe || '_unknown';
+}
+
+function atomicWriteJson(filePath: string, data: unknown): void {
   try {
-    if (!fs.existsSync(path.dirname(STORE_PATH))) {
-      fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    if (fs.existsSync(STORE_PATH)) {
-      const raw = fs.readFileSync(STORE_PATH, 'utf-8');
-      const parsed = JSON.parse(raw);
-      const profiles = parsed.profiles || {};
-      const userToUsername = parsed.userToUsername || {};
-      const claims = parsed.claims || {};
+    const tmp = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    console.warn('[UserStore] Atomic write failed:', err);
+  }
+}
 
-      // Auto-populate userToUsername mapping if profiles have userIds
-      for (const [uname, prof] of Object.entries(profiles)) {
-        const u = prof as any;
-        if (u.userId && u.userId !== 'owner' && !userToUsername[u.userId]) {
-          userToUsername[u.userId] = uname;
-        }
+function readJsonFile<T>(filePath: string, fallback: T): T {
+  try {
+    if (fs.existsSync(filePath)) {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (parsed && typeof parsed === 'object') {
+        return parsed as T;
       }
-
-      return {
-        profiles,
-        userToUsername,
-        claims,
-        blocks: parsed.blocks || {},
-        contacts: parsed.contacts || {},
-        passwords: parsed.passwords || {},
-        analytics: parsed.analytics || {},
-        redirects: parsed.redirects || {},
-      };
     }
   } catch {}
+  return fallback;
+}
+
+function ensureMigratedToPerUserStore(): void {
+  const dataDir = getDataDir();
+  if (migratedDirs.has(dataDir)) return;
+  migratedDirs.add(dataDir);
+
+  const markerPath = path.join(dataDir, '.migrated_users_v1');
+  const legacyPath = path.join(dataDir, 'server_store.json');
+  if (fs.existsSync(markerPath) || !fs.existsSync(legacyPath)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(legacyPath, 'utf-8'));
+    if (!parsed || typeof parsed !== 'object') return;
+
+    const profiles: Record<string, any> = parsed.profiles || {};
+    const blocksMap: Record<string, any[]> = parsed.blocks || {};
+    const contactsMap: Record<string, any[]> = parsed.contacts || {};
+    const analyticsMap: Record<string, any[]> = parsed.analytics || {};
+    const passwordsMap: Record<string, string> = parsed.passwords || {};
+    const claims: Record<string, any> = parsed.claims || {};
+    const redirects: Record<string, any> = parsed.redirects || {};
+    const userToUsername: Record<string, string> = { ...(parsed.userToUsername || {}) };
+
+    const allUsernames = new Set<string>([
+      ...Object.keys(profiles),
+      ...Object.keys(blocksMap),
+      ...Object.keys(contactsMap),
+      ...Object.keys(analyticsMap),
+    ]);
+
+    const passwordIndex: Record<string, IndexPasswordEntry> = {};
+    const linkOwner = new Map<string, string>();
+    for (const [uname, blist] of Object.entries(blocksMap)) {
+      const clean = uname.replace(/^@+/, '').toLowerCase().trim();
+      if (Array.isArray(blist)) {
+        for (const b of blist) {
+          if (b?.id) linkOwner.set(String(b.id), clean);
+        }
+      }
+    }
+
+    const perUserPasswords: Record<string, Record<string, string>> = {};
+    for (const [linkId, pwd] of Object.entries(passwordsMap)) {
+      const owner = linkOwner.get(linkId);
+      passwordIndex[linkId] = { password: String(pwd), ...(owner ? { username: owner } : {}) };
+      if (owner) {
+        if (!perUserPasswords[owner]) perUserPasswords[owner] = {};
+        perUserPasswords[owner][linkId] = String(pwd);
+      }
+    }
+
+    for (const rawName of allUsernames) {
+      const clean = rawName.replace(/^@+/, '').toLowerCase().trim();
+      if (!clean) continue;
+      const prof = profiles[rawName] || profiles[clean] || null;
+      if (prof?.userId && prof.userId !== 'owner' && !userToUsername[prof.userId]) {
+        userToUsername[prof.userId] = clean;
+      }
+      const userRec: UserRecord = {
+        profile: prof ? { ...prof, username: clean } : null,
+        blocks: Array.isArray(blocksMap[rawName] || blocksMap[clean])
+          ? (blocksMap[rawName] || blocksMap[clean])
+          : [],
+        contacts: Array.isArray(contactsMap[rawName] || contactsMap[clean])
+          ? (contactsMap[rawName] || contactsMap[clean])
+          : [],
+        passwords: perUserPasswords[clean] || {},
+        analytics: Array.isArray(analyticsMap[rawName] || analyticsMap[clean])
+          ? (analyticsMap[rawName] || analyticsMap[clean])
+          : [],
+      };
+      const userFile = path.join(getUsersDir(), `${sanitizeUserFileKey(clean)}.json`);
+      if (!fs.existsSync(userFile)) {
+        atomicWriteJson(userFile, userRec);
+      }
+    }
+
+    atomicWriteJson(path.join(dataDir, 'index_users.json'), userToUsername);
+    atomicWriteJson(path.join(dataDir, 'index_claims.json'), claims);
+    atomicWriteJson(path.join(dataDir, 'index_redirects.json'), redirects);
+    atomicWriteJson(path.join(dataDir, 'index_passwords.json'), passwordIndex);
+    atomicWriteJson(markerPath, { migratedAt: new Date().toISOString(), users: allUsernames.size });
+  } catch (err) {
+    console.warn('[UserStore] Migration warning:', err);
+  }
+}
+
+function getUserFilePath(username: string): string {
+  return path.join(getUsersDir(), `${sanitizeUserFileKey(username)}.json`);
+}
+
+function readUserRecord(username: string): UserRecord {
+  ensureMigratedToPerUserStore();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) {
+    return { profile: null, blocks: [], contacts: [], passwords: {}, analytics: [] };
+  }
+  const raw = readJsonFile<Partial<UserRecord>>(getUserFilePath(clean), {});
   return {
-    profiles: {},
-    userToUsername: {},
-    claims: {},
-    blocks: {},
-    contacts: {},
-    passwords: {},
-    analytics: {},
-    redirects: {},
+    profile: raw.profile ?? null,
+    blocks: Array.isArray(raw.blocks) ? raw.blocks : [],
+    contacts: Array.isArray(raw.contacts) ? raw.contacts : [],
+    passwords: raw.passwords && typeof raw.passwords === 'object' ? raw.passwords : {},
+    analytics: Array.isArray(raw.analytics) ? raw.analytics : [],
   };
 }
 
-function writeServerStore(data: ServerStoreData): void {
+function writeUserRecord(username: string, record: UserRecord): void {
+  ensureMigratedToPerUserStore();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return;
+  atomicWriteJson(getUserFilePath(clean), record);
+}
+
+async function withUserLock<T>(username: string, fn: () => Promise<T> | T): Promise<T> {
+  const key = sanitizeUserFileKey(username);
+  const prev = userWriteQueues.get(key) || Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((res) => {
+    release = res;
+  });
+  userWriteQueues.set(
+    key,
+    prev.then(() => gate, () => gate)
+  );
   try {
-    if (!fs.existsSync(path.dirname(STORE_PATH))) {
-      fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+    await prev.catch(() => {});
+    return await fn();
+  } finally {
+    release();
+    if (userWriteQueues.get(key) === gate) {
+      userWriteQueues.delete(key);
     }
-    fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('[ServerStore] Write failed:', err);
   }
+}
+
+function readUserIndex(): Record<string, string> {
+  ensureMigratedToPerUserStore();
+  return readJsonFile<Record<string, string>>(path.join(getDataDir(), 'index_users.json'), {});
+}
+function writeUserIndex(data: Record<string, string>): void {
+  atomicWriteJson(path.join(getDataDir(), 'index_users.json'), data);
+}
+
+function readClaimsIndex(): Record<string, { userId: string; username: string; claimedAt: string }> {
+  ensureMigratedToPerUserStore();
+  return readJsonFile(path.join(getDataDir(), 'index_claims.json'), {});
+}
+function writeClaimsIndex(data: Record<string, { userId: string; username: string; claimedAt: string }>): void {
+  atomicWriteJson(path.join(getDataDir(), 'index_claims.json'), data);
+}
+
+function readRedirectsIndex(): Record<string, { to: string; updatedAt: string }> {
+  ensureMigratedToPerUserStore();
+  return readJsonFile(path.join(getDataDir(), 'index_redirects.json'), {});
+}
+function writeRedirectsIndex(data: Record<string, { to: string; updatedAt: string }>): void {
+  atomicWriteJson(path.join(getDataDir(), 'index_redirects.json'), data);
+}
+
+function readPasswordsIndex(): Record<string, IndexPasswordEntry> {
+  ensureMigratedToPerUserStore();
+  return readJsonFile(path.join(getDataDir(), 'index_passwords.json'), {});
+}
+function writePasswordsIndex(data: Record<string, IndexPasswordEntry>): void {
+  atomicWriteJson(path.join(getDataDir(), 'index_passwords.json'), data);
+}
+
+function listAllUserRecords(): Array<{ username: string; record: UserRecord }> {
+  ensureMigratedToPerUserStore();
+  const dir = getUsersDir();
+  if (!fs.existsSync(dir)) return [];
+  const results: Array<{ username: string; record: UserRecord }> = [];
+  for (const file of fs.readdirSync(dir)) {
+    if (!file.endsWith('.json') || file.endsWith('.tmp')) continue;
+    const uname = file.slice(0, -5);
+    const rec = readJsonFile<Partial<UserRecord>>(path.join(dir, file), {});
+    results.push({
+      username: (rec.profile?.username || uname).replace(/^@+/, '').toLowerCase().trim(),
+      record: {
+        profile: rec.profile ?? null,
+        blocks: Array.isArray(rec.blocks) ? rec.blocks : [],
+        contacts: Array.isArray(rec.contacts) ? rec.contacts : [],
+        passwords: rec.passwords && typeof rec.passwords === 'object' ? rec.passwords : {},
+        analytics: Array.isArray(rec.analytics) ? rec.analytics : [],
+      },
+    });
+  }
+  return results;
 }
 
 // ============================================================================
@@ -568,146 +747,162 @@ export async function dbClaimUsername(
 
       await transaction.commit();
 
-      // Update server store redirect map if old username was released
-      const storeSync = readServerStore();
-      delete storeSync.redirects[clean];
+      // Update isolated per-user redirect & claim maps if old username was released
+      const redirects = readRedirectsIndex();
+      delete redirects[clean];
       if (releasedUsername && releasedUsername !== clean) {
-        storeSync.redirects[releasedUsername] = { to: clean, updatedAt: new Date().toISOString() };
-        delete storeSync.profiles[releasedUsername];
-        delete storeSync.claims[releasedUsername];
-        delete storeSync.blocks[releasedUsername];
+        redirects[releasedUsername] = { to: clean, updatedAt: new Date().toISOString() };
+        const claims = readClaimsIndex();
+        delete claims[releasedUsername];
+        writeClaimsIndex(claims);
+        const oldFile = getUserFilePath(releasedUsername);
+        if (fs.existsSync(oldFile)) {
+          try { fs.unlinkSync(oldFile); } catch {}
+        }
       }
-      writeServerStore(storeSync);
+      writeRedirectsIndex(redirects);
 
       return { ok: true, username: clean, previousUsername: releasedUsername, profileUrl: `https://iveo.site/@${clean}` };
     } catch {
-      // Gracefully fall through to server store
+      // Gracefully fall through to isolated per-user store
     }
   }
 
-  // Server store fallback
-  const store = readServerStore();
-  const existingProfile = store.profiles[clean];
-  if (
-    existingProfile &&
-    existingProfile.userId &&
-    existingProfile.userId !== userId &&
-    existingProfile.userId !== 'owner' &&
-    !isOwnerEmailMatch
-  ) {
-    return { ok: false, error: 'already_claimed', message: `iveo.site/@${clean} is already claimed by another creator. Please pick another address.` };
-  }
-
-  // Clear any old redirect pointing away from the newly claimed handle
-  delete store.redirects[clean];
-
-  // If user previously owned another username, release & migrate blocks/contacts/analytics cleanly
-  const previousUsername = store.userToUsername[userId] || (
-    cleanPrevHint &&
-    cleanPrevHint !== clean &&
-    store.profiles[cleanPrevHint] &&
-    (store.profiles[cleanPrevHint].userId === userId || store.profiles[cleanPrevHint].userId === 'owner' || isOwnerEmailMatch)
-      ? cleanPrevHint
-      : null
-  );
-
-  let oldProfSnapshot: any = null;
-  if (previousUsername && previousUsername !== clean) {
-    oldProfSnapshot = store.profiles[previousUsername] || null;
-    if (store.blocks[previousUsername]) {
-      store.blocks[clean] = store.blocks[previousUsername].map((b) => ({ ...b, username: clean }));
-      delete store.blocks[previousUsername];
+  // Isolated per-user store fallback
+  return withUserLock(clean, () => {
+    const targetRecord = readUserRecord(clean);
+    const existingProfile = targetRecord.profile;
+    if (
+      existingProfile &&
+      existingProfile.userId &&
+      existingProfile.userId !== userId &&
+      existingProfile.userId !== 'owner' &&
+      !isOwnerEmailMatch
+    ) {
+      return { ok: false, error: 'already_claimed', message: `iveo.site/@${clean} is already claimed by another creator. Please pick another address.` };
     }
-    if (store.contacts[previousUsername]) {
-      store.contacts[clean] = [
-        ...(store.contacts[clean] || []),
-        ...store.contacts[previousUsername].map((c) => ({ ...c, username: clean })),
-      ];
-      delete store.contacts[previousUsername];
-    }
-    if (store.analytics[previousUsername]) {
-      store.analytics[clean] = [
-        ...(store.analytics[clean] || []),
-        ...store.analytics[previousUsername].map((e) => ({ ...e, username: clean })),
-      ];
-      delete store.analytics[previousUsername];
-    }
-    delete store.profiles[previousUsername];
-    delete store.claims[previousUsername];
 
-    // Record 301 SEO redirect only while previousUsername remains unclaimed
-    store.redirects[previousUsername] = {
-      to: clean,
+    const userIndex = readUserIndex();
+    const claimsIndex = readClaimsIndex();
+    const redirectsIndex = readRedirectsIndex();
+    delete redirectsIndex[clean];
+
+    const hintRecord = cleanPrevHint && cleanPrevHint !== clean ? readUserRecord(cleanPrevHint).profile : null;
+    const previousUsername = userIndex[userId] || (
+      cleanPrevHint &&
+      cleanPrevHint !== clean &&
+      hintRecord &&
+      (hintRecord.userId === userId || hintRecord.userId === 'owner' || isOwnerEmailMatch)
+        ? cleanPrevHint
+        : null
+    );
+
+    let oldProfSnapshot: any = null;
+    if (previousUsername && previousUsername !== clean) {
+      const oldRec = readUserRecord(previousUsername);
+      oldProfSnapshot = oldRec.profile || null;
+      if (oldRec.blocks.length > 0) {
+        targetRecord.blocks = oldRec.blocks.map((b) => ({ ...b, username: clean }));
+      }
+      if (oldRec.contacts.length > 0) {
+        targetRecord.contacts = [
+          ...targetRecord.contacts,
+          ...oldRec.contacts.map((c) => ({ ...c, username: clean })),
+        ];
+      }
+      if (oldRec.analytics.length > 0) {
+        targetRecord.analytics = [
+          ...targetRecord.analytics,
+          ...oldRec.analytics.map((e) => ({ ...e, username: clean })),
+        ];
+      }
+      if (Object.keys(oldRec.passwords).length > 0) {
+        targetRecord.passwords = { ...oldRec.passwords, ...targetRecord.passwords };
+      }
+
+      const oldFile = getUserFilePath(previousUsername);
+      if (fs.existsSync(oldFile)) {
+        try { fs.unlinkSync(oldFile); } catch {}
+      }
+      delete claimsIndex[previousUsername];
+      redirectsIndex[previousUsername] = {
+        to: clean,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    // If claimed by a new user after deletion of an old account, isolate blocks & contacts
+    if (claimsIndex[clean] && claimsIndex[clean].userId !== userId) {
+      targetRecord.blocks = [];
+      targetRecord.contacts = [];
+      targetRecord.passwords = {};
+    }
+
+    userIndex[userId] = clean;
+    claimsIndex[clean] = {
+      userId,
+      username: clean,
+      claimedAt: new Date().toISOString(),
+    };
+
+    const basePrev = targetRecord.profile || oldProfSnapshot || {};
+    const fallbackCreatedAt = basePrev?.createdAt || basePrev?.claimedAt || profileData?.createdAt || new Date().toISOString();
+    const fallbackSubscription = profileData?.subscription !== undefined ? profileData.subscription : (basePrev?.subscription || null);
+    const fallbackPlan = resolveEffectivePlan({
+      email: primaryEmail || basePrev?.primaryEmail,
+      storedPlan: profileData?.plan || basePrev?.plan,
+      createdAt: fallbackCreatedAt,
+      subscription: fallbackSubscription,
+    });
+
+    targetRecord.profile = {
+      ...basePrev,
+      userId,
+      username: clean,
+      displayName: profileData?.displayName || basePrev?.displayName || clean,
+      bio: profileData?.bio !== undefined ? profileData.bio : (basePrev?.bio || ''),
+      avatarUrl: profileData?.avatarUrl !== undefined ? profileData.avatarUrl : (basePrev?.avatarUrl || null),
+      avatarType: profileData?.avatarType || basePrev?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
+      avatarId: profileData?.avatarId !== undefined ? profileData.avatarId : (basePrev?.avatarId || null),
+      vibeId: profileData?.vibeId || basePrev?.vibeId || 'clean',
+      buttonShape: profileData?.buttonShape !== undefined ? profileData.buttonShape : (basePrev?.buttonShape ?? null),
+      socials: profileData?.socials || basePrev?.socials || {},
+      socialsPosition: profileData?.socialsPosition || basePrev?.socialsPosition || 'top',
+      primaryEmail: primaryEmail || basePrev?.primaryEmail || null,
+      plan: fallbackPlan.plan,
+      planSource: fallbackPlan.planSource,
+      createdAt: fallbackCreatedAt,
+      subscription: fallbackSubscription,
+      status: profileData?.status || basePrev?.status || 'active',
+      isPublished: profileData?.isPublished ?? basePrev?.isPublished ?? true,
+      hideFooter: Boolean(profileData?.hideFooter ?? basePrev?.hideFooter),
+      hideFromSearch: Boolean(profileData?.hideFromSearch ?? basePrev?.hideFromSearch),
+      background: profileData?.background !== undefined ? profileData.background : (basePrev?.background || null),
+      googleAnalyticsId: profileData?.googleAnalyticsId !== undefined ? profileData.googleAnalyticsId : (basePrev?.googleAnalyticsId || null),
+      metaPixelId: profileData?.metaPixelId !== undefined ? profileData.metaPixelId : (basePrev?.metaPixelId || null),
+      whatsappNumber: profileData?.whatsappNumber !== undefined ? profileData.whatsappNumber : (basePrev?.whatsappNumber || null),
+      customSeoTitle: profileData?.customSeoTitle !== undefined ? profileData.customSeoTitle : (basePrev?.customSeoTitle || null),
+      customSeoDescription: profileData?.customSeoDescription !== undefined ? profileData.customSeoDescription : (basePrev?.customSeoDescription || null),
+      fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (basePrev?.fontSettings || null),
+      buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (basePrev?.buttonColors || null),
+      businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (basePrev?.businessCard || null),
+      layoutSettings: profileData?.layoutSettings !== undefined ? profileData.layoutSettings : (basePrev?.layoutSettings || null),
+      claimedAt: basePrev?.claimedAt || fallbackCreatedAt,
       updatedAt: new Date().toISOString(),
     };
-  }
 
-  // If claimed by a new user after deletion of an old account, ensure old blocks and contacts are not inherited
-  if (store.claims[clean] && store.claims[clean].userId !== userId) {
-    store.blocks[clean] = [];
-    store.contacts[clean] = [];
-  }
+    writeUserRecord(clean, targetRecord);
+    writeUserIndex(userIndex);
+    writeClaimsIndex(claimsIndex);
+    writeRedirectsIndex(redirectsIndex);
 
-  store.userToUsername[userId] = clean;
-  store.claims[clean] = {
-    userId,
-    username: clean,
-    claimedAt: new Date().toISOString(),
-  };
-
-  const basePrev = store.profiles[clean] || oldProfSnapshot || {};
-  const fallbackCreatedAt = basePrev?.createdAt || basePrev?.claimedAt || profileData?.createdAt || new Date().toISOString();
-  const fallbackSubscription = profileData?.subscription !== undefined ? profileData.subscription : (basePrev?.subscription || null);
-  const fallbackPlan = resolveEffectivePlan({
-    email: primaryEmail || basePrev?.primaryEmail,
-    storedPlan: profileData?.plan || basePrev?.plan,
-    createdAt: fallbackCreatedAt,
-    subscription: fallbackSubscription,
+    return {
+      ok: true,
+      username: clean,
+      previousUsername: previousUsername && previousUsername !== clean ? previousUsername : null,
+      profileUrl: `https://iveo.site/@${clean}`,
+    };
   });
-
-  store.profiles[clean] = {
-    ...basePrev,
-    userId,
-    username: clean,
-    displayName: profileData?.displayName || basePrev?.displayName || clean,
-    bio: profileData?.bio !== undefined ? profileData.bio : (basePrev?.bio || ''),
-    avatarUrl: profileData?.avatarUrl !== undefined ? profileData.avatarUrl : (basePrev?.avatarUrl || null),
-    avatarType: profileData?.avatarType || basePrev?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
-    avatarId: profileData?.avatarId !== undefined ? profileData.avatarId : (basePrev?.avatarId || null),
-    vibeId: profileData?.vibeId || basePrev?.vibeId || 'clean',
-    buttonShape: profileData?.buttonShape !== undefined ? profileData.buttonShape : (basePrev?.buttonShape ?? null),
-    socials: profileData?.socials || basePrev?.socials || {},
-    socialsPosition: profileData?.socialsPosition || basePrev?.socialsPosition || 'top',
-    primaryEmail: primaryEmail || basePrev?.primaryEmail || null,
-    plan: fallbackPlan.plan,
-    planSource: fallbackPlan.planSource,
-    createdAt: fallbackCreatedAt,
-    subscription: fallbackSubscription,
-    status: profileData?.status || basePrev?.status || 'active',
-    isPublished: profileData?.isPublished ?? basePrev?.isPublished ?? true,
-    hideFooter: Boolean(profileData?.hideFooter ?? basePrev?.hideFooter),
-    hideFromSearch: Boolean(profileData?.hideFromSearch ?? basePrev?.hideFromSearch),
-    background: profileData?.background !== undefined ? profileData.background : (basePrev?.background || null),
-    googleAnalyticsId: profileData?.googleAnalyticsId !== undefined ? profileData.googleAnalyticsId : (basePrev?.googleAnalyticsId || null),
-    metaPixelId: profileData?.metaPixelId !== undefined ? profileData.metaPixelId : (basePrev?.metaPixelId || null),
-    whatsappNumber: profileData?.whatsappNumber !== undefined ? profileData.whatsappNumber : (basePrev?.whatsappNumber || null),
-    customSeoTitle: profileData?.customSeoTitle !== undefined ? profileData.customSeoTitle : (basePrev?.customSeoTitle || null),
-    customSeoDescription: profileData?.customSeoDescription !== undefined ? profileData.customSeoDescription : (basePrev?.customSeoDescription || null),
-    fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (basePrev?.fontSettings || null),
-    buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (basePrev?.buttonColors || null),
-    businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (basePrev?.businessCard || null),
-    layoutSettings: profileData?.layoutSettings !== undefined ? profileData.layoutSettings : (basePrev?.layoutSettings || null),
-    claimedAt: basePrev?.claimedAt || fallbackCreatedAt,
-    updatedAt: new Date().toISOString(),
-  };
-
-  writeServerStore(store);
-  return {
-    ok: true,
-    username: clean,
-    previousUsername: previousUsername && previousUsername !== clean ? previousUsername : null,
-    profileUrl: `https://iveo.site/@${clean}`,
-  };
 }
 
 export async function dbGetProfileByUserId(userId: string, email?: string | null): Promise<any | null> {
@@ -795,7 +990,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
     }
   }
 
-  const store = readServerStore();
+  const userIndex = readUserIndex();
   const cleanEmail = email ? email.toLowerCase().trim() : null;
   const applyStorePlan = (found: any) => {
     const resolved = resolveEffectivePlan({
@@ -814,25 +1009,29 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
     };
   };
 
-  // Direct userToUsername lookup
-  if (userId && store.userToUsername[userId]) {
-    const uname = store.userToUsername[userId];
-    if (store.profiles[uname]) {
-      return applyStorePlan(store.profiles[uname]);
+  if (userId && userIndex[userId]) {
+    const uname = userIndex[userId];
+    const rec = readUserRecord(uname);
+    if (rec.profile) {
+      return applyStorePlan(rec.profile);
     }
   }
 
-  // Scan profiles
-  for (const [uname, p] of Object.entries(store.profiles)) {
+  for (const { username: uname, record } of listAllUserRecords()) {
+    const p = record.profile;
+    if (!p) continue;
     if (userId && p.userId === userId) {
-      store.userToUsername[userId] = uname;
+      userIndex[userId] = uname;
+      writeUserIndex(userIndex);
       return applyStorePlan(p);
     }
     if (cleanEmail && p.primaryEmail && p.primaryEmail.toLowerCase().trim() === cleanEmail) {
       if (userId && (!p.userId || p.userId === 'owner')) {
         p.userId = userId;
-        store.userToUsername[userId] = uname;
-        writeServerStore(store);
+        record.profile = p;
+        writeUserRecord(uname, record);
+        userIndex[userId] = uname;
+        writeUserIndex(userIndex);
       }
       return applyStorePlan(p);
     }
@@ -957,22 +1156,26 @@ export async function dbSaveProfile(profile: {
     }
   }
 
-  // Server store fallback
-  const store = readServerStore();
-  const storeExisting = store.profiles[cleanUsername];
-  store.profiles[cleanUsername] = {
-    ...storeExisting,
-    ...merged,
-    username: cleanUsername,
-    updatedAt: new Date().toISOString(),
-  };
+  // Isolated per-user store fallback
+  return withUserLock(cleanUsername, () => {
+    const record = readUserRecord(cleanUsername);
+    record.profile = {
+      ...record.profile,
+      ...merged,
+      username: cleanUsername,
+      updatedAt: new Date().toISOString(),
+    };
+    writeUserRecord(cleanUsername, record);
 
-  if (merged.userId && merged.userId !== 'owner') {
-    store.userToUsername[merged.userId] = cleanUsername;
-  }
-
-  writeServerStore(store);
-  return { ok: true };
+    if (merged.userId && merged.userId !== 'owner') {
+      const userIndex = readUserIndex();
+      if (userIndex[merged.userId] !== cleanUsername) {
+        userIndex[merged.userId] = cleanUsername;
+        writeUserIndex(userIndex);
+      }
+    }
+    return { ok: true };
+  });
 }
 
 export async function dbGetProfile(username: string): Promise<any | null> {
@@ -1061,8 +1264,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
     }
   }
 
-  const store = readServerStore();
-  const prof = store.profiles[clean];
+  const record = readUserRecord(clean);
+  const prof = record.profile;
   if (!prof) return null;
   const resolved = resolveEffectivePlan({
     email: prof.primaryEmail,
@@ -1167,14 +1370,18 @@ export async function dbSaveBlocks(
     }
   }
 
-  const store = readServerStore();
-  store.blocks[clean] = blocks.map((b) => ({
-    ...b,
-    isActive: b.isActive !== false,
-    isArchived: Boolean(b.isArchived),
-  }));
-  writeServerStore(store);
-  return { ok: true };
+  return withUserLock(clean, () => {
+    const record = readUserRecord(clean);
+    const pwKeys = new Set(Object.keys(record.passwords || {}));
+    record.blocks = blocks.map((b) => ({
+      ...b,
+      isProtected: b.isProtected !== undefined ? Boolean(b.isProtected) : pwKeys.has(String(b.id)),
+      isActive: b.isActive !== false,
+      isArchived: Boolean(b.isArchived),
+    }));
+    writeUserRecord(clean, record);
+    return { ok: true };
+  });
 }
 
 export async function dbGetBlocks(username: string): Promise<any[]> {
@@ -1285,8 +1492,11 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
     }
   }
 
-  const store = readServerStore();
-  return store.blocks[clean] || [];
+  const record = readUserRecord(clean);
+  const pwKeys = new Set(Object.keys(record.passwords || {}));
+  return record.blocks.map((b) =>
+    pwKeys.has(String(b.id)) && !b.isProtected ? { ...b, isProtected: true } : b
+  );
 }
 
 export async function dbSaveContact(contact: {
@@ -1325,14 +1535,15 @@ export async function dbSaveContact(contact: {
     }
   }
 
-  const store = readServerStore();
-  if (!store.contacts[clean]) store.contacts[clean] = [];
-  store.contacts[clean].unshift({
-    ...contact,
-    formTitle: contact.formTitle || contact.source || null,
-    createdAt: new Date().toISOString(),
+  await withUserLock(clean, () => {
+    const record = readUserRecord(clean);
+    record.contacts.unshift({
+      ...contact,
+      formTitle: contact.formTitle || contact.source || null,
+      createdAt: new Date().toISOString(),
+    });
+    writeUserRecord(clean, record);
   });
-  writeServerStore(store);
 }
 
 export async function dbGetContacts(username?: string): Promise<any[]> {
@@ -1361,17 +1572,16 @@ export async function dbGetContacts(username?: string): Promise<any[]> {
         createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
       }));
     } catch {
-      // Fall through to server store fallback
+      // Fall through to isolated per-user store
     }
   }
 
-  const store = readServerStore();
   if (clean) {
-    return store.contacts[clean] || [];
+    return readUserRecord(clean).contacts;
   }
   const all: any[] = [];
-  for (const list of Object.values(store.contacts)) {
-    all.push(...list);
+  for (const { record } of listAllUserRecords()) {
+    all.push(...record.contacts);
   }
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
@@ -1391,19 +1601,28 @@ export async function dbDeleteContact(username: string | undefined, contactId: s
       await req.query(query);
       return;
     } catch {
-      // Fall through to server store fallback
+      // Fall through to isolated per-user store
     }
   }
 
-  const store = readServerStore();
-  if (clean && store.contacts[clean]) {
-    store.contacts[clean] = store.contacts[clean].filter((c) => c.id !== contactId);
+  if (clean) {
+    await withUserLock(clean, () => {
+      const record = readUserRecord(clean);
+      record.contacts = record.contacts.filter((c) => c.id !== contactId);
+      writeUserRecord(clean, record);
+    });
   } else {
-    for (const key of Object.keys(store.contacts)) {
-      store.contacts[key] = store.contacts[key].filter((c) => c.id !== contactId);
+    for (const { username: uname, record } of listAllUserRecords()) {
+      const next = record.contacts.filter((c) => c.id !== contactId);
+      if (next.length !== record.contacts.length) {
+        await withUserLock(uname, () => {
+          const fresh = readUserRecord(uname);
+          fresh.contacts = fresh.contacts.filter((c) => c.id !== contactId);
+          writeUserRecord(uname, fresh);
+        });
+      }
     }
   }
-  writeServerStore(store);
 }
 
 export async function dbDeleteAllContacts(username?: string): Promise<void> {
@@ -1421,17 +1640,25 @@ export async function dbDeleteAllContacts(username?: string): Promise<void> {
       await req.query(query);
       return;
     } catch {
-      // Fall through to server store fallback
+      // Fall through to isolated per-user store
     }
   }
 
-  const store = readServerStore();
   if (clean) {
-    store.contacts[clean] = [];
+    await withUserLock(clean, () => {
+      const record = readUserRecord(clean);
+      record.contacts = [];
+      writeUserRecord(clean, record);
+    });
   } else {
-    store.contacts = {};
+    for (const { username: uname } of listAllUserRecords()) {
+      await withUserLock(uname, () => {
+        const fresh = readUserRecord(uname);
+        fresh.contacts = [];
+        writeUserRecord(uname, fresh);
+      });
+    }
   }
-  writeServerStore(store);
 }
 
 export async function dbDeleteAccount(
@@ -1465,39 +1692,63 @@ export async function dbDeleteAccount(
     }
   }
 
-  const store = readServerStore();
-  delete store.profiles[clean];
-  delete store.claims[clean];
-  delete store.blocks[clean];
-  delete store.contacts[clean];
-
-  for (const [uid, uname] of Object.entries(store.userToUsername)) {
-    if (uname === clean) {
-      delete store.userToUsername[uid];
+  await withUserLock(clean, () => {
+    const userFile = getUserFilePath(clean);
+    if (fs.existsSync(userFile)) {
+      try { fs.unlinkSync(userFile); } catch {}
     }
-  }
 
-  writeServerStore(store);
+    const claims = readClaimsIndex();
+    delete claims[clean];
+    writeClaimsIndex(claims);
 
-  // Clean up any uploaded avatar or link thumbnail files for this username
+    const userIndex = readUserIndex();
+    for (const [uid, uname] of Object.entries(userIndex)) {
+      if (uname === clean) {
+        delete userIndex[uid];
+      }
+    }
+    writeUserIndex(userIndex);
+
+    const pwIdx = readPasswordsIndex();
+    let pwChanged = false;
+    for (const [lid, entry] of Object.entries(pwIdx)) {
+      if (entry.username === clean) {
+        delete pwIdx[lid];
+        pwChanged = true;
+      }
+    }
+    if (pwChanged) writePasswordsIndex(pwIdx);
+  });
+
+  // Clean up uploaded avatar & uploaded custom background directory
   try {
-    const avatarDir = path.resolve(process.cwd(), 'data', 'avatars');
+    const dataDir = getDataDir();
+    const avatarDir = path.join(dataDir, 'avatars');
     if (fs.existsSync(avatarDir)) {
-      const files = fs.readdirSync(avatarDir);
-      for (const f of files) {
+      for (const f of fs.readdirSync(avatarDir)) {
         if (f.startsWith(`${clean}.`) || f.startsWith(`${clean}_`)) {
-          try {
-            fs.unlinkSync(path.join(avatarDir, f));
-          } catch {}
+          try { fs.unlinkSync(path.join(avatarDir, f)); } catch {}
         }
       }
+    }
+    const bgUserDir = path.join(dataDir, 'backgrounds', sanitizeUserFileKey(clean));
+    if (fs.existsSync(bgUserDir)) {
+      fs.rmSync(bgUserDir, { recursive: true, force: true });
     }
   } catch {}
 
   return { ok: true };
 }
 
-export async function dbSetLinkPassword(linkId: string, password: string): Promise<void> {
+export async function dbSetLinkPassword(
+  linkId: string,
+  password: string,
+  username?: string | null
+): Promise<string | null> {
+  const cleanUser = username ? username.replace(/^@+/, '').toLowerCase().trim() : null;
+  let ownerUsername = cleanUser;
+
   const pool = await getAzureSqlPool();
   if (pool) {
     try {
@@ -1514,18 +1765,50 @@ export async function dbSetLinkPassword(linkId: string, password: string): Promi
           WHEN NOT MATCHED THEN
             INSERT (link_id, password_text) VALUES (@linkId, @password);
         `);
-      return;
+      await pool
+        .request()
+        .input('linkId', sql.NVarChar(128), linkId)
+        .query('UPDATE iveo_blocks SET is_protected = 1 WHERE id = @linkId')
+        .catch(() => {});
     } catch {
-      // Fall through to server store fallback
+      // Continue syncing per-user store as well
     }
   }
 
-  const store = readServerStore();
-  store.passwords[linkId] = password;
-  writeServerStore(store);
+  if (!ownerUsername) {
+    for (const { username: uname, record } of listAllUserRecords()) {
+      if (record.blocks.some((b) => b.id === linkId)) {
+        ownerUsername = uname;
+        break;
+      }
+    }
+  }
+
+  const pwIdx = readPasswordsIndex();
+  pwIdx[linkId] = { password, ...(ownerUsername ? { username: ownerUsername } : {}) };
+  writePasswordsIndex(pwIdx);
+
+  if (ownerUsername) {
+    await withUserLock(ownerUsername, () => {
+      const record = readUserRecord(ownerUsername!);
+      record.passwords[linkId] = password;
+      record.blocks = record.blocks.map((b) =>
+        b.id === linkId ? { ...b, isProtected: true } : b
+      );
+      writeUserRecord(ownerUsername!, record);
+    });
+  }
+
+  return ownerUsername;
 }
 
-export async function dbClearLinkPassword(linkId: string): Promise<void> {
+export async function dbClearLinkPassword(
+  linkId: string,
+  username?: string | null
+): Promise<string | null> {
+  const cleanUser = username ? username.replace(/^@+/, '').toLowerCase().trim() : null;
+  let ownerUsername = cleanUser;
+
   const pool = await getAzureSqlPool();
   if (pool) {
     try {
@@ -1533,18 +1816,49 @@ export async function dbClearLinkPassword(linkId: string): Promise<void> {
         .request()
         .input('linkId', sql.NVarChar(128), linkId)
         .query('DELETE FROM iveo_link_passwords WHERE link_id = @linkId');
-      return;
-    } catch {
-      // Fall through to server store fallback
+      await pool
+        .request()
+        .input('linkId', sql.NVarChar(128), linkId)
+        .query('UPDATE iveo_blocks SET is_protected = 0 WHERE id = @linkId')
+        .catch(() => {});
+    } catch {}
+  }
+
+  const pwIdx = readPasswordsIndex();
+  if (!ownerUsername && pwIdx[linkId]?.username) {
+    ownerUsername = pwIdx[linkId].username || null;
+  }
+  if (!ownerUsername) {
+    for (const { username: uname, record } of listAllUserRecords()) {
+      if (record.passwords[linkId] !== undefined || record.blocks.some((b) => b.id === linkId)) {
+        ownerUsername = uname;
+        break;
+      }
     }
   }
 
-  const store = readServerStore();
-  delete store.passwords[linkId];
-  writeServerStore(store);
+  delete pwIdx[linkId];
+  writePasswordsIndex(pwIdx);
+
+  if (ownerUsername) {
+    await withUserLock(ownerUsername, () => {
+      const record = readUserRecord(ownerUsername!);
+      delete record.passwords[linkId];
+      record.blocks = record.blocks.map((b) =>
+        b.id === linkId ? { ...b, isProtected: false } : b
+      );
+      writeUserRecord(ownerUsername!, record);
+    });
+  }
+
+  return ownerUsername;
 }
 
-export async function dbVerifyLinkPassword(linkId: string, password: string): Promise<boolean> {
+export async function dbVerifyLinkPassword(
+  linkId: string,
+  password: string,
+  username?: string | null
+): Promise<boolean> {
   const pool = await getAzureSqlPool();
   if (pool) {
     try {
@@ -1553,23 +1867,77 @@ export async function dbVerifyLinkPassword(linkId: string, password: string): Pr
         .input('linkId', sql.NVarChar(128), linkId)
         .input('password', sql.NVarChar(256), password)
         .query('SELECT link_id FROM iveo_link_passwords WHERE link_id = @linkId AND password_text = @password');
-      return res.recordset.length > 0;
-    } catch {
-      // Fall through to server store fallback
+      if (res.recordset.length > 0) return true;
+    } catch {}
+  }
+
+  if (username) {
+    const cleanUser = username.replace(/^@+/, '').toLowerCase().trim();
+    const record = readUserRecord(cleanUser);
+    if (record.passwords[linkId] !== undefined) {
+      return record.passwords[linkId] === password;
     }
   }
 
-  const store = readServerStore();
-  return store.passwords[linkId] === password;
+  const pwIdx = readPasswordsIndex();
+  if (pwIdx[linkId]) {
+    return pwIdx[linkId].password === password;
+  }
+
+  for (const { record } of listAllUserRecords()) {
+    if (record.passwords[linkId] !== undefined) {
+      return record.passwords[linkId] === password;
+    }
+  }
+  return false;
+}
+
+export async function dbFindBlockForUnlock(
+  linkId: string,
+  username?: string | null
+): Promise<{ username: string | null; block: any | null }> {
+  const cleanUser = username ? username.replace(/^@+/, '').toLowerCase().trim() : null;
+  if (cleanUser) {
+    const blocks = await dbGetBlocks(cleanUser).catch(() => []);
+    const found = blocks.find((b) => b.id === linkId) || null;
+    if (found) return { username: cleanUser, block: found };
+  }
+
+  const pwIdx = readPasswordsIndex();
+  const indexedOwner = pwIdx[linkId]?.username;
+  if (indexedOwner) {
+    const blocks = await dbGetBlocks(indexedOwner).catch(() => []);
+    const found = blocks.find((b) => b.id === linkId) || null;
+    if (found) return { username: indexedOwner, block: found };
+  }
+
+  for (const { username: uname, record } of listAllUserRecords()) {
+    const found = record.blocks.find((b) => b.id === linkId);
+    if (found) return { username: uname, block: found };
+  }
+  return { username: cleanUser || indexedOwner || null, block: null };
+}
+
+export async function dbGetProtectedLinkIds(username: string): Promise<string[]> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return [];
+  const record = readUserRecord(clean);
+  const ids = new Set<string>(Object.keys(record.passwords || {}));
+  for (const b of record.blocks) {
+    if (b?.isProtected && b?.id) {
+      ids.add(String(b.id));
+    }
+  }
+  return Array.from(ids);
 }
 
 export async function dbGetRedirectTarget(username: string): Promise<string | null> {
   const clean = (username || '').toLowerCase().trim();
   if (!clean) return null;
-  const store = readServerStore();
-  // Redirect only applies while the old handle remains unclaimed
-  if (store.profiles[clean]) return null;
-  const rec = store.redirects[clean];
+  const existing = readUserRecord(clean);
+  if (existing.profile) return null;
+  const redirects = readRedirectsIndex();
+  const rec = redirects[clean];
   if (rec?.to && rec.to !== clean) {
     return rec.to;
   }
@@ -1590,6 +1958,7 @@ export async function dbListAllProfiles(): Promise<any[]> {
         let integrations: Record<string, any> = {};
         let socials: Record<string, string> = {};
         let primaryEmail: string | null = null;
+        let backgroundConfig: any = null;
         let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
         let subscription: SubscriptionRecord | null = null;
         try {
@@ -1597,6 +1966,7 @@ export async function dbListAllProfiles(): Promise<any[]> {
             const parsed = JSON.parse(row.socials_json);
             if (parsed && typeof parsed === 'object') {
               socials = parsed.links || {};
+              backgroundConfig = parsed.background || null;
               if (parsed.status) parsedStatus = parsed.status;
               if (parsed.email) primaryEmail = parsed.email;
               if (parsed.createdAt) createdAt = String(parsed.createdAt);
@@ -1620,6 +1990,7 @@ export async function dbListAllProfiles(): Promise<any[]> {
           vibeId: row.vibe_id,
           socials,
           primaryEmail,
+          background: backgroundConfig,
           plan: resolved.plan,
           isPro: resolved.isPro,
           planSource: resolved.planSource,
@@ -1636,20 +2007,19 @@ export async function dbListAllProfiles(): Promise<any[]> {
     } catch {}
   }
 
-  const store = readServerStore();
-  for (const [uname, prof] of Object.entries<any>(store.profiles)) {
-    const clean = uname.replace(/^@+/, '').toLowerCase().trim();
-    if (!clean) continue;
-    if (!byUsername.has(clean)) {
+  for (const { username: uname, record } of listAllUserRecords()) {
+    const prof = record.profile;
+    if (!prof || !uname) continue;
+    if (!byUsername.has(uname)) {
       const resolved = resolveEffectivePlan({
         email: prof.primaryEmail,
         storedPlan: prof.plan,
         createdAt: prof.createdAt || prof.claimedAt,
         subscription: prof.subscription,
       });
-      byUsername.set(clean, {
+      byUsername.set(uname, {
         ...prof,
-        username: clean,
+        username: uname,
         plan: resolved.plan,
         isPro: resolved.isPro,
         planSource: resolved.planSource,
@@ -1700,22 +2070,23 @@ export async function dbRecordAnalyticsEvent(event: {
     } catch {}
   }
 
-  const store = readServerStore();
-  if (!store.analytics[clean]) store.analytics[clean] = [];
-  store.analytics[clean].push({
-    id,
-    username: clean,
-    eventType: event.eventType,
-    blockId: event.blockId || null,
-    country,
-    referrer,
-    device,
-    createdAt,
+  await withUserLock(clean, () => {
+    const record = readUserRecord(clean);
+    record.analytics.push({
+      id,
+      username: clean,
+      eventType: event.eventType,
+      blockId: event.blockId || null,
+      country,
+      referrer,
+      device,
+      createdAt,
+    });
+    if (record.analytics.length > 10000) {
+      record.analytics = record.analytics.slice(-10000);
+    }
+    writeUserRecord(clean, record);
   });
-  if (store.analytics[clean].length > 10000) {
-    store.analytics[clean] = store.analytics[clean].slice(-10000);
-  }
-  writeServerStore(store);
 }
 
 export async function dbGetAnalytics(
@@ -1753,8 +2124,7 @@ export async function dbGetAnalytics(
   }
 
   if (events.length === 0) {
-    const store = readServerStore();
-    const list = store.analytics[clean] || [];
+    const list = readUserRecord(clean).analytics;
     const fromMs = fromDate.getTime();
     const toMs = toDate.getTime();
     events = list.filter((e) => {

@@ -175,7 +175,9 @@ export function mergeProfileForSave(
         ? Boolean(incoming.hideFromSearch)
         : Boolean(prev.hideFromSearch),
     background:
-      incoming.background !== undefined ? incoming.background : (prev.background ?? null),
+      incoming.background !== undefined
+        ? (incoming.background === null ? null : (incoming.background && typeof incoming.background === 'object' ? incoming.background : null))
+        : (prev.background ?? null),
     googleAnalyticsId:
       incoming.googleAnalyticsId !== undefined
         ? incoming.googleAnalyticsId

@@ -17,6 +17,7 @@
         "fontSettings": { "type": "object" },
         "buttonColors": { "type": "object" },
         "layoutSettings": { "type": "object" },
+        "background": { "type": "object" },
         "businessCard": { "type": "object" },
         "plan": { "type": "string", "enum": ["free", "pro"] },
         "updatedAt": { "type": "string" },

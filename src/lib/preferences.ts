@@ -5,12 +5,156 @@ import { type BusinessCardConfig, parseBusinessCardConfig } from './businessCard
 
 export type ButtonShape = 'square' | 'rounded' | 'pill';
 
+export type BackgroundType = 'none' | 'solid' | 'gradient' | 'mesh' | 'image' | 'pattern';
+export type GradientDirection =
+  | 'to bottom'
+  | 'to top'
+  | 'to right'
+  | 'to bottom right'
+  | 'to top right'
+  | 'radial';
+export type BackgroundImageFit = 'cover' | 'contain';
+
 export interface BackgroundConfig {
-  type: 'none' | 'gradient' | 'mesh' | 'image' | 'pattern';
+  type: BackgroundType;
   value?: string;
-  blur?: number;
-  opacity?: number;
   presetId?: string;
+  gradientStops?: string[];
+  gradientAngle?: number;
+  gradientDirection?: GradientDirection;
+  imagePosition?: { x: number; y: number };
+  imageFit?: BackgroundImageFit;
+  overlayColor?: string;
+  overlayOpacity?: number;
+  blur?: number;
+  brightness?: number;
+  saturation?: number;
+  opacity?: number;
+  recentColors?: string[];
+}
+
+export const DEFAULT_BACKGROUND_CONFIG: BackgroundConfig = {
+  type: 'solid',
+  value: '#FFFFFF',
+  presetId: 'pure-white',
+};
+
+const VALID_BG_TYPES = new Set<BackgroundType>([
+  'none',
+  'solid',
+  'gradient',
+  'mesh',
+  'image',
+  'pattern',
+]);
+
+const VALID_GRADIENT_DIRECTIONS = new Set<GradientDirection>([
+  'to bottom',
+  'to top',
+  'to right',
+  'to bottom right',
+  'to top right',
+  'radial',
+]);
+
+function clampNum(val: unknown, min: number, max: number): number | undefined {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return undefined;
+  return Math.min(max, Math.max(min, val));
+}
+
+function isSafeBgValue(type: BackgroundType, value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) return false;
+  if (/javascript:|vbscript:|<script|expression\s*\(/i.test(trimmed)) return false;
+  if (type === 'image') {
+    if (trimmed.startsWith('/api/backgrounds/')) return true;
+    if (trimmed.startsWith('/assets/')) return true;
+    if (/^https?:\/\//i.test(trimmed)) return true;
+    return false;
+  }
+  return true;
+}
+
+export function parseBackgroundConfig(raw: unknown): BackgroundConfig | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const rawType = typeof r.type === 'string' ? (r.type as BackgroundType) : null;
+  if (!rawType || !VALID_BG_TYPES.has(rawType)) return null;
+
+  const value =
+    typeof r.value === 'string' && isSafeBgValue(rawType, r.value)
+      ? r.value.trim()
+      : undefined;
+
+  if (rawType === 'image' && !value) return null;
+
+  const presetId =
+    typeof r.presetId === 'string' && r.presetId.trim().length > 0
+      ? r.presetId.trim().slice(0, 64)
+      : undefined;
+
+  const gradientStops = Array.isArray(r.gradientStops)
+    ? r.gradientStops
+        .filter((c): c is string => typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c.trim()))
+        .map((c) => c.trim().toUpperCase())
+        .slice(0, 3)
+    : undefined;
+
+  const gradientAngle = clampNum(r.gradientAngle, 0, 360);
+  const gradientDirection =
+    typeof r.gradientDirection === 'string' &&
+    VALID_GRADIENT_DIRECTIONS.has(r.gradientDirection as GradientDirection)
+      ? (r.gradientDirection as GradientDirection)
+      : undefined;
+
+  let imagePosition: { x: number; y: number } | undefined;
+  if (r.imagePosition && typeof r.imagePosition === 'object' && !Array.isArray(r.imagePosition)) {
+    const pos = r.imagePosition as Record<string, unknown>;
+    const x = clampNum(pos.x, 0, 100);
+    const y = clampNum(pos.y, 0, 100);
+    if (x !== undefined && y !== undefined) {
+      imagePosition = { x, y };
+    }
+  }
+
+  const imageFit: BackgroundImageFit | undefined =
+    r.imageFit === 'contain' ? 'contain' : r.imageFit === 'cover' ? 'cover' : undefined;
+
+  const overlayColor =
+    typeof r.overlayColor === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(r.overlayColor.trim())
+      ? r.overlayColor.trim().toUpperCase()
+      : undefined;
+
+  const overlayOpacity = clampNum(r.overlayOpacity, 0, 0.85);
+  const blur = clampNum(r.blur, 0, 24);
+  const brightness = clampNum(r.brightness, 0.5, 1.5);
+  const saturation = clampNum(r.saturation, 0.4, 1.6);
+  const opacity = clampNum(r.opacity, 0, 1);
+
+  const recentColors = Array.isArray(r.recentColors)
+    ? r.recentColors
+        .filter((c): c is string => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.trim()))
+        .map((c) => c.trim().toUpperCase())
+        .slice(0, 8)
+    : undefined;
+
+  const out: BackgroundConfig = { type: rawType };
+  if (value !== undefined) out.value = value;
+  if (presetId !== undefined) out.presetId = presetId;
+  if (gradientStops && gradientStops.length >= 2) out.gradientStops = gradientStops;
+  if (gradientAngle !== undefined) out.gradientAngle = gradientAngle;
+  if (gradientDirection !== undefined) out.gradientDirection = gradientDirection;
+  if (imagePosition !== undefined) out.imagePosition = imagePosition;
+  if (imageFit !== undefined) out.imageFit = imageFit;
+  if (overlayColor !== undefined) out.overlayColor = overlayColor;
+  if (overlayOpacity !== undefined) out.overlayOpacity = overlayOpacity;
+  if (blur !== undefined) out.blur = blur;
+  if (brightness !== undefined) out.brightness = brightness;
+  if (saturation !== undefined) out.saturation = saturation;
+  if (opacity !== undefined) out.opacity = opacity;
+  if (recentColors && recentColors.length > 0) out.recentColors = recentColors;
+
+  return out;
 }
 
 export type AvatarShape = 'circle' | 'squircle' | 'rounded' | 'ring';
