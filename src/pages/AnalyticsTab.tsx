@@ -194,6 +194,14 @@ export const AnalyticsTab: React.FC = () => {
           bio={session.bio}
           avatarUrl={session.imageUrl}
           vibeId={session.vibeId}
+          fontSettings={session.fontSettings ?? null}
+          buttonColors={session.buttonColors ?? null}
+          businessCard={session.businessCard}
+          socials={session.socials}
+          onSaveCardConfig={async (cfg) => {
+            await session.updatePreferences({ businessCard: cfg });
+          }}
+          isPro={session.isPro}
           isPublished={true}
         />
       )}

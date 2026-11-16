@@ -32,7 +32,7 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
         <p className="text-[14px] text-muted mt-0.5">{countLabel}</p>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
         <Button
           variant="secondary"
           size="md"

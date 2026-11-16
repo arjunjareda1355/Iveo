@@ -93,7 +93,7 @@ export const DiscoverPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <Button as={Link} to="/login" variant="ghost" size="sm">
               Log in
             </Button>
