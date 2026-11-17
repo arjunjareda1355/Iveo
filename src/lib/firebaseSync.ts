@@ -49,6 +49,7 @@ export async function syncBlockToFirebase(userId: string, block: Block): Promise
       updatedAt: new Date().toISOString(),
     };
     if (block.embedProvider) cleanBlock.embedProvider = block.embedProvider;
+    if (block.embedMeta) cleanBlock.embedMeta = block.embedMeta;
     if (block.signup) cleanBlock.signup = block.signup;
     if (block.tipJar) cleanBlock.tipJar = block.tipJar;
     if (block.faq) cleanBlock.faq = block.faq;

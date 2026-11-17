@@ -385,6 +385,7 @@ export async function firebaseSaveBlocks(
         thumbnailUrl: b.thumbnailUrl || null,
         layout: b.layout || 'classic',
         embedProvider: b.embedProvider || null,
+        embedMeta: b.embedMeta || null,
         isProtected: Boolean(b.isProtected),
         signup: b.signup || null,
         tipJar: b.tipJar || null,

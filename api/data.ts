@@ -5,6 +5,8 @@ import {
   handleGetMe,
   handleMigrateLegacy,
   handleSaveProfile,
+  handleUploadAvatar,
+  handleUploadBackground,
   handleGetBlocks,
   handleSaveBlocks,
   handleSaveContact,
@@ -12,16 +14,26 @@ import {
   handleDeleteContacts,
   handleUnlockLink,
   handleSetLinkPassword,
+  handleGetProtectedLinkIds,
   handleDeleteAccount,
   handleRecordAnalyticsEvent,
   handleGetAnalytics,
   handleBuyMeACoffee,
   handleYouTubeShowcase,
+  handleYouTubeOAuthUrl,
+  handleYouTubeOAuthCallback,
+  handleSocialEmbedLookup,
+  handleSocialOAuthUrl,
+  handleSocialOAuthCallback,
+  handleGetSubscription,
+  handleCancelSubscription,
+  handleReactivateSubscription,
   handleDiscoverProfiles,
   handleSeoAdminOverview,
   handleSeoAdminRegenerate,
   handleSeoAdminValidate,
   handleSeoAdminInspect,
+  handleSeoAdminModerateBackground,
 } from './_lib/db-handlers.ts';
 
 export const dynamic = 'force-dynamic';
@@ -45,6 +57,9 @@ function getActionFromUrl(urlStr: string, queryAction?: string): string {
 
 async function dispatchNode(action: string, req: any, res: any) {
   const method = (req.method || 'GET').toUpperCase();
+  if (!req.params) {
+    req.params = { ...(req.query || {}) };
+  }
 
   switch (action) {
     case 'public-page':
@@ -57,6 +72,10 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleMigrateLegacy(req, res);
     case 'profile':
       return handleSaveProfile(req, res);
+    case 'avatar-upload':
+      return handleUploadAvatar(req, res);
+    case 'background-upload':
+      return handleUploadBackground(req, res);
     case 'blocks':
       return method === 'POST' ? handleSaveBlocks(req, res) : handleGetBlocks(req, res);
     case 'contacts':
@@ -71,6 +90,22 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleBuyMeACoffee(req, res);
     case 'youtube':
       return handleYouTubeShowcase(req, res);
+    case 'embed':
+      return handleSocialEmbedLookup(req, res);
+    case 'oauth-youtube-url':
+      return handleYouTubeOAuthUrl(req, res);
+    case 'oauth-youtube-callback':
+      return handleYouTubeOAuthCallback(req, res);
+    case 'oauth-social-url':
+      return handleSocialOAuthUrl(req, res);
+    case 'oauth-social-callback':
+      return handleSocialOAuthCallback(req, res);
+    case 'subscription':
+      return handleGetSubscription(req, res);
+    case 'subscription-cancel':
+      return handleCancelSubscription(req, res);
+    case 'subscription-reactivate':
+      return handleReactivateSubscription(req, res);
     case 'discover':
       return handleDiscoverProfiles(req, res);
     case 'seo-overview':
@@ -81,10 +116,14 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleSeoAdminValidate(req, res);
     case 'seo-inspect':
       return handleSeoAdminInspect(req, res);
+    case 'seo-moderate-background':
+      return handleSeoAdminModerateBackground(req, res);
     case 'unlock-link':
       return handleUnlockLink(req, res);
     case 'link-password':
       return handleSetLinkPassword(req, res);
+    case 'link-password-status':
+      return handleGetProtectedLinkIds(req, res);
     case 'account-delete':
       return handleDeleteAccount(req, res);
     case 'readiness':
@@ -128,6 +167,7 @@ async function dispatchWeb(request: Request): Promise<Response> {
     url: request.url,
     headers,
     query,
+    params: { ...query },
     body,
     protocol: url.protocol.replace(':', ''),
     hostname: url.hostname,

@@ -1470,6 +1470,11 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
     return sendPopupHtml({
       type: 'IVEO_SOCIAL_OAUTH_SUCCESS',
       provider: providerRaw,
+      embed: {
+        ...connected.embedMeta,
+        url: connected.url,
+        title: connected.title,
+      },
       connection: connected,
     });
   } catch (err: any) {

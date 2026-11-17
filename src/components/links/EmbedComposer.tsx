@@ -47,8 +47,13 @@ export const EmbedComposer: React.FC<EmbedComposerProps> = ({
   useEffect(() => {
     const applySocialPayload = (payload: any) => {
       if (!payload || typeof payload !== 'object') return;
-      if (payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' && payload.embed) {
-        const em = payload.embed as EmbedMetaData & { url?: string; badge?: string | null };
+      const rawEmbed = payload.embed || (payload.connection?.embedMeta ? {
+        ...payload.connection.embedMeta,
+        url: payload.connection.url,
+        title: payload.connection.title,
+      } : null);
+      if (payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' && rawEmbed) {
+        const em = rawEmbed as EmbedMetaData & { url?: string; badge?: string | null };
         const nextUrl = em.url || '';
         if (nextUrl) {
           setUrlInput(nextUrl);

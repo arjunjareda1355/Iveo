@@ -291,28 +291,149 @@ export function parseRssFeedXml(xml: string): {
   return { channelName, videos };
 }
 
-async function fetchRssFeedVideos(
-  channelId: string
-): Promise<{ channelName: string | null; videos: YouTubeVideoItem[] }> {
+async function fetchRssFeedVideosByParam(
+  paramName: 'channel_id' | 'user',
+  value: string
+): Promise<{ channelId: string | null; channelName: string | null; videos: YouTubeVideoItem[] }> {
   try {
     const res = await fetch(
-      `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`,
+      `https://www.youtube.com/feeds/videos.xml?${paramName}=${encodeURIComponent(value)}`,
       {
         signal: AbortSignal.timeout(4500),
         headers: { 'User-Agent': 'iveo-showcase/1.0' },
       }
     );
-    if (!res.ok) return { channelName: null, videos: [] };
+    if (!res.ok) return { channelId: null, channelName: null, videos: [] };
     const xml = await res.text();
-    return parseRssFeedXml(xml);
+    const chMatch = xml.match(/<yt:channelId>([^<]+)<\/yt:channelId>/i);
+    const parsedFeed = parseRssFeedXml(xml);
+    return {
+      channelId: chMatch?.[1]?.trim() || null,
+      channelName: parsedFeed.channelName,
+      videos: parsedFeed.videos,
+    };
   } catch {
-    return { channelName: null, videos: [] };
+    return { channelId: null, channelName: null, videos: [] };
+  }
+}
+
+async function fetchRssFeedVideos(
+  channelId: string
+): Promise<{ channelName: string | null; videos: YouTubeVideoItem[] }> {
+  const res = await fetchRssFeedVideosByParam('channel_id', channelId);
+  return { channelName: res.channelName, videos: res.videos };
+}
+
+async function resolveChannelViaInnerTube(
+  parsed: ParsedYouTubeInput
+): Promise<YouTubeShowcaseData | null> {
+  try {
+    let browseId: string | null = parsed.kind === 'channel_id' ? parsed.value : null;
+    if (!browseId) {
+      const targetUrl = parsed.canonicalUrl;
+      const resolveRes = await fetch('https://www.youtube.com/youtubei/v1/navigation/resolve_url?prettyPrint=false', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': YT_FETCH_HEADERS['User-Agent'],
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: 'WEB',
+              clientVersion: '2.20241001.01.00',
+              hl: 'en',
+              gl: 'US',
+            },
+          },
+          url: targetUrl,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (resolveRes.ok) {
+        const resolveJson: any = await resolveRes.json().catch(() => null);
+        const bid = resolveJson?.endpoint?.browseEndpoint?.browseId;
+        if (typeof bid === 'string' && bid.startsWith('UC')) {
+          browseId = bid;
+        }
+      }
+    }
+
+    if (!browseId) return null;
+
+    const [rss, browseRes] = await Promise.all([
+      fetchRssFeedVideos(browseId),
+      fetch('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': YT_FETCH_HEADERS['User-Agent'],
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: 'WEB',
+              clientVersion: '2.20241001.01.00',
+              hl: 'en',
+              gl: 'US',
+            },
+          },
+          browseId,
+        }),
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => null),
+    ]);
+
+    let channelTitle: string | null = rss.channelName;
+    let handle: string | null = parsed.kind === 'handle' ? parsed.value : null;
+    let avatarUrl: string | null = null;
+    let subscriberCountText: string | null = null;
+
+    if (browseRes && browseRes.ok) {
+      const rawText = await browseRes.text().catch(() => '');
+      if (rawText) {
+        try {
+          const bJson: any = JSON.parse(rawText);
+          const metaRenderer = bJson?.metadata?.channelMetadataRenderer;
+          if (metaRenderer?.title) channelTitle = String(metaRenderer.title);
+          const vanity = metaRenderer?.vanityChannelUrl;
+          if (typeof vanity === 'string' && vanity.includes('/@')) {
+            handle = `@${vanity.split('/@')[1].split('/')[0]}`;
+          }
+          const thumbs = metaRenderer?.avatar?.thumbnails;
+          if (Array.isArray(thumbs) && thumbs.length > 0) {
+            avatarUrl = thumbs[thumbs.length - 1]?.url || thumbs[0]?.url || null;
+          }
+        } catch {}
+        subscriberCountText = extractSubscriberCountFromHtml(rawText);
+      }
+    }
+
+    if (!channelTitle && rss.videos.length === 0 && !avatarUrl) {
+      return null;
+    }
+
+    return {
+      channelId: browseId,
+      channelTitle: channelTitle || parsed.value.replace(/^@+/, '') || 'YouTube Creator',
+      handle,
+      avatarUrl,
+      subscriberCountText,
+      channelUrl: handle
+        ? `https://www.youtube.com/${handle}`
+        : `https://www.youtube.com/channel/${browseId}`,
+      latestVideos: rss.videos,
+      source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
+    };
+  } catch {
+    return null;
   }
 }
 
 async function fetchChannelDetailsByUrl(
   parsed: ParsedYouTubeInput
 ): Promise<YouTubeShowcaseData> {
+  // Attempt direct HTML fetch (works cleanly when consent cookie is honored)
   try {
     const res = await fetch(parsed.canonicalUrl, {
       headers: YT_FETCH_HEADERS,
@@ -320,28 +441,41 @@ async function fetchChannelDetailsByUrl(
       signal: AbortSignal.timeout(5500),
     });
 
-    if (res.ok) {
+    if (res.ok && !res.url.includes('consent.youtube.com')) {
       const html = await res.text();
       const meta = extractChannelMetaFromHtml(html, parsed);
       const rss = meta.channelId
         ? await fetchRssFeedVideos(meta.channelId)
-        : { channelName: null, videos: [] };
+        : parsed.kind === 'handle' || parsed.kind === 'custom'
+          ? await fetchRssFeedVideosByParam('user', parsed.value.replace(/^@+/, ''))
+          : { channelId: null, channelName: null, videos: [] };
 
-      return {
-        channelId: meta.channelId,
-        channelTitle:
-          meta.channelTitle || rss.channelName || parsed.value.replace(/^@/, ''),
-        handle: meta.handle,
-        avatarUrl: meta.avatarUrl,
-        subscriberCountText: meta.subscriberCountText,
-        channelUrl: meta.handle
-          ? `https://www.youtube.com/${meta.handle}`
-          : parsed.canonicalUrl,
-        latestVideos: rss.videos,
-        source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
-      };
+      const resolvedChannelId = meta.channelId || ('channelId' in rss ? rss.channelId : null);
+      if (resolvedChannelId || rss.videos.length > 0 || meta.avatarUrl) {
+        return {
+          channelId: resolvedChannelId,
+          channelTitle:
+            meta.channelTitle || rss.channelName || parsed.value.replace(/^@/, ''),
+          handle: meta.handle,
+          avatarUrl: meta.avatarUrl,
+          subscriberCountText: meta.subscriberCountText,
+          channelUrl: meta.handle
+            ? `https://www.youtube.com/${meta.handle}`
+            : resolvedChannelId
+              ? `https://www.youtube.com/channel/${resolvedChannelId}`
+              : parsed.canonicalUrl,
+          latestVideos: rss.videos,
+          source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
+        };
+      }
     }
   } catch {}
+
+  // InnerTube fallback (works reliably from deployed serverless & Cloud Run IPs without consent wall)
+  const innerTube = await resolveChannelViaInnerTube(parsed);
+  if (innerTube) {
+    return innerTube;
+  }
 
   if (parsed.kind === 'channel_id') {
     const rss = await fetchRssFeedVideos(parsed.value);
@@ -355,6 +489,22 @@ async function fetchChannelDetailsByUrl(
       latestVideos: rss.videos,
       source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
     };
+  }
+
+  if (parsed.kind === 'handle' || parsed.kind === 'custom') {
+    const rssByUser = await fetchRssFeedVideosByParam('user', parsed.value.replace(/^@+/, ''));
+    if (rssByUser.videos.length > 0 || rssByUser.channelId) {
+      return {
+        channelId: rssByUser.channelId,
+        channelTitle: rssByUser.channelName || parsed.value.replace(/^@/, ''),
+        handle: parsed.kind === 'handle' ? parsed.value : null,
+        avatarUrl: null,
+        subscriberCountText: null,
+        channelUrl: parsed.canonicalUrl,
+        latestVideos: rssByUser.videos,
+        source: rssByUser.videos.length > 0 ? 'channel_rss' : 'manual',
+      };
+    }
   }
 
   return {
@@ -406,10 +556,10 @@ async function fetchYouTubePlaylistVideosApi(
   }
 }
 
-async function fetchYouTubeShowcaseViaDataApi(
-  parsed: ParsedYouTubeInput
+async function fetchYouTubeShowcaseViaDataApiWithKey(
+  parsed: ParsedYouTubeInput,
+  apiKey: string
 ): Promise<YouTubeShowcaseData | null> {
-  const apiKey = getYouTubeApiKey();
   if (!apiKey) return null;
 
   try {
@@ -599,6 +749,18 @@ async function fetchYouTubeShowcaseViaDataApi(
   }
 }
 
+async function fetchYouTubeShowcaseViaDataApi(
+  parsed: ParsedYouTubeInput
+): Promise<YouTubeShowcaseData | null> {
+  const primaryKey = getYouTubeApiKey();
+  const res = await fetchYouTubeShowcaseViaDataApiWithKey(parsed, primaryKey);
+  if (res) return res;
+  if (primaryKey !== DEFAULT_YOUTUBE_DATA_API_KEY) {
+    return fetchYouTubeShowcaseViaDataApiWithKey(parsed, DEFAULT_YOUTUBE_DATA_API_KEY);
+  }
+  return null;
+}
+
 export async function fetchYouTubeShowcase(
   rawInput: string
 ): Promise<YouTubeShowcaseData | null> {
@@ -675,12 +837,14 @@ export async function fetchYouTubeShowcase(
     } catch {}
   }
 
-  // Fallback 2: Channel HTML + RSS scraping
+  // Fallback 2: Channel HTML + InnerTube + RSS scraping
   const result = await fetchChannelDetailsByUrl(parsed);
-  cache.set(parsed.canonicalUrl, {
-    data: result,
-    expiresAt: Date.now() + CACHE_TTL_MS,
-  });
+  if (result.channelId || result.avatarUrl || (result.latestVideos?.length ?? 0) > 0) {
+    cache.set(parsed.canonicalUrl, {
+      data: result,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+  }
   return result;
 }
 

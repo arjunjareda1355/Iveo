@@ -139,6 +139,9 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
     if (localeMatch) {
       path = path.slice(localeMatch[0].length - 1);
     }
+    if (path.startsWith('/embed/')) {
+      path = path.slice('/embed'.length);
+    }
 
     const segments = path.split('/').filter(Boolean);
     if (segments.length === 2) {
@@ -174,6 +177,29 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
       SOUNDCLOUD_SEGMENT_REGEX.test(segments[1])
     ) {
       const canonicalUrl = `https://soundcloud.com/${segments[0]}/${segments[1]}`;
+      const embedSrc = `https://w.soundcloud.com/player/?url=${encodeURIComponent(
+        canonicalUrl
+      )}&color=%230a0a0a&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false`;
+
+      return {
+        provider: 'soundcloud',
+        canonicalUrl,
+        embedSrc,
+        label: 'SoundCloud track',
+        height: 166,
+        aspect: null,
+        identifier: `${segments[0]}/${segments[1]}`,
+        subtype: 'track',
+      };
+    }
+
+    if (
+      segments.length === 3 &&
+      SOUNDCLOUD_SEGMENT_REGEX.test(segments[0]) &&
+      SOUNDCLOUD_SEGMENT_REGEX.test(segments[1]) &&
+      /^s-[A-Za-z0-9_-]+$/.test(segments[2])
+    ) {
+      const canonicalUrl = `https://soundcloud.com/${segments[0]}/${segments[1]}/${segments[2]}`;
       const embedSrc = `https://w.soundcloud.com/player/?url=${encodeURIComponent(
         canonicalUrl
       )}&color=%230a0a0a&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false`;

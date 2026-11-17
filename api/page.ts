@@ -45,6 +45,10 @@ const PUBLIC_INFO_META: Record<string, { title: string; description: string }> =
     title: 'Legal Information | Iveo',
     description: 'Legal notices, ownership, and compliance details for Iveo (iveo.site).',
   },
+  report: {
+    title: 'Report a Page | Iveo',
+    description: 'Report a suspicious, impersonating, or policy-violating Iveo profile page for Trust & Safety review.',
+  },
 };
 
 async function getShellTemplate(origin: string): Promise<{ template: string; isFallback: boolean }> {
@@ -170,6 +174,25 @@ export async function resolveSeoHeadForSegment(
 }> {
   const cleanFull = (rawSegment || '').replace(/^\/+|\/+$/g, '').toLowerCase();
   const firstSegment = cleanFull.split('/')[0] || '';
+
+  if (firstSegment === 'embed') {
+    const rawUser = cleanFull.split('/')[1] || '';
+    const cleanUser = rawUser.replace(/^@+/, '');
+    const title = cleanUser ? `@${cleanUser} Embed | Iveo` : 'Iveo Profile Embed';
+    const ogImg = cleanUser ? `${origin}/api/og?u=${encodeURIComponent(cleanUser)}` : ogImageAddress(origin);
+    const tags = `<title>${escapeHtml(title)}</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:image" content="${escapeHtml(ogImg)}" />`;
+    return {
+      tags,
+      ssrBodyHtml: '',
+      cacheControl: 'public, s-maxage=120, stale-while-revalidate=600',
+      failed: false,
+      foundProfile: false,
+      httpStatus: 200,
+    };
+  }
 
   if (!cleanFull || ['@vite', '@react-refresh', '@fs', '@id'].includes(firstSegment)) {
     return {

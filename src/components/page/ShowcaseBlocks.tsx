@@ -62,11 +62,71 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
   surfaceStyle,
 }) => {
   const ytUrl = block.url ? formatExternalUrl(block.url) : 'https://youtube.com';
-  const yt = block.youtube;
-  const ctaLabel = yt?.buttonLabel?.trim() || 'Subscribe';
+  const [liveEnriched, setLiveEnriched] = useState<{
+    avatarUrl?: string | null;
+    channelTitle?: string | null;
+    handle?: string | null;
+    subscriberText?: string | null;
+    latestVideos?: { id: string; title: string; thumbnailUrl?: string | null; url: string }[];
+  } | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const [failedThumbIds, setFailedThumbIds] = useState<Record<string, boolean>>({});
+
+  const storedYt = block.youtube;
+  const shouldEnrich =
+    isPublicPage &&
+    Boolean(block.url) &&
+    (storedYt?.showLatestVideo ?? true) &&
+    (!Array.isArray(storedYt?.latestVideos) || storedYt.latestVideos.length === 0 || !storedYt?.avatarUrl);
+
+  useEffect(() => {
+    setAvatarFailed(false);
+    setFailedThumbIds({});
+  }, [storedYt?.avatarUrl, block.url]);
+
+  useEffect(() => {
+    if (!shouldEnrich || !block.url) return;
+    let cancelled = false;
+    fetch(`/api/integrations/youtube?url=${encodeURIComponent(block.url)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.ok || !data?.channel) return;
+        const ch = data.channel;
+        const mappedVideos = Array.isArray(ch.latestVideos)
+          ? ch.latestVideos.map((v: any) => ({
+              id: String(v.videoId || v.id || ''),
+              title: String(v.title || 'Watch on YouTube'),
+              thumbnailUrl: v.thumbnailUrl || null,
+              url: String(v.url || ''),
+            }))
+          : [];
+        setLiveEnriched({
+          avatarUrl: ch.avatarUrl || null,
+          channelTitle: ch.channelTitle || null,
+          handle: ch.handle || null,
+          subscriberText: ch.subscriberCountText || null,
+          latestVideos: mappedVideos,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldEnrich, block.url]);
+
+  const effectiveAvatarUrl = storedYt?.avatarUrl || liveEnriched?.avatarUrl || null;
+  const effectiveChannelTitle = storedYt?.channelTitle || liveEnriched?.channelTitle || null;
+  const effectiveHandle = storedYt?.handle || liveEnriched?.handle || null;
+  const effectiveSubscriberText = storedYt?.subscriberText || liveEnriched?.subscriberText || null;
+  const rawVideos =
+    Array.isArray(storedYt?.latestVideos) && storedYt.latestVideos.length > 0
+      ? storedYt.latestVideos
+      : liveEnriched?.latestVideos || [];
+
+  const ctaLabel = storedYt?.buttonLabel?.trim() || 'Subscribe';
   const videos =
-    yt?.showLatestVideo && Array.isArray(yt.latestVideos)
-      ? yt.latestVideos.slice(0, 3)
+    (storedYt?.showLatestVideo ?? true) && Array.isArray(rawVideos)
+      ? rawVideos.slice(0, 3)
       : [];
   const { fg } = resolveCardPalette(surfaceStyle, tokens);
   const upperFg = fg.toUpperCase();
@@ -81,11 +141,12 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
 
   const channelIdentity = (
     <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
-      {yt?.avatarUrl ? (
+      {effectiveAvatarUrl && !avatarFailed ? (
         <img
-          src={yt.avatarUrl}
+          src={effectiveAvatarUrl}
           alt={block.title || 'YouTube'}
           referrerPolicy="no-referrer"
+          onError={() => setAvatarFailed(true)}
           className="object-cover shrink-0 border border-current/20"
           style={{
             width: `${Math.round(36 * scale)}px`,
@@ -115,9 +176,9 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
               color: fg,
             }}
           >
-            {block.title || yt?.channelTitle || 'YouTube Channel'}
+            {block.title || effectiveChannelTitle || 'YouTube Channel'}
           </span>
-          {yt?.subscriberText && (
+          {effectiveSubscriberText && (
             <span
               className={`px-1.5 py-0.5 text-[9px] font-semibold shrink-0 whitespace-nowrap border ${
                 isLightFg
@@ -126,12 +187,12 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
               }`}
               style={{ borderRadius: `${controlRadius}px` }}
             >
-              {yt.subscriberText}
+              {effectiveSubscriberText}
             </span>
           )}
         </div>
         <span className="text-[11px] opacity-75 truncate">
-          {block.badge || yt?.handle || 'Subscribe for new videos'}
+          {block.badge || effectiveHandle || 'Subscribe for new videos'}
         </span>
       </div>
     </div>
@@ -196,18 +257,23 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
         >
           {videos.map((vid, idx) => {
             const vidUrl = formatExternalUrl(vid.url || ytUrl);
+            const thumbKey = vid.id || String(idx);
+            const thumbBroken = Boolean(failedThumbIds[thumbKey]);
             const cardInner = (
               <div
                 className="overflow-hidden border border-current/15 bg-black/5 flex flex-col"
                 style={{ borderRadius: `${innerRadius}px` }}
               >
-                <div className="relative aspect-video bg-black/20">
-                  {vid.thumbnailUrl && (
+                <div className="relative aspect-video bg-neutral-900">
+                  {vid.thumbnailUrl && !thumbBroken && (
                     <img
                       src={vid.thumbnailUrl}
                       alt={vid.title}
                       loading="lazy"
                       referrerPolicy="no-referrer"
+                      onError={() =>
+                        setFailedThumbIds((prev) => ({ ...prev, [thumbKey]: true }))
+                      }
                       className="w-full h-full object-cover"
                     />
                   )}

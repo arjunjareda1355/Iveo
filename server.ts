@@ -549,7 +549,14 @@ async function startServer() {
       return { html: resultHtml, status: 301, redirectLocation: resolved.redirectLocation };
     }
 
-    if (resolved.foundProfile || resolved.httpStatus === 404 || cleanPath.startsWith('admin') || cleanPath === 'discover') {
+    if (
+      resolved.foundProfile ||
+      resolved.httpStatus === 404 ||
+      cleanPath.startsWith('admin') ||
+      cleanPath.startsWith('embed') ||
+      cleanPath === 'report' ||
+      cleanPath === 'discover'
+    ) {
       resultHtml = stripSiteIntroMarkup(resultHtml);
     }
 
@@ -562,6 +569,11 @@ async function startServer() {
 
     return { html: resultHtml, status: resolved.httpStatus };
   };
+
+  app.use('/embed', (_req, res, next) => {
+    res.setHeader('Content-Security-Policy', 'frame-ancestors *;');
+    next();
+  });
 
   // 5. Vite Dev Server / Static SPA Fallback
   if (!isProd) {

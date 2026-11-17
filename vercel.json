@@ -5,6 +5,8 @@
   },
   "rewrites": [
     { "source": "/api/avatar/:username", "destination": "/api/avatar?u=:username" },
+    { "source": "/api/avatar", "destination": "/api/data?action=avatar-upload" },
+    { "source": "/api/background/upload", "destination": "/api/data?action=background-upload" },
     { "source": "/api/razorpay/:action", "destination": "/api/razorpay?action=:action" },
     { "source": "/api/public-page", "destination": "/api/data?action=public-page" },
     { "source": "/api/claim-username", "destination": "/api/data?action=claim-username" },
@@ -16,19 +18,37 @@
     { "source": "/api/analytics/event", "destination": "/api/data?action=analytics-event" },
     { "source": "/api/analytics", "destination": "/api/data?action=analytics" },
     { "source": "/api/integrations/buymeacoffee", "destination": "/api/data?action=buymeacoffee" },
+    { "source": "/api/integrations/youtube", "destination": "/api/data?action=youtube" },
+    { "source": "/api/integrations/embed", "destination": "/api/data?action=embed" },
+    { "source": "/api/oauth/youtube/url", "destination": "/api/data?action=oauth-youtube-url" },
+    { "source": "/api/oauth/youtube/callback", "destination": "/api/data?action=oauth-youtube-callback" },
+    { "source": "/api/oauth/:provider/url", "destination": "/api/data?action=oauth-social-url&provider=:provider" },
+    { "source": "/api/oauth/:provider/callback", "destination": "/api/data?action=oauth-social-callback&provider=:provider" },
+    { "source": "/api/subscription/cancel", "destination": "/api/data?action=subscription-cancel" },
+    { "source": "/api/subscription/reactivate", "destination": "/api/data?action=subscription-reactivate" },
+    { "source": "/api/subscription", "destination": "/api/data?action=subscription" },
     { "source": "/api/discover", "destination": "/api/data?action=discover" },
     { "source": "/api/seo/admin/overview", "destination": "/api/data?action=seo-overview" },
     { "source": "/api/seo/admin/regenerate-sitemap", "destination": "/api/data?action=seo-regenerate" },
     { "source": "/api/seo/admin/validate", "destination": "/api/data?action=seo-validate" },
     { "source": "/api/seo/admin/inspect", "destination": "/api/data?action=seo-inspect" },
+    { "source": "/api/seo/admin/moderate-background", "destination": "/api/data?action=seo-moderate-background" },
     { "source": "/api/unlock-link", "destination": "/api/data?action=unlock-link" },
+    { "source": "/api/link-password/status", "destination": "/api/data?action=link-password-status" },
     { "source": "/api/link-password", "destination": "/api/data?action=link-password" },
     { "source": "/api/account/delete", "destination": "/api/data?action=account-delete" },
     { "source": "/api/db/readiness", "destination": "/api/data?action=readiness" },
+    { "source": "/@:username([A-Za-z0-9-]{3,30})", "destination": "/api/page?u=@:username" },
     { "source": "/:username([A-Za-z0-9-]{3,30})", "destination": "/api/page?u=:username" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
+    {
+      "source": "/embed/(.*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "frame-ancestors *;" }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

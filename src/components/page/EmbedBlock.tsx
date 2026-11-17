@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   Music,
@@ -12,6 +12,7 @@ import {
 import { PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
 import { parseEmbedUrl } from '../../lib/embeds';
+import { formatExternalUrl } from '../../lib/urls';
 import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
@@ -36,6 +37,16 @@ const XMarkIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
   </svg>
 );
 
+function buildAutoplayEmbedUrl(embedSrc: string, provider: string): string {
+  if (provider === 'youtube') {
+    return embedSrc.includes('?') ? `${embedSrc}&autoplay=1` : `${embedSrc}?autoplay=1`;
+  }
+  if (provider === 'soundcloud') {
+    return embedSrc.replace('auto_play=false', 'auto_play=true');
+  }
+  return embedSrc;
+}
+
 export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   block,
   vibe,
@@ -52,6 +63,11 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   const parsed = parseEmbedUrl(block.url || '');
   const provider = parsed?.provider || block.embedProvider || 'youtube';
   const meta = block.embedMeta;
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [meta?.avatarUrl]);
 
   const isSocialCardProvider =
     provider === 'discord' ||
@@ -104,7 +120,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
   // Rich interactive social / developer card (Discord, GitHub, LinkedIn, X)
   if (isSocialCardProvider) {
-    const targetUrl = parsed?.canonicalUrl || block.url || '#';
+    const targetUrl = parsed?.canonicalUrl || (block.url ? formatExternalUrl(block.url) : '#');
     const cardTitle = meta?.title || block.title || parsed?.label || `${providerLabel} link`;
     const cardSubtitle = meta?.subtitle || (parsed?.identifier ? `@${parsed.identifier}` : undefined);
     const cardDesc = meta?.description;
@@ -130,10 +146,12 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
       >
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            {meta?.avatarUrl ? (
+            {meta?.avatarUrl && !avatarError ? (
               <img
                 src={meta.avatarUrl}
                 alt={cardTitle}
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarError(true)}
                 className="rounded-full object-cover border border-current/20 shrink-0"
                 style={{
                   width: `${Math.round(38 * scale)}px`,
@@ -212,7 +230,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
           )}
 
           <span
-            className="inline-flex items-center gap-1 font-semibold px-3 py-1 shrink-0"
+            className="inline-flex items-center gap-1 font-semibold px-3 py-1 shrink-0 whitespace-nowrap"
             style={{
               backgroundColor: tokens.text,
               color: tokens.bg,
@@ -289,30 +307,90 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
     );
   }
 
-  // Live mode on public page:
-  // If active, render iframe
+  const externalFallbackUrl = parsed?.canonicalUrl || (block.url ? formatExternalUrl(block.url) : '');
+
+  // Live mode on public page: if active and valid embedSrc, render native iframe without blocking sandbox
   if (isActivePlayer && parsed) {
+    const activeSrc = buildAutoplayEmbedUrl(parsed.embedSrc, parsed.provider);
     return (
-      <div
-        className="w-full overflow-hidden transition-all duration-150"
+      <div className="w-full flex flex-col gap-1.5">
+        <div
+          className="w-full overflow-hidden transition-all duration-150 bg-black/5"
+          style={{
+            borderRadius: `${cardRadius}px`,
+            height: parsed.height ? `${parsed.height}px` : undefined,
+            aspectRatio: parsed.aspect || undefined,
+          }}
+        >
+          <iframe
+            src={activeSrc}
+            title={block.title || parsed.label}
+            loading="eager"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="w-full h-full border-0 block"
+            style={{ borderRadius: `${cardRadius}px` }}
+          />
+        </div>
+        {externalFallbackUrl && (
+          <a
+            href={externalFallbackUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-end inline-flex items-center gap-1 text-[11px] font-medium opacity-65 hover:opacity-100 transition-opacity px-1"
+            style={{ color: tokens.muted }}
+          >
+            <span>Open on {providerLabel}</span>
+            <ExternalLink size={10} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback card if a saved media embed URL could not be parsed cleanly into an iframe
+  if (!parsed && externalFallbackUrl) {
+    return (
+      <a
+        href={externalFallbackUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onLinkClick?.(block)}
+        className="w-full overflow-hidden relative flex flex-col items-center justify-center p-6 text-center transition-all duration-150 hover:scale-[1.01]"
         style={{
+          minHeight: `${defaultHeight}px`,
+          ...baseSurface,
+          fontFamily: fontFamily || vibe.fontFamily,
           borderRadius: `${cardRadius}px`,
-          height: parsed.height ? `${parsed.height}px` : undefined,
-          aspectRatio: parsed.aspect || undefined,
         }}
       >
-        <iframe
-          src={parsed.embedSrc}
-          title={block.title || parsed.label}
-          loading="eager"
-          allow="encrypted-media; fullscreen; picture-in-picture"
-          allowFullScreen={provider === 'youtube'}
-          referrerPolicy="strict-origin-when-cross-origin"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
-          className="w-full h-full border-0 block"
-          style={{ borderRadius: `${cardRadius}px` }}
-        />
-      </div>
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center mb-3 shrink-0"
+          style={{
+            backgroundColor: tokens.text,
+            color: tokens.bg,
+          }}
+        >
+          <ProviderIcon size={24} strokeWidth={1.5} />
+        </div>
+        {block.title && (
+          <h4 className="text-[15px] font-semibold mb-1 max-w-[85%] truncate">
+            {block.title}
+          </h4>
+        )}
+        <span
+          className="h-9 px-5 font-semibold text-[13px] inline-flex items-center gap-1.5 mt-2 whitespace-nowrap"
+          style={{
+            backgroundColor: tokens.text,
+            color: tokens.bg,
+            borderRadius: `${controlRadius}px`,
+          }}
+        >
+          <span>Open on {providerLabel}</span>
+          <ExternalLink size={13} />
+        </span>
+      </a>
     );
   }
 
@@ -353,26 +431,45 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
       )}
 
       <p className="text-[13px] font-medium opacity-85 mb-4">
-        {parsed?.label || `${providerLabel} audio`}
+        {parsed?.label || `${providerLabel} player`}
       </p>
 
-      <button
-        type="button"
-        aria-label={accessibleName}
-        onClick={() => {
-          onActivate(block.id);
-          onLinkClick?.(block);
-        }}
-        className="h-10 px-6 font-semibold text-[14px] flex items-center justify-center gap-2 transition-transform duration-120 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
-        style={{
-          backgroundColor: tokens.text,
-          color: tokens.bg,
-          borderRadius: `${controlRadius}px`,
-        }}
-      >
-        <Play size={15} fill="currentColor" />
-        <span>{playLabel}</span>
-      </button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          aria-label={accessibleName}
+          onClick={() => {
+            onActivate(block.id);
+            onLinkClick?.(block);
+          }}
+          className="h-10 px-6 font-semibold text-[14px] inline-flex items-center justify-center gap-2 transition-transform duration-120 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer whitespace-nowrap shrink-0"
+          style={{
+            backgroundColor: tokens.text,
+            color: tokens.bg,
+            borderRadius: `${controlRadius}px`,
+          }}
+        >
+          <Play size={15} fill="currentColor" />
+          <span>{playLabel}</span>
+        </button>
+
+        {externalFallbackUrl && (
+          <a
+            href={externalFallbackUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${block.title || providerLabel} in ${providerLabel}`}
+            title={`Open on ${providerLabel}`}
+            className="h-10 w-10 inline-flex items-center justify-center border border-current/25 opacity-80 hover:opacity-100 transition-opacity shrink-0"
+            style={{
+              borderRadius: `${controlRadius}px`,
+              color: String(baseSurface.color || tokens.text),
+            }}
+          >
+            <ExternalLink size={15} />
+          </a>
+        )}
+      </div>
 
       <p className="mt-3 text-[12px] opacity-75">
         Content loads from {providerLabel} when you press play.
