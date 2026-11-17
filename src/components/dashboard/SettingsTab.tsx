@@ -258,6 +258,19 @@ export const SettingsTab: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Passkeys row */}
+          <div className="py-3 flex items-center justify-between gap-3 text-[14px]">
+            <div className="min-w-0">
+              <span className="text-muted block">Passkeys</span>
+              <span className="text-[12px] text-muted/90 block mt-0.5">
+                Sign in faster with fingerprint, face ID, or security key
+              </span>
+            </div>
+            <Button as={Link} to="/account#passkeys" variant="ghost" size="sm" className="shrink-0">
+              Manage
+            </Button>
+          </div>
         </div>
 
         <div className="mt-2">

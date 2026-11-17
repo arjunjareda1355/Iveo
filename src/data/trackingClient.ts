@@ -14,8 +14,10 @@ export async function sendTrackingRpc(
   if (!rawUrl || !anonKey) {
     // Persist cross-device to unified Express/AzureSQL analytics endpoint + local fallback
     if (fnName === 'record_page_event' && typeof window !== 'undefined') {
-      const username = String(params.p_username || '').toLowerCase().trim();
+      const username = String(params.p_username || '').replace(/^@+/, '').toLowerCase().trim();
       const eventType = params.p_event === 'click' ? 'link_click' : 'page_view';
+      const rawSource = String(params.p_source || '').trim();
+      const rawDevice = String(params.p_device || 'other').trim().toLowerCase();
       if (username) {
         fetch('/api/analytics/event', {
           method: 'POST',
@@ -24,8 +26,9 @@ export async function sendTrackingRpc(
             username,
             eventType,
             blockId: params.p_link_id || null,
-            referrer: String(params.p_source || 'Direct') || 'Direct',
-            device: String(params.p_device || 'Desktop') || 'Desktop',
+            source: rawSource,
+            referrer: rawSource || 'direct',
+            device: rawDevice || 'other',
           }),
           keepalive: true,
         }).catch(() => {});

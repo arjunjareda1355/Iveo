@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSourceParam, classifyReferrer } from './sources.ts';
+import { parseSourceParam, classifyReferrer, normalizeAnalyticsSource } from './sources.ts';
 import { detectDevice } from './device.ts';
 import { niceMax, yTicks, formatCtr } from './chart.ts';
 import { todayUtc, addDaysUtc, formatCount } from './dates.ts';
@@ -29,11 +29,27 @@ test('sources: classifyReferrer maps android app packages and hosts correctly', 
   assert.equal(classifyReferrer('', 'iveo.site'), '');
 });
 
-test('device: detectDevice identifies device types from User-Agent', () => {
+test('sources: normalizeAnalyticsSource canonicalizes raw referrers and handles empty as direct', () => {
+  assert.equal(normalizeAnalyticsSource(''), '');
+  assert.equal(normalizeAnalyticsSource('Direct'), '');
+  assert.equal(normalizeAnalyticsSource('twitter'), 'x');
+  assert.equal(normalizeAnalyticsSource('https://l.instagram.com/?u=https://iveo.site/@maya'), 'instagram');
+  assert.equal(normalizeAnalyticsSource('https://vm.tiktok.com/ZM8abc/'), 'tiktok');
+  assert.equal(normalizeAnalyticsSource('https://l.threads.net/'), 'threads');
+  assert.equal(normalizeAnalyticsSource('https://iveo.site/@maya', 'iveo.site'), '');
+});
+
+test('device: detectDevice identifies device types from User-Agent including mobile in-app WebViews', () => {
   assert.equal(detectDevice('Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X)'), 'tablet');
+  assert.equal(detectDevice('Mozilla/5.0 (Linux; Android 13; SM-X900 Tablet) AppleWebKit/537.36'), 'tablet');
   assert.equal(detectDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) Mobile/15E148'), 'mobile');
+  assert.equal(detectDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0 Mobile/15E148 Safari/604.1'), 'mobile');
+  assert.equal(detectDevice('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Instagram 310.0.0.0 Android'), 'mobile');
+  assert.equal(detectDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 [FBAN/FBIOS;FBAV/440.0]'), 'mobile');
+  assert.equal(detectDevice('Mozilla/5.0 (Linux; Android 13; SM-S918B) WhatsApp/2.23'), 'mobile');
   assert.equal(detectDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'), 'desktop');
   assert.equal(detectDevice('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), 'desktop');
+  assert.equal(detectDevice('Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'), 'desktop');
   assert.equal(detectDevice('UnknownAgent/1.0'), 'other');
 });
 

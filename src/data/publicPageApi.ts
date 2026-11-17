@@ -1,21 +1,58 @@
 import { PublicPageData, PublicBlock, SignupConfig } from './types';
 import { storagePublicUrl } from './storageApi';
 import type { VibeId } from '../lib/vibes';
-import { parseEmbedUrl } from '../lib/embeds';
 import { isAllowedAvatarUrl } from '../lib/avatar';
-import { isOwnerEmail } from '../lib/plan';
+import { resolveEffectivePlan } from '../lib/plan';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
+function mapFbBlocks(rawBlocks: any[]): PublicBlock[] {
+  const now = new Date();
+  return rawBlocks
+    .filter((b) => {
+      if (!b || b.isActive === false || b.isArchived) return false;
+      if (b.startAt && new Date(b.startAt) > now) return false;
+      if (b.endAt && new Date(b.endAt) <= now) return false;
+      return true;
+    })
+    .sort((a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0))
+    .map((b) => ({
+      id: String(b.id),
+      kind: b.kind || 'link',
+      title: String(b.title || ''),
+      url: b.isProtected ? null : (b.url ? String(b.url) : null),
+      icon: b.icon || null,
+      thumbnailPath: b.thumbnailPath || null,
+      thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
+      layout: b.layout || 'classic',
+      embedProvider: b.embedProvider || null,
+      embedMeta: b.embedMeta || null,
+      isProtected: Boolean(b.isProtected),
+      signup: b.signup || null,
+      tipJar: b.tipJar || null,
+      coffee: b.coffee || null,
+      faq: b.faq || null,
+      vcard: b.vcard || null,
+      animation: b.animation || null,
+      badge: b.badge || null,
+      youtube: b.youtube || null,
+      product: b.product || null,
+      booking: b.booking || null,
+      countdown: b.countdown || null,
+      promo: b.promo || null,
+      location: b.location || null,
+      download: b.download || null,
+    }));
+}
+
 export async function fetchPublicPage(username: string): Promise<PublicPageData | null> {
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return null;
 
-  let serverRespondedNotFound = false;
+  let serverTerminalNotFound = false;
 
-  // 1. Unified server endpoint (Azure SQL Database / Server store)
-  // Ensures published pages are accessible across any browser, device, or crawler with immediate real-time sync
+  // 1. Unified server endpoint (Azure SQL Database / Server store / Firebase Server)
   try {
     const ts = Date.now();
     let res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}&_t=${ts}`, {
@@ -38,11 +75,20 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     }
 
     if (res.status === 404) {
-      serverRespondedNotFound = true;
+      try {
+        const errBody = await res.json();
+        const st = errBody?.status;
+        if (st === 'deleted' || st === 'suspended' || st === 'private' || st === 'unpublished') {
+          serverTerminalNotFound = true;
+        }
+      } catch {}
     }
 
     if (res.ok) {
       const data = await res.json();
+      if (data && data.redirectTo && typeof data.redirectTo === 'string') {
+        return { profile: null, links: [], redirectTo: data.redirectTo };
+      }
       if (data && data.profile) {
         const mappedResult: PublicPageData = {
           profile: {
@@ -82,6 +128,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
             layout: b.layout || 'classic',
             embedProvider: b.embedProvider || null,
+            embedMeta: b.embedMeta || null,
             isProtected: Boolean(b.isProtected),
             signup: b.signup || null,
             tipJar: b.tipJar || null,
@@ -111,10 +158,10 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       }
     }
   } catch {
-    // Continue to Supabase / local fallback on network failure
+    // Continue to Firebase / local fallback on network failure
   }
 
-  if (serverRespondedNotFound) {
+  if (serverTerminalNotFound) {
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(`iveo_profile_${clean}`);
@@ -124,7 +171,118 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     return null;
   }
 
-  // 2. Check local client cache ONLY if server endpoint was unreachable
+  // 2. Direct Firebase client lookup fallback (handles cross-instance propagation or missing local disk cache)
+  try {
+    const { doc, getDoc, getDocs, collection, query, where } = await import('firebase/firestore');
+    const { db } = await import('../lib/firebase');
+
+    let fbData: any = null;
+    let blockOwnerKey = clean;
+
+    const userDoc = await getDoc(doc(db, 'users', clean));
+    if (userDoc.exists() && userDoc.data()?.status !== 'deleted') {
+      fbData = userDoc.data();
+    }
+
+    if (!fbData) {
+      const claimDoc = await getDoc(doc(db, 'claims', clean));
+      if (claimDoc.exists() && claimDoc.data()?.status !== 'deleted' && claimDoc.data()?.userId) {
+        const claimUid = String(claimDoc.data()!.userId);
+        const uidDoc = await getDoc(doc(db, 'users', claimUid));
+        if (uidDoc.exists() && uidDoc.data()?.status !== 'deleted') {
+          fbData = uidDoc.data();
+          blockOwnerKey = claimUid;
+        }
+      }
+    }
+
+    if (!fbData) {
+      const qSnap = await getDocs(query(collection(db, 'users'), where('username', '==', clean)));
+      for (const d of qSnap.docs) {
+        const dData = d.data();
+        if (dData?.status !== 'deleted') {
+          fbData = dData;
+          blockOwnerKey = d.id;
+          break;
+        }
+      }
+    }
+
+    if (fbData) {
+      const st = fbData.status || (fbData.isPublished === false ? 'unpublished' : 'active');
+      if (st === 'deleted' || st === 'suspended' || st === 'private' || st === 'unpublished') {
+        return null;
+      }
+
+      let rawBlocks: any[] = [];
+      const cleanBlocksSnap = await getDocs(collection(db, 'users', clean, 'blocks'));
+      if (!cleanBlocksSnap.empty) {
+        rawBlocks = cleanBlocksSnap.docs.map((d) => d.data());
+      } else {
+        const altKey = blockOwnerKey !== clean ? blockOwnerKey : (fbData.userId && fbData.userId !== clean ? String(fbData.userId) : '');
+        if (altKey && altKey !== 'owner') {
+          const uidBlocksSnap = await getDocs(collection(db, 'users', altKey, 'blocks'));
+          rawBlocks = uidBlocksSnap.docs.map((d) => d.data());
+        }
+      }
+
+      const resolvedPlan = resolveEffectivePlan({
+        email: fbData.primaryEmail,
+        storedPlan: fbData.plan,
+        isProFlag: fbData.isPro,
+        createdAt: fbData.createdAt || fbData.claimedAt || null,
+        subscription: fbData.subscription || null,
+      });
+
+      const rawAvatar = isAllowedAvatarUrl(fbData.avatarUrl) ? fbData.avatarUrl : null;
+      const resolvedAvatarUrl =
+        rawAvatar || (fbData.avatarData ? `/api/avatar/${encodeURIComponent(clean)}` : null);
+
+      const mappedFb: PublicPageData = {
+        profile: {
+          username: String(fbData.username || clean).replace(/^@+/, '').toLowerCase().trim(),
+          displayName: fbData.displayName || fbData.username || clean,
+          bio: fbData.bio || '',
+          avatarUrl: resolvedAvatarUrl,
+          avatarType: fbData.avatarType || (fbData.avatarId ? 'default' : (resolvedAvatarUrl ? 'uploaded' : 'default')),
+          avatarId: fbData.avatarId || null,
+          vibeId: (fbData.vibeId as VibeId) || 'clean',
+          plan: resolvedPlan.plan,
+          isPro: resolvedPlan.isPro,
+          isVerified: resolvedPlan.isPro,
+          buttonShape: fbData.buttonShape || null,
+          socials: fbData.socials || {},
+          socialsPosition: fbData.socialsPosition || 'top',
+          hideFromSearch: Boolean(fbData.hideFromSearch),
+          hideFooter: Boolean(fbData.hideFooter),
+          background: fbData.background || null,
+          googleAnalyticsId: fbData.googleAnalyticsId || null,
+          metaPixelId: fbData.metaPixelId || null,
+          whatsappNumber: fbData.whatsappNumber || null,
+          customSeoTitle: fbData.customSeoTitle || null,
+          customSeoDescription: fbData.customSeoDescription || null,
+          fontSettings: fbData.fontSettings || null,
+          buttonColors: fbData.buttonColors || null,
+          layoutSettings: fbData.layoutSettings || null,
+          businessCard: fbData.businessCard || null,
+        },
+        links: mapFbBlocks(rawBlocks),
+      };
+
+      return mappedFb;
+    }
+
+    // Check rename redirect in Firestore if profile not directly found
+    const redirectSnap = await getDoc(doc(db, 'redirects', clean));
+    if (redirectSnap.exists()) {
+      const target = String(redirectSnap.data()?.to || '').replace(/^@+/, '').toLowerCase().trim();
+      if (target && target !== clean) {
+        return { profile: null, links: [], redirectTo: target };
+      }
+    }
+  } catch {}
+
+  // 3. Local client cache fallback when server/Firebase are unreachable
   if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem(`iveo_profile_${clean}`);
@@ -138,6 +296,8 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             displayName: parsed.displayName || clean,
             bio: parsed.bio || '',
             avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
+            avatarType: parsed.avatarType,
+            avatarId: parsed.avatarId,
             vibeId: (parsed.vibeId as VibeId) || 'clean',
             plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
             isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
@@ -163,71 +323,6 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       }
     } catch {}
   }
-
-  // 3. Direct Firebase client lookup fallback
-  try {
-    const { doc, getDoc, getDocs, collection } = await import('firebase/firestore');
-    const { db } = await import('../lib/firebase');
-    const userDoc = await getDoc(doc(db, 'users', clean));
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      const blocksSnap = await getDocs(collection(db, 'users', clean, 'blocks'));
-      const links = blocksSnap.docs.map((d) => d.data() as any);
-      return {
-        profile: {
-          username: data.username || clean,
-          displayName: data.displayName || data.username || clean,
-          bio: data.bio || '',
-          avatarUrl: isAllowedAvatarUrl(data.avatarUrl) ? data.avatarUrl : null,
-          vibeId: (data.vibeId as VibeId) || 'clean',
-          plan: isOwnerEmail(data.primaryEmail) || data.plan === 'pro' ? 'pro' : 'free',
-          isPro: Boolean(isOwnerEmail(data.primaryEmail) || data.isPro || data.plan === 'pro'),
-          isVerified: Boolean(isOwnerEmail(data.primaryEmail) || data.isVerified || data.isPro || data.plan === 'pro'),
-          buttonShape: data.buttonShape || null,
-          socials: data.socials || {},
-          socialsPosition: data.socialsPosition || 'top',
-          hideFromSearch: Boolean(data.hideFromSearch),
-          hideFooter: Boolean(data.hideFooter),
-          background: data.background || null,
-          googleAnalyticsId: data.googleAnalyticsId || null,
-          metaPixelId: data.metaPixelId || null,
-          whatsappNumber: data.whatsappNumber || null,
-          customSeoTitle: data.customSeoTitle || null,
-          customSeoDescription: data.customSeoDescription || null,
-          fontSettings: data.fontSettings || null,
-          buttonColors: data.buttonColors || null,
-          layoutSettings: data.layoutSettings || null,
-          businessCard: data.businessCard || null,
-        },
-        links: links.map((b) => ({
-          id: String(b.id),
-          kind: b.kind || 'link',
-          title: String(b.title || ''),
-          url: b.isProtected ? null : (b.url ? String(b.url) : null),
-          icon: b.icon || null,
-          thumbnailPath: b.thumbnailPath || null,
-          thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
-          layout: b.layout || 'classic',
-          embedProvider: b.embedProvider || null,
-          isProtected: Boolean(b.isProtected),
-          signup: b.signup || null,
-          tipJar: b.tipJar || null,
-          coffee: b.coffee || null,
-          faq: b.faq || null,
-          vcard: b.vcard || null,
-          animation: b.animation || null,
-          badge: b.badge || null,
-          youtube: b.youtube || null,
-          product: b.product || null,
-          booking: b.booking || null,
-          countdown: b.countdown || null,
-          promo: b.promo || null,
-          location: b.location || null,
-          download: b.download || null,
-        })),
-      };
-    }
-  } catch {}
 
   if (rawSupabaseUrl) {
     try {

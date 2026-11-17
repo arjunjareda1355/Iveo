@@ -6,6 +6,7 @@ export interface ProfileSaveInput {
   displayName?: string;
   bio?: string;
   avatarUrl?: string | null;
+  avatarData?: string | null;
   avatarType?: 'default' | 'uploaded';
   avatarId?: string | null;
   vibeId?: string;
@@ -38,6 +39,7 @@ export interface MergedProfileSave {
   displayName: string;
   bio: string;
   avatarUrl: string | null;
+  avatarData: string | null;
   avatarType: 'default' | 'uploaded';
   avatarId: string | null;
   vibeId: string;
@@ -134,6 +136,17 @@ export function mergeProfileForSave(
       ? incoming.avatarType
       : prev.avatarType || (avatarId ? 'default' : avatarUrl ? 'uploaded' : 'default');
 
+  const clearedUploadedAvatar =
+    incoming.avatarUrl !== undefined &&
+    (!incoming.avatarUrl || (!incoming.avatarUrl.startsWith('/api/avatar/') && !incoming.avatarUrl.startsWith('data:image/')));
+
+  const avatarData: string | null =
+    incoming.avatarData !== undefined
+      ? incoming.avatarData
+      : clearedUploadedAvatar
+        ? null
+        : (prev.avatarData ?? null);
+
   return {
     userId: finalUserId,
     username: cleanUsername,
@@ -143,6 +156,7 @@ export function mergeProfileForSave(
         : prev.displayName || cleanUsername,
     bio: incoming.bio !== undefined ? incoming.bio : prev.bio || '',
     avatarUrl,
+    avatarData,
     avatarType,
     avatarId,
     vibeId: incoming.vibeId !== undefined ? incoming.vibeId : prev.vibeId || 'clean',

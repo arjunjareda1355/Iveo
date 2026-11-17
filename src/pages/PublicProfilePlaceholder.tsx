@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, Navigate } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo';
 import { Button } from '../components/ui/Button';
 import { PageRenderer } from '../components/page/PageRenderer';
@@ -54,6 +54,13 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
   }
 
   const clean = normalizeUsername(rawUsername);
+  return <PublicProfilePlaceholderInner clean={clean} isReservedName={isReservedName} />;
+};
+
+const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: boolean }> = ({
+  clean,
+  isReservedName,
+}) => {
   const [pageData, setPageData] = useState<PublicPageData | null>(() => {
     if (typeof window === 'undefined' || !clean) return null;
     try {
@@ -68,6 +75,8 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
           displayName: parsed.displayName || clean,
           bio: parsed.bio || '',
           avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
+          avatarType: parsed.avatarType,
+          avatarId: parsed.avatarId,
           vibeId: parsed.vibeId || 'clean',
           plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
           isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
@@ -343,9 +352,19 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     w.fbq('track', 'PageView');
   }, [pageData?.profile?.metaPixelId]);
 
-  // Analytics tracking & owner exclusion logic (Section 5.4 & 7)
+  // Reset tracking flags & analytics context only on handle change or unmount (not 60s background refresh)
   useEffect(() => {
-    if (!pageData?.profile) return;
+    viewTrackedRef.current = false;
+    ownerExclusionDoneRef.current = false;
+    return () => {
+      setAnalyticsContext({ enabled: true, username: null, source: null });
+    };
+  }, [clean]);
+
+  // Analytics tracking & owner exclusion logic (Section 5.4 & 7)
+  const hasLoadedProfile = Boolean(pageData?.profile);
+  useEffect(() => {
+    if (!hasLoadedProfile) return;
 
     const source = resolveSource();
     setAnalyticsContext({ username: clean, source, enabled: true });
@@ -399,11 +418,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
         clearTimeout(timer);
       };
     }
-
-    return () => {
-      setAnalyticsContext({ enabled: true, username: null, source: null });
-    };
-  }, [pageData?.profile, clean, session.isLoaded, session.isSignedIn, session.username]);
+  }, [hasLoadedProfile, clean, session.isLoaded, session.isSignedIn, session.username]);
 
   if (isLoading) {
     return (
@@ -411,6 +426,10 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
         <div className="w-8 h-8 rounded-full border-2 border-ink border-t-transparent animate-spin" />
       </div>
     );
+  }
+
+  if (pageData?.redirectTo) {
+    return <Navigate to={`/@${pageData.redirectTo}`} replace />;
   }
 
   // If reserved name is NOT claimed in the database, do not show "Claim this address" to public visitors

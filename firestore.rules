@@ -19,12 +19,40 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isValidRedirect(data) {
+      return data.keys().hasAll(['from', 'to', 'updatedAt'])
+        && data.keys().hasOnly(['from', 'to', 'updatedAt'])
+        && data.from is string && data.from.size() > 0 && data.from.size() <= 64
+        && data.to is string && data.to.size() > 0 && data.to.size() <= 64
+        && data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    function isValidAnalyticsEvent(data) {
+      return data.keys().hasAll(['id', 'username', 'eventType', 'createdAt'])
+        && data.keys().hasOnly(['id', 'username', 'eventType', 'blockId', 'country', 'referrer', 'device', 'createdAt'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.username is string && data.username.size() > 0 && data.username.size() <= 64
+        && data.eventType in ['page_view', 'link_click']
+        && (!('blockId' in data) || data.blockId == null || (data.blockId is string && data.blockId.size() <= 128))
+        && (!('country' in data) || data.country == null || (data.country is string && data.country.size() <= 120))
+        && (!('referrer' in data) || data.referrer == null || (data.referrer is string && data.referrer.size() <= 120))
+        && (!('device' in data) || data.device == null || data.device in ['mobile', 'tablet', 'desktop', 'other'])
+        && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64;
+    }
+
     // Claims Registry (for fast atomic check and cross-instance claim checks)
     match /claims/{username} {
       allow get: if isValidId(username);
       allow list: if true;
       allow create, update: if isValidId(username);
       allow delete: if isValidId(username) && isSignedIn();
+    }
+
+    // Handle rename redirects
+    match /redirects/{username} {
+      allow get: if isValidId(username);
+      allow create, update: if isValidId(username) && isValidRedirect(request.resource.data);
+      allow delete: if isValidId(username);
     }
 
     // User Profile
@@ -48,13 +76,19 @@ service cloud.firestore {
         allow update: if false;
       }
 
-      // Click Analytics
+      // Click Analytics Counters
       match /clicks/{clickId} {
         allow get, list: if isValidId(userId);
         allow create, update: if isValidId(userId) && isValidId(clickId);
         allow delete: if isValidId(userId);
       }
+
+      // Raw Analytics Events
+      match /analytics/{eventId} {
+        allow get, list: if isValidId(userId);
+        allow create, update: if isValidId(userId) && isValidId(eventId) && isValidAnalyticsEvent(request.resource.data);
+        allow delete: if isValidId(userId);
+      }
     }
   }
 }
-

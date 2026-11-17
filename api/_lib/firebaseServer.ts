@@ -42,7 +42,7 @@ export async function firebaseIsUsernameClaimed(
   requestingUserId?: string | null
 ): Promise<{ claimed: boolean; isOwn?: boolean; userId?: string }> {
   if (!serverDb || !username) return { claimed: false };
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
 
   // 1. Check atomic claims collection
   const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
@@ -91,7 +91,8 @@ export async function firebaseIsUsernameClaimed(
  */
 export async function firebaseGetProfile(username: string): Promise<any | null> {
   if (!serverDb || !username) return null;
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return null;
 
   try {
     // 1. Direct doc lookup by username
@@ -101,7 +102,7 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
       if (data?.status !== 'deleted') {
         return {
           ...data,
-          username: data.username || clean,
+          username: String(data.username || clean).replace(/^@+/, '').toLowerCase().trim() || clean,
         };
       }
     }
@@ -114,27 +115,32 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
         const userIdSnap = await getDoc(doc(serverDb, 'users', claimData.userId));
         if (userIdSnap.exists()) {
           const udata = userIdSnap.data();
-          const uUsername = typeof udata?.username === 'string' ? udata.username.toLowerCase().trim() : clean;
-          if (udata?.status !== 'deleted' && uUsername === clean) {
+          const uUsername =
+            typeof udata?.username === 'string'
+              ? udata.username.replace(/^@+/, '').toLowerCase().trim()
+              : '';
+          if (udata?.status !== 'deleted' && (!uUsername || uUsername === clean)) {
             return {
               ...udata,
-              username: udata.username || clean,
+              username: clean,
             };
           }
         }
       }
     }
 
-    // 3. Query by username attribute
-    const q = query(collection(serverDb, 'users'), where('username', '==', clean));
-    const querySnap = await getDocs(q);
-    for (const d of querySnap.docs) {
-      const data = d.data();
-      if (data?.status === 'deleted') continue;
-      return {
-        ...data,
-        username: data.username || clean,
-      };
+    // 3. Query by username attribute (including legacy @-prefixed docs)
+    for (const candidate of [clean, `@${clean}`]) {
+      const q = query(collection(serverDb, 'users'), where('username', '==', candidate));
+      const querySnap = await getDocs(q);
+      for (const d of querySnap.docs) {
+        const data = d.data();
+        if (data?.status === 'deleted') continue;
+        return {
+          ...data,
+          username: clean,
+        };
+      }
     }
   } catch (err) {
     console.warn('[FirebaseServer] getProfile notice:', err);
@@ -222,9 +228,9 @@ export async function firebaseGetProfileByUserId(
 /**
  * Retrieves user blocks from Firebase
  */
-export async function firebaseGetBlocks(username: string): Promise<any[]> {
+export async function firebaseGetBlocks(username: string, ownerUserId?: string | null): Promise<any[]> {
   if (!serverDb || !username) return [];
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
 
   try {
     // 1. Try blocks subcollection under username
@@ -235,17 +241,26 @@ export async function firebaseGetBlocks(username: string): Promise<any[]> {
         .sort((a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0));
     }
 
-    // 2. Try under claim userId
+    // 2. Try under claim userId or explicit ownerUserId
+    const candidateUserIds = new Set<string>();
+    if (ownerUserId && ownerUserId !== clean && ownerUserId !== 'owner') {
+      candidateUserIds.add(ownerUserId);
+    }
+
     const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
     if (claimSnap.exists()) {
       const claimData = claimSnap.data();
-      if (claimData.userId && claimData.userId !== clean) {
-        blocksSnap = await getDocs(collection(serverDb, 'users', claimData.userId, 'blocks'));
-        if (!blocksSnap.empty) {
-          return blocksSnap.docs
-            .map((d) => d.data())
-            .sort((a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0));
-        }
+      if (claimData.userId && claimData.userId !== clean && claimData.userId !== 'owner') {
+        candidateUserIds.add(claimData.userId);
+      }
+    }
+
+    for (const uid of candidateUserIds) {
+      blocksSnap = await getDocs(collection(serverDb, 'users', uid, 'blocks'));
+      if (!blocksSnap.empty) {
+        return blocksSnap.docs
+          .map((d) => d.data())
+          .sort((a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0));
       }
     }
   } catch (err) {
@@ -264,10 +279,10 @@ export async function firebaseSaveProfile(
   userId?: string
 ): Promise<void> {
   if (!serverDb || !username) return;
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
   const effectiveUserId = userId || profileData.userId || 'owner';
 
-  const cleanProfile = {
+  const cleanProfile: Record<string, any> = {
     userId: effectiveUserId,
     username: clean,
     displayName: profileData.displayName || clean,
@@ -281,6 +296,8 @@ export async function firebaseSaveProfile(
     socialsPosition: profileData.socialsPosition || 'top',
     primaryEmail: profileData.primaryEmail || null,
     plan: profileData.plan || 'free',
+    createdAt: profileData.createdAt || null,
+    subscription: profileData.subscription ?? null,
     status: profileData.status || (profileData.isPublished === false ? 'unpublished' : 'active'),
     isPublished: profileData.isPublished !== false,
     hideFooter: Boolean(profileData.hideFooter),
@@ -298,6 +315,18 @@ export async function firebaseSaveProfile(
     updatedAt: new Date().toISOString(),
   };
 
+  if (typeof profileData.avatarData === 'string' && profileData.avatarData.length <= 350000) {
+    cleanProfile.avatarData = profileData.avatarData;
+  } else if (
+    profileData.avatarData === null ||
+    (profileData.avatarUrl !== undefined &&
+      (!profileData.avatarUrl ||
+        (!String(profileData.avatarUrl).startsWith('/api/avatar/') &&
+          !String(profileData.avatarUrl).startsWith('data:image/'))))
+  ) {
+    cleanProfile.avatarData = null;
+  }
+
   try {
     // Save to users collection and overwrite nested socials map so deleted icons stay deleted
     const userRef = doc(serverDb, 'users', clean);
@@ -310,6 +339,9 @@ export async function firebaseSaveProfile(
       userId: effectiveUserId,
       claimedAt: cleanProfile.updatedAt,
     }, { merge: true });
+
+    // Remove any stale redirect from this newly claimed handle
+    await deleteDoc(doc(serverDb, 'redirects', clean)).catch(() => {});
 
     // If userId differs from username, mirror to users/{userId}
     if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
@@ -470,15 +502,16 @@ export async function firebaseMigrateUsernameData(
   userId?: string
 ): Promise<void> {
   if (!serverDb || !oldUsername || !newUsername) return;
-  const cleanOld = oldUsername.toLowerCase().trim();
-  const cleanNew = newUsername.toLowerCase().trim();
+  const cleanOld = oldUsername.replace(/^@+/, '').toLowerCase().trim();
+  const cleanNew = newUsername.replace(/^@+/, '').toLowerCase().trim();
   if (!cleanOld || !cleanNew || cleanOld === cleanNew) return;
 
   try {
-    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap] = await Promise.all([
+    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap, oldAnalyticsSnap] = await Promise.all([
       getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'contacts')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'clicks')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'analytics')).catch(() => null),
     ]);
 
     const batch = writeBatch(serverDb);
@@ -520,11 +553,120 @@ export async function firebaseMigrateUsernameData(
       });
     }
 
+    if (oldAnalyticsSnap && !oldAnalyticsSnap.empty) {
+      oldAnalyticsSnap.docs.forEach((d) => {
+        hasWrites = true;
+        const data = d.data() || {};
+        batch.set(
+          doc(serverDb!, 'users', cleanNew, 'analytics', d.id),
+          { ...data, username: cleanNew },
+          { merge: true }
+        );
+      });
+    }
+
     if (hasWrites) {
       await batch.commit();
     }
   } catch (err) {
     console.warn('[FirebaseServer] migrateUsernameData notice:', err);
+  }
+}
+
+/**
+ * Persists a rename redirect in Firestore so old /@handle links route cleanly across restarts.
+ */
+export async function firebaseSaveRedirect(
+  oldUsername: string,
+  newUsername: string
+): Promise<void> {
+  if (!serverDb || !oldUsername || !newUsername) return;
+  const cleanOld = oldUsername.replace(/^@+/, '').toLowerCase().trim();
+  const cleanNew = newUsername.replace(/^@+/, '').toLowerCase().trim();
+  if (!cleanOld || !cleanNew || cleanOld === cleanNew) return;
+  try {
+    await setDoc(doc(serverDb, 'redirects', cleanOld), {
+      from: cleanOld,
+      to: cleanNew,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.warn('[FirebaseServer] saveRedirect notice:', err);
+  }
+}
+
+export async function firebaseGetRedirectTarget(username: string): Promise<string | null> {
+  if (!serverDb || !username) return null;
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return null;
+  try {
+    const snap = await getDoc(doc(serverDb, 'redirects', clean));
+    if (snap.exists()) {
+      const target = String(snap.data()?.to || '').replace(/^@+/, '').toLowerCase().trim();
+      if (target && target !== clean) {
+        return target;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Persists raw page_view / link_click analytics event in Firestore for durable cross-device analytics.
+ */
+export async function firebaseRecordAnalyticsEvent(event: {
+  id: string;
+  username: string;
+  eventType: 'page_view' | 'link_click';
+  blockId?: string | null;
+  country?: string | null;
+  referrer?: string | null;
+  device?: string | null;
+  createdAt?: string;
+}): Promise<void> {
+  if (!serverDb || !event?.username || !event?.id) return;
+  const clean = event.username.replace(/^@+/, '').toLowerCase().trim();
+  const safeId = event.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
+  if (!clean || !safeId) return;
+
+  try {
+    await setDoc(doc(serverDb, 'users', clean, 'analytics', safeId), {
+      id: safeId,
+      username: clean,
+      eventType: event.eventType,
+      blockId: event.blockId || null,
+      country: event.country || 'Unknown',
+      referrer: event.referrer || 'direct',
+      device: event.device || 'desktop',
+      createdAt: event.createdAt || new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('[FirebaseServer] Background recordAnalyticsEvent notice:', err);
+  }
+}
+
+export async function firebaseGetAnalyticsEvents(
+  username: string,
+  fromDate: Date,
+  toDate: Date
+): Promise<any[]> {
+  if (!serverDb || !username) return [];
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return [];
+
+  try {
+    const fromMs = fromDate.getTime();
+    const toMs = toDate.getTime();
+    const snap = await getDocs(collection(serverDb, 'users', clean, 'analytics'));
+    return snap.docs
+      .map((d) => d.data())
+      .filter((ev: any) => {
+        const ts = new Date(ev.createdAt || '').getTime();
+        return !Number.isNaN(ts) && ts >= fromMs && ts <= toMs;
+      });
+  } catch (err) {
+    console.warn('[FirebaseServer] getAnalyticsEvents notice:', err);
+    return [];
   }
 }
 
@@ -536,7 +678,7 @@ export async function firebaseRecordClick(
   blockId: string
 ): Promise<void> {
   if (!serverDb || !username || !blockId) return;
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
 
   try {
     const clickRef = doc(serverDb, 'users', clean, 'clicks', blockId);
@@ -561,7 +703,7 @@ export async function firebaseReleaseUsername(
   userId?: string
 ): Promise<void> {
   if (!serverDb || !oldUsername) return;
-  const cleanOld = oldUsername.toLowerCase().trim();
+  const cleanOld = oldUsername.replace(/^@+/, '').toLowerCase().trim();
   if (!cleanOld) return;
   const nowIso = new Date().toISOString();
 
@@ -582,17 +724,24 @@ export async function firebaseReleaseUsername(
       }
     }
 
-    // 2. Delete old blocks, contacts & clicks subcollections under users/{cleanOld}/...
-    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap] = await Promise.all([
+    // 2. Delete old blocks, contacts, clicks & analytics subcollections under users/{cleanOld}/...
+    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap, oldAnalyticsSnap] = await Promise.all([
       getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'contacts')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'clicks')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'analytics')).catch(() => null),
     ]);
-    if ((oldBlocksSnap && !oldBlocksSnap.empty) || (oldContactsSnap && !oldContactsSnap.empty) || (oldClicksSnap && !oldClicksSnap.empty)) {
+    if (
+      (oldBlocksSnap && !oldBlocksSnap.empty) ||
+      (oldContactsSnap && !oldContactsSnap.empty) ||
+      (oldClicksSnap && !oldClicksSnap.empty) ||
+      (oldAnalyticsSnap && !oldAnalyticsSnap.empty)
+    ) {
       const batch = writeBatch(serverDb);
       oldBlocksSnap?.docs.forEach((d) => batch.delete(d.ref));
       oldContactsSnap?.docs.forEach((d) => batch.delete(d.ref));
       oldClicksSnap?.docs.forEach((d) => batch.delete(d.ref));
+      oldAnalyticsSnap?.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit().catch(() => {});
     }
 

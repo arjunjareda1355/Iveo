@@ -91,6 +91,31 @@ export const OnboardingPage: React.FC = () => {
   const [selectedVibeId, setSelectedVibeId] = useState<VibeId>(session.vibeId || 'clean');
   const [buttonShape, setButtonShape] = useState<ButtonShape>('rounded');
 
+  // Hydrate inputs once async server profile loading settles (before user edits)
+  const hydratedFromSessionRef = useRef(false);
+  useEffect(() => {
+    if (!session.isLoaded || hydratedFromSessionRef.current) return;
+    hydratedFromSessionRef.current = true;
+    if (session.username) {
+      setUsernameInput((prev) => prev || session.username || '');
+      if (currentStep === 1 && validateUsername(session.username, { allowReserved: isOwnerEmail(session.primaryEmail) }).ok) {
+        setCurrentStep(2);
+      }
+    }
+    if (session.displayName && session.displayName !== 'Your name') {
+      setDisplayName((prev) => (prev && prev !== 'Your name' ? prev : session.displayName));
+    }
+    if (session.imageUrl) {
+      setAvatarUrl((prev) => prev || session.imageUrl);
+    }
+    if (session.bio) {
+      setBio((prev) => prev || session.bio);
+    }
+    if (session.vibeId) {
+      setSelectedVibeId(session.vibeId);
+    }
+  }, [session.isLoaded, session.username, session.displayName, session.imageUrl, session.bio, session.vibeId, session.primaryEmail, currentStep]);
+
   // Submitting
   const [isSaving, setIsSaving] = useState(false);
 
@@ -458,6 +483,8 @@ export const OnboardingPage: React.FC = () => {
                         currentAvatarUrl={avatarUrl}
                         initials={displayName || usernameInput || 'ME'}
                         username={usernameInput || session.username}
+                        userId={session.userId}
+                        primaryEmail={session.primaryEmail}
                         onAvatarChange={(url) => setAvatarUrl(url)}
                       />
                     </div>

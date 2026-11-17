@@ -40,9 +40,9 @@ export function useAnalytics(rangeKey: RangeKey): UseAnalyticsResult {
         return;
       }
 
-      // Check cache validity (stale time 60s) unless manual refresh
+      // Check cache validity (stale time 5s) unless manual refresh
       const cached = analyticsCache.get(cacheKey);
-      const isFresh = cached && Date.now() - cached.updatedAt < 60000;
+      const isFresh = cached && Date.now() - cached.updatedAt < 5000;
 
       if (cached && !isManualRefresh) {
         setData(cached.data);

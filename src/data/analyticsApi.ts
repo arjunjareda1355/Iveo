@@ -1,6 +1,6 @@
 import { sendTrackingRpc } from './trackingClient';
-import { TrackSource } from '../lib/analytics/sources';
-import { DeviceType } from '../lib/analytics/device';
+import { TrackSource, normalizeAnalyticsSource } from '../lib/analytics/sources';
+import { DeviceType, detectDevice } from '../lib/analytics/device';
 import { AnalyticsResult, analyticsFromJson } from '../lib/analytics/types';
 
 export interface RecordEventInput {
@@ -82,22 +82,15 @@ export async function getAnalytics(
       if (res.ok) {
         const srv = await res.json();
         if (srv && typeof srv === 'object' && Array.isArray(srv.by_day)) {
-          const validSources = new Set<string>([
-            '', 'qr', 'google', 'bing', 'duckduckgo', 'instagram', 'facebook', 'x',
-            'tiktok', 'youtube', 'linkedin', 'pinterest', 'reddit', 'whatsapp',
-            'telegram', 'snapchat', 'threads', 'github', 'discord', 'email', 'other',
-          ]);
-          const normalizeSource = (rawSrc: string): TrackSource => {
-            const lower = (rawSrc || '').toLowerCase().trim();
-            if (!lower || lower === 'direct') return '';
-            return validSources.has(lower) ? (lower as TrackSource) : 'other';
-          };
+          const normalizeSource = (rawSrc: string): TrackSource =>
+            normalizeAnalyticsSource(rawSrc, 'iveo.site');
           const normalizeDevice = (rawDev: string): DeviceType => {
             const lower = (rawDev || '').toLowerCase().trim();
             if (lower === 'mobile' || lower === 'tablet' || lower === 'desktop' || lower === 'other') {
               return lower as DeviceType;
             }
-            return 'desktop';
+            const detected = detectDevice(rawDev);
+            return detected !== 'other' ? detected : 'desktop';
           };
 
           const serverViews = typeof srv.views === 'number' ? srv.views : 0;
@@ -106,6 +99,36 @@ export async function getAnalytics(
 
           // If server already recorded events (or local is empty), return server result cleanly
           if (serverViews > 0 || serverClicks > 0 || (localSim.totals.views === 0 && localSim.totals.clicks === 0)) {
+            let sourcesAgg: Array<{ source: TrackSource; views: number; clicks: number }> | null = null;
+            if (isPro && Array.isArray(srv.referrers)) {
+              const sMap = new Map<TrackSource, { views: number; clicks: number }>();
+              for (const r of srv.referrers) {
+                const key = normalizeSource(String(r.referrer || ''));
+                const prev = sMap.get(key) || { views: 0, clicks: 0 };
+                prev.views += typeof r.views === 'number' ? r.views : 0;
+                prev.clicks += typeof r.clicks === 'number' ? r.clicks : 0;
+                sMap.set(key, prev);
+              }
+              sourcesAgg = Array.from(sMap.entries())
+                .map(([source, counts]) => ({ source, views: counts.views, clicks: counts.clicks }))
+                .sort((a, b) => b.views - a.views || b.clicks - a.clicks);
+            }
+
+            let devicesAgg: Array<{ device: DeviceType; views: number; clicks: number }> | null = null;
+            if (isPro && Array.isArray(srv.devices)) {
+              const dMap = new Map<DeviceType, { views: number; clicks: number }>();
+              for (const dv of srv.devices) {
+                const key = normalizeDevice(String(dv.device || 'desktop'));
+                const prev = dMap.get(key) || { views: 0, clicks: 0 };
+                prev.views += typeof dv.views === 'number' ? dv.views : 0;
+                prev.clicks += typeof dv.clicks === 'number' ? dv.clicks : 0;
+                dMap.set(key, prev);
+              }
+              devicesAgg = Array.from(dMap.entries())
+                .map(([device, counts]) => ({ device, views: counts.views, clicks: counts.clicks }))
+                .sort((a, b) => b.views - a.views || b.clicks - a.clicks);
+            }
+
             return {
               range: { from, to, maxDays, isPro },
               totals: { views: serverViews, clicks: serverClicks },
@@ -121,20 +144,8 @@ export async function getAnalytics(
                     clicks: typeof l.clicks === 'number' ? l.clicks : 0,
                   }))
                 : [],
-              sources: isPro && Array.isArray(srv.referrers)
-                ? srv.referrers.map((r: any) => ({
-                    source: normalizeSource(String(r.referrer || '')),
-                    views: typeof r.views === 'number' ? r.views : 0,
-                    clicks: typeof r.clicks === 'number' ? r.clicks : 0,
-                  }))
-                : null,
-              devices: isPro && Array.isArray(srv.devices)
-                ? srv.devices.map((dv: any) => ({
-                    device: normalizeDevice(String(dv.device || 'desktop')),
-                    views: typeof dv.views === 'number' ? dv.views : 0,
-                    clicks: typeof dv.clicks === 'number' ? dv.clicks : 0,
-                  }))
-                : null,
+              sources: sourcesAgg,
+              devices: devicesAgg,
               countries: isPro && Array.isArray(srv.countries)
                 ? srv.countries.map((c: any) => ({
                     country: String(c.country || 'Unknown'),

@@ -1,5 +1,5 @@
 import { TrackSource } from './sources';
-import { detectDevice } from './device';
+import { detectClientDevice } from './device';
 import { shouldTrack } from './shouldTrack';
 import { validateUsername } from '../username-rules';
 import { recordPageEvent } from '../../data/analyticsApi';
@@ -44,7 +44,7 @@ export function trackView(username: string, source: TrackSource): void {
     }
 
     const device =
-      typeof navigator !== 'undefined' ? detectDevice(navigator.userAgent || '') : 'other';
+      typeof navigator !== 'undefined' ? detectClientDevice() : 'other';
 
     scheduleView(() => {
       recordPageEvent({
@@ -79,7 +79,7 @@ export function trackClick(username: string, linkId: string, source: TrackSource
     }
 
     const device =
-      typeof navigator !== 'undefined' ? detectDevice(navigator.userAgent || '') : 'other';
+      typeof navigator !== 'undefined' ? detectClientDevice() : 'other';
 
     // Dispatch immediately so keepalive survives navigation away from the profile page
     recordPageEvent({

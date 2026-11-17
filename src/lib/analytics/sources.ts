@@ -177,7 +177,7 @@ export function classifyReferrer(referrer: string, ownHost: string): TrackSource
       return 'facebook';
     }
     if (host === 'x.com' || host === 'twitter.com' || host === 't.co' || host.endsWith('.twitter.com') || host.endsWith('.x.com')) return 'x';
-    if (host === 'tiktok.com' || host.endsWith('.tiktok.com')) return 'tiktok';
+    if (host === 'tiktok.com' || host === 'vm.tiktok.com' || host.endsWith('.tiktok.com')) return 'tiktok';
     if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be' || host.endsWith('.youtube.com')) return 'youtube';
     if (host === 'linkedin.com' || host === 'lnkd.in' || host.endsWith('.linkedin.com')) return 'linkedin';
     if (host === 'pinterest.com' || host === 'pin.it' || /(^|\.)pinterest\.[a-z.]+$/.test(host)) return 'pinterest';
@@ -185,7 +185,7 @@ export function classifyReferrer(referrer: string, ownHost: string): TrackSource
     if (host === 'whatsapp.com' || host === 'web.whatsapp.com' || host === 'wa.me' || host.endsWith('.whatsapp.com')) return 'whatsapp';
     if (host === 'telegram.org' || host === 'web.telegram.org' || host === 't.me' || host.endsWith('.telegram.org')) return 'telegram';
     if (host === 'snapchat.com' || host.endsWith('.snapchat.com')) return 'snapchat';
-    if (host === 'threads.net' || host === 'threads.com' || host.endsWith('.threads.net')) return 'threads';
+    if (host === 'threads.net' || host === 'threads.com' || host === 'l.threads.net' || host.endsWith('.threads.net')) return 'threads';
     if (host === 'github.com' || host.endsWith('.github.com')) return 'github';
     if (host === 'discord.com' || host === 'discord.gg' || host.endsWith('.discord.com')) return 'discord';
 
@@ -193,6 +193,53 @@ export function classifyReferrer(referrer: string, ownHost: string): TrackSource
   } catch {
     return '';
   }
+}
+
+const SOURCE_ALIASES: Record<string, TrackSource> = {
+  direct: '',
+  none: '',
+  ig: 'instagram',
+  insta: 'instagram',
+  fb: 'facebook',
+  twitter: 'x',
+  tw: 'x',
+  yt: 'youtube',
+  li: 'linkedin',
+  wa: 'whatsapp',
+  tg: 'telegram',
+  gh: 'github',
+  ddg: 'duckduckgo',
+  qrcode: 'qr',
+  qr_code: 'qr',
+  mail: 'email',
+  newsletter: 'email',
+};
+
+/**
+ * Normalizes any raw stored/incoming source or referrer value to a canonical TrackSource.
+ */
+export function normalizeAnalyticsSource(raw: string | null | undefined, ownHost = 'iveo.site'): TrackSource {
+  if (!raw || typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+
+  const lower = trimmed.toLowerCase();
+  if (lower in SOURCE_ALIASES) {
+    return SOURCE_ALIASES[lower];
+  }
+  if (TRACK_SOURCES_SET.has(lower)) {
+    return lower as TrackSource;
+  }
+
+  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('android-app://')) {
+    return classifyReferrer(trimmed, ownHost);
+  }
+
+  if (lower.includes('.')) {
+    return classifyReferrer(`https://${trimmed}`, ownHost);
+  }
+
+  return 'other';
 }
 
 /**

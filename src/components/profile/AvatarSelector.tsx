@@ -16,6 +16,8 @@ interface AvatarSelectorProps {
   avatarId?: string | null;
   initials?: string;
   username?: string | null;
+  userId?: string | null;
+  primaryEmail?: string | null;
   onAvatarChange: (payload: {
     avatarUrl: string | null;
     avatarType: 'default' | 'uploaded';
@@ -30,6 +32,8 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   avatarId,
   initials = 'ME',
   username,
+  userId,
+  primaryEmail,
   onAvatarChange,
   className = '',
 }) => {
@@ -88,28 +92,47 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
 
     try {
       const { dataUrl } = await compressImageFile(file, {
-        maxWidth: 360,
-        maxHeight: 360,
-        quality: 0.82,
+        maxWidth: 300,
+        maxHeight: 300,
+        quality: 0.78,
         cropSquare: true,
       });
 
-      const u = username || localStorage.getItem('iveo_current_username') || 'owner';
+      const u = (username || localStorage.getItem('iveo_current_username') || 'owner')
+        .replace(/^@+/, '')
+        .toLowerCase()
+        .trim();
       let uploadedUrl = dataUrl;
 
       try {
         const upRes = await fetch('/api/avatar', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: u, dataUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': userId || '',
+            'x-user-email': primaryEmail || '',
+          },
+          body: JSON.stringify({
+            username: u,
+            dataUrl,
+            userId: userId || undefined,
+            primaryEmail: primaryEmail || undefined,
+          }),
         });
         if (upRes.ok) {
           const upJson = await upRes.json();
           if (upJson.avatarUrl) {
             uploadedUrl = upJson.avatarUrl;
           }
+        } else if (userId) {
+          const errJson = await upRes.json().catch(() => ({}));
+          throw new Error(errJson?.message || 'Could not upload photo');
         }
-      } catch {}
+      } catch (uploadErr) {
+        if (userId) {
+          throw uploadErr;
+        }
+      }
 
       setSelectedDefaultId(null);
       await onAvatarChange({
@@ -118,8 +141,8 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
         avatarId: null,
       });
       showToast('Custom photo updated');
-    } catch {
-      showToast('Failed to process image');
+    } catch (err: any) {
+      showToast(err?.message || 'Could not upload photo');
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

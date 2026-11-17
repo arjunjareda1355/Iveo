@@ -10,6 +10,7 @@
         "displayName": { "type": "string", "maxLength": 80 },
         "bio": { "type": "string", "maxLength": 300 },
         "avatarUrl": { "type": "string", "maxLength": 2048 },
+        "avatarData": { "type": "string", "maxLength": 350000 },
         "avatarType": { "type": "string", "enum": ["default", "uploaded"] },
         "avatarId": { "type": "string", "maxLength": 64 },
         "vibeId": { "type": "string", "maxLength": 32 },
@@ -81,6 +82,22 @@
       },
       "required": ["blockId", "userId", "count"]
     },
+    "AnalyticsEvent": {
+      "title": "AnalyticsEvent",
+      "description": "Raw page view and link click event for analytics reporting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
+        "eventType": { "type": "string", "enum": ["page_view", "link_click"] },
+        "blockId": { "type": "string", "maxLength": 128 },
+        "country": { "type": "string", "maxLength": 120 },
+        "referrer": { "type": "string", "maxLength": 120 },
+        "device": { "type": "string", "enum": ["mobile", "tablet", "desktop", "other"] },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "username", "eventType", "createdAt"]
+    },
     "ClaimRecord": {
       "title": "ClaimRecord",
       "description": "Unique username registry record preventing duplicate claims",
@@ -91,12 +108,27 @@
         "claimedAt": { "type": "string" }
       },
       "required": ["username", "userId"]
+    },
+    "RedirectRecord": {
+      "title": "RedirectRecord",
+      "description": "Handle rename redirect mapping old username to current username",
+      "type": "object",
+      "properties": {
+        "from": { "type": "string", "maxLength": 64 },
+        "to": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["from", "to", "updatedAt"]
     }
   },
   "firestore": {
     "/claims/{username}": {
       "schema": { "$ref": "#/entities/ClaimRecord" },
       "description": "Global atomic username reservations registry"
+    },
+    "/redirects/{username}": {
+      "schema": { "$ref": "#/entities/RedirectRecord" },
+      "description": "Handle rename redirect mappings"
     },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
@@ -113,6 +145,10 @@
     "/users/{userId}/clicks/{clickId}": {
       "schema": { "$ref": "#/entities/BlockClickCount" },
       "description": "Click telemetry counter records for user links"
+    },
+    "/users/{userId}/analytics/{eventId}": {
+      "schema": { "$ref": "#/entities/AnalyticsEvent" },
+      "description": "Durable page view and link click analytics events"
     }
   }
 }

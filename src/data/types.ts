@@ -377,4 +377,5 @@ export interface PublicProfileData {
 export interface PublicPageData {
   profile: PublicProfileData | null;
   links: PublicBlock[];
+  redirectTo?: string | null;
 }

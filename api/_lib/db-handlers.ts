@@ -22,7 +22,10 @@ import {
   dbGetProtectedLinkIds,
   dbRecordAnalyticsEvent,
   dbGetAnalytics,
+  dbGetRedirectTarget,
 } from './azureSql.ts';
+import { normalizeAnalyticsSource } from '../../src/lib/analytics/sources.ts';
+import { detectDevice } from '../../src/lib/analytics/device.ts';
 import {
   saveUploadedBackgroundImage,
   resolveBackgroundFilePath,
@@ -47,6 +50,7 @@ import {
   firebaseSaveProfile,
   firebaseSaveBlocks,
   firebaseSaveContact,
+  firebaseSaveRedirect,
   firebaseReleaseUsername,
 } from './firebaseServer.ts';
 import { fetchBuyMeACoffeeProfile } from './buymeacoffee.ts';
@@ -104,12 +108,20 @@ interface CachedPublicPageEntry {
 
 const PUBLIC_PAGE_CACHE_TTL_MS = 20_000;
 const DISCOVER_CACHE_TTL_MS = 30_000;
+const FIREBASE_TIMEOUT_MS = 6_000;
 const publicPageCache = new Map<string, CachedPublicPageEntry>();
 const discoverCache = new Map<string, { payload: Record<string, any>; expiresAt: number }>();
 
+function withTimeout<T>(promise: Promise<T>, fallback: T, ms = FIREBASE_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise.catch(() => fallback),
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 export function invalidatePublicPageCache(username?: string | null) {
   if (username) {
-    publicPageCache.delete(username.toLowerCase().trim());
+    publicPageCache.delete(username.replace(/^@+/, '').toLowerCase().trim());
   } else {
     publicPageCache.clear();
   }
@@ -162,7 +174,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
           setTimeout(() => {
             fbTimedOut = true;
             resolve(null);
-          }, 2500)
+          }, FIREBASE_TIMEOUT_MS)
         ),
       ]),
     ]);
@@ -177,15 +189,19 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       cameFromFirebase = true;
     }
 
-    if (!profile || isSyntheticTestHandle(clean)) {
+    if (!profile) {
+      const redirectTo = await dbGetRedirectTarget(clean).catch(() => null);
+      if (redirectTo && redirectTo !== clean) {
+        return res.status(200).json({ profile: null, links: [], redirectTo });
+      }
       if (!fbTimedOut) {
         publicPageCache.set(clean, {
           status: 404,
-          payload: { error: 'not_found' },
+          payload: { error: 'not_found', confirmed: true },
           expiresAt: Date.now() + 1_500,
         });
       }
-      return res.status(404).json({ error: 'not_found' });
+      return res.status(404).json({ error: 'not_found', confirmed: !fbTimedOut });
     }
 
     if (cameFromFirebase && !dbProf && profile.username) {
@@ -199,10 +215,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
 
     let allBlocks = dbBlocksInitial;
     if (cameFromFirebase || !allBlocks || allBlocks.length === 0) {
-      const fbBlocks = await Promise.race([
-        firebaseGetBlocks(clean).catch(() => []),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
-      ]);
+      const fbBlocks = await withTimeout(firebaseGetBlocks(clean, profile.userId), [] as any[]);
       if (fbBlocks && fbBlocks.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
         allBlocks = fbBlocks;
         if (!dbBlocksInitial || dbBlocksInitial.length === 0) {
@@ -260,14 +273,17 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       subscription: profile.subscription || null,
     });
     const isPro = resolvedPlan.isPro;
+    const rawAvatar = isAllowedAvatarHost(profile.avatarUrl) ? profile.avatarUrl : null;
+    const resolvedAvatarUrl =
+      rawAvatar || (profile.avatarData ? `/api/avatar/${encodeURIComponent(clean)}` : null);
 
     const responsePayload = {
       profile: {
         username: profile.username,
         displayName: profile.displayName || profile.username,
         bio: profile.bio || '',
-        avatarUrl: isAllowedAvatarHost(profile.avatarUrl) ? profile.avatarUrl : null,
-        avatarType: profile.avatarType || (profile.avatarId ? 'default' : (profile.avatarUrl ? 'uploaded' : 'default')),
+        avatarUrl: resolvedAvatarUrl,
+        avatarType: profile.avatarType || (profile.avatarId ? 'default' : (resolvedAvatarUrl ? 'uploaded' : 'default')),
         avatarId: profile.avatarId || null,
         vibeId: profile.vibeId || 'clean',
         plan: resolvedPlan.plan,
@@ -328,12 +344,10 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
   try {
     // Check Firebase Cloud claims first so cross-instance usernames cannot be double-claimed
     try {
-      const fbClaim = await Promise.race([
+      const fbClaim = await withTimeout(
         firebaseIsUsernameClaimed(username, userId),
-        new Promise<{ claimed: boolean; isOwn?: boolean }>((resolve) =>
-          setTimeout(() => resolve({ claimed: false }), 2000)
-        ),
-      ]);
+        { claimed: false }
+      );
       if (fbClaim.claimed && !fbClaim.isOwn && !isPrivilegedEmailServer(primaryEmail)) {
         return res.status(409).json({
           ok: false,
@@ -364,14 +378,9 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
     if (result.username) {
       if (releasedOld) {
         // Migrate existing blocks, contacts, clicks before releasing old username
-        await Promise.race([
-          firebaseMigrateUsernameData(releasedOld, result.username, userId).catch(() => {}),
-          new Promise((resolve) => setTimeout(resolve, 2000)),
-        ]);
-        await Promise.race([
-          firebaseReleaseUsername(releasedOld, userId).catch(() => {}),
-          new Promise((resolve) => setTimeout(resolve, 2000)),
-        ]);
+        await withTimeout(firebaseMigrateUsernameData(releasedOld, result.username, userId), undefined);
+        await withTimeout(firebaseSaveRedirect(releasedOld, result.username), undefined);
+        await withTimeout(firebaseReleaseUsername(releasedOld, userId), undefined);
       }
       const claimCreatedAt = profileData?.createdAt || new Date().toISOString();
       const resolvedClaimPlan = resolveEffectivePlan({
@@ -381,7 +390,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
         subscription: profileData?.subscription,
       });
       // Sync new claim and profile to Firebase (bounded await so subsequent renames never race)
-      await Promise.race([
+      await withTimeout(
         firebaseSaveProfile(
           result.username,
           {
@@ -391,9 +400,9 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
             plan: resolvedClaimPlan.plan,
           },
           userId
-        ).catch(() => {}),
-        new Promise((resolve) => setTimeout(resolve, 2500)),
-      ]);
+        ),
+        undefined
+      );
 
       notifyProfileSeoChanged(releasedOld ? 'renamed' : 'created', result.username, releasedOld).catch(() => {});
       invalidatePublicPageCache(result.username);
@@ -427,10 +436,7 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
   try {
     const [dbProf, fbProf] = await Promise.all([
       dbGetProfileByUserId(userId, email).catch(() => null),
-      Promise.race([
-        firebaseGetProfileByUserId(userId, email).catch(() => null),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
-      ]),
+      withTimeout(firebaseGetProfileByUserId(userId, email), null),
     ]);
 
     let profile = dbProf;
@@ -455,8 +461,14 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
       createdAt,
       subscription: profile.subscription || null,
     });
+    const cleanUname = String(profile.username || '').replace(/^@+/, '').toLowerCase().trim();
+    const resolvedAvatarUrl =
+      profile.avatarUrl || (profile.avatarData && cleanUname ? `/api/avatar/${encodeURIComponent(cleanUname)}` : null);
+    const { avatarData: _omittedAvatarData, ...profileWithoutRawData } = profile;
     profile = {
-      ...profile,
+      ...profileWithoutRawData,
+      username: cleanUname || profile.username,
+      avatarUrl: resolvedAvatarUrl,
       plan: resolvedPlan.plan,
       isPro: resolvedPlan.isPro,
       planSource: resolvedPlan.planSource,
@@ -467,10 +479,7 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
 
     let blocks = await dbGetBlocks(profile.username);
     if (cameFromFirebase || !blocks || blocks.length === 0) {
-      const fbBlocks = await Promise.race([
-        firebaseGetBlocks(profile.username).catch(() => []),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
-      ]);
+      const fbBlocks = await withTimeout(firebaseGetBlocks(profile.username, profile.userId), [] as any[]);
       if (fbBlocks && fbBlocks.length > 0 && (!blocks || blocks.length === 0 || cameFromFirebase)) {
         blocks = fbBlocks;
       }
@@ -587,14 +596,14 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     }
 
     // Bounded await sync to Firebase Cloud Database so immediate page loads stay consistent
-    await Promise.race([
+    await withTimeout(
       firebaseSaveProfile(
         username,
         { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan },
         body.userId || req.headers['x-user-id'] as string || 'owner'
-      ).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 2000)),
-    ]);
+      ),
+      undefined
+    );
 
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
@@ -609,16 +618,16 @@ const AVATAR_DIR = path.resolve(process.cwd(), 'data', 'avatars');
 
 /**
  * POST /api/avatar
- * Securely uploads and stores user avatar on server disk with ownership verification
+ * Securely uploads and stores user avatar on server disk + durable DB/Firestore fallback
  */
 export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
-  const username = (body.username as string || '').toLowerCase().trim();
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   const dataUrl = body.dataUrl as string;
   const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
 
-  if (!username) {
+  if (!username || !/^[a-z0-9._-]+$/.test(username)) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
@@ -636,28 +645,33 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       }
     }
 
-    if (!fs.existsSync(AVATAR_DIR)) {
-      fs.mkdirSync(AVATAR_DIR, { recursive: true });
-    }
-
-    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    const matches = dataUrl.match(/^data:(image\/[a-z0-9+.-]+);base64,(.+)$/i);
     if (!matches || matches.length !== 3) {
       return res.status(400).json({ error: 'invalid_data_url' });
     }
 
     const buffer = Buffer.from(matches[2], 'base64');
+    if (buffer.length > 300_000) {
+      return res.status(400).json({ error: 'avatar_too_large', message: 'Please upload a smaller image (under 300 KB).' });
+    }
+
+    if (!fs.existsSync(AVATAR_DIR)) {
+      fs.mkdirSync(AVATAR_DIR, { recursive: true });
+    }
+
     const avatarFile = path.join(AVATAR_DIR, `${username}.jpg`);
     fs.writeFileSync(avatarFile, buffer);
 
     const avatarUrl = `/api/avatar/${username}?v=${Date.now()}`;
 
-    // Update in database immediately while preserving existing background and integrations
+    // Update in database + durable avatarData fallback immediately while preserving existing fields
     const updatedAvatarProfile = {
       userId: userId || existing?.userId || 'owner',
       username,
       displayName: existing?.displayName || username,
       bio: existing?.bio || '',
       avatarUrl,
+      avatarData: dataUrl,
       avatarType: 'uploaded' as const,
       avatarId: null,
       vibeId: existing?.vibeId || 'clean',
@@ -680,10 +694,10 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       layoutSettings: existing?.layoutSettings ?? null,
     };
     await dbSaveProfile(updatedAvatarProfile);
-    await Promise.race([
-      firebaseSaveProfile(username, updatedAvatarProfile, updatedAvatarProfile.userId).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 2000)),
-    ]);
+    await withTimeout(
+      firebaseSaveProfile(username, updatedAvatarProfile, updatedAvatarProfile.userId),
+      undefined
+    );
 
     invalidatePublicPageCache(username);
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
@@ -694,11 +708,11 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
 
 /**
  * GET /api/avatar/:username
- * Serves user avatar image with short cache and stale-while-revalidate for immediate updates
+ * Serves user avatar image with disk cache and durable DB/Firestore avatarData fallback
  */
 export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
-  const username = (req.params.username as string || '').toLowerCase().trim();
-  if (!username) {
+  const username = (req.params.username as string || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!username || !/^[a-z0-9._-]+$/.test(username)) {
     return res.status(400).end();
   }
 
@@ -715,6 +729,30 @@ export async function handleServeAvatar(req: ExpressReq, res: ExpressRes) {
     }
     return res.sendFile(avatarFile);
   }
+
+  // Fallback to durable avatarData stored in DB/Firestore when container disk is ephemeral
+  try {
+    let prof = await dbGetProfile(username).catch(() => null);
+    if (!prof?.avatarData) {
+      prof = await withTimeout(firebaseGetProfile(username), null);
+    }
+    if (prof?.avatarData && typeof prof.avatarData === 'string') {
+      const matches = prof.avatarData.match(/^data:(image\/[a-z0-9+.-]+);base64,(.+)$/i);
+      if (matches && matches.length === 3) {
+        const mime = matches[1].toLowerCase();
+        const buffer = Buffer.from(matches[2], 'base64');
+        try {
+          if (!fs.existsSync(AVATAR_DIR)) {
+            fs.mkdirSync(AVATAR_DIR, { recursive: true });
+          }
+          fs.writeFileSync(avatarFile, buffer);
+        } catch {}
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=86400');
+        return res.status(200).send(buffer);
+      }
+    }
+  } catch {}
 
   return res.status(404).end();
 }
@@ -798,10 +836,7 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
   try {
     let blocks = await dbGetBlocks(username);
     if (!blocks || blocks.length === 0) {
-      const fbBlocks = await Promise.race([
-        firebaseGetBlocks(username).catch(() => []),
-        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
-      ]);
+      const fbBlocks = await withTimeout(firebaseGetBlocks(username), [] as any[]);
       if (fbBlocks && fbBlocks.length > 0) {
         blocks = fbBlocks;
         dbSaveBlocks(username, fbBlocks).catch(() => {});
@@ -823,7 +858,7 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
   const body = req.body || {};
-  const username = (body.username as string || '').toLowerCase().trim();
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   const blocks = Array.isArray(body.blocks) ? body.blocks : [];
   const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
@@ -841,10 +876,7 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
       return res.status(400).json({ error: result.error });
     }
     // Bounded-await sync to Firebase Cloud Database so deletions & edits never leave ghost items
-    await Promise.race([
-      firebaseSaveBlocks(username, blocks, userId || undefined).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 2500)),
-    ]);
+    await withTimeout(firebaseSaveBlocks(username, blocks, userId || undefined), undefined);
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
 
@@ -1117,7 +1149,23 @@ export async function handleRecordAnalyticsEvent(req: ExpressReq, res: ExpressRe
 
   try {
     const ua = String(req.headers['user-agent'] || '');
-    const device = body.device || (/mobile|iphone|android/i.test(ua) ? 'Mobile' : 'Desktop');
+    const rawDev = typeof body.device === 'string' ? body.device.trim().toLowerCase() : '';
+    const uaDevice = detectDevice(ua);
+    const device =
+      rawDev === 'mobile' || rawDev === 'tablet' || rawDev === 'desktop'
+        ? rawDev
+        : uaDevice !== 'other'
+          ? uaDevice
+          : rawDev === 'other'
+            ? 'other'
+            : 'desktop';
+
+    const rawSource = typeof (body.referrer ?? body.source) === 'string'
+      ? String(body.referrer ?? body.source)
+      : '';
+    const normSource = normalizeAnalyticsSource(rawSource, 'iveo.site');
+    const referrer = normSource === '' ? 'direct' : normSource;
+
     const country = body.country || String(req.headers['x-vercel-ip-country'] || req.headers['cf-ipcountry'] || 'IN');
 
     await dbRecordAnalyticsEvent({
@@ -1125,7 +1173,7 @@ export async function handleRecordAnalyticsEvent(req: ExpressReq, res: ExpressRe
       eventType,
       blockId: body.blockId || null,
       country,
-      referrer: body.referrer || body.source || 'Direct',
+      referrer,
       device,
     });
     return res.status(200).json({ ok: true });

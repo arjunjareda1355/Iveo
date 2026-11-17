@@ -123,12 +123,14 @@ function useClerkSession(): IveoSession {
   const { isLoaded: userLoaded, user } = useUser();
   const { signOut } = useClerk();
 
-  const isLoaded = Boolean(authLoaded && userLoaded);
-  const activeUser = isLoaded && isSignedIn && user ? user : null;
+  const clerkLoaded = Boolean(authLoaded && userLoaded);
+  const activeUser = clerkLoaded && isSignedIn && user ? user : null;
 
   // Server-side profile data retrieved via /api/me for cross-browser synchronization
   const [serverProfile, setServerProfile] = useState<any | null>(null);
-  const [hasFetchedServerProfile, setHasFetchedServerProfile] = useState(false);
+  const [fetchedForUserId, setFetchedForUserId] = useState<string | null>(null);
+  const hasFetchedServerProfile = !activeUser?.id || fetchedForUserId === activeUser.id;
+  const isLoaded = clerkLoaded && (!activeUser || hasFetchedServerProfile);
   const syncQueueRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSyncDoneRef = useRef(false);
   const pendingPatchRef = useRef<Record<string, any>>({});
@@ -163,47 +165,108 @@ function useClerkSession(): IveoSession {
     return () => window.removeEventListener('iveo-server-profile-sync', onSync);
   }, []);
 
-  // Fetch claimed profile from database whenever activeUser loads
+  // Fetch claimed profile from database (with 5s timeout & direct Firestore fallback) whenever activeUser loads
   useEffect(() => {
     if (!activeUser?.id) {
       setServerProfile(null);
-      setHasFetchedServerProfile(false);
+      setFetchedForUserId(null);
       initialSyncDoneRef.current = false;
       return;
     }
 
     let isMounted = true;
     const fetchServerProfile = async () => {
+      let hydratedProfile: any | null = null;
+      const email = activeUser.primaryEmailAddress?.emailAddress || '';
+      const cleanEmail = email.toLowerCase().trim();
+
       try {
-        const email = activeUser.primaryEmailAddress?.emailAddress || '';
-        const res = await fetch(
-          `/api/me?userId=${encodeURIComponent(activeUser.id)}&email=${encodeURIComponent(email)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.claimed && data.username && isMounted) {
-            setServerProfile(data.profile);
-
-            // Sync username back to Clerk unsafeMetadata asynchronously if out of sync
-            const currentMeta = (activeUser.unsafeMetadata && typeof activeUser.unsafeMetadata === 'object'
-              ? activeUser.unsafeMetadata
-              : {}) as Record<string, unknown>;
-
-            if (currentMeta.username !== data.username) {
-              activeUser.update({
-                unsafeMetadata: {
-                  ...currentMeta,
-                  username: data.username,
-                  onboardingComplete: true,
-                },
-              }).catch(() => {});
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        try {
+          const res = await fetch(
+            `/api/me?userId=${encodeURIComponent(activeUser.id)}&email=${encodeURIComponent(email)}`,
+            { signal: controller.signal, cache: 'no-cache' }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.claimed && data.username && data.profile) {
+              hydratedProfile = data.profile;
             }
           }
+        } finally {
+          clearTimeout(timer);
         }
-      } catch {} finally {
-        if (isMounted) {
-          setHasFetchedServerProfile(true);
+      } catch {}
+
+      // Direct Firestore fallback if /api/me timed out or had no local record
+      if (!hydratedProfile) {
+        try {
+          const { doc, getDoc, getDocs, collection, query, where } = await import('firebase/firestore');
+          const { db } = await import('../lib/firebase');
+          const uidDoc = await getDoc(doc(db, 'users', activeUser.id));
+          if (uidDoc.exists() && uidDoc.data()?.username && uidDoc.data()?.status !== 'deleted') {
+            hydratedProfile = uidDoc.data();
+          }
+          if (!hydratedProfile) {
+            const qUser = await getDocs(query(collection(db, 'users'), where('userId', '==', activeUser.id)));
+            for (const d of qUser.docs) {
+              const dData = d.data();
+              if (dData?.username && dData?.status !== 'deleted') {
+                hydratedProfile = dData;
+                break;
+              }
+            }
+          }
+          if (!hydratedProfile) {
+            const qClaims = await getDocs(query(collection(db, 'claims'), where('userId', '==', activeUser.id)));
+            for (const d of qClaims.docs) {
+              const cData = d.data();
+              if (cData?.status !== 'deleted') {
+                const uname = String(cData.username || d.id || '').replace(/^@+/, '').toLowerCase().trim();
+                if (uname) {
+                  const uDoc = await getDoc(doc(db, 'users', uname));
+                  hydratedProfile = uDoc.exists() ? uDoc.data() : { username: uname, userId: activeUser.id, displayName: uname };
+                  break;
+                }
+              }
+            }
+          }
+          if (!hydratedProfile && cleanEmail) {
+            const qEmail = await getDocs(query(collection(db, 'users'), where('primaryEmail', '==', cleanEmail)));
+            for (const d of qEmail.docs) {
+              const dData = d.data();
+              if (dData?.username && dData?.status !== 'deleted') {
+                hydratedProfile = dData;
+                break;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (hydratedProfile && hydratedProfile.username && isMounted) {
+        const cleanUname = String(hydratedProfile.username).replace(/^@+/, '').toLowerCase().trim();
+        const normalizedHydrated = { ...hydratedProfile, username: cleanUname };
+        setServerProfile(normalizedHydrated);
+
+        const currentMeta = (activeUser.unsafeMetadata && typeof activeUser.unsafeMetadata === 'object'
+          ? activeUser.unsafeMetadata
+          : {}) as Record<string, unknown>;
+
+        if (currentMeta.username !== cleanUname || currentMeta.onboardingComplete !== true) {
+          activeUser.update({
+            unsafeMetadata: {
+              ...currentMeta,
+              username: cleanUname,
+              onboardingComplete: true,
+            },
+          }).catch(() => {});
         }
+      }
+
+      if (isMounted) {
+        setFetchedForUserId(activeUser.id);
       }
     };
 
@@ -407,15 +470,23 @@ function useClerkSession(): IveoSession {
     }
   }, [activeUser?.id, username, primaryEmail]);
 
-  // Single initial sync once server hydration finishes (does not re-trigger on every keystroke or toggle)
+  // Backfill server only when serverProfile has no record yet (never overwrite hydrated serverProfile with defaults)
   useEffect(() => {
     if (!hasFetchedServerProfile || !activeUser?.id || !username || initialSyncDoneRef.current) return;
     initialSyncDoneRef.current = true;
+    if (serverProfile && serverProfile.username) {
+      if (!serverProfile.primaryEmail && primaryEmail) {
+        syncToServer({ username, primaryEmail });
+      }
+      return;
+    }
     syncToServer({
       username,
       displayName: displayName || username,
       bio,
-      avatarUrl: imageUrl,
+      avatarUrl: imageUrl && !imageUrl.startsWith('data:') ? imageUrl : null,
+      avatarType: latestSnapshotRef.current.avatarType,
+      avatarId: latestSnapshotRef.current.avatarId,
       vibeId,
       buttonShape,
       socials,
@@ -435,7 +506,7 @@ function useClerkSession(): IveoSession {
       plan: isPro ? 'pro' : plan,
       hideFooter,
     });
-  }, [hasFetchedServerProfile, activeUser?.id, username]);
+  }, [hasFetchedServerProfile, activeUser?.id, username, serverProfile]);
 
   if (!activeUser) {
     return {
@@ -498,6 +569,8 @@ function useClerkSession(): IveoSession {
         displayName: displayName || clean,
         bio,
         avatarUrl: imageUrl,
+        avatarType: serverProfile?.avatarType || (serverProfile?.avatarId ? 'default' : (imageUrl ? 'uploaded' : 'default')),
+        avatarId: serverProfile?.avatarId || null,
         vibeId: vibeId || preferences.vibeId,
         buttonShape: buttonShape ?? preferences.buttonShape,
         socials,
@@ -608,8 +681,12 @@ function useClerkSession(): IveoSession {
       ...pendingPatchRef.current,
     };
 
-    // Keep Clerk unsafeMetadata well under its 8KB limit (store minimal background hint there; full config lives in DB/Firebase)
+    // Keep Clerk unsafeMetadata well under its 8KB limit (strip binary data URLs & large background values; full config lives in DB/Firebase)
     const clerkMerged: Record<string, unknown> = { ...mergedMeta };
+    delete clerkMerged.avatarData;
+    if (typeof clerkMerged.avatarUrl === 'string' && clerkMerged.avatarUrl.startsWith('data:')) {
+      delete clerkMerged.avatarUrl;
+    }
     if (clerkMerged.background && typeof clerkMerged.background === 'object') {
       const bgObj = clerkMerged.background as Record<string, any>;
       clerkMerged.background = {
@@ -810,7 +887,7 @@ function useClerkSession(): IveoSession {
   };
 
   return {
-    isLoaded: true,
+    isLoaded,
     isSignedIn: true,
     userId: currentUser.id,
     username,

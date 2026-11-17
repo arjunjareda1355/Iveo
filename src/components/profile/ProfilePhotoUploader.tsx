@@ -7,6 +7,8 @@ export interface ProfilePhotoUploaderProps {
   avatarId?: string | null;
   initials?: string;
   username?: string | null;
+  userId?: string | null;
+  primaryEmail?: string | null;
   onAvatarChange: (newUrl: string | null) => Promise<void> | void;
   onAvatarPayloadChange?: (payload: {
     avatarUrl: string | null;
@@ -23,6 +25,8 @@ export const ProfilePhotoUploader: React.FC<ProfilePhotoUploaderProps> = ({
   avatarId,
   initials = 'ME',
   username,
+  userId,
+  primaryEmail,
   onAvatarChange,
   onAvatarPayloadChange,
   className = '',
@@ -34,6 +38,8 @@ export const ProfilePhotoUploader: React.FC<ProfilePhotoUploaderProps> = ({
       avatarId={avatarId}
       initials={initials}
       username={username}
+      userId={userId}
+      primaryEmail={primaryEmail}
       className={className}
       onAvatarChange={async (payload) => {
         if (onAvatarPayloadChange) {

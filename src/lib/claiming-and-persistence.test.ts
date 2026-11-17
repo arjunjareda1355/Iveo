@@ -9,6 +9,9 @@ import {
   dbSaveBlocks,
   dbGetBlocks,
   dbDeleteAccount,
+  dbGetRedirectTarget,
+  dbRecordAnalyticsEvent,
+  dbGetAnalytics,
 } from '../../api/_lib/azureSql.ts';
 
 test('dbClaimUsername: rejects invalid format and reserved usernames', async () => {
@@ -151,6 +154,97 @@ test('dbClaimUsername: user can rename their address and their blocks transfer s
   assert.equal(newBlocks.length, 1);
   assert.equal(newBlocks[0].title, 'My Work');
 
+  // Rename redirect lookup points old handle -> new handle
+  const redirectTarget = await dbGetRedirectTarget(oldName);
+  assert.equal(redirectTarget, newName);
+
   // Cleanup
   await dbDeleteAccount(newName, userId);
+});
+
+test('dbSaveProfile & analytics: preserves/clears avatarData and aggregates mobile/desktop events cleanly', async () => {
+  const userId = `user_avatar_ana_${Date.now()}`;
+  const username = `av_${Date.now()}`;
+
+  await dbClaimUsername(userId, username, { displayName: 'Analytics Tester' });
+  await dbSaveProfile({
+    userId,
+    username,
+    displayName: 'Analytics Tester',
+    avatarUrl: `/api/avatar/${username}?v=1`,
+    avatarData: 'data:image/jpeg;base64,ZmFrZWRhdGE=',
+    avatarType: 'uploaded',
+    avatarId: null,
+  });
+
+  const savedWithAvatar = await dbGetProfile(username);
+  assert.equal(savedWithAvatar?.avatarData, 'data:image/jpeg;base64,ZmFrZWRhdGE=');
+
+  // Switching to library avatar clears avatarData cleanly
+  await dbSaveProfile({
+    userId,
+    username,
+    avatarUrl: 'https://api.dicebear.com/9.x/notionists/svg?seed=Felix',
+    avatarType: 'default',
+    avatarId: 'felix',
+  });
+  const savedAfterReset = await dbGetProfile(username);
+  assert.equal(savedAfterReset?.avatarData, null);
+
+  await dbSaveBlocks(username, [{ id: 'blk_1', kind: 'link', title: 'Portfolio', isActive: true }], userId);
+
+  const nowIso = new Date().toISOString();
+  await dbRecordAnalyticsEvent({
+    id: `ev_mob_view_${Date.now()}`,
+    username,
+    eventType: 'page_view',
+    referrer: 'https://l.instagram.com/?u=https://iveo.site',
+    device: 'mobile',
+    country: 'United States',
+    createdAt: nowIso,
+  });
+  await dbRecordAnalyticsEvent({
+    id: `ev_mob_click_${Date.now()}`,
+    username,
+    eventType: 'link_click',
+    blockId: 'blk_1',
+    referrer: '',
+    device: 'mobile',
+    country: 'United States',
+    createdAt: nowIso,
+  });
+  await dbRecordAnalyticsEvent({
+    id: `ev_desk_view_${Date.now()}`,
+    username,
+    eventType: 'page_view',
+    referrer: 'twitter',
+    device: 'desktop',
+    country: 'India',
+    createdAt: nowIso,
+  });
+
+  const fromDate = new Date(Date.now() - 86400000);
+  const toDate = new Date(Date.now() + 86400000);
+  const analytics = await dbGetAnalytics(username, fromDate, toDate, true);
+  assert.equal(analytics.views, 2);
+  assert.equal(analytics.clicks, 1);
+
+  const mobileDevice = analytics.devices.find((d: any) => d.device === 'mobile');
+  const desktopDevice = analytics.devices.find((d: any) => d.device === 'desktop');
+  assert.equal(mobileDevice?.views, 1);
+  assert.equal(mobileDevice?.clicks, 1);
+  assert.equal(desktopDevice?.views, 1);
+
+  const igSource = analytics.referrers.find((s: any) => s.referrer === 'instagram');
+  const xSource = analytics.referrers.find((s: any) => s.referrer === 'x');
+  const directSource = analytics.referrers.find((s: any) => s.referrer === 'direct');
+  assert.equal(igSource?.views, 1);
+  assert.equal(xSource?.views, 1);
+  assert.equal(directSource?.clicks, 1);
+
+  const topLink = analytics.top_links.find((l: any) => l.block_id === 'blk_1');
+  assert.equal(topLink?.title, 'Portfolio');
+  assert.equal(topLink?.clicks, 1);
+
+  await dbDeleteAccount(username, userId);
 });

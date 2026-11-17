@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import { AddressPill } from '../components/dashboard/AddressPill';
 import { ProfilePhotoUploader } from '../components/profile/ProfilePhotoUploader';
 import { SubscriptionCard } from '../components/plan/SubscriptionCard';
+import { PasskeysCard } from '../components/account/PasskeysCard';
 import { IveoUserButton } from '../auth/IvioUserButton';
 import { RequireAuth } from '../auth/guards';
 import { iveoAppearance } from '../auth/appearance';
@@ -167,6 +168,8 @@ export const AccountPage: React.FC = () => {
                     avatarId={session.avatarId}
                     initials={displayName || session.username || 'ME'}
                     username={session.username}
+                    userId={session.userId}
+                    primaryEmail={session.primaryEmail}
                     onAvatarChange={handleAvatarChange}
                     onAvatarPayloadChange={handleAvatarPayloadChange}
                   />
@@ -226,6 +229,11 @@ export const AccountPage: React.FC = () => {
             {/* Subscription & Billing */}
             <div id="subscription">
               <SubscriptionCard />
+            </div>
+
+            {/* Passkeys Authentication (Clerk Managed) */}
+            <div id="passkeys">
+              <PasskeysCard />
             </div>
 
             {/* Seamless Clerk Security & Account Controls (No Side Borders) */}

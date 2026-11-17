@@ -3,6 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mergeProfileForSave } from './profileMerge.ts';
 import { resolveEffectivePlan, type SubscriptionRecord } from '../../src/lib/plan.ts';
+import { normalizeAnalyticsSource } from '../../src/lib/analytics/sources.ts';
+import { detectDevice } from '../../src/lib/analytics/device.ts';
+import {
+  firebaseRecordAnalyticsEvent,
+  firebaseGetAnalyticsEvents,
+  firebaseGetBlocks,
+  firebaseGetRedirectTarget,
+} from './firebaseServer.ts';
 
 // Confirmed Azure SQL Infrastructure details
 const AZURE_SQL_SERVER = process.env.AZURE_SQL_SERVER || 'faneme.database.windows.net';
@@ -704,6 +712,7 @@ export async function dbClaimUsername(
         position: profileData?.socialsPosition || 'top',
         email: primaryEmail || null,
         background: profileData?.background || null,
+        avatarData: profileData?.avatarData || null,
         status: profileData?.status || 'active',
         createdAt: claimCreatedAt,
         subscription: profileData?.subscription || null,
@@ -927,6 +936,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         let backgroundConfig: any = null;
         let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
         let subscription: SubscriptionRecord | null = null;
+        let avatarData: string | null = null;
         let integrations: Record<string, any> = {};
         let appearance: Record<string, any> = {};
         try {
@@ -937,6 +947,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
               socialsPosition = parsed.position === 'bottom' ? 'bottom' : parsed.position === 'both' ? 'both' : 'top';
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
+              avatarData = typeof parsed.avatarData === 'string' ? parsed.avatarData : null;
               if (parsed.createdAt) createdAt = String(parsed.createdAt);
               if (parsed.subscription) subscription = parsed.subscription;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
@@ -958,6 +969,7 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           displayName: row.display_name,
           bio: row.bio,
           avatarUrl: row.avatar_url,
+          avatarData,
           avatarType: row.avatar_type || (row.avatar_id ? 'default' : (row.avatar_url ? 'uploaded' : 'default')),
           avatarId: row.avatar_id || null,
           vibeId: row.vibe_id,
@@ -1046,6 +1058,7 @@ export async function dbSaveProfile(profile: {
   displayName?: string;
   bio?: string;
   avatarUrl?: string | null;
+  avatarData?: string | null;
   avatarType?: 'default' | 'uploaded';
   avatarId?: string | null;
   vibeId?: string;
@@ -1092,6 +1105,7 @@ export async function dbSaveProfile(profile: {
     position: merged.socialsPosition,
     email: merged.primaryEmail,
     background: merged.background,
+    avatarData: merged.avatarData || null,
     status: merged.status,
     createdAt: merged.createdAt,
     subscription: merged.subscription,
@@ -1198,6 +1212,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
         let parsedStatus = 'active';
         let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
         let subscription: SubscriptionRecord | null = null;
+        let avatarData: string | null = null;
         let integrations: Record<string, any> = {};
         let appearance: Record<string, any> = {};
         try {
@@ -1208,6 +1223,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
               socialsPosition = parsed.position === 'bottom' ? 'bottom' : parsed.position === 'both' ? 'both' : 'top';
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
+              avatarData = typeof parsed.avatarData === 'string' ? parsed.avatarData : null;
               if (parsed.status) parsedStatus = parsed.status;
               if (parsed.createdAt) createdAt = String(parsed.createdAt);
               if (parsed.subscription) subscription = parsed.subscription;
@@ -1230,6 +1246,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           displayName: row.display_name,
           bio: row.bio,
           avatarUrl: row.avatar_url,
+          avatarData,
           avatarType: row.avatar_type || (row.avatar_id ? 'default' : (row.avatar_url ? 'uploaded' : 'default')),
           avatarId: row.avatar_id || null,
           vibeId: row.vibe_id,
@@ -1932,7 +1949,7 @@ export async function dbGetProtectedLinkIds(username: string): Promise<string[]>
 }
 
 export async function dbGetRedirectTarget(username: string): Promise<string | null> {
-  const clean = (username || '').toLowerCase().trim();
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return null;
   const existing = readUserRecord(clean);
   if (existing.profile) return null;
@@ -1940,6 +1957,13 @@ export async function dbGetRedirectTarget(username: string): Promise<string | nu
   const rec = redirects[clean];
   if (rec?.to && rec.to !== clean) {
     return rec.to;
+  }
+  const fbTarget = await Promise.race([
+    firebaseGetRedirectTarget(clean).catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+  ]);
+  if (fbTarget && fbTarget !== clean) {
+    return fbTarget;
   }
   return null;
 }
@@ -2033,23 +2057,43 @@ export async function dbListAllProfiles(): Promise<any[]> {
   return Array.from(byUsername.values());
 }
 
+function normalizeStoredDevice(raw: string | null | undefined): 'mobile' | 'tablet' | 'desktop' | 'other' {
+  const s = String(raw || '').trim();
+  if (!s) return 'desktop';
+  const lower = s.toLowerCase();
+  if (lower === 'mobile' || lower === 'phone') return 'mobile';
+  if (lower === 'tablet' || lower === 'ipad') return 'tablet';
+  if (lower === 'desktop' || lower === 'pc' || lower === 'laptop') return 'desktop';
+  const uaDetected = detectDevice(s);
+  if (uaDetected !== 'other') return uaDetected;
+  return lower === 'other' ? 'other' : 'desktop';
+}
+
+function normalizeStoredSource(raw: string | null | undefined): string {
+  const normalized = normalizeAnalyticsSource(raw, 'iveo.site');
+  return normalized === '' ? 'direct' : normalized;
+}
+
 export async function dbRecordAnalyticsEvent(event: {
+  id?: string;
   username: string;
   eventType: 'page_view' | 'link_click';
   blockId?: string | null;
   country?: string | null;
   referrer?: string | null;
   device?: string | null;
+  createdAt?: string;
 }): Promise<void> {
   const clean = (event.username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return;
 
-  const id = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const country = event.country || 'Unknown';
-  const referrer = event.referrer || 'direct';
-  const device = event.device || 'desktop';
-  const createdAt = new Date().toISOString();
+  const id = event.id || `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const country = String(event.country || 'Unknown').trim() || 'Unknown';
+  const referrer = normalizeStoredSource(event.referrer);
+  const device = normalizeStoredDevice(event.device);
+  const createdAt = event.createdAt || new Date().toISOString();
 
+  let savedToSql = false;
   const pool = await getAzureSqlPool();
   if (pool) {
     try {
@@ -2066,13 +2110,33 @@ export async function dbRecordAnalyticsEvent(event: {
           INSERT INTO iveo_analytics_events (id, username, event_type, block_id, country, referrer, device)
           VALUES (@id, @username, @eventType, @blockId, @country, @referrer, @device)
         `);
-      return;
+      savedToSql = true;
     } catch {}
   }
 
-  await withUserLock(clean, () => {
-    const record = readUserRecord(clean);
-    record.analytics.push({
+  if (!savedToSql) {
+    await withUserLock(clean, () => {
+      const record = readUserRecord(clean);
+      record.analytics.push({
+        id,
+        username: clean,
+        eventType: event.eventType,
+        blockId: event.blockId || null,
+        country,
+        referrer,
+        device,
+        createdAt,
+      });
+      if (record.analytics.length > 10000) {
+        record.analytics = record.analytics.slice(-10000);
+      }
+      writeUserRecord(clean, record);
+    });
+  }
+
+  // Persist to Firestore as well so analytics survive cold starts & mobile/cross-instance traffic
+  await Promise.race([
+    firebaseRecordAnalyticsEvent({
       id,
       username: clean,
       eventType: event.eventType,
@@ -2081,12 +2145,9 @@ export async function dbRecordAnalyticsEvent(event: {
       referrer,
       device,
       createdAt,
-    });
-    if (record.analytics.length > 10000) {
-      record.analytics = record.analytics.slice(-10000);
-    }
-    writeUserRecord(clean, record);
-  });
+    }).catch(() => {}),
+    new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+  ]);
 }
 
 export async function dbGetAnalytics(
@@ -2098,40 +2159,66 @@ export async function dbGetAnalytics(
   const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return null;
 
-  let events: any[] = [];
+  const fromMs = fromDate.getTime();
+  const toMs = toDate.getTime();
+
   const pool = await getAzureSqlPool();
-  if (pool) {
-    try {
-      const res = await pool
+  const sqlEventsPromise: Promise<any[]> = pool
+    ? pool
         .request()
         .input('username', sql.NVarChar(64), clean)
         .input('from', sql.DateTime2, fromDate)
         .input('to', sql.DateTime2, toDate)
         .query(`
-          SELECT event_type, block_id, country, referrer, device, created_at
+          SELECT id, event_type, block_id, country, referrer, device, created_at
           FROM iveo_analytics_events
           WHERE username = @username AND created_at >= @from AND created_at <= @to
-        `);
-      events = res.recordset.map((r) => ({
-        eventType: r.event_type,
-        blockId: r.block_id,
-        country: r.country || 'Unknown',
-        referrer: r.referrer || 'direct',
-        device: r.device || 'desktop',
-        createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
-      }));
-    } catch {}
-  }
+        `)
+        .then((res) =>
+          res.recordset.map((r) => ({
+            id: r.id || undefined,
+            eventType: r.event_type,
+            blockId: r.block_id,
+            country: r.country || 'Unknown',
+            referrer: r.referrer || 'direct',
+            device: r.device || 'desktop',
+            createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+          }))
+        )
+        .catch(() => [])
+    : Promise.resolve([]);
 
-  if (events.length === 0) {
-    const list = readUserRecord(clean).analytics;
-    const fromMs = fromDate.getTime();
-    const toMs = toDate.getTime();
-    events = list.filter((e) => {
-      const t = new Date(e.createdAt).getTime();
-      return t >= fromMs && t <= toMs;
-    });
+  const fbEventsPromise: Promise<any[]> = Promise.race([
+    firebaseGetAnalyticsEvents(clean, fromDate, toDate).catch(() => []),
+    new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+  ]);
+
+  const localList = readUserRecord(clean).analytics.filter((e) => {
+    const t = new Date(e.createdAt).getTime();
+    return !Number.isNaN(t) && t >= fromMs && t <= toMs;
+  });
+
+  const [sqlEvents, fbEvents] = await Promise.all([sqlEventsPromise, fbEventsPromise]);
+
+  // Merge and deduplicate across SQL, local per-user store, and Firestore
+  const deduped = new Map<string, any>();
+  for (const ev of [...sqlEvents, ...localList, ...fbEvents]) {
+    const ts = new Date(ev.createdAt || '').getTime();
+    if (Number.isNaN(ts) || ts < fromMs || ts > toMs) continue;
+    const normRef = normalizeStoredSource(ev.referrer);
+    const normDev = normalizeStoredDevice(ev.device);
+    const key = ev.id
+      ? `id:${ev.id}`
+      : `cmp:${ev.eventType}|${ev.blockId || ''}|${String(ev.createdAt || '').slice(0, 19)}|${normRef}|${normDev}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, {
+        ...ev,
+        referrer: normRef,
+        device: normDev,
+      });
+    }
   }
+  const events = Array.from(deduped.values());
 
   let views = 0;
   let clicks = 0;
@@ -2144,9 +2231,9 @@ export async function dbGetAnalytics(
   for (const ev of events) {
     const day = String(ev.createdAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
     const dayEntry = byDayMap.get(day) || { views: 0, clicks: 0 };
-    const refKey = String(ev.referrer || 'direct').trim() || 'direct';
+    const refKey = normalizeStoredSource(ev.referrer);
     const countryKey = String(ev.country || 'Unknown').trim() || 'Unknown';
-    const deviceKey = String(ev.device || 'desktop').trim().toLowerCase() || 'desktop';
+    const deviceKey = normalizeStoredDevice(ev.device);
 
     const refStats = refMap.get(refKey) || { views: 0, clicks: 0 };
     const countryStats = countryMap.get(countryKey) || { views: 0, clicks: 0 };
@@ -2187,10 +2274,16 @@ export async function dbGetAnalytics(
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  const blocks = await dbGetBlocks(clean).catch(() => []);
+  const [localBlocks, fbBlocks] = await Promise.all([
+    dbGetBlocks(clean).catch(() => []),
+    Promise.race([
+      firebaseGetBlocks(clean).catch(() => []),
+      new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2500)),
+    ]),
+  ]);
   const titleById = new Map<string, string>();
-  blocks.forEach((b: any) => {
-    if (b.id) titleById.set(b.id, b.title || b.kind || 'Link');
+  [...fbBlocks, ...localBlocks].forEach((b: any) => {
+    if (b?.id) titleById.set(b.id, b.title || b.kind || 'Link');
   });
 
   const resolveLinkTitle = (blockId: string) => {
