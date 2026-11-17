@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   Block,
   BlockLayout,
@@ -73,6 +73,8 @@ export const BlocksProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ userId, ownerUserId = null, primaryEmail = null, token = null, children }) => {
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const blocksRef = useRef<Block[]>([]);
+  blocksRef.current = blocks;
   const [isLoading, setIsLoading] = useState(true);
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
@@ -480,14 +482,19 @@ export const BlocksProvider: React.FC<{
   };
 
   const updateBlockFields = async (id: string, patch: Partial<Block>) => {
-    const prev = [...blocks];
-    setBlocks((b) => b.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    const prev = [...blocksRef.current];
+    const next = prev.map((item) => (item.id === id ? { ...item, ...patch } : item));
+    blocksRef.current = next;
+    setBlocks(next);
 
     try {
       await updateBlock(token, userId, id, patch, authCtx);
-      const updated = { ...(blocks.find((b) => b.id === id) || {}), ...patch };
-      syncBlockTargets(updated as Block).catch(() => {});
+      const updated = next.find((b) => b.id === id);
+      if (updated) {
+        syncBlockTargets(updated).catch(() => {});
+      }
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
         if (patch.startAt || patch.endAt) openUpgrade('scheduling');
@@ -506,12 +513,12 @@ export const BlocksProvider: React.FC<{
     thumbnailUrl?: string | null
   ) => {
     const finalThumbUrl = thumbnailUrl !== undefined ? thumbnailUrl : (thumbnailPath ? storagePublicUrl(thumbnailPath) : null);
-    const prev = [...blocks];
-    setBlocks((b) =>
-      b.map((item) =>
-        item.id === id ? { ...item, thumbnailPath, thumbnailUrl: finalThumbUrl, layout } : item
-      )
+    const prev = [...blocksRef.current];
+    const next = prev.map((item) =>
+      item.id === id ? { ...item, thumbnailPath, thumbnailUrl: finalThumbUrl, layout } : item
     );
+    blocksRef.current = next;
+    setBlocks(next);
 
     try {
       await apiSetBlockImage(token, userId, id, {
@@ -519,14 +526,12 @@ export const BlocksProvider: React.FC<{
         layout,
         thumbnailUrl: finalThumbUrl,
       }, authCtx);
-      const updated = {
-        ...(blocks.find((b) => b.id === id) || {}),
-        thumbnailPath,
-        thumbnailUrl: finalThumbUrl,
-        layout,
-      };
-      syncBlockTargets(updated as Block).catch(() => {});
+      const updated = next.find((b) => b.id === id);
+      if (updated) {
+        syncBlockTargets(updated).catch(() => {});
+      }
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't save image. Try again.");
       throw err;
@@ -534,9 +539,10 @@ export const BlocksProvider: React.FC<{
   };
 
   const deleteBlockById = async (id: string) => {
-    const target = blocks.find((b) => b.id === id);
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
+    const target = prev.find((b) => b.id === id);
     const next = prev.filter((item) => item.id !== id);
+    blocksRef.current = next;
     setBlocks(next);
 
     try {
@@ -550,20 +556,20 @@ export const BlocksProvider: React.FC<{
       }
       showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
     } catch {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't delete item. Try again.");
     }
   };
 
   const toggleArchive = async (id: string) => {
-    const target = blocks.find((b) => b.id === id);
+    const prev = [...blocksRef.current];
+    const target = prev.find((b) => b.id === id);
     if (!target) return;
     const nextArchived = !target.isArchived;
-
-    const prev = [...blocks];
-    setBlocks((b) =>
-      b.map((item) => (item.id === id ? { ...item, isArchived: nextArchived } : item))
-    );
+    const next = prev.map((item) => (item.id === id ? { ...item, isArchived: nextArchived } : item));
+    blocksRef.current = next;
+    setBlocks(next);
 
     try {
       await updateBlock(token, userId, id, { isArchived: nextArchived }, authCtx);
@@ -575,32 +581,34 @@ export const BlocksProvider: React.FC<{
         showToast(isEmbed ? 'Embed restored' : 'Link restored');
       }
     } catch {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't update item. Try again.");
     }
   };
 
   const toggleActive = async (id: string) => {
-    const target = blocks.find((b) => b.id === id);
+    const prev = [...blocksRef.current];
+    const target = prev.find((b) => b.id === id);
     if (!target) return;
     const nextActive = !target.isActive;
-
-    const prev = [...blocks];
-    setBlocks((b) =>
-      b.map((item) => (item.id === id ? { ...item, isActive: nextActive } : item))
-    );
+    const next = prev.map((item) => (item.id === id ? { ...item, isActive: nextActive } : item));
+    blocksRef.current = next;
+    setBlocks(next);
 
     try {
       await updateBlock(token, userId, id, { isActive: nextActive }, authCtx);
       syncBlockTargets({ ...target, isActive: nextActive }).catch(() => {});
     } catch {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't update item. Try again.");
     }
   };
 
   const reorderBlocks = async (orderedIds: string[]) => {
-    const idMap = new Map(blocks.map((b) => [b.id, b]));
+    const current = [...blocksRef.current];
+    const idMap = new Map(current.map((b) => [b.id, b]));
     const reordered: Block[] = [];
 
     orderedIds.forEach((id, idx) => {
@@ -609,10 +617,11 @@ export const BlocksProvider: React.FC<{
     });
 
     // Append unmentioned (e.g. archived) blocks
-    blocks.forEach((b) => {
+    current.forEach((b) => {
       if (!orderedIds.includes(b.id)) reordered.push(b);
     });
 
+    blocksRef.current = reordered;
     setBlocks(reordered);
     await saveOrderedBlocks(token, userId, reordered, authCtx).catch(() => {});
     syncAllTargets(reordered).catch(() => {});

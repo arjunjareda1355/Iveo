@@ -285,7 +285,11 @@ export const LinksTab: React.FC = () => {
         return;
       }
     }
-    if (editEndAt && new Date(editEndAt) <= new Date()) {
+    if (
+      editEndAt &&
+      editEndAt !== (block.endAt || null) &&
+      new Date(editEndAt) <= new Date()
+    ) {
       setEditError('Choose a time in the future.');
       return;
     }
@@ -1438,6 +1442,8 @@ export const LinksTab: React.FC = () => {
                         isPro={isPro}
                         linkId={block.id}
                         isProtected={protectedIds.has(block.id) || block.isProtected === true}
+                        onPasswordSet={() => updateBlock(block.id, { isProtected: true })}
+                        onPasswordRemoved={() => updateBlock(block.id, { isProtected: false })}
                       />
                     )}
 
@@ -1451,7 +1457,12 @@ export const LinksTab: React.FC = () => {
                           setEditStartAt(s);
                           setEditEndAt(e);
                         }}
-                        onClearScheduleImmediate={() => clearSchedule(block.id)}
+                        onClearScheduleImmediate={async () => {
+                          setEditStartAt(null);
+                          setEditEndAt(null);
+                          setEditError(null);
+                          await clearSchedule(block.id);
+                        }}
                         errorMessage={editError}
                       />
                     )}

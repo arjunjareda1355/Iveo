@@ -11,6 +11,7 @@ interface UnlockDialogProps {
   onClose: () => void;
   block: PageBlock | null;
   vibe: Vibe;
+  username?: string | null;
   onSuccess: (block: PageBlock, url: string) => void;
   buttonRadiusOverride?: number;
   fontFamily?: string;
@@ -21,6 +22,7 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
   onClose,
   block,
   vibe,
+  username,
   onSuccess,
   buttonRadiusOverride,
   fontFamily,
@@ -79,7 +81,7 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
     setErrorMessage(null);
 
     try {
-      const res = await unlockLink(block.id, password.trim());
+      const res = await unlockLink(block.id, password.trim(), username);
       if (res.ok) {
         if (!isSafeHref(res.url)) {
           setErrorMessage(copy.password.visitor.errors.unavailable);

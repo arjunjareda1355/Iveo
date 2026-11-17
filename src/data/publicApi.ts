@@ -9,14 +9,15 @@ export type UnlockLinkResult =
 
 export async function unlockLink(
   linkId: string,
-  password: string
+  password: string,
+  username?: string | null
 ): Promise<UnlockLinkResult> {
   // 1. Try unified server endpoint first
   try {
     const res = await fetch('/api/unlock-link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ linkId, password }),
+      body: JSON.stringify({ linkId, password, username: username || undefined }),
     });
     if (res.ok) {
       const data = await res.json();

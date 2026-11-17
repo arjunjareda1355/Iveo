@@ -79,6 +79,7 @@ export interface UpdateBlockInput {
   endAt?: string | null;
   isActive?: boolean;
   isArchived?: boolean;
+  isProtected?: boolean;
   position?: number;
 }
 
@@ -149,6 +150,7 @@ export async function syncBlocksToServer(
 }
 
 const blockSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const blockSyncChains = new Map<string, Promise<void>>();
 
 export async function saveLocalBlocks(
   userId: string,
@@ -166,8 +168,14 @@ export async function saveLocalBlocks(
     key,
     setTimeout(() => {
       blockSyncTimers.delete(key);
-      syncBlocksToServer(userId, blocks, auth).catch(() => {});
-    }, 120)
+      const latestBlocks = getLocalBlocks(userId);
+      const prevChain = blockSyncChains.get(key) || Promise.resolve();
+      const nextChain = prevChain
+        .catch(() => {})
+        .then(() => syncBlocksToServer(userId, latestBlocks, auth))
+        .catch(() => {});
+      blockSyncChains.set(key, nextChain);
+    }, 80)
   );
 }
 

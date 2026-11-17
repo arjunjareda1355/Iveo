@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ChevronRight,
   Image as ImageIcon,
+  Info,
   Palette,
   RectangleHorizontal,
   Sparkles,
@@ -35,6 +36,7 @@ interface AppearanceTabProps {
   onPreviewFontSettingsChange?: (fonts: FontSettings | null) => void;
   onPreviewButtonColorsChange?: (colors: ButtonColors | null) => void;
   onPreviewLayoutChange?: (layout: LayoutSettings | null) => void;
+  onPreviewBackgroundChange?: (background: BackgroundConfig | null) => void;
 }
 
 const BUTTON_SHAPE_OPTIONS: readonly { value: ButtonShape; label: string }[] = [
@@ -84,12 +86,14 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   onPreviewFontSettingsChange,
   onPreviewButtonColorsChange,
   onPreviewLayoutChange,
+  onPreviewBackgroundChange,
 }) => {
   const session = useIvioSession();
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
 
   const [activePanel, setActivePanel] = useState<AppearancePanel>('hub');
+  const [openInfoId, setOpenInfoId] = useState<Exclude<AppearancePanel, 'hub'> | null>(null);
   const [currentVibeId, setCurrentVibeId] = useState<VibeId>(session.vibeId);
   const [currentShape, setCurrentShape] = useState<ButtonShape>(() =>
     session.buttonShape || getNativeShape(session.vibeId)
@@ -279,7 +283,10 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              onClick={() => setActivePanel('hub')}
+              onClick={() => {
+                onPreviewBackgroundChange?.(null);
+                setActivePanel('hub');
+              }}
               aria-label="Back to Appearance"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[10px] border border-border bg-surface text-[13px] font-medium text-ink hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
             >
@@ -354,8 +361,13 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
             <BackgroundSelectorCard
               embedded
               currentBackground={session.background}
+              vibe={activeVibe}
               isPro={session.isPro}
+              username={session.username}
+              userId={session.userId}
+              primaryEmail={session.primaryEmail}
               onBackgroundChange={handleBackgroundChange}
+              onPreviewBackgroundChange={onPreviewBackgroundChange}
             />
           </Card>
         )}
@@ -482,113 +494,53 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   const featureButtons: {
     id: Exclude<AppearancePanel, 'hub'>;
     label: string;
-    tierNote: string;
-    description: string;
-    summary: string;
+    infoText: string;
     icon: React.ReactNode;
-    accessory: React.ReactNode;
   }[] = [
     {
       id: 'vibe',
       label: 'Vibe',
-      tierNote: '6 Free · 6 Pro',
-      description: 'Theme palette & overall mood',
-      summary: activeVibe.name,
+      infoText: 'Choose a cohesive color palette and theme personality for your entire profile.',
       icon: <Sparkles size={18} strokeWidth={1.75} />,
-      accessory: (
-        <div className="flex items-center -space-x-1 shrink-0">
-          <span
-            className="w-4 h-4 rounded-full border border-black/15"
-            style={{ backgroundColor: activeVibe.tokens.bg }}
-          />
-          <span
-            className="w-4 h-4 rounded-full border border-black/15"
-            style={{ backgroundColor: activeVibe.tokens.buttonBg }}
-          />
-          <span
-            className="w-4 h-4 rounded-full border border-black/15"
-            style={{ backgroundColor: activeVibe.tokens.text }}
-          />
-        </div>
-      ),
     },
     {
       id: 'background',
       label: 'Page Background',
-      tierNote: '5 Free · 10 Pro + Photo',
-      description: 'Gradients, patterns or custom photo',
-      summary: backgroundSummary,
+      infoText: 'Personalize your backdrop with Pure White, solid colors, custom gradients, presets, textures, or uploaded photos.',
       icon: <ImageIcon size={18} strokeWidth={1.75} />,
-      accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink truncate max-w-[110px]">
-          {backgroundSummary}
-        </span>
-      ),
     },
     {
       id: 'fonts',
       label: 'Fonts',
-      tierNote: '8 Free · 11 Pro',
-      description: 'Customize Name, Bio & Button typography',
-      summary: fontsSummary,
+      infoText: 'Customize typography for your display name, bio, and link buttons.',
       icon: <Type size={18} strokeWidth={1.75} />,
-      accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink truncate max-w-[130px]">
-          {fontsSummary}
-        </span>
-      ),
     },
     {
       id: 'shape',
       label: 'Button Shape',
-      tierNote: 'Free',
-      description: 'Square, Rounded or Pill link buttons',
-      summary: shapeSummary,
+      infoText: 'Switch link and social button corners between Square, Rounded, and Pill.',
       icon: <RectangleHorizontal size={18} strokeWidth={1.75} />,
-      accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink">
-          {shapeSummary}
-        </span>
-      ),
     },
     {
       id: 'colors',
       label: 'Button Colors',
-      tierNote: 'Free',
-      description: 'Custom hex codes, picker & border colors',
-      summary: buttonColorsSummary,
+      infoText: 'Customize fill, text, and border colors for your link buttons using swatches or #RRGGBB hex codes.',
       icon: <Palette size={18} strokeWidth={1.75} />,
-      accessory: (
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className="w-4 h-4 rounded-full border border-black/15"
-            style={{
-              backgroundColor:
-                effectiveTokens.buttonBg === 'transparent'
-                  ? 'transparent'
-                  : effectiveTokens.buttonBg,
-            }}
-          />
-          <span className="font-mono text-[11px] text-muted hidden sm:inline">
-            {buttonColorsSummary}
-          </span>
-        </div>
-      ),
     },
     {
       id: 'layout',
       label: 'Layout & Effects',
-      tierNote: 'Free',
-      description: 'Avatar frame, button finish, spacing & width',
-      summary: layoutSummary,
+      infoText: 'Adjust avatar frame shape, header alignment, button finish, link spacing, and page width.',
       icon: <Layers size={18} strokeWidth={1.75} />,
-      accessory: (
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-surface-2 border border-border text-ink">
-          {layoutSummary}
-        </span>
-      ),
     },
   ];
+
+  // Unused summary variables kept clean via removal
+  void backgroundSummary;
+  void fontsSummary;
+  void shapeSummary;
+  void buttonColorsSummary;
+  void layoutSummary;
 
   return (
     <div className="flex flex-col gap-6">
@@ -606,44 +558,67 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         </div>
 
         <div className="grid grid-cols-1 gap-2.5">
-          {featureButtons.map((feat) => (
-            <button
-              key={feat.id}
-              type="button"
-              onClick={() => setActivePanel(feat.id)}
-              className="group w-full p-3 sm:p-3.5 rounded-xl border border-border bg-surface hover:border-ink/40 hover:bg-surface-2/60 transition-all flex items-center justify-between gap-2.5 sm:gap-3 text-left cursor-pointer min-w-0"
-            >
-              <div className="flex items-start sm:items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0 group-hover:bg-surface transition-colors">
-                  {feat.icon}
-                </div>
-                <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
-                      <span className="text-[14px] font-semibold text-ink leading-snug">
-                        {feat.label}
-                      </span>
-                      <span className="text-[11px] font-medium text-muted leading-tight">
-                        {feat.tierNote}
-                      </span>
+          {featureButtons.map((feat) => {
+            const isInfoOpen = openInfoId === feat.id;
+            return (
+              <div key={feat.id} className="relative">
+                {/* Sibling top-left (i) info button — never nested inside card button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenInfoId((prev) => (prev === feat.id ? null : feat.id));
+                  }}
+                  aria-label={`About ${feat.label}`}
+                  aria-expanded={isInfoOpen}
+                  className="absolute top-1.5 left-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
+                >
+                  <Info size={12} strokeWidth={2} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenInfoId(null);
+                    setActivePanel(feat.id);
+                  }}
+                  className="group w-full p-3.5 pl-7 sm:p-4 sm:pl-8 rounded-xl border border-border bg-surface hover:border-ink/40 hover:bg-surface-2/60 transition-all flex items-center justify-between gap-3 text-left cursor-pointer min-w-0"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0 group-hover:bg-surface transition-colors">
+                      {feat.icon}
                     </div>
-                    <p className="text-[12px] text-muted leading-snug mt-0.5 line-clamp-2 sm:line-clamp-1">
-                      {feat.description}
-                    </p>
+                    <span className="text-[14px] font-semibold text-ink leading-snug truncate">
+                      {feat.label}
+                    </span>
                   </div>
 
-                  <div className="flex items-center shrink-0 max-w-full sm:max-w-[140px]">
-                    <div className="min-w-0 truncate flex items-center">{feat.accessory}</div>
+                  <ChevronRight
+                    size={17}
+                    className="text-muted group-hover:text-ink group-hover:translate-x-0.5 transition-all shrink-0"
+                  />
+                </button>
+
+                {isInfoOpen && (
+                  <div
+                    role="region"
+                    aria-label={`${feat.label} details`}
+                    className="mt-1.5 p-3 rounded-xl bg-surface-2 border border-border text-[12px] text-ink shadow-sm flex items-start justify-between gap-2"
+                  >
+                    <p className="leading-relaxed text-muted">{feat.infoText}</p>
+                    <button
+                      type="button"
+                      onClick={() => setOpenInfoId(null)}
+                      aria-label="Close info"
+                      className="text-muted hover:text-ink text-[12px] px-1 cursor-pointer shrink-0"
+                    >
+                      ✕
+                    </button>
                   </div>
-                </div>
+                )}
               </div>
-
-              <ChevronRight
-                size={17}
-                className="text-muted group-hover:text-ink group-hover:translate-x-0.5 transition-all shrink-0"
-              />
-            </button>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>

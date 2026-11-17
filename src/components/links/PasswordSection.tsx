@@ -11,8 +11,8 @@ interface PasswordSectionProps {
   isPro: boolean;
   linkId: string;
   isProtected: boolean;
-  onPasswordSet?: () => void;
-  onPasswordRemoved?: () => void;
+  onPasswordSet?: () => void | Promise<void>;
+  onPasswordRemoved?: () => void | Promise<void>;
 }
 
 export const PasswordSection: React.FC<PasswordSectionProps> = ({
@@ -69,6 +69,7 @@ export const PasswordSection: React.FC<PasswordSectionProps> = ({
               <span>{copy.password.dashboard.passwordSet}</span>
             </div>
             <Button
+              type="button"
               variant="ghost"
               size="sm"
               disabled={isClearing}
@@ -189,6 +190,7 @@ export const PasswordSection: React.FC<PasswordSectionProps> = ({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
+              type="button"
               variant="secondary"
               size="sm"
               onClick={() => {
@@ -200,6 +202,7 @@ export const PasswordSection: React.FC<PasswordSectionProps> = ({
               {copy.password.dashboard.changePassword}
             </Button>
             <Button
+              type="button"
               variant="ghost"
               size="sm"
               disabled={isClearing}

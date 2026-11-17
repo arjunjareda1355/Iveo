@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { ProLockNotice } from '../plan/ProLockNotice';
 import { formatScheduleTime } from '../../lib/time';
@@ -52,6 +52,10 @@ export const ScheduleSection: React.FC<ScheduleSectionProps> = ({
 }) => {
   const hasSchedule = !!startAt || !!endAt;
   const [isEnabled, setIsEnabled] = useState(hasSchedule);
+
+  useEffect(() => {
+    setIsEnabled(Boolean(startAt || endAt));
+  }, [startAt, endAt]);
   const userTimeZone =
     typeof Intl !== 'undefined'
       ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -100,6 +104,7 @@ export const ScheduleSection: React.FC<ScheduleSectionProps> = ({
             </div>
             {onClearScheduleImmediate && (
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 onClick={onClearScheduleImmediate}
@@ -158,6 +163,7 @@ export const ScheduleSection: React.FC<ScheduleSectionProps> = ({
               />
               {startAt && (
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => onChange(null, endAt)}
@@ -182,6 +188,7 @@ export const ScheduleSection: React.FC<ScheduleSectionProps> = ({
               />
               {endAt && (
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => onChange(startAt, null)}

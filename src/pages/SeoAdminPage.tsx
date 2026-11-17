@@ -114,6 +114,7 @@ export const SeoAdminPage: React.FC = () => {
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [gscResult, setGscResult] = useState<any>(null);
+  const [moderatingUsername, setModeratingUsername] = useState<string | null>(null);
 
   const loadReport = useCallback(async () => {
     if (!isAuthorized || !adminEmail) return;
@@ -229,6 +230,34 @@ export const SeoAdminPage: React.FC = () => {
       showToast('Inspection failed');
     } finally {
       setValidating(false);
+    }
+  };
+
+  const handleModerateBackground = async (targetUsername: string) => {
+    if (!adminEmail) return;
+    setModeratingUsername(targetUsername);
+    try {
+      const res = await fetch(
+        `/api/seo/admin/moderate-background?adminEmail=${encodeURIComponent(adminEmail)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-email': adminEmail,
+          },
+          body: JSON.stringify({ username: targetUsername }),
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        showToast(data?.message || 'Could not reset background');
+        return;
+      }
+      showToast(`Reset @${targetUsername} background to Pure White`);
+    } catch {
+      showToast('Network error resetting background');
+    } finally {
+      setModeratingUsername(null);
     }
   };
 
@@ -676,16 +705,26 @@ export const SeoAdminPage: React.FC = () => {
                             {p.hasAvatar ? 'Photo' : 'Monogram OG'}
                           </td>
                           <td className="py-2.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInspectUsername(p.username);
-                                handleValidateProfile(undefined, p.username);
-                              }}
-                              className="text-[12px] font-medium text-ink underline underline-offset-2 hover:opacity-75 cursor-pointer"
-                            >
-                              Check
-                            </button>
+                            <div className="inline-flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInspectUsername(p.username);
+                                  handleValidateProfile(undefined, p.username);
+                                }}
+                                className="text-[12px] font-medium text-ink underline underline-offset-2 hover:opacity-75 cursor-pointer"
+                              >
+                                Check
+                              </button>
+                              <button
+                                type="button"
+                                disabled={moderatingUsername === p.username}
+                                onClick={() => handleModerateBackground(p.username)}
+                                className="text-[12px] font-medium text-red-600 underline underline-offset-2 hover:opacity-75 disabled:opacity-50 cursor-pointer"
+                              >
+                                {moderatingUsername === p.username ? 'Resetting...' : 'Reset BG'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

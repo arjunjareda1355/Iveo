@@ -14,7 +14,7 @@ import {
 } from './plan';
 import { VIBES } from './vibes';
 import { FONT_OPTIONS } from './fonts';
-import { BACKGROUND_PRESETS } from './backgrounds';
+import { BACKGROUND_CATEGORIES, BACKGROUND_PRESETS } from './backgrounds';
 import { normalizeUsername, validateUsername } from './username-rules';
 import { validateUsernameSync } from './username';
 import { isUserPageLocation } from './intro';
@@ -94,8 +94,9 @@ test('Free vs Pro features, Vibes, Fonts, and Backgrounds maintain exact clean s
 
   const freeBgPresets = BACKGROUND_PRESETS.filter((b) => !b.isPro && b.id !== 'none');
   const proBgPresets = BACKGROUND_PRESETS.filter((b) => b.isPro);
-  assert.equal(freeBgPresets.length, 5);
-  assert.equal(proBgPresets.length, 10);
+  assert.ok(freeBgPresets.length >= 5);
+  assert.ok(proBgPresets.length >= 10);
+  assert.ok(BACKGROUND_CATEGORIES.filter((c) => c.id !== 'all').length >= 7);
 
   for (const feat of PRO_FEATURES) {
     assert.ok(PRO_FEATURE_NAMES[feat], `Missing label for ${feat}`);

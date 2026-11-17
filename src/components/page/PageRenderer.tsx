@@ -40,7 +40,7 @@ import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
 } from '../../lib/preferences';
-import { getBackgroundPreset } from '../../lib/backgrounds';
+import { BackgroundLayer } from './BackgroundLayer';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -191,6 +191,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   };
 
   const buttonSurfaceStyle = getButtonSurfaceStyle();
+  const socialBorderRadiusCss =
+    effectiveRadius >= 999
+      ? '9999px'
+      : effectiveRadius <= 0
+        ? '0px'
+        : `${Math.round(Math.max(6, Math.min(12, effectiveRadius)) * scale)}px`;
   const isLeftHeader = layout.headerAlign === 'left';
 
   const [activeEmbedId, setActiveEmbedId] = useState<string | null>(null);
@@ -257,19 +263,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     setIsShareModalOpen(true);
   };
 
-  const bgConfig = profile?.background;
-  const hasCustomBg = Boolean(bgConfig && bgConfig.type && bgConfig.type !== 'none');
-
   const containerBgStyle: React.CSSProperties = {
     backgroundColor: isPublicPage ? 'transparent' : tokens.bg,
     color: tokens.text,
     fontFamily: vibe.fontFamily,
     padding: `${Math.round(32 * scale)}px ${Math.round(20 * scale)}px ${Math.round(24 * scale)}px`,
   };
-
-  if (!isPublicPage && hasCustomBg && (bgConfig?.type === 'gradient' || bgConfig?.type === 'mesh')) {
-    containerBgStyle.background = bgConfig.value || tokens.bg;
-  }
 
   return (
     <div
@@ -278,33 +277,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       }`}
       style={containerBgStyle}
     >
-      {/* Background Image Layer (for Dashboard/Onboarding phone preview; Public page renders full-viewport layer) */}
-      {!isPublicPage && hasCustomBg && bgConfig?.type === 'image' && bgConfig.value && (
-        <div
-          className="absolute inset-0 pointer-events-none overflow-hidden z-0"
-          style={{
-            opacity: bgConfig.opacity ?? 0.85,
-            filter: bgConfig.blur ? `blur(${bgConfig.blur}px)` : 'none',
-            transform: bgConfig.blur ? 'scale(1.05)' : 'none',
-          }}
-        >
-          <img
-            src={bgConfig.value}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        </div>
-      )}
-
-      {/* Background Pattern Layer (for phone preview) */}
-      {!isPublicPage && hasCustomBg && bgConfig?.type === 'pattern' && (
-        <div
-          className="absolute inset-0 pointer-events-none z-0 opacity-15"
-          style={{
-            backgroundImage: bgConfig.value || 'radial-gradient(currentColor 1.2px, transparent 1.2px)',
-            backgroundSize: getBackgroundPreset(bgConfig.presetId)?.patternSize || '18px 18px',
-            color: tokens.text,
-          }}
+      {/* Background Layer (for Dashboard/Onboarding phone preview; Public page renders full-viewport fixed layer) */}
+      {!isPublicPage && (
+        <BackgroundLayer
+          mode="contained"
+          background={profile?.background}
+          fallbackBg={tokens.bg}
         />
       )}
 
@@ -439,12 +417,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             const btnStyle: React.CSSProperties = {
               width: `${Math.round(36 * scale)}px`,
               height: `${Math.round(36 * scale)}px`,
-              backgroundColor: tokens.buttonBg,
-              color: tokens.buttonText,
-              border: tokens.buttonBorder
-                ? `1px solid ${tokens.buttonBorder}`
-                : `1px solid ${tokens.text}1A`,
-              boxShadow: tokens.buttonShadow || '0 1px 2px rgba(0,0,0,0.04)',
+              borderRadius: socialBorderRadiusCss,
+              ...buttonSurfaceStyle,
+              border: buttonSurfaceStyle.border || `1px solid ${tokens.text}1A`,
             };
             if (isPublicPage) {
               return (
@@ -457,7 +432,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   onAuxClick={() => onSocialClick?.(platform, cleanUrl)}
                   aria-label={platform}
                   title={platform.charAt(0).toUpperCase() + platform.slice(1)}
-                  className="rounded-full flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
+                  className="flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
                   style={btnStyle}
                 >
                   <SocialIcon platform={platform} size={Math.round(16 * scale)} />
@@ -468,7 +443,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <span
                 key={platform}
                 title={`${platform}: ${url}`}
-                className="rounded-full flex items-center justify-center transition-transform hover:scale-105"
+                className="flex items-center justify-center transition-transform hover:scale-105"
                 style={btnStyle}
               >
                 <SocialIcon platform={platform} size={Math.round(16 * scale)} />
@@ -1232,12 +1207,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             const btnStyle: React.CSSProperties = {
               width: `${Math.round(36 * scale)}px`,
               height: `${Math.round(36 * scale)}px`,
-              backgroundColor: tokens.buttonBg,
-              color: tokens.buttonText,
-              border: tokens.buttonBorder
-                ? `1px solid ${tokens.buttonBorder}`
-                : `1px solid ${tokens.text}1A`,
-              boxShadow: tokens.buttonShadow || '0 1px 2px rgba(0,0,0,0.04)',
+              borderRadius: socialBorderRadiusCss,
+              ...buttonSurfaceStyle,
+              border: buttonSurfaceStyle.border || `1px solid ${tokens.text}1A`,
             };
             if (isPublicPage) {
               return (
@@ -1250,7 +1222,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   onAuxClick={() => onSocialClick?.(platform, cleanUrl)}
                   aria-label={platform}
                   title={platform.charAt(0).toUpperCase() + platform.slice(1)}
-                  className="rounded-full flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
+                  className="flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95"
                   style={btnStyle}
                 >
                   <SocialIcon platform={platform} size={Math.round(16 * scale)} />
@@ -1261,7 +1233,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               <span
                 key={platform}
                 title={`${platform}: ${url}`}
-                className="rounded-full flex items-center justify-center transition-transform hover:scale-105"
+                className="flex items-center justify-center transition-transform hover:scale-105"
                 style={btnStyle}
               >
                 <SocialIcon platform={platform} size={Math.round(16 * scale)} />

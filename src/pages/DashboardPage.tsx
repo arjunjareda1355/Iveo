@@ -21,6 +21,7 @@ import { VIBES, VibeId } from '../lib/vibes';
 import { ButtonShape, LayoutSettings } from '../lib/preferences';
 import { FontSettings } from '../lib/fonts';
 import { ButtonColors } from '../lib/colors';
+import { BackgroundConfig } from '../data/types';
 import { useNow, isBlockVisibleNow } from '../lib/time';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
@@ -50,6 +51,7 @@ const DashboardContent: React.FC = () => {
   const [previewLayoutSettings, setPreviewLayoutSettings] = useState<LayoutSettings | null>(
     session.layoutSettings ?? null
   );
+  const [previewBackground, setPreviewBackground] = useState<BackgroundConfig | null>(null);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const tabsNavRef = useRef<HTMLElement | null>(null);
@@ -84,6 +86,12 @@ const DashboardContent: React.FC = () => {
   const isAnalytics = location.pathname.includes('/analytics');
   const isSettings = location.pathname.includes('/settings');
   const isLinks = !isAppearance && !isContacts && !isAnalytics && !isSettings;
+
+  useEffect(() => {
+    if (!isAppearance) {
+      setPreviewBackground(null);
+    }
+  }, [isAppearance]);
 
   const demoSearch = React.useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -136,7 +144,7 @@ const DashboardContent: React.FC = () => {
     socials: session.socials,
     socialsPosition: session.socialsPosition,
     whatsappNumber: session.whatsappNumber,
-    background: session.background,
+    background: previewBackground ?? session.background,
     fontSettings: previewFontSettings,
     buttonColors: previewButtonColors,
     layoutSettings: previewLayoutSettings,
@@ -320,6 +328,7 @@ const DashboardContent: React.FC = () => {
                     onPreviewFontSettingsChange={(fonts) => setPreviewFontSettings(fonts)}
                     onPreviewButtonColorsChange={(colors) => setPreviewButtonColors(colors)}
                     onPreviewLayoutChange={(layout) => setPreviewLayoutSettings(layout)}
+                    onPreviewBackgroundChange={(bg) => setPreviewBackground(bg)}
                   />
                 )}
                 {isSettings && <SettingsTab />}

@@ -8,26 +8,26 @@ const anonKey = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_SU
 export async function setLinkPassword(
   token: string | null,
   linkId: string,
-  password: string
+  password: string,
+  username?: string | null
 ): Promise<void> {
   const cleanPass = password.trim();
   if (cleanPass.length < 4 || cleanPass.length > 64 || cleanPass !== password) {
     throw new Error('invalid_password');
   }
 
-  // Sync to Azure SQL / Server database
-  try {
-    await fetch('/api/link-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ linkId, password: cleanPass }),
-    });
-  } catch {
-    // Continue
+  // Sync to Azure SQL / Isolated Server Store
+  const serverRes = await fetch('/api/link-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ linkId, password: cleanPass, username: username || undefined }),
+  });
+  if (!serverRes.ok) {
+    const errBody = await serverRes.json().catch(() => ({}));
+    throw new Error(errBody?.error || 'Failed to set link password');
   }
 
   if (!rawSupabaseUrl) {
-    // Local / development fallback
     try {
       localStorage.setItem(`iveo_link_pwd_${linkId}`, cleanPass);
       const set = new Set<string>(JSON.parse(localStorage.getItem('iveo_protected_ids') || '[]'));
@@ -59,7 +59,6 @@ export async function setLinkPassword(
     throw new Error('Failed to set link password');
   }
 
-  // Update local cache of protected IDs
   try {
     const set = new Set<string>(JSON.parse(localStorage.getItem('iveo_protected_ids') || '[]'));
     set.add(linkId);
@@ -72,17 +71,18 @@ export async function setLinkPassword(
  */
 export async function clearLinkPassword(
   token: string | null,
-  linkId: string
+  linkId: string,
+  username?: string | null
 ): Promise<void> {
-  // Sync to Azure SQL / Server database
-  try {
-    await fetch('/api/link-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ linkId, password: '' }),
-    });
-  } catch {
-    // Continue
+  // Sync to Azure SQL / Isolated Server Store with explicit remove flag
+  const serverRes = await fetch('/api/link-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ linkId, remove: true, username: username || undefined }),
+  });
+  if (!serverRes.ok) {
+    const errBody = await serverRes.json().catch(() => ({}));
+    throw new Error(errBody?.error || 'Failed to remove link password');
   }
 
   if (!rawSupabaseUrl) {
@@ -123,8 +123,29 @@ export async function clearLinkPassword(
 /**
  * Get protected link IDs for the current owner
  */
-export async function getProtectedLinkIds(token: string | null): Promise<string[]> {
+export async function getProtectedLinkIds(
+  token: string | null,
+  username?: string | null
+): Promise<string[]> {
   if (!rawSupabaseUrl) {
+    const merged = new Set<string>();
+    if (username) {
+      try {
+        const res = await fetch(`/api/link-password/status?username=${encodeURIComponent(username)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data?.protectedIds)) {
+            data.protectedIds.forEach((id: string) => merged.add(id));
+          }
+        }
+      } catch {}
+    }
+    if (merged.size > 0) {
+      try {
+        localStorage.setItem('iveo_protected_ids', JSON.stringify(Array.from(merged)));
+      } catch {}
+      return Array.from(merged);
+    }
     try {
       return JSON.parse(localStorage.getItem('iveo_protected_ids') || '[]');
     } catch {
@@ -143,7 +164,6 @@ export async function getProtectedLinkIds(token: string | null): Promise<string[
   });
 
   if (!response.ok) {
-    // If not authenticated or error, return empty array
     return [];
   }
 

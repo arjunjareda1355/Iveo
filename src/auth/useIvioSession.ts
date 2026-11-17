@@ -131,6 +131,9 @@ function useClerkSession(): IveoSession {
   const [hasFetchedServerProfile, setHasFetchedServerProfile] = useState(false);
   const syncQueueRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSyncDoneRef = useRef(false);
+  const pendingPatchRef = useRef<Record<string, any>>({});
+  const inFlightSyncRef = useRef<Promise<void>>(Promise.resolve());
+  const latestSnapshotRef = useRef<Record<string, any>>({});
 
   const refreshServerProfile = useCallback(async () => {
     if (!activeUser?.id) return;
@@ -317,6 +320,35 @@ function useClerkSession(): IveoSession {
     serverProfile?.businessCard !== undefined
       ? serverProfile.businessCard
       : (preferences.businessCard || null);
+
+  latestSnapshotRef.current = {
+    username,
+    displayName,
+    bio,
+    imageUrl,
+    avatarType: serverProfile?.avatarType || (serverProfile?.avatarId ? 'default' : (serverProfile?.avatarUrl ? 'uploaded' : 'default')),
+    avatarId: serverProfile?.avatarId || null,
+    vibeId,
+    buttonShape,
+    socials,
+    socialsPosition,
+    background: effectiveBackground,
+    googleAnalyticsId,
+    metaPixelId,
+    whatsappNumber,
+    customSeoTitle,
+    customSeoDescription,
+    fontSettings,
+    buttonColors,
+    layoutSettings,
+    businessCard,
+    createdAtIso,
+    primaryEmail,
+    plan: isPro ? 'pro' : plan,
+    isPro,
+    hideFooter,
+    meta,
+  };
 
   const syncToServer = async (payload: Record<string, unknown>) => {
     if (!activeUser?.id) return;
@@ -543,13 +575,21 @@ function useClerkSession(): IveoSession {
   };
 
   const updatePreferences = async (patch: Partial<Omit<IveoPreferences, 'plan'>>): Promise<void> => {
-    const currentMeta = (currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
-      ? currentUser.unsafeMetadata
-      : {}) as Record<string, unknown>;
-
     const { plan: _ignoredPlan, ...safePatch } = patch as any;
 
-    // 1. Immediately update serverProfile React state for immediate UI consistency across all hooks
+    // 1. Synchronously merge into accumulated patch & latest snapshot so rapid clicks never lose prior edits
+    pendingPatchRef.current = {
+      ...pendingPatchRef.current,
+      ...safePatch,
+    };
+    const prevSnap = latestSnapshotRef.current || {};
+    const mergedSnap: Record<string, any> = {
+      ...prevSnap,
+      ...pendingPatchRef.current,
+    };
+    latestSnapshotRef.current = mergedSnap;
+
+    // 2. Immediately update serverProfile React state for instantaneous UI feedback
     setServerProfile((prev: any) => ({
       ...(prev || {}),
       ...safePatch,
@@ -558,31 +598,28 @@ function useClerkSession(): IveoSession {
       window.dispatchEvent(new CustomEvent('iveo-server-profile-sync', { detail: safePatch }));
     }
 
-    const merged = {
-      ...currentMeta,
-      ...safePatch,
+    const baseMeta = (
+      currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
+        ? currentUser.unsafeMetadata
+        : {}
+    ) as Record<string, unknown>;
+    const mergedMeta = {
+      ...baseMeta,
+      ...pendingPatchRef.current,
     };
 
-    // Strip oversized data-URL wallpapers before persisting to Clerk's 8KB unsafeMetadata
-    const clerkMerged: Record<string, unknown> = { ...merged };
-    if (
-      clerkMerged.background &&
-      typeof clerkMerged.background === 'object' &&
-      typeof (clerkMerged.background as any).value === 'string' &&
-      ((clerkMerged.background as any).value.startsWith('data:') || (clerkMerged.background as any).value.length > 600)
-    ) {
+    // Keep Clerk unsafeMetadata well under its 8KB limit (store minimal background hint there; full config lives in DB/Firebase)
+    const clerkMerged: Record<string, unknown> = { ...mergedMeta };
+    if (clerkMerged.background && typeof clerkMerged.background === 'object') {
+      const bgObj = clerkMerged.background as Record<string, any>;
       clerkMerged.background = {
-        ...(clerkMerged.background as any),
-        value: undefined,
+        type: bgObj.type,
+        presetId: bgObj.presetId,
+        ...(typeof bgObj.value === 'string' && !bgObj.value.startsWith('data:') && bgObj.value.length <= 240
+          ? { value: bgObj.value }
+          : {}),
       };
     }
-
-    // Persist to Clerk metadata in background so UI toggles respond instantly
-    currentUser.update({
-      unsafeMetadata: clerkMerged,
-    }).catch((metaErr) => {
-      console.warn('Clerk metadata update note:', metaErr);
-    });
 
     if (safePatch.onboardingComplete) {
       try {
@@ -590,49 +627,46 @@ function useClerkSession(): IveoSession {
       } catch {}
     }
 
-    const nextBackground = merged.background !== undefined ? merged.background : effectiveBackground;
-    const nextButtonShape =
-      merged.buttonShape !== undefined ? merged.buttonShape : buttonShape;
-    const nextFontSettings =
-      merged.fontSettings !== undefined ? merged.fontSettings : fontSettings;
-    const nextButtonColors =
-      merged.buttonColors !== undefined ? merged.buttonColors : buttonColors;
-    const nextLayoutSettings =
-      merged.layoutSettings !== undefined ? merged.layoutSettings : layoutSettings;
-    const nextBusinessCard =
-      merged.businessCard !== undefined ? merged.businessCard : businessCard;
+    const activeUsername = mergedSnap.username || username;
+    const nextBackground = mergedSnap.background !== undefined ? mergedSnap.background : effectiveBackground;
+    const nextButtonShape = mergedSnap.buttonShape !== undefined ? mergedSnap.buttonShape : buttonShape;
+    const nextFontSettings = mergedSnap.fontSettings !== undefined ? mergedSnap.fontSettings : fontSettings;
+    const nextButtonColors = mergedSnap.buttonColors !== undefined ? mergedSnap.buttonColors : buttonColors;
+    const nextLayoutSettings = mergedSnap.layoutSettings !== undefined ? mergedSnap.layoutSettings : layoutSettings;
+    const nextBusinessCard = mergedSnap.businessCard !== undefined ? mergedSnap.businessCard : businessCard;
 
-    // Mirror to localStorage immediately
-    if (username) {
+    const nextHideFooter =
+      mergedMeta.hideIveoFooter !== undefined
+        ? Boolean(mergedMeta.hideIveoFooter)
+        : (mergedMeta.hideIvioFooter !== undefined ? Boolean(mergedMeta.hideIvioFooter) : mergedSnap.hideFooter);
+
+    if (activeUsername) {
       try {
-        const raw = localStorage.getItem(`iveo_profile_${username}`) || '{}';
+        const raw = localStorage.getItem(`iveo_profile_${activeUsername}`) || '{}';
         const parsed = JSON.parse(raw);
         localStorage.setItem(
-          `iveo_profile_${username}`,
+          `iveo_profile_${activeUsername}`,
           JSON.stringify({
             ...parsed,
-            vibeId: merged.vibeId || parsed.vibeId,
+            vibeId: mergedSnap.vibeId || parsed.vibeId,
             plan: isPro ? 'pro' : plan,
             isPro,
             isVerified: isPro,
-            buttonShape: merged.buttonShape !== undefined ? merged.buttonShape : parsed.buttonShape,
-            hideFooter:
-              merged.hideIveoFooter !== undefined
-                ? Boolean(merged.hideIveoFooter)
-                : (merged.hideIvioFooter !== undefined ? Boolean(merged.hideIvioFooter) : parsed.hideFooter),
-            displayName: merged.displayName !== undefined ? merged.displayName : parsed.displayName,
-            bio: merged.bio !== undefined ? merged.bio : parsed.bio,
-            avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : parsed.avatarUrl,
-            avatarType: merged.avatarType !== undefined ? merged.avatarType : parsed.avatarType,
-            avatarId: merged.avatarId !== undefined ? merged.avatarId : parsed.avatarId,
-            socials: merged.socials !== undefined ? merged.socials : parsed.socials,
-            socialsPosition: merged.socialsPosition || parsed.socialsPosition || 'top',
+            buttonShape: nextButtonShape !== undefined ? nextButtonShape : parsed.buttonShape,
+            hideFooter: nextHideFooter,
+            displayName: mergedSnap.displayName !== undefined ? mergedSnap.displayName : parsed.displayName,
+            bio: mergedSnap.bio !== undefined ? mergedSnap.bio : parsed.bio,
+            avatarUrl: mergedSnap.avatarUrl !== undefined ? mergedSnap.avatarUrl : (mergedSnap.imageUrl ?? parsed.avatarUrl),
+            avatarType: mergedSnap.avatarType !== undefined ? mergedSnap.avatarType : parsed.avatarType,
+            avatarId: mergedSnap.avatarId !== undefined ? mergedSnap.avatarId : parsed.avatarId,
+            socials: mergedSnap.socials !== undefined ? mergedSnap.socials : parsed.socials,
+            socialsPosition: mergedSnap.socialsPosition || parsed.socialsPosition || 'top',
             background: nextBackground,
-            googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : parsed.googleAnalyticsId,
-            metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : parsed.metaPixelId,
-            whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : parsed.whatsappNumber,
-            customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : parsed.customSeoTitle,
-            customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : parsed.customSeoDescription,
+            googleAnalyticsId: mergedSnap.googleAnalyticsId !== undefined ? mergedSnap.googleAnalyticsId : parsed.googleAnalyticsId,
+            metaPixelId: mergedSnap.metaPixelId !== undefined ? mergedSnap.metaPixelId : parsed.metaPixelId,
+            whatsappNumber: mergedSnap.whatsappNumber !== undefined ? mergedSnap.whatsappNumber : parsed.whatsappNumber,
+            customSeoTitle: mergedSnap.customSeoTitle !== undefined ? mergedSnap.customSeoTitle : parsed.customSeoTitle,
+            customSeoDescription: mergedSnap.customSeoDescription !== undefined ? mergedSnap.customSeoDescription : parsed.customSeoDescription,
             fontSettings: nextFontSettings,
             buttonColors: nextButtonColors,
             layoutSettings: nextLayoutSettings,
@@ -640,48 +674,66 @@ function useClerkSession(): IveoSession {
           })
         );
       } catch {}
+    }
 
-      const syncPayload = {
-        username,
-        displayName: merged.displayName !== undefined ? merged.displayName : displayName,
-        bio: merged.bio !== undefined ? merged.bio : bio,
-        avatarUrl: merged.avatarUrl !== undefined ? merged.avatarUrl : imageUrl,
-        avatarType: merged.avatarType || (merged.avatarId ? 'default' : (merged.avatarUrl ? 'uploaded' : 'default')),
-        avatarId: merged.avatarId || null,
-        vibeId: merged.vibeId || preferences.vibeId,
-        buttonShape: nextButtonShape,
-        socials: merged.socials !== undefined ? merged.socials : socials,
-        socialsPosition: (merged.socialsPosition as any) || socialsPosition || 'top',
-        background: nextBackground,
-        googleAnalyticsId: merged.googleAnalyticsId !== undefined ? merged.googleAnalyticsId : googleAnalyticsId,
-        metaPixelId: merged.metaPixelId !== undefined ? merged.metaPixelId : metaPixelId,
-        whatsappNumber: merged.whatsappNumber !== undefined ? merged.whatsappNumber : whatsappNumber,
-        customSeoTitle: merged.customSeoTitle !== undefined ? merged.customSeoTitle : customSeoTitle,
-        customSeoDescription: merged.customSeoDescription !== undefined ? merged.customSeoDescription : customSeoDescription,
-        fontSettings: nextFontSettings,
-        buttonColors: nextButtonColors,
-        layoutSettings: nextLayoutSettings,
-        businessCard: nextBusinessCard,
-        createdAt: createdAtIso,
-        primaryEmail,
-        plan: isPro ? 'pro' : plan,
-        hideFooter:
-          merged.hideIveoFooter !== undefined
-            ? Boolean(merged.hideIveoFooter)
-            : (merged.hideIvioFooter !== undefined ? Boolean(merged.hideIvioFooter) : hideFooter),
+    // Coalesce rapid updates (60ms debounce) with strict FIFO async serialization
+    if (syncQueueRef.current) {
+      clearTimeout(syncQueueRef.current);
+    }
+    syncQueueRef.current = setTimeout(() => {
+      syncQueueRef.current = null;
+      const latest = latestSnapshotRef.current || {};
+      const accumulated = { ...pendingPatchRef.current };
+      pendingPatchRef.current = {};
+
+      const targetUsername = latest.username || username;
+      const clerkSnapshot = {
+        ...((currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object' ? currentUser.unsafeMetadata : {}) as Record<string, unknown>),
+        ...clerkMerged,
       };
 
-      // Coalesce rapid updates (100ms debounce) so buttons feel instantaneous without race conditions
-      if (syncQueueRef.current) {
-        clearTimeout(syncQueueRef.current);
-      }
-      syncQueueRef.current = setTimeout(() => {
-        syncToServer(syncPayload);
-        if (username || currentUser.id) {
-          syncProfileToFirebase(username || currentUser.id, syncPayload).catch(() => {});
+      const runSync = async () => {
+        await currentUser
+          .update({ unsafeMetadata: clerkSnapshot })
+          .catch((metaErr) => console.warn('Clerk metadata update note:', metaErr));
+
+        if (targetUsername) {
+          const syncPayload = {
+            username: targetUsername,
+            displayName: latest.displayName ?? displayName,
+            bio: latest.bio ?? bio,
+            avatarUrl: latest.avatarUrl !== undefined ? latest.avatarUrl : (latest.imageUrl ?? imageUrl),
+            avatarType: latest.avatarType || (latest.avatarId ? 'default' : (latest.avatarUrl ? 'uploaded' : 'default')),
+            avatarId: latest.avatarId || null,
+            vibeId: latest.vibeId || preferences.vibeId,
+            buttonShape: latest.buttonShape !== undefined ? latest.buttonShape : buttonShape,
+            socials: latest.socials !== undefined ? latest.socials : socials,
+            socialsPosition: (latest.socialsPosition as any) || socialsPosition || 'top',
+            background: latest.background !== undefined ? latest.background : effectiveBackground,
+            googleAnalyticsId: latest.googleAnalyticsId !== undefined ? latest.googleAnalyticsId : googleAnalyticsId,
+            metaPixelId: latest.metaPixelId !== undefined ? latest.metaPixelId : metaPixelId,
+            whatsappNumber: latest.whatsappNumber !== undefined ? latest.whatsappNumber : whatsappNumber,
+            customSeoTitle: latest.customSeoTitle !== undefined ? latest.customSeoTitle : customSeoTitle,
+            customSeoDescription: latest.customSeoDescription !== undefined ? latest.customSeoDescription : customSeoDescription,
+            fontSettings: latest.fontSettings !== undefined ? latest.fontSettings : fontSettings,
+            buttonColors: latest.buttonColors !== undefined ? latest.buttonColors : buttonColors,
+            layoutSettings: latest.layoutSettings !== undefined ? latest.layoutSettings : layoutSettings,
+            businessCard: latest.businessCard !== undefined ? latest.businessCard : businessCard,
+            createdAt: createdAtIso,
+            primaryEmail,
+            plan: isPro ? 'pro' : plan,
+            hideFooter:
+              accumulated.hideIveoFooter !== undefined
+                ? Boolean(accumulated.hideIveoFooter)
+                : (accumulated.hideIvioFooter !== undefined ? Boolean(accumulated.hideIvioFooter) : (latest.hideFooter ?? hideFooter)),
+          };
+          await syncToServer(syncPayload);
+          await syncProfileToFirebase(targetUsername || currentUser.id, syncPayload).catch(() => {});
         }
-      }, 100);
-    }
+      };
+
+      inFlightSyncRef.current = inFlightSyncRef.current.then(runSync, runSync);
+    }, 60);
   };
 
   const updateProfile = async (profile: {

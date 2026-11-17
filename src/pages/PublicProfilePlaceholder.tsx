@@ -20,7 +20,8 @@ import { normalizeGoogleAnalyticsId, normalizeMetaPixelId } from '../lib/integra
 import { formatExternalUrl } from '../lib/urls';
 import { getFontCssFamily, loadGoogleFonts } from '../lib/fonts';
 import { resolveEffectiveTokens } from '../lib/colors';
-import { getBackgroundPreset } from '../lib/backgrounds';
+import { computeBackgroundLayers } from '../lib/backgrounds';
+import { BackgroundLayer } from '../components/page/BackgroundLayer';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 
 export interface PublicProfilePlaceholderProps {
@@ -137,14 +138,15 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
     };
   }, [loadData]);
 
-  // Sync full-viewport document background color with active vibe so overscroll matches theme
+  // Sync full-viewport document background color with active background/vibe so overscroll matches theme
   useEffect(() => {
     if (!pageData?.profile) return;
     const vibe = VIBES.find((v) => v.id === pageData.profile?.vibeId) || VIBES[0];
+    const baseBg = computeBackgroundLayers(pageData.profile.background, vibe.tokens.bg).baseColor;
     const prevBodyBg = document.body.style.backgroundColor;
     const prevHtmlBg = document.documentElement.style.backgroundColor;
-    document.body.style.backgroundColor = vibe.tokens.bg;
-    document.documentElement.style.backgroundColor = vibe.tokens.bg;
+    document.body.style.backgroundColor = baseBg;
+    document.documentElement.style.backgroundColor = baseBg;
 
     // Preload any user-selected custom Google Fonts immediately
     loadGoogleFonts([
@@ -442,54 +444,17 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
       return b;
     });
 
-    const bgConfig = pageData.profile.background;
-    const hasCustomBg = Boolean(bgConfig && bgConfig.type && bgConfig.type !== 'none');
-    const customBgStyle: React.CSSProperties = {
-      backgroundColor: vibe.tokens.bg,
-    };
-    if (hasCustomBg && (bgConfig?.type === 'gradient' || bgConfig?.type === 'mesh') && bgConfig.value) {
-      customBgStyle.background = bgConfig.value;
-    }
-
     return (
       <div
         className="relative min-h-[100dvh] w-full flex justify-center overflow-x-hidden"
-        style={customBgStyle}
+        style={{ backgroundColor: vibe.tokens.bg }}
       >
-        {/* Full-Viewport Background Layer (solid vibe, gradient/mesh, wallpaper image, or pattern) */}
-        <div
-          className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
-          style={customBgStyle}
-          aria-hidden="true"
-        >
-          {hasCustomBg && bgConfig?.type === 'image' && bgConfig.value && (
-            <div
-              className="absolute inset-0 w-full h-full"
-              style={{
-                opacity: bgConfig.opacity ?? 0.85,
-                filter: bgConfig.blur ? `blur(${bgConfig.blur}px)` : 'none',
-                transform: bgConfig.blur ? 'scale(1.06)' : 'none',
-              }}
-            >
-              <img
-                src={bgConfig.value}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-          )}
-
-          {hasCustomBg && bgConfig?.type === 'pattern' && (
-            <div
-              className="absolute inset-0 opacity-15"
-              style={{
-                backgroundImage: bgConfig.value || 'radial-gradient(currentColor 1.2px, transparent 1.2px)',
-                backgroundSize: getBackgroundPreset(bgConfig.presetId)?.patternSize || '18px 18px',
-                color: vibe.tokens.text,
-              }}
-            />
-          )}
-        </div>
+        {/* Full-Viewport Background Layer (Pure White default, solid, gradient/mesh, wallpaper image, or pattern) */}
+        <BackgroundLayer
+          mode="fixed"
+          background={pageData.profile.background}
+          fallbackBg={vibe.tokens.bg}
+        />
 
         <div
           className={`relative z-10 w-full min-h-[100dvh] flex flex-col ${
@@ -605,6 +570,7 @@ export const PublicProfilePlaceholder: React.FC<PublicProfilePlaceholderProps> =
                   onClose={() => setUnlockBlock(null)}
                   block={unlockBlock}
                   vibe={effectiveVibe}
+                  username={clean}
                   buttonRadiusOverride={buttonRadiusOverride}
                   fontFamily={buttonFontFamily}
                   onSuccess={(block, url) => {

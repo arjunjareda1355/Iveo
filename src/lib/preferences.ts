@@ -362,10 +362,7 @@ export function parsePreferences(raw: unknown): IveoPreferences {
         ? 'both'
         : 'top';
 
-  const background =
-    record.background && typeof record.background === 'object'
-      ? (record.background as BackgroundConfig)
-      : null;
+  const background = parseBackgroundConfig(record.background);
 
   const googleAnalyticsId =
     typeof record.googleAnalyticsId === 'string' && record.googleAnalyticsId.trim().length > 0

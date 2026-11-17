@@ -220,10 +220,11 @@ export const SettingsTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleStartEditUsername}
-                  className="inline-flex items-center gap-1 text-[13px] font-medium text-ink hover:text-ink-2 px-2 py-1 rounded-[6px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+                  aria-label="Edit username"
+                  title="Edit username"
+                  className="inline-flex items-center justify-center w-8 h-8 text-ink hover:text-ink-2 rounded-[6px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
                 >
-                  <Pencil size={12} />
-                  <span>Change</span>
+                  <Pencil size={14} />
                 </button>
               </div>
             </div>
@@ -235,10 +236,7 @@ export const SettingsTab: React.FC = () => {
               <span className="text-muted">Plan</span>
               <div className="flex items-center gap-2">
                 {session.isPro ? (
-                  <div className="flex items-center gap-1.5">
-                    <ProBadge />
-                    <span className="text-[15px] font-medium text-ink">Pro</span>
-                  </div>
+                  <ProBadge />
                 ) : (
                   <span className="text-[15px] font-medium text-ink">Free</span>
                 )}

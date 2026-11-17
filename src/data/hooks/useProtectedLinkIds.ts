@@ -39,7 +39,7 @@ export function useProtectedLinkIds(): {
 
     try {
       const token = await getToken({ template: 'supabase' }).catch(() => null);
-      const ids = await getProtectedLinkIds(token);
+      const ids = await getProtectedLinkIds(token, session.username);
       const newSet = new Set(ids);
       cachedProtectedIds = newSet;
       setProtectedIds(newSet);
@@ -48,7 +48,7 @@ export function useProtectedLinkIds(): {
     } finally {
       setIsLoading(false);
     }
-  }, [getToken, session.isSignedIn]);
+  }, [getToken, session.isSignedIn, session.username]);
 
   useEffect(() => {
     fetchIds();

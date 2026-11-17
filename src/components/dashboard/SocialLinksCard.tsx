@@ -7,7 +7,7 @@ import {
   SUPPORTED_SOCIAL_PLATFORMS,
   SocialIcon,
 } from '../phone/SocialIcons';
-import { formatExternalUrl, normalizeSocialUrl } from '../../lib/urls';
+import { formatExternalUrl, validateAndFormatSocialInput } from '../../lib/urls';
 
 export const SocialLinksCard: React.FC = () => {
   const session = useIveoSession();
@@ -67,7 +67,12 @@ export const SocialLinksCard: React.FC = () => {
       return;
     }
 
-    const finalUrl = normalizeSocialUrl(platform, clean);
+    const validation = validateAndFormatSocialInput(platform, clean);
+    if (!validation.ok) {
+      setErrorMessage(validation.error);
+      return;
+    }
+    const finalUrl = validation.url;
 
     setIsSaving(true);
     setErrorMessage(null);
@@ -189,7 +194,10 @@ export const SocialLinksCard: React.FC = () => {
               <select
                 id="platform-select"
                 value={selectedPlatform}
-                onChange={(e) => setSelectedPlatform(e.target.value)}
+                onChange={(e) => {
+                  setSelectedPlatform(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="h-10 px-3 bg-surface border border-border rounded-[8px] text-[14px] text-ink focus:outline-ink cursor-pointer"
               >
                 {SUPPORTED_SOCIAL_PLATFORMS.map((p) => (
@@ -285,7 +293,10 @@ export const SocialLinksCard: React.FC = () => {
                   <input
                     type="text"
                     value={editUrlInput}
-                    onChange={(e) => setEditUrlInput(e.target.value)}
+                    onChange={(e) => {
+                      setEditUrlInput(e.target.value);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
                     className="w-full h-9 px-3 bg-surface border border-border rounded-[6px] text-[13px] text-ink focus:outline-ink"
                     autoFocus
                   />

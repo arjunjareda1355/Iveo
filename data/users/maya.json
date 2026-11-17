@@ -1,0 +1,28 @@
+{
+  "profile": null,
+  "blocks": [],
+  "contacts": [],
+  "passwords": {},
+  "analytics": [
+    {
+      "id": "ev_1794828067216_pdiqjj",
+      "username": "maya",
+      "eventType": "page_view",
+      "blockId": null,
+      "country": "IN",
+      "referrer": "https://google.com",
+      "device": "desktop",
+      "createdAt": "2026-11-16T11:21:07.216Z"
+    },
+    {
+      "id": "ev_1794828067233_kl78bb",
+      "username": "maya",
+      "eventType": "link_click",
+      "blockId": "social:instagram",
+      "country": "IN",
+      "referrer": "google",
+      "device": "mobile",
+      "createdAt": "2026-11-16T11:21:07.233Z"
+    }
+  ]
+}
