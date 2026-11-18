@@ -1,47 +1,89 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, ExternalLink, Share2, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { Pencil, Loader2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { Toggle } from '../ui/Toggle';
 import { VerifiedTick } from '../ui/VerifiedTick';
 import { ProBadge } from '../plan/ProBadge';
+import { PageUrlStrip } from './PageUrlStrip';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
-import { ShareDialog } from '../share/ShareDialog';
 import { SubscriptionCard } from '../plan/SubscriptionCard';
 import { IntegrationsCard } from './IntegrationsCard';
+import { SearchSeoCard } from './SearchSeoCard';
 import { ExportDataCard } from '../account/ExportDataCard';
 import { DeleteAccountCard } from '../account/DeleteAccountCard';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
-import { pageUrl } from '../../lib/site';
-import { isOwnerEmail } from '../../lib/plan';
 import {
   sanitizeUsername,
   validateUsernameSync,
   checkUsernameAvailability,
 } from '../../lib/username';
 
+const SUB_NAV_ITEMS = [
+  { id: 'account', label: 'Account' },
+  { id: 'plan', label: 'Plan & billing' },
+  { id: 'page', label: 'Your page' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'seo', label: 'Search & SEO' },
+  { id: 'data', label: 'Data' },
+  { id: 'danger', label: 'Danger zone', danger: true },
+] as const;
+
 export const SettingsTab: React.FC = () => {
   const session = useIvioSession();
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
-  const [isShareOpen, setIsShareOpen] = useState(false);
-  const [copiedUrl, setCopiedUrl] = useState(false);
 
-  const fullUrl = session.username ? pageUrl(session.username) : '';
+  const [activeNavId, setActiveNavId] = useState<string>('account');
 
-  const handleCopyLink = async () => {
-    if (!fullUrl) return;
-    try {
-      await navigator.clipboard.writeText(fullUrl);
-      setCopiedUrl(true);
-      showToast('Link copied');
-      setTimeout(() => setCopiedUrl(false), 1800);
-    } catch {}
-  };
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
 
-  const handleSignOut = async () => {
-    await session.signOut();
+  // Scroll-spy for left desktop sub-navigation
+  useEffect(() => {
+    const sections = SUB_NAV_ITEMS.map((item) => document.getElementById(item.id)).filter(
+      Boolean
+    ) as HTMLElement[];
+    if (sections.length === 0 || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]?.target?.id) {
+          setActiveNavId(visible[0].target.id);
+        }
+      },
+      { rootMargin: '-120px 0px -60% 0px', threshold: 0.1 }
+    );
+
+    sections.forEach((sec) => observer.observe(sec));
+    return () => observer.disconnect();
+  }, []);
+
+  // Scroll to hash target when navigating from avatar menu
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.hash) return;
+    const id = window.location.hash.replace('#', '');
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveNavId(id);
+    }
+  }, []);
+
+  const handleJumpTo = (id: string) => {
+    setActiveNavId(id);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   const handleFooterMarkToggle = async () => {
@@ -56,17 +98,11 @@ export const SettingsTab: React.FC = () => {
         hideIveoFooter: nextVal,
         hideIvioFooter: nextVal,
       });
-      showToast(nextVal ? 'Footer mark hidden.' : 'Footer mark shown.');
+      showToast(nextVal ? 'iveo branding hidden.' : 'iveo branding shown.');
     } catch {
       openUpgrade('hide_footer');
     }
   };
-
-  const [isEditingUsername, setIsEditingUsername] = useState(false);
-  const [usernameInput, setUsernameInput] = useState('');
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
-  const [isSavingUsername, setIsSavingUsername] = useState(false);
 
   const handleStartEditUsername = () => {
     setUsernameInput(session.username || '');
@@ -103,7 +139,11 @@ export const SettingsTab: React.FC = () => {
     setUsernameError(null);
 
     try {
-      const avail = await checkUsernameAvailability(clean, session.userId || undefined, session.primaryEmail);
+      const avail = await checkUsernameAvailability(
+        clean,
+        session.userId || undefined,
+        session.primaryEmail
+      );
       if (avail.status !== 'available') {
         setUsernameError(avail.message || "That name isn't available. Try another.");
         setIsCheckingUsername(false);
@@ -130,301 +170,277 @@ export const SettingsTab: React.FC = () => {
     }
   };
 
+  const brandingHidden = Boolean(
+    session.isPro && (session.hideIveoFooter || session.hideIvioFooter)
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      {/* 1. Account Card */}
-      <Card className="flex flex-col gap-4">
-        <h3 className="text-[20px] font-semibold text-ink leading-tight">
-          Account
-        </h3>
+      <div>
+        <h1 className="text-[20px] sm:text-[22px] font-semibold text-ink leading-tight">
+          Settings
+        </h1>
+        <p className="mt-1 text-[14px] text-muted">
+          Manage your account, plan, integrations, search settings, and data.
+        </p>
+      </div>
 
-        <div className="divide-y divide-border">
-          {/* Email row */}
-          <div className="min-h-14 py-2 flex items-center justify-between gap-3 text-[14px]">
-            <span className="text-muted shrink-0">Email</span>
-            <span className="text-[15px] font-medium text-ink min-w-0 truncate text-right">
-              {session.primaryEmail || 'Not set'}
-            </span>
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[200px_minmax(0,1fr)] gap-8 items-start">
+        {/* Desktop Sticky Left Sub-Navigation */}
+        <aside className="hidden lg:flex flex-col gap-1 sticky top-28" aria-label="Settings sections">
+          {SUB_NAV_ITEMS.map((item) => {
+            const active = activeNavId === item.id;
+            const isDanger = 'danger' in item && item.danger;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleJumpTo(item.id)}
+                className={`min-h-[40px] px-3 rounded-[10px] text-left text-[13px] transition-colors cursor-pointer ${
+                  active
+                    ? isDanger
+                      ? 'bg-red-50 text-[color:var(--error,#B3261E)] font-semibold'
+                      : 'bg-surface border border-border text-ink font-semibold'
+                    : isDanger
+                      ? 'text-[color:var(--error,#B3261E)]/80 hover:text-[color:var(--error,#B3261E)] hover:bg-red-50/50'
+                      : 'text-muted hover:text-ink hover:bg-surface-2/60'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </aside>
 
-          {/* Username row */}
-          {isEditingUsername ? (
-            <div className="py-3.5 flex flex-col gap-2">
-              <div className="flex items-center justify-between text-[14px]">
-                <span className="text-muted">Username</span>
-                <button
-                  type="button"
-                  onClick={handleCancelEditUsername}
-                  className="text-[13px] text-muted hover:text-ink cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
+        {/* Right Grouped Settings Cards */}
+        <div className="flex flex-col gap-7 min-w-0 max-w-[720px] w-full">
+          {/* GROUP A - ACCOUNT */}
+          <section className="flex flex-col gap-4" aria-labelledby="settings-group-account">
+            <h2
+              id="settings-group-account"
+              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
+            >
+              Account
+            </h2>
 
-              <form onSubmit={handleSaveUsername} className="flex flex-col gap-2">
-                <div className="flex items-center rounded-[8px] border border-border bg-surface px-2.5 h-10 focus-within:border-ink">
-                  <span className="text-[14px] text-muted font-mono select-none pl-1 pr-0.5 font-medium">
-                    iveo.site/@
-                  </span>
-                  <input
-                    type="text"
-                    value={usernameInput}
-                    onChange={(e) => {
-                      setUsernameInput(sanitizeUsername(e.target.value));
-                      if (usernameError) setUsernameError(null);
-                    }}
-                    placeholder="yourname"
-                    className="flex-1 font-mono text-[14px] text-ink bg-transparent outline-none pl-0.5"
-                    autoFocus
-                  />
-                  {isCheckingUsername && (
-                    <Loader2 size={14} className="animate-spin text-muted" />
+            {/* A1. Account Card */}
+            <div id="account" className="scroll-mt-32">
+              <Card className="flex flex-col gap-4">
+                <h3 className="text-[16px] font-semibold text-ink leading-tight">
+                  Account
+                </h3>
+
+                <div className="divide-y divide-divider">
+                  {/* Email row */}
+                  <div className="min-h-[52px] py-2 flex items-center justify-between gap-3 text-[14px]">
+                    <span className="text-muted shrink-0">Email</span>
+                    <span className="text-[14px] font-medium text-ink min-w-0 truncate text-right">
+                      {session.primaryEmail || 'Not set'}
+                    </span>
+                  </div>
+
+                  {/* Username row (Verified tick ONLY next to @username for Pro) */}
+                  {isEditingUsername ? (
+                    <div className="py-3.5 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-[14px]">
+                        <span className="text-muted">Username</span>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditUsername}
+                          className="text-[13px] text-muted hover:text-ink cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleSaveUsername} className="flex flex-col gap-2">
+                        <div className="flex items-center rounded-[10px] border border-border bg-surface px-3 h-11 focus-within:border-ink">
+                          <span className="text-[14px] text-muted font-mono select-none pr-0.5 font-medium">
+                            iveo.site/@
+                          </span>
+                          <input
+                            type="text"
+                            value={usernameInput}
+                            onChange={(e) => {
+                              setUsernameInput(sanitizeUsername(e.target.value));
+                              if (usernameError) setUsernameError(null);
+                            }}
+                            placeholder="yourname"
+                            className="flex-1 font-mono text-[14px] text-ink bg-transparent outline-none pl-0.5 min-w-0"
+                            autoFocus
+                          />
+                          {isCheckingUsername && (
+                            <Loader2 size={14} className="animate-spin text-muted" />
+                          )}
+                        </div>
+
+                        {usernameError && (
+                          <p className="text-[12px] text-[color:var(--error,#B3261E)] font-medium">
+                            {usernameError}
+                          </p>
+                        )}
+
+                        <div className="flex justify-end gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCancelEditUsername}
+                            disabled={isSavingUsername}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            disabled={isSavingUsername || isCheckingUsername || !usernameInput.trim()}
+                          >
+                            {isSavingUsername ? 'Saving...' : 'Save address'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="min-h-[52px] py-2 flex items-center justify-between gap-3 text-[14px]">
+                      <span className="text-muted shrink-0">Username</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="inline-flex items-center gap-1.5 text-[14px] font-mono font-medium text-ink min-w-0">
+                          <span className="truncate">@{session.username || 'not_set'}</span>
+                          {session.isPro && session.username && <VerifiedTick size={14} />}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleStartEditUsername}
+                          aria-label="Edit username"
+                          title="Edit username"
+                          className="w-10 h-10 inline-flex items-center justify-center text-muted hover:text-ink rounded-[10px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Pencil size={15} strokeWidth={1.6} />
+                        </button>
+                      </div>
+                    </div>
                   )}
+
+                  {/* Password & passkeys row */}
+                  <div className="py-3 flex items-center justify-between gap-3 text-[14px]">
+                    <div className="min-w-0">
+                      <span className="text-ink font-medium block">Password &amp; passkeys</span>
+                      <span className="text-[12px] text-muted block mt-0.5">
+                        Sign in faster with fingerprint, face ID, or security key
+                      </span>
+                    </div>
+                    <Button as={Link} to="/account#passkeys" variant="ghost" size="sm" className="shrink-0">
+                      Manage
+                    </Button>
+                  </div>
                 </div>
 
-                {usernameError && (
-                  <p className="text-[12px] text-red-600 font-medium">
-                    {usernameError}
-                  </p>
-                )}
-
-                <div className="flex justify-end gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleCancelEditUsername}
-                    disabled={isSavingUsername}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    disabled={isSavingUsername || isCheckingUsername || !usernameInput.trim()}
-                  >
-                    {isSavingUsername ? 'Saving...' : 'Save address'}
+                <div className="pt-1">
+                  <Button as={Link} to="/account" variant="secondary" size="md">
+                    Account &amp; security
                   </Button>
                 </div>
-              </form>
-            </div>
-          ) : (
-            <div className="min-h-14 py-2 flex items-center justify-between gap-3 text-[14px]">
-              <span className="text-muted shrink-0">Username</span>
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="inline-flex items-center gap-1.5 text-[15px] font-mono font-medium text-ink min-w-0">
-                  <span className="truncate">@{session.username || 'not_set'}</span>
-                  {session.isPro && session.username && <VerifiedTick size={14} />}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleStartEditUsername}
-                  aria-label="Edit username"
-                  title="Edit username"
-                  className="inline-flex items-center justify-center w-8 h-8 text-ink hover:text-ink-2 rounded-[6px] hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
-                >
-                  <Pencil size={14} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Plan row */}
-          <div className="py-3 flex flex-col justify-center gap-1">
-            <div className="flex items-center justify-between text-[14px]">
-              <span className="text-muted">Plan</span>
-              <div className="flex items-center gap-2">
-                {session.isPro ? (
-                  <ProBadge />
-                ) : (
-                  <span className="text-[15px] font-medium text-ink">Free</span>
-                )}
-              </div>
+              </Card>
             </div>
 
-            {!session.isPro && (
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[13px] text-muted">
-                  Standard features included.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => openUpgrade()}
-                  className="text-[13px] text-ink font-semibold underline underline-offset-2 hover:text-ink-2 cursor-pointer"
-                >
-                  Upgrade to Pro
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Passkeys row */}
-          <div className="py-3 flex items-center justify-between gap-3 text-[14px]">
-            <div className="min-w-0">
-              <span className="text-muted block">Passkeys</span>
-              <span className="text-[12px] text-muted/90 block mt-0.5">
-                Sign in faster with fingerprint, face ID, or security key
-              </span>
+            {/* A2. Plan & billing card */}
+            <div id="plan" className="scroll-mt-32">
+              <SubscriptionCard />
             </div>
-            <Button as={Link} to="/account#passkeys" variant="ghost" size="sm" className="shrink-0">
-              Manage
-            </Button>
-          </div>
-        </div>
+          </section>
 
-        <div className="mt-2">
-          <Button as={Link} to="/account" variant="secondary" size="md">
-            Manage account
-          </Button>
-        </div>
-      </Card>
-
-      {/* 2. Subscription & Billing Card */}
-      <SubscriptionCard />
-
-      {/* 2. Your Page Card */}
-      <Card className="flex flex-col gap-4">
-        <h3 className="text-[20px] font-semibold text-ink leading-tight">
-          Your page
-        </h3>
-
-        <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-2 border border-border min-w-0">
-          <span className="font-mono text-[14px] text-ink select-all truncate flex-1 min-w-0">
-            {fullUrl || 'https://iveo.site'}
-          </span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <a
-              href={session.username ? pageUrl(session.username) : '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open page"
-              title="Open page"
-              className="w-9 h-9 inline-flex items-center justify-center rounded-[8px] border border-border bg-surface text-ink hover:bg-surface-2 transition-colors cursor-pointer"
+          {/* GROUP B - YOUR PAGE */}
+          <section className="flex flex-col gap-4" aria-labelledby="settings-group-page">
+            <h2
+              id="settings-group-page"
+              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
             >
-              <ExternalLink size={16} strokeWidth={1.6} />
-            </a>
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              aria-label="Copy page link"
-              title="Copy page link"
-              className="w-9 h-9 inline-flex items-center justify-center rounded-[8px] border border-border bg-surface text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
-            >
-              {copiedUrl ? <Check size={16} strokeWidth={1.8} className="text-emerald-600" /> : <Copy size={16} strokeWidth={1.6} />}
-            </button>
-          </div>
-        </div>
+              Your page
+            </h2>
 
-        {/* Remove the iveo mark switch */}
-        <div className="pt-4 mt-2 border-t border-border flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-[14px] font-medium text-ink">
-                Remove the iveo mark
-              </span>
-              <ProBadge />
+            <div id="page" className="scroll-mt-32">
+              <Card className="flex flex-col gap-4">
+                <h3 className="text-[16px] font-semibold text-ink leading-tight">
+                  Page link
+                </h3>
+
+                <PageUrlStrip username={session.username} />
+
+                <div className="pt-3 border-t border-divider flex items-center justify-between gap-4">
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[14px] font-medium text-ink">
+                        Remove iveo branding
+                      </span>
+                      {!session.isPro && <ProBadge locked />}
+                    </div>
+                    <p className="text-[13px] text-muted mt-0.5">
+                      Hides the &apos;Create your own page&apos; link. The report link always stays.
+                    </p>
+                  </div>
+
+                  <Toggle
+                    checked={brandingHidden}
+                    onChange={handleFooterMarkToggle}
+                    ariaLabel="Remove iveo branding"
+                    locked={!session.isPro}
+                  />
+                </div>
+              </Card>
             </div>
-            <p className="text-[13px] text-muted max-w-[42ch]">
-              Hide the 'Create your own page' link from your page. The report link always stays.
-            </p>
-          </div>
+          </section>
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={
-              session.isPro
-                ? session.hideIveoFooter || session.hideIvioFooter
-                : false
-            }
-            aria-disabled={!session.isPro}
-            onClick={handleFooterMarkToggle}
-            className={`w-11 h-6 rounded-full flex items-center p-0.5 transition-colors duration-120 shrink-0 focus-visible:outline-2 focus-visible:outline-ink ${
-              session.isPro &&
-              (session.hideIveoFooter || session.hideIvioFooter)
-                ? 'bg-ink'
-                : 'bg-border'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-120 ${
-                session.isPro &&
-                (session.hideIveoFooter || session.hideIvioFooter)
-                  ? 'translate-x-5'
-                  : 'translate-x-0'
-              }`}
-            />
-          </button>
+          {/* GROUP C - GROWTH & SEO */}
+          <section className="flex flex-col gap-4" aria-labelledby="settings-group-growth">
+            <h2
+              id="settings-group-growth"
+              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
+            >
+              Growth &amp; SEO
+            </h2>
+
+            <div id="integrations" className="scroll-mt-32">
+              <IntegrationsCard />
+            </div>
+
+            <div id="seo" className="scroll-mt-32">
+              <SearchSeoCard />
+            </div>
+          </section>
+
+          {/* GROUP D - DATA & PRIVACY */}
+          <section className="flex flex-col gap-4" aria-labelledby="settings-group-data">
+            <h2
+              id="settings-group-data"
+              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
+            >
+              Data &amp; privacy
+            </h2>
+
+            <div id="data" className="scroll-mt-32">
+              <ExportDataCard />
+            </div>
+          </section>
+
+          {/* GROUP E - DANGER ZONE */}
+          <section className="flex flex-col gap-4" aria-labelledby="settings-group-danger">
+            <h2
+              id="settings-group-danger"
+              className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--error,#B3261E)] px-0.5"
+            >
+              Danger zone
+            </h2>
+
+            <div id="danger" className="scroll-mt-32">
+              <DeleteAccountCard
+                username={session.username || session.primaryEmail?.split('@')[0] || 'account'}
+                email={session.primaryEmail}
+              />
+            </div>
+          </section>
         </div>
-      </Card>
-
-      {/* 3. Apps & Integrations Card (Google Analytics, Meta Pixel, WhatsApp, SEO) */}
-      <IntegrationsCard />
-
-      {/* 3b. Platform SEO Health Console (Admin / Owner emails only) */}
-      {isOwnerEmail(session.primaryEmail) && (
-        <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-[18px] font-semibold text-ink leading-tight">
-              SEO Health &amp; Search Console
-            </h3>
-            <p className="mt-1 text-[13px] text-muted max-w-[46ch]">
-              Monitor profile indexability, inspect URLs, regenerate XML sitemaps, and submit updates to Google &amp; Bing.
-            </p>
-          </div>
-          <Button as={Link} to="/admin/seo" variant="secondary" size="md" className="shrink-0">
-            Open SEO Console
-          </Button>
-        </Card>
-      )}
-
-      {/* 4. Compact Account Utility Strip (Your Data, Session, Delete Account) */}
-      <ExportDataCard />
-
-      <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-[15px] font-semibold text-ink leading-tight">
-            Session
-          </h3>
-          <p className="text-[12px] text-muted mt-0.5">
-            Signed in on this device.
-          </p>
-        </div>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleSignOut}
-          className="shrink-0 self-start sm:self-center"
-        >
-          Sign out
-        </Button>
-      </Card>
-
-      <DeleteAccountCard username={session.username || session.primaryEmail?.split('@')[0] || 'account'} />
-
-      {/* Share Dialog */}
-      {session.username && (
-        <ShareDialog
-          isOpen={isShareOpen}
-          onClose={() => setIsShareOpen(false)}
-          username={session.username}
-          displayName={session.displayName}
-          bio={session.bio}
-          avatarUrl={session.imageUrl}
-          vibeId={session.vibeId}
-          fontSettings={session.fontSettings}
-          buttonColors={session.buttonColors}
-          businessCard={session.businessCard}
-          socials={session.socials}
-          onSaveCardConfig={async (cfg) => {
-            await session.updatePreferences({ businessCard: cfg });
-          }}
-          isPro={session.isPro}
-          isPublished={true}
-        />
-      )}
+      </div>
     </div>
   );
 };

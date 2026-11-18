@@ -129,11 +129,11 @@ export const VibeTileGroup: React.FC<VibeTileGroupProps> = ({
                 }}
               />
 
-              {/* Top-left Pro / Free indicator */}
-              {vibe.isPro && (
+              {/* Top-left Pro lock indicator (shown only for Free users) */}
+              {isLocked && (
                 <div className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-[#0A0A0A]/85 text-[#FAFAFA] text-[9px] font-semibold uppercase tracking-wider backdrop-blur-xs">
-                  {isLocked && <Lock size={9} strokeWidth={2.5} />}
-                  <span>Pro</span>
+                  <Lock size={9} strokeWidth={2.5} />
+                  <span>PRO</span>
                 </div>
               )}
 
@@ -151,9 +151,11 @@ export const VibeTileGroup: React.FC<VibeTileGroupProps> = ({
                 <span className="text-[14px] font-medium text-ink leading-tight">
                   {vibe.name}
                 </span>
-                <span className="text-[10px] font-medium text-muted shrink-0">
-                  {vibe.isPro ? (isLocked ? 'Pro' : 'Pro') : 'Free'}
-                </span>
+                {isLocked && (
+                  <span className="text-[10px] font-medium text-muted shrink-0">
+                    PRO
+                  </span>
+                )}
               </div>
               <span className="text-[12px] text-muted leading-snug line-clamp-2 mt-0.5">
                 {vibe.description}

@@ -4,12 +4,14 @@ import {
   ChevronRight,
   Image as ImageIcon,
   Info,
-  Palette,
+  Layers,
   RectangleHorizontal,
   Sparkles,
   Type,
+  X,
 } from 'lucide-react';
 import { Card } from '../ui/Card';
+import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { VibeTileGroup } from '../onboarding/VibeTileGroup';
 import { BackgroundSelectorCard } from './BackgroundSelectorCard';
@@ -20,15 +22,18 @@ import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { VibeId, VIBES } from '../../lib/vibes';
-import { ButtonShape, DEFAULT_LAYOUT_SETTINGS, LayoutSettings } from '../../lib/preferences';
-import { FontSettings, getFontOption, loadGoogleFonts } from '../../lib/fonts';
+import {
+  ButtonShape,
+  DEFAULT_BACKGROUND_CONFIG,
+  DEFAULT_LAYOUT_SETTINGS,
+  LayoutSettings,
+} from '../../lib/preferences';
+import { FontSettings, getFontCssFamily, getFontOption, loadGoogleFonts } from '../../lib/fonts';
 import { ButtonColors, resolveEffectiveTokens } from '../../lib/colors';
 import { getBackgroundPreset } from '../../lib/backgrounds';
 import { BackgroundConfig } from '../../data/types';
-import { copy } from '../../content/copy';
-import { Layers } from 'lucide-react';
 
-type AppearancePanel = 'hub' | 'vibe' | 'background' | 'fonts' | 'shape' | 'colors' | 'layout';
+type AppearancePanel = 'hub' | 'vibe' | 'background' | 'fonts' | 'buttons' | 'layout';
 
 interface AppearanceTabProps {
   onPreviewVibeChange?: (vibeId: VibeId) => void;
@@ -37,6 +42,7 @@ interface AppearanceTabProps {
   onPreviewButtonColorsChange?: (colors: ButtonColors | null) => void;
   onPreviewLayoutChange?: (layout: LayoutSettings | null) => void;
   onPreviewBackgroundChange?: (background: BackgroundConfig | null) => void;
+  mobilePhonePreview?: React.ReactNode;
 }
 
 const BUTTON_SHAPE_OPTIONS: readonly { value: ButtonShape; label: string }[] = [
@@ -50,28 +56,24 @@ const PANEL_META: Record<
   { title: string; subtitle: string }
 > = {
   vibe: {
-    title: copy.dashboard.appearanceTab.vibeHeading,
-    subtitle: copy.dashboard.appearanceTab.vibeSubheading,
+    title: 'Theme',
+    subtitle: 'Choose a cohesive color palette and personality for your page.',
   },
   background: {
-    title: 'Page Background',
-    subtitle: 'Choose a preset gradient, pattern, or upload a custom photo backdrop.',
+    title: 'Background',
+    subtitle: 'Set a solid color, gradient, preset texture, or custom photo.',
   },
   fonts: {
-    title: 'Typography & Fonts',
-    subtitle: 'Customize Name, Bio, and Button text fonts with Free & Pro typefaces.',
+    title: 'Typography',
+    subtitle: 'Customize Name, Bio, and Button typefaces.',
   },
-  shape: {
-    title: copy.dashboard.appearanceTab.buttonShapeHeading,
-    subtitle: 'Choose square, rounded, or pill curvature for your link buttons.',
-  },
-  colors: {
-    title: 'Button Colors',
-    subtitle: 'Pick colors or enter #RRGGBB hex codes for button fill, text, and border.',
+  buttons: {
+    title: 'Buttons',
+    subtitle: 'Set corner shape, fill color, text contrast, and border.',
   },
   layout: {
-    title: 'Layout & Effects',
-    subtitle: 'Customize avatar frame, header alignment, button finish, spacing & width.',
+    title: 'Layout & effects',
+    subtitle: 'Adjust avatar frame, alignment, button finish, spacing & width.',
   },
 };
 
@@ -87,6 +89,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   onPreviewButtonColorsChange,
   onPreviewLayoutChange,
   onPreviewBackgroundChange,
+  mobilePhonePreview,
 }) => {
   const session = useIvioSession();
   const { showToast } = useToast();
@@ -108,7 +111,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     session.layoutSettings || null
   );
 
-  // Sync local state when session hydrates asynchronously from /api/me
   useEffect(() => {
     setCurrentVibeId(session.vibeId);
   }, [session.vibeId]);
@@ -141,18 +143,17 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     setCurrentVibeId(id);
     onPreviewVibeChange?.(id);
 
-    // Reset button shape to native when switching vibe
     const native = getNativeShape(id);
     setCurrentShape(native);
     onPreviewShapeChange?.(null);
 
     try {
       await session.updatePreferences({ vibeId: id, buttonShape: null });
-      showToast(copy.toasts.vibeSaved);
+      showToast('Theme saved');
     } catch {
       setCurrentVibeId(previous);
       onPreviewVibeChange?.(previous);
-      showToast(copy.toasts.saveFailed);
+      showToast("Couldn't save theme");
     }
   };
 
@@ -167,19 +168,21 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     } catch {
       setCurrentShape(previous);
       onPreviewShapeChange?.(previous);
-      showToast(copy.toasts.saveFailed);
+      showToast("Couldn't save button style");
     }
   };
 
-  const handleResetShape = async () => {
+  const handleResetButtonsToDefault = async () => {
     const native = getNativeShape(currentVibeId);
     setCurrentShape(native);
+    setCurrentButtonColors(null);
     onPreviewShapeChange?.(null);
+    onPreviewButtonColorsChange?.(null);
     try {
-      await session.updatePreferences({ buttonShape: null });
-      showToast('Button shape reset to Vibe native');
+      await session.updatePreferences({ buttonShape: null, buttonColors: null });
+      showToast('Buttons reset to theme default');
     } catch {
-      showToast(copy.toasts.saveFailed);
+      showToast("Couldn't reset buttons");
     }
   };
 
@@ -230,6 +233,24 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     }
   };
 
+  const handleResetActivePanel = async () => {
+    if (activePanel === 'vibe') {
+      await handleSelectVibe('clean');
+    } else if (activePanel === 'background') {
+      onPreviewBackgroundChange?.(DEFAULT_BACKGROUND_CONFIG);
+      await handleBackgroundChange(DEFAULT_BACKGROUND_CONFIG);
+      showToast('Background reset to Pure White');
+    } else if (activePanel === 'fonts') {
+      await handleSaveFonts(null);
+      showToast('Typography reset to theme default');
+    } else if (activePanel === 'buttons') {
+      await handleResetButtonsToDefault();
+    } else if (activePanel === 'layout') {
+      await handleSaveLayout(null);
+      showToast('Layout reset to default');
+    }
+  };
+
   const activeVibe = VIBES.find((v) => v.id === currentVibeId) || VIBES[0];
   const effectiveTokens = resolveEffectiveTokens(
     activeVibe.tokens,
@@ -237,11 +258,11 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     session.background
   );
 
-  // Summaries for minimized feature buttons
+  // Summaries for the 5 hub rows
   const backgroundSummary = (() => {
     const bg = session.background;
-    if (!bg || bg.type === 'none') return 'Theme Default';
-    if (bg.type === 'image') return 'Custom Photo';
+    if (!bg || bg.type === 'none') return 'Pure White';
+    if (bg.type === 'image') return 'Custom photo';
     if (bg.presetId) {
       const preset = getBackgroundPreset(bg.presetId);
       if (preset) return preset.name;
@@ -250,7 +271,9 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         .replace(/-/g, ' ')
         .replace(/\b\w/g, (c) => c.toUpperCase());
     }
-    return 'Custom Backdrop';
+    if (bg.type === 'solid') return bg.value || '#FFFFFF';
+    if (bg.type === 'gradient' || bg.type === 'mesh') return 'Gradient';
+    return 'Custom backdrop';
   })();
 
   const fontsSummary = (() => {
@@ -260,26 +283,53 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
       getFontOption(currentFonts?.buttonFont)?.name,
     ].filter(Boolean) as string[];
     if (parts.length === 0) {
-      return `${activeVibe.fontFamily.split(',')[0].replace(/['"]/g, '')} (Default)`;
+      return activeVibe.fontFamily.split(',')[0].replace(/['"]/g, '');
     }
-    return Array.from(new Set(parts)).join(' · ');
+    return Array.from(new Set(parts)).slice(0, 2).join(' / ');
   })();
 
   const shapeSummary =
     BUTTON_SHAPE_OPTIONS.find((s) => s.value === currentShape)?.label || 'Rounded';
 
-  const buttonColorsSummary = currentButtonColors?.bg || effectiveTokens.buttonBg;
+  const buttonColorHex = (currentButtonColors?.bg || effectiveTokens.buttonBg).toUpperCase();
 
-  const layoutStyle = currentLayout?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle;
-  const layoutSummary = `${layoutStyle.charAt(0).toUpperCase()}${layoutStyle.slice(1)}`;
+  const layoutBtnStyle = currentLayout?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle;
+  const layoutSummary = `${layoutBtnStyle.charAt(0).toUpperCase()}${layoutBtnStyle.slice(1)}, ${
+    (currentLayout?.headerAlign || DEFAULT_LAYOUT_SETTINGS.headerAlign) === 'left'
+      ? 'Left-aligned'
+      : 'Centered'
+  }`;
+
+  const backgroundPreviewSwatchStyle: React.CSSProperties = (() => {
+    const bg = session.background;
+    if (!bg || bg.type === 'none') {
+      return { backgroundColor: '#FFFFFF' };
+    }
+    if (bg.type === 'solid' && bg.value) {
+      return { backgroundColor: bg.value };
+    }
+    if ((bg.type === 'gradient' || bg.type === 'mesh') && bg.gradientStops && bg.gradientStops.length >= 2) {
+      return {
+        backgroundImage: `linear-gradient(135deg, ${bg.gradientStops[0]}, ${bg.gradientStops[1]})`,
+      };
+    }
+    if (bg.type === 'image' && bg.value) {
+      return {
+        backgroundImage: `url(${bg.value})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      };
+    }
+    return { backgroundColor: bg.value || activeVibe.tokens.bg };
+  })();
 
   // ── Dedicated Sub-Screen View ───────────────────────────────────────────────
   if (activePanel !== 'hub') {
     const meta = PANEL_META[activePanel];
     return (
-      <div className="flex flex-col gap-5 w-full min-w-0">
-        {/* Sub-screen Header with Back button only (no duplicate top Preview) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
+      <div className="flex flex-col gap-4 w-full min-w-0">
+        {/* Back navigation bar */}
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-divider">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -288,19 +338,26 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                 setActivePanel('hub');
               }}
               aria-label="Back to Appearance"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[10px] border border-border bg-surface text-[13px] font-medium text-ink hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-[10px] border border-border bg-surface text-[13px] font-medium text-ink hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
             >
-              <ArrowLeft size={15} />
-              <span>Back</span>
+              <ArrowLeft size={16} strokeWidth={1.75} />
+              <span>Appearance</span>
             </button>
             <div className="min-w-0 flex-1">
               <h2 className="text-[18px] sm:text-[20px] font-semibold text-ink leading-tight">
                 {meta.title}
               </h2>
-              <p className="text-[13px] text-muted leading-snug">{meta.subtitle}</p>
+              <p className="text-[13px] text-muted leading-snug truncate">{meta.subtitle}</p>
             </div>
           </div>
         </div>
+
+        {/* Mobile/Tablet pinned compact live preview (<lg only) */}
+        {mobilePhonePreview && (
+          <div className="lg:hidden rounded-[16px] border border-border bg-surface-2/60 py-3 px-4 flex flex-col items-center justify-center">
+            {mobilePhonePreview}
+          </div>
+        )}
 
         {/* Sub-screen Body */}
         {activePanel === 'vibe' && (
@@ -311,48 +368,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
               isPro={session.isPro}
               onProBlocked={() => openUpgrade('pro_vibes')}
             />
-
-            <div className="pt-4 border-t border-border">
-              <p className="text-[12px] font-semibold uppercase tracking-wider text-muted mb-3">
-                Active Palette ({activeVibe.name})
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px]">
-                <div className="p-3 rounded-[10px] bg-surface-2 border border-border flex flex-col gap-1">
-                  <span className="text-muted text-[11px] uppercase font-mono">Font</span>
-                  <span className="font-semibold text-ink truncate">
-                    {activeVibe.fontFamily.split(',')[0].replace(/['"]/g, '')}
-                  </span>
-                </div>
-                <div className="p-3 rounded-[10px] bg-surface-2 border border-border flex flex-col gap-1">
-                  <span className="text-muted text-[11px] uppercase font-mono">Background</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0"
-                      style={{ backgroundColor: activeVibe.tokens.bg }}
-                    />
-                    <span className="font-mono text-ink text-[12px]">
-                      {activeVibe.tokens.bg}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-[10px] bg-surface-2 border border-border flex flex-col gap-1">
-                  <span className="text-muted text-[11px] uppercase font-mono">Button</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0"
-                      style={{ backgroundColor: activeVibe.tokens.buttonBg }}
-                    />
-                    <span className="font-mono text-ink text-[12px]">
-                      {activeVibe.tokens.buttonBg}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-[10px] bg-surface-2 border border-border flex flex-col gap-1">
-                  <span className="text-muted text-[11px] uppercase font-mono">Radius</span>
-                  <span className="font-medium text-ink">{activeVibe.tokens.buttonRadius}px</span>
-                </div>
-              </div>
-            </div>
           </Card>
         )}
 
@@ -387,10 +402,17 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
           </Card>
         )}
 
-        {activePanel === 'shape' && (
-          <Card className="flex flex-col gap-5">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="max-w-[340px] w-full">
+        {activePanel === 'buttons' && (
+          <div className="flex flex-col gap-4">
+            <Card className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-[16px] font-semibold text-ink">Button shape</h3>
+                <p className="text-[13px] text-muted mt-0.5">
+                  Choose corner curvature for links and social buttons.
+                </p>
+              </div>
+
+              <div className="max-w-[360px] w-full">
                 <SegmentedControl<ButtonShape>
                   options={BUTTON_SHAPE_OPTIONS}
                   value={currentShape}
@@ -399,76 +421,58 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                 />
               </div>
 
-              {session.buttonShape && (
-                <button
-                  type="button"
-                  onClick={handleResetShape}
-                  className="text-[12px] text-muted hover:text-ink underline cursor-pointer"
-                >
-                  Reset to {activeVibe.name} native ({activeVibe.nativeShape})
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(
-                [
-                  { id: 'square', label: 'Square', radius: '0px', desc: 'Crisp architectural edges' },
-                  { id: 'rounded', label: 'Rounded', radius: '12px', desc: 'Balanced modern cards' },
-                  { id: 'pill', label: 'Pill', radius: '999px', desc: 'Soft capsule buttons' },
-                ] as const
-              ).map((item) => {
-                const selected = currentShape === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelectShape(item.id)}
-                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-3 ${
-                      selected
-                        ? 'border-ink bg-surface ring-1 ring-ink shadow-xs'
-                        : 'border-border bg-surface-2/50 hover:border-ink/35'
-                    }`}
-                  >
-                    <div
-                      className="w-full h-10 flex items-center justify-center text-[13px] font-medium"
-                      style={{
-                        borderRadius: item.radius,
-                        backgroundColor: effectiveTokens.buttonBg,
-                        color: effectiveTokens.buttonText,
-                        border: effectiveTokens.buttonBorder
-                          ? `${effectiveTokens.buttonBorderWidth || '1px'} solid ${effectiveTokens.buttonBorder}`
-                          : 'none',
-                      }}
+              <div className="grid grid-cols-3 gap-2.5">
+                {(
+                  [
+                    { id: 'square', label: 'Square', radius: '0px' },
+                    { id: 'rounded', label: 'Rounded', radius: '12px' },
+                    { id: 'pill', label: 'Pill', radius: '999px' },
+                  ] as const
+                ).map((item) => {
+                  const selected = currentShape === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSelectShape(item.id)}
+                      className={`p-3 rounded-[12px] border text-center transition-all cursor-pointer flex flex-col items-center gap-2 ${
+                        selected
+                          ? 'border-ink bg-surface ring-1 ring-ink'
+                          : 'border-border bg-surface-2/40 hover:border-border-strong'
+                      }`}
                     >
-                      {item.label}
-                    </div>
-                    <div>
-                      <div className="text-[13px] font-semibold text-ink">
-                        {item.label} <span className="font-mono text-[11px] text-muted">({item.radius})</span>
+                      <div
+                        className="w-full h-9 flex items-center justify-center text-[12px] font-medium"
+                        style={{
+                          borderRadius: item.radius,
+                          backgroundColor: effectiveTokens.buttonBg,
+                          color: effectiveTokens.buttonText,
+                          border: effectiveTokens.buttonBorder
+                            ? `${effectiveTokens.buttonBorderWidth || '1px'} solid ${effectiveTokens.buttonBorder}`
+                            : 'none',
+                        }}
+                      >
+                        {item.label}
                       </div>
-                      <div className="text-[11px] text-muted mt-0.5">{item.desc}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        )}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
 
-        {activePanel === 'colors' && (
-          <Card className="w-full min-w-0 overflow-hidden">
-            <ButtonColorsPanel
-              currentColors={currentButtonColors}
-              activeVibe={activeVibe}
-              background={session.background}
-              onColorsChange={handleSaveButtonColors}
-              onPreviewColorsChange={(next) => {
-                setCurrentButtonColors(next);
-                onPreviewButtonColorsChange?.(next);
-              }}
-            />
-          </Card>
+            <Card className="w-full min-w-0 overflow-hidden">
+              <ButtonColorsPanel
+                currentColors={currentButtonColors}
+                activeVibe={activeVibe}
+                background={session.background}
+                onColorsChange={handleSaveButtonColors}
+                onPreviewColorsChange={(next) => {
+                  setCurrentButtonColors(next);
+                  onPreviewButtonColorsChange?.(next);
+                }}
+              />
+            </Card>
+          </div>
         )}
 
         {activePanel === 'layout' && (
@@ -486,142 +490,218 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
             />
           </Card>
         )}
+
+        {/* Sticky Sub-Editor Footer Bar */}
+        <div className="sticky bottom-16 md:bottom-3 z-20 p-3 rounded-[14px] bg-surface/95 backdrop-blur-sm border border-border shadow-sm flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleResetActivePanel}
+            className="min-h-[44px] px-2 text-[13px] font-medium text-muted hover:text-ink underline underline-offset-2 cursor-pointer"
+          >
+            Reset to default
+          </button>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => {
+              onPreviewBackgroundChange?.(null);
+              setActivePanel('hub');
+            }}
+          >
+            Done
+          </Button>
+        </div>
       </div>
     );
   }
 
-  // ── Main Minimized Appearance Hub Screen ────────────────────────────────────
-  const featureButtons: {
+  // ── Main 5-Row Appearance Hub ───────────────────────────────────────────────
+  const sections: {
     id: Exclude<AppearancePanel, 'hub'>;
     label: string;
+    summary: string;
     infoText: string;
     icon: React.ReactNode;
+    swatch: React.ReactNode;
   }[] = [
     {
       id: 'vibe',
-      label: 'Vibe',
+      label: 'Theme',
+      summary: `Vibe · ${activeVibe.name}`,
       infoText: 'Choose a cohesive color palette and theme personality for your entire profile.',
-      icon: <Sparkles size={18} strokeWidth={1.75} />,
+      icon: <Sparkles size={20} strokeWidth={1.5} />,
+      swatch: (
+        <div className="flex items-center -space-x-1.5 shrink-0" aria-hidden="true">
+          <span
+            className="w-4 h-4 rounded-full border border-black/15"
+            style={{ backgroundColor: activeVibe.tokens.bg }}
+          />
+          <span
+            className="w-4 h-4 rounded-full border border-black/15"
+            style={{ backgroundColor: activeVibe.tokens.buttonBg }}
+          />
+          <span
+            className="w-4 h-4 rounded-full border border-black/15"
+            style={{ backgroundColor: activeVibe.tokens.text }}
+          />
+        </div>
+      ),
     },
     {
       id: 'background',
-      label: 'Page Background',
-      infoText: 'Personalize your backdrop with Pure White, solid colors, custom gradients, presets, textures, or uploaded photos.',
-      icon: <ImageIcon size={18} strokeWidth={1.75} />,
+      label: 'Background',
+      summary: `Background · ${backgroundSummary}`,
+      infoText:
+        'Personalize your backdrop with Pure White, solid colors, custom gradients, presets, textures, or uploaded photos.',
+      icon: <ImageIcon size={20} strokeWidth={1.5} />,
+      swatch: (
+        <span
+          className="w-7 h-7 rounded-[8px] border border-border shrink-0"
+          style={backgroundPreviewSwatchStyle}
+          aria-hidden="true"
+        />
+      ),
     },
     {
       id: 'fonts',
-      label: 'Fonts',
+      label: 'Typography',
+      summary: `Font · ${fontsSummary}`,
       infoText: 'Customize typography for your display name, bio, and link buttons.',
-      icon: <Type size={18} strokeWidth={1.75} />,
+      icon: <Type size={20} strokeWidth={1.5} />,
+      swatch: (
+        <span
+          className="w-7 h-7 rounded-[8px] border border-border bg-surface-2 flex items-center justify-center text-[13px] font-semibold text-ink shrink-0"
+          style={{
+            fontFamily: getFontCssFamily(currentFonts?.nameFont, activeVibe.fontFamily),
+          }}
+          aria-hidden="true"
+        >
+          Aa
+        </span>
+      ),
     },
     {
-      id: 'shape',
-      label: 'Button Shape',
-      infoText: 'Switch link and social button corners between Square, Rounded, and Pill.',
-      icon: <RectangleHorizontal size={18} strokeWidth={1.75} />,
-    },
-    {
-      id: 'colors',
-      label: 'Button Colors',
-      infoText: 'Customize fill, text, and border colors for your link buttons using swatches or #RRGGBB hex codes.',
-      icon: <Palette size={18} strokeWidth={1.75} />,
+      id: 'buttons',
+      label: 'Buttons',
+      summary: `Buttons · ${shapeSummary}, ${buttonColorHex}`,
+      infoText: 'Set link button curvature (Square, Rounded, Pill) and customize fill, text, and border colors.',
+      icon: <RectangleHorizontal size={20} strokeWidth={1.5} />,
+      swatch: (
+        <span
+          className="w-10 h-5 flex items-center justify-center shrink-0"
+          style={{
+            backgroundColor: effectiveTokens.buttonBg,
+            borderRadius:
+              currentShape === 'square' ? '2px' : currentShape === 'pill' ? '999px' : '6px',
+            border: effectiveTokens.buttonBorder
+              ? `1px solid ${effectiveTokens.buttonBorder}`
+              : '1px solid rgba(0,0,0,0.1)',
+          }}
+          aria-hidden="true"
+        />
+      ),
     },
     {
       id: 'layout',
-      label: 'Layout & Effects',
+      label: 'Layout & effects',
+      summary: `Layout · ${layoutSummary}`,
       infoText: 'Adjust avatar frame shape, header alignment, button finish, link spacing, and page width.',
-      icon: <Layers size={18} strokeWidth={1.75} />,
+      icon: <Layers size={20} strokeWidth={1.5} />,
+      swatch: (
+        <div
+          className="w-7 h-7 rounded-[8px] border border-border bg-surface-2 flex flex-col items-center justify-center gap-0.5 px-1.5 shrink-0"
+          aria-hidden="true"
+        >
+          <span className="w-3.5 h-0.5 rounded-full bg-ink/70" />
+          <span className="w-4 h-0.5 rounded-full bg-ink/40" />
+          <span className="w-3 h-0.5 rounded-full bg-ink/40" />
+        </div>
+      ),
     },
   ];
 
-  // Unused summary variables kept clean via removal
-  void backgroundSummary;
-  void fontsSummary;
-  void shapeSummary;
-  void buttonColorsSummary;
-  void layoutSummary;
-
   return (
-    <div className="flex flex-col gap-6">
-      {/* Minimized Page Design Feature Buttons */}
-      <Card className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-[20px] font-semibold text-ink leading-tight">
-              Customize Page Style
-            </h3>
-            <p className="mt-1 text-[14px] text-muted">
-              Select a feature below to open its full editor.
-            </p>
-          </div>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-[20px] sm:text-[22px] font-semibold text-ink leading-tight">
+          Appearance
+        </h1>
+        <p className="mt-1 text-[14px] text-muted">
+          Customize how your iveo page looks to visitors.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 gap-2.5">
-          {featureButtons.map((feat) => {
-            const isInfoOpen = openInfoId === feat.id;
-            return (
-              <div key={feat.id} className="relative">
-                {/* Sibling top-left (i) info button — never nested inside card button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenInfoId((prev) => (prev === feat.id ? null : feat.id));
-                  }}
-                  aria-label={`About ${feat.label}`}
-                  aria-expanded={isInfoOpen}
-                  className="absolute top-1.5 left-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
-                >
-                  <Info size={12} strokeWidth={2} />
-                </button>
-
+      <Card className="p-0 sm:p-0 overflow-hidden divide-y divide-divider">
+        {sections.map((section) => {
+          const isInfoOpen = openInfoId === section.id;
+          return (
+            <div key={section.id} className="flex flex-col">
+              <div className="relative min-h-[72px] px-4 py-3 flex items-center justify-between gap-2.5 hover:bg-surface-2/50 transition-colors">
                 <button
                   type="button"
                   onClick={() => {
                     setOpenInfoId(null);
-                    setActivePanel(feat.id);
+                    setActivePanel(section.id);
                   }}
-                  className="group w-full p-3.5 pl-7 sm:p-4 sm:pl-8 rounded-xl border border-border bg-surface hover:border-ink/40 hover:bg-surface-2/60 transition-all flex items-center justify-between gap-3 text-left cursor-pointer min-w-0"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0 group-hover:bg-surface transition-colors">
-                      {feat.icon}
+                  aria-label={`Edit ${section.label}`}
+                  className="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-ink"
+                />
+
+                <div className="relative z-10 pointer-events-none flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 rounded-[12px] bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0">
+                    {section.icon}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[15px] font-semibold text-ink leading-snug">
+                        {section.label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenInfoId((prev) => (prev === section.id ? null : section.id))
+                        }
+                        aria-label={`About ${section.label}`}
+                        aria-expanded={isInfoOpen}
+                        className="pointer-events-auto w-7 h-7 inline-flex items-center justify-center rounded-full text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Info size={14} strokeWidth={1.75} />
+                      </button>
                     </div>
-                    <span className="text-[14px] font-semibold text-ink leading-snug truncate">
-                      {feat.label}
-                    </span>
+                    <p className="text-[13px] text-muted leading-snug truncate">
+                      {section.summary}
+                    </p>
                   </div>
+                </div>
 
-                  <ChevronRight
-                    size={17}
-                    className="text-muted group-hover:text-ink group-hover:translate-x-0.5 transition-all shrink-0"
-                  />
-                </button>
-
-                {isInfoOpen && (
-                  <div
-                    role="region"
-                    aria-label={`${feat.label} details`}
-                    className="mt-1.5 p-3 rounded-xl bg-surface-2 border border-border text-[12px] text-ink shadow-sm flex items-start justify-between gap-2"
-                  >
-                    <p className="leading-relaxed text-muted">{feat.infoText}</p>
-                    <button
-                      type="button"
-                      onClick={() => setOpenInfoId(null)}
-                      aria-label="Close info"
-                      className="text-muted hover:text-ink text-[12px] px-1 cursor-pointer shrink-0"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
+                <div className="relative z-10 pointer-events-none flex items-center gap-2 shrink-0">
+                  {section.swatch}
+                  <ChevronRight size={18} strokeWidth={1.5} className="text-muted" />
+                </div>
               </div>
-            );
-          })}
-        </div>
+
+              {isInfoOpen && (
+                <div
+                  role="region"
+                  aria-label={`${section.label} info`}
+                  className="px-4 py-3 bg-surface-2/70 border-t border-divider flex items-start justify-between gap-3 text-[13px] text-muted"
+                >
+                  <p className="leading-relaxed">{section.infoText}</p>
+                  <button
+                    type="button"
+                    onClick={() => setOpenInfoId(null)}
+                    aria-label="Close info"
+                    className="w-8 h-8 inline-flex items-center justify-center rounded-full text-muted hover:text-ink cursor-pointer shrink-0"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </Card>
     </div>
   );
 };
-

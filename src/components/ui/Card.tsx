@@ -16,7 +16,7 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={cn(
-        'rounded-[14px] bg-surface p-5 sm:p-6 border border-border shadow-[0_1px_2px_rgba(10,10,10,0.04)]',
+        'rounded-[16px] bg-surface p-4 sm:p-5 border border-border shadow-[0_1px_2px_rgba(10,10,10,0.04)]',
         interactive && 'transition-colors duration-120 hover:border-border-strong cursor-pointer',
         className
       )}

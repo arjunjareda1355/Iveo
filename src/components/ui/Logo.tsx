@@ -12,6 +12,7 @@ interface LogoProps {
   className?: string;
   isLink?: boolean;
   externalLink?: boolean;
+  compactMobile?: boolean;
 }
 
 export const Logo: React.FC<LogoProps> = ({
@@ -20,6 +21,7 @@ export const Logo: React.FC<LogoProps> = ({
   className,
   isLink = true,
   externalLink = false,
+  compactMobile = false,
 }) => {
   const isDark = tone === 'dark';
   const heightClass = size === 'sm' ? 'h-6' : size === 'lg' ? 'h-9' : 'h-7';
@@ -38,6 +40,7 @@ export const Logo: React.FC<LogoProps> = ({
       <span
         className={cn(
           'font-semibold tracking-[-0.03em] text-[17px] text-ink transition-colors',
+          compactMobile && 'hidden sm:inline',
           isDark && 'text-white'
         )}
       >

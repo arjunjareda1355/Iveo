@@ -200,9 +200,9 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
                 >
                   {font.name}
                 </span>
-                {font.isPro && (
+                {isLocked && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ink text-surface shrink-0">
-                    {isLocked && <Lock size={9} />}
+                    <Lock size={9} />
                     <span>PRO</span>
                   </span>
                 )}

@@ -1,0 +1,524 @@
+=====================================================================
+IVEO DASHBOARD - LAYOUT CLEANUP & FEATURE ORGANISATION PROMPT
+=====================================================================
+
+---------------------------------------------------------------------
+0. ROLE AND GOAL
+---------------------------------------------------------------------
+You are a senior product designer + front-end engineer. Redesign the
+layout and information architecture of the iveo dashboard
+(iveo.site/dashboard) so it looks clean, professional, consistent and
+easy to use, especially on mobile (primary use case, ~360-430px wide).
+
+DO NOT remove any working feature. The job is to:
+  1. Remove duplicated features / duplicated entry points.
+  2. Put every feature in exactly ONE logical home.
+  3. Fix spacing, alignment, hierarchy and overlapping UI.
+  4. Make the whole dashboard feel like one consistent product.
+
+Keep all existing data, URLs, routes, API calls and behaviour. Only
+restructure and restyle the UI unless a requirement below says
+otherwise.
+
+Dashboard tabs today: Links | Appearance | Contacts | Analytics |
+Settings. (Contacts and Analytics screens were not provided - apply
+the global rules in section 2 to them as well and keep their content.)
+
+
+---------------------------------------------------------------------
+1. AUDIT - PROBLEMS FOUND IN THE CURRENT UI
+---------------------------------------------------------------------
+
+1.1 GLOBAL / HEADER / NAVIGATION
+  - Tab bar is cut off on mobile (the "Settings" tab shows as "ngs" and
+    the left tab is clipped) - it scrolls horizontally with no hint.
+  - The avatar dropdown opens ON TOP of the tab bar and covers page
+    content, and its items duplicate the tabs: "Dashboard",
+    "Appearance", "Analytics" are already tabs.
+  - "Manage account" exists in 4 places: avatar menu, Account card
+    button, Passkeys "Manage", and the Subscription "Manage & details".
+  - "Subscription" is in the avatar menu AND is a full card in Settings.
+  - "Sign out" exists in the avatar menu AND in a Settings "Session"
+    card.
+  - A "Share" button and a "Preview" floating button both exist and do
+    similar jobs. The floating "Preview" button overlaps page content
+    (it covers the "iveo Pro Member" text and the edit button of the
+    last link row).
+  - The "iveo" logo, the URL pill (iveo.site/@help + verified tick),
+    Share and avatar crowd one header row on mobile.
+
+1.2 SETTINGS TAB
+  - Too many unrelated cards stacked with no grouping: Account,
+    Subscription & Billing, Your page, Apps & Integrations, SEO Health,
+    Your data, Session, Delete account.
+  - The Subscription card contains an 8-item benefits list that
+    belongs on a plan/pricing page, not in settings. It makes the page
+    very long and repeats "Pro" many times.
+  - "PRO" / "Verified Pro" appears 6+ times (Plan: PRO, Verified Pro
+    chip, iveo Pro Member PRO, Remove-the-mark PRO, verified tick next
+    to username, verified tick in URL pill).
+  - "Custom SEO & Search Preview" (inside Integrations) and "SEO Health
+    & Search Console" (separate card) are the same topic split into two
+    places. SEO is not an "integration".
+  - Integrations card has ONE "Save integrations" button at the very
+    bottom, far from the fields, and it also appears to save the SEO
+    fields. The save scope is unclear.
+  - "Your page" card is cut between pages and mixes URL copy with the
+    "Remove the iveo mark" toggle. The toggle is nearly invisible
+    (very faint).
+  - Delete account text ends with a dangling email: "This can't be
+    undone. help@iveo.site." - confusing copy.
+  - Account card: "Plan PRO" row is plain grey text with no purpose;
+    "Passkeys" has a "Manage" link while there is also a "Manage
+    account" button right below.
+  - The subscription card has an empty gap where its icon should be.
+  - Placeholder phone number "+14155550199" in WhatsApp looks like a
+    saved value.
+
+1.3 APPEARANCE TAB
+  - Six cards each with a tiny "info (i)" icon floating in the top-left
+    corner, not aligned with the title or icon.
+  - "Button Shape" and "Button Colors" are two cards for one concept
+    (Buttons).
+  - Page is mostly empty space below the list and gives no visual
+    feedback - user cannot see current Vibe/Font/Colors without
+    opening each editor.
+  - Floating "Preview" button overlaps the bottom area.
+  - A blank second page/screen appears (empty bottom padding / hidden
+    content) - remove any blank trailing area.
+
+1.4 LINKS TAB
+  - "Add link" button looks disabled (grey, no border) while "Add other
+    blocks" looks primary. Two add buttons for one action.
+  - Filter chips are misleading: "Links (1) | Interactive (6) |
+    Headers (0)". Instagram, GitHub, LinkedIn, X and Support are all
+    counted as "Interactive" while only one item counts as a "Link".
+    The "All" chip also looks disabled.
+  - Link row toggles (visible/hidden switch) are almost invisible.
+  - Up/down reorder arrows are tiny; no drag handle; the first row's
+    "up" arrow is greyed but shown anyway.
+  - GitHub, LinkedIn and X rows use a generic globe icon and show only
+    the bare domain ("github.com", "x.com"); LinkedIn and X rows have
+    the identical title "Arjun Bharti Mina", so rows look duplicated.
+  - Two near-duplicate Support blocks: "Support Arjun Bharti Mina" and
+    "Support: Support My Work (INR 50, 100, 250, 500)".
+  - The Support row's subtitle shows truncated bio text
+    ("...is a multi-talented i - http...") - description text is
+    leaking into the list row.
+  - Subtitles are inconsistent: some show "description - URL", some
+    only a domain, some only amounts.
+  - Social icons (Email, YouTube, Instagram, X) live at the bottom of
+    the Links tab, and Instagram and X are ALSO present as normal link
+    rows above -> duplicate content on the public page.
+  - The "Top | Bottom | Both" icon-placement control looks disabled
+    (selected state is pale grey).
+  - Floating "Preview" button hides the last row's controls.
+
+
+---------------------------------------------------------------------
+2. GLOBAL DESIGN REQUIREMENTS (APPLY TO EVERY SCREEN)
+---------------------------------------------------------------------
+
+2.1 Design system / tokens (define once, reuse everywhere)
+  - Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 px. Page side padding
+    16px on mobile, 24px tablet, max content width 720px centered on
+    desktop.
+  - Cards: white, 1px border #E5E7EB, radius 16px, padding 16-20px,
+    16px gap between cards. No nested cards inside cards deeper than
+    one level - use dividers (1px, #EEF0F2) for rows inside a card.
+  - Typography: ONE font family. Page title 20-22px/600, card title
+    16px/600, body 14px/400, helper text 12-13px/400 muted #6B7280.
+    No more than 3 font sizes per card.
+  - Buttons (3 types only):
+      Primary  - solid dark, white text, 44px min height
+      Secondary - white with 1px border, 44px min height
+      Destructive - red text/border (solid red only inside confirm
+      dialogs)
+      Text link - for low-priority actions
+    All tap targets >= 44x44px.
+  - Toggles: visible OFF state (grey track #D1D5DB, white knob) and ON
+    state (dark/brand track). Never faint or invisible.
+  - Badges: one component. "PRO" = small pill, same style everywhere.
+  - Icons: one icon set, 20px, 1.5px stroke, vertically centered with
+    the label. Info icons must be INLINE, right after the title, never
+    floating at a card corner.
+  - Colors: neutral greys + one brand accent. Green only for success
+    ("Connected"), red only for destructive/errors.
+  - Dark-mode ready: use CSS variables for every color.
+
+2.2 Layout rules
+  - Nothing may overlap anything else at any width from 320px up.
+  - Reserve bottom padding equal to the height of any fixed/floating
+    element so the last item is always reachable.
+  - No horizontal scrolling of the page body. No clipped text. Long
+    URLs/emails truncate with ellipsis in one line and are fully
+    visible on tap/long-press or in the edit view.
+  - Each page has: Page title + one-line description -> content cards
+    -> (optional) sticky action bar. No blank trailing space.
+  - Consistent empty states (icon, one-line message, one primary
+    button) and loading skeletons for every list/card.
+
+2.3 Save behaviour (consistent everywhere)
+  - Each section that edits fields has its own "Save" button INSIDE
+    that card, bottom-right, disabled until something changes.
+  - After save: toast "Saved" + button returns to disabled. Show inline
+    errors under the field, not only toasts.
+  - If the user leaves with unsaved changes, show a confirm dialog.
+
+2.4 Accessibility
+  - Contrast >= 4.5:1 for text. Visible focus ring. All icon buttons
+    have aria-labels. Touch-friendly; no hover-only actions.
+
+
+---------------------------------------------------------------------
+3. HEADER, TAB NAVIGATION AND AVATAR MENU
+---------------------------------------------------------------------
+
+3.1 Header (sticky, 56px tall)
+  Left : iveo logo mark (icon only on mobile, logo + wordmark on
+         desktop).
+  Right: [Preview] icon-button (eye) + [Share] icon-button + avatar.
+  The page-URL pill (iveo.site/@help + verified tick) MOVES out of the
+  header into a slim "Your page" strip directly under the header on the
+  Links tab (and optionally Settings > Your page): URL text (truncate),
+  Copy icon, Open icon. This removes header crowding.
+
+3.2 Preview and Share (remove the floating button)
+  - Delete the floating "Preview" pill. Replace with:
+      * Header eye icon -> opens a bottom-sheet/side panel with a live
+        phone-frame preview of the public page.
+      * Header share icon -> opens the share sheet (copy link, QR,
+        native share).
+  - On desktop (>=1024px) show the live preview as a persistent right
+    column (360px wide) on Links and Appearance tabs, instead of a
+    button.
+
+3.3 Tabs
+  - Tabs: Links, Appearance, Contacts, Analytics, Settings.
+  - Mobile: a fixed BOTTOM tab bar with 5 equal-width items, each with
+    icon + small label (11-12px). The active tab is highlighted. No
+    horizontal scroll, no clipping.
+    (Alternative if bottom bar is not wanted: a top segmented tab bar
+    where all 5 tabs fit using icons + short labels.)
+  - Desktop: horizontal tabs under the header, left-aligned.
+
+3.4 Avatar menu (dropdown on desktop, bottom sheet on mobile)
+  It must NOT duplicate tabs and must not cover the tab bar.
+  Contents, in this order:
+    - Header row: avatar, display name, @handle, small plan badge
+      (PRO) - not clickable.
+    - View my page (opens public page in a new tab)
+    - Account & security      -> Settings > Account
+    - Plan & billing          -> Settings > Plan & billing
+    - Help & support          -> help.iveo.site
+    - Divider
+    - Sign out (red text)
+  REMOVE from the menu: Dashboard, Appearance, Analytics (already
+  tabs), and the separate "Manage account" + "Subscription" wording.
+  The menu closes on outside tap, Esc, or item selection.
+
+
+---------------------------------------------------------------------
+4. LINKS TAB - REQUIREMENTS
+---------------------------------------------------------------------
+
+4.1 Page structure (top to bottom)
+  1) "Your page" strip (URL + copy + open) - see 3.1.
+  2) Toolbar: ONE primary button "+ Add" and a search field.
+       "+ Add" opens a type picker (bottom sheet): Link, Header,
+       Support / Tips, Embed (YouTube, Spotify, SoundCloud), Signup
+       form, Social icon, etc. This merges "Add link" + "Add other
+       blocks" into a single entry point.
+  3) Filter chips with CORRECT counts by real type:
+       All | Links | Support | Media | Forms | Headers
+       (show only chips that have >= 1 item, always show "All").
+       The selected chip is clearly highlighted (dark fill).
+  4) Block list (sortable).
+  5) "Social icons" card (collapsible, below the list).
+
+4.2 Block row anatomy (identical for every block type)
+  [drag handle] [brand/type icon 40px] [Title + 1-line subtitle]
+  [visible toggle] [overflow menu "..."]
+  - Drag handle on the left for reordering (long-press on mobile).
+    Remove the tiny up/down arrows; move "Move up / Move down" into
+    the overflow menu for accessibility.
+  - Overflow menu: Edit, Duplicate, Schedule (PRO), Password (PRO),
+    Delete. Remove the separate pencil icon OR keep pencil and drop
+    the extra icons - but never more than 3 controls visible per row.
+  - Subtitle rule: ALWAYS the destination domain/URL only (or amount
+    list for support blocks), single line, truncated. Descriptions or
+    bio text must NEVER appear in the row; they live in the edit form.
+  - Small type chip under/next to the title for non-link blocks
+    (Support, Embed, Form, Header).
+  - Show click count (e.g. "128 clicks") in muted text if analytics
+    exist.
+  - Auto-detect brand icons from the URL: GitHub, LinkedIn, X,
+    Instagram, YouTube, etc. Use a globe icon only for unknown sites.
+  - Default title for detected platforms = platform name
+    ("GitHub", "LinkedIn", "X") with the handle as the subtitle, so two
+    rows can never look identical.
+  - Row height 72px, 12px vertical gap or divider; the whole row is
+    tappable to edit.
+
+4.3 De-duplication on this tab
+  - Merge the two Support blocks ("Support Arjun Bharti Mina" and
+    "Support: Support My Work") into ONE Support block: one title, one
+    description (in edit form), one amount list (INR 50 / 100 / 250 /
+    500). If both must stay, label them differently
+    ("Support - Coffee button" / "Support - Donation amounts").
+  - Duplicate detection: when a link's domain equals an existing
+    Social icon (e.g. instagram.com/iveo.site, x.com/Iveosite) show a
+    warning chip "Also in Social icons" and offer "Remove duplicate".
+  - Decide one home per item: profile socials (Email, YouTube,
+    Instagram, X) live ONLY in Social icons; personal profile links
+    (GitHub, LinkedIn, personal X) live as Link blocks. Do not show
+    the same destination in both.
+
+4.3 Social icons card
+  - Title "Social icons" + "+ Add" on the right.
+  - "Icon placement" as a proper segmented control: Top | Bottom |
+    Both, with a clearly highlighted selected option.
+  - Rows: icon, platform name, URL (truncate), edit, delete (with
+    confirm). Drag to reorder.
+  - Normalise casing/format of saved URLs (lowercase host, remove
+    duplicates like "Iveo.site" vs "iveo.site").
+
+4.4 Empty state
+  "No links yet" + illustration/icon + "+ Add your first link".
+
+
+---------------------------------------------------------------------
+5. APPEARANCE TAB - REQUIREMENTS
+---------------------------------------------------------------------
+
+5.1 Structure: from 6 cards to 5 clearly named sections
+  Merge "Button Shape" + "Button Colors" into one "Buttons" section.
+    1) Theme (Vibe)
+    2) Background
+    3) Typography (Fonts)
+    4) Buttons (shape + colors)
+    5) Layout & Effects
+
+5.2 Row design (each section is one tappable row inside ONE card, or a
+    2-column grid of cards on desktop)
+  [icon 40px] [Title + current-value summary] [PRO badge if locked]
+  [chevron]
+  - Show the CURRENT value as the subtitle so the user sees state
+    without opening: e.g. "Vibe - Glass", "Background - Gradient",
+    "Font - Fraunces / Inter", "Buttons - Rounded, Solid, #111111",
+    "Layout - Stacked, Shadow on".
+  - Move the (i) info icon inline next to the title (opens a tooltip
+    or bottom sheet). Never float it in a corner.
+  - Optional: small visual swatch/thumbnail on the right (theme color
+    dots, font "Aa", button shape sample).
+  - Pro-locked options inside editors show a lock + "PRO" badge; for
+    Pro users show nothing extra.
+
+5.3 Editors
+  - Each editor opens as a full-screen page (mobile) with a back arrow
+    "< Appearance", live preview pinned at the top (or side on
+    desktop), controls below, and a sticky Save/Done bar.
+  - "Reset to default" as a text link inside each editor.
+
+5.4 Cleanup
+  - Remove any blank trailing screen and the overlapping floating
+    Preview button (preview is in the header - see 3.2).
+
+
+---------------------------------------------------------------------
+6. SETTINGS TAB - REQUIREMENTS (MAIN PROBLEM AREA)
+---------------------------------------------------------------------
+
+6.1 New section order and grouping
+  Use a small group label above each group (12px, uppercase, muted).
+
+  GROUP A - ACCOUNT
+    A1. Account card
+        Rows: Email (read-only), Username (@help with verified tick +
+        edit pencil), Password & passkeys (one row -> "Manage").
+        ONE button at the bottom: "Account & security" (replaces
+        "Manage account"). Remove the separate "Plan: PRO" row (it
+        moves to Plan & billing).
+    A2. Plan & billing card (compact, ~3 rows tall)
+        - Left: plan name "iveo Pro" + one "PRO" badge + one-line
+          status ("Verified - renews on <date>").
+        - Right: "Manage plan" button.
+        - REMOVE the 8-item benefits list from this card. Move it to
+          the "Manage plan" screen (plan details page/bottom sheet)
+          where it is shown as a tidy 2-column checklist on desktop,
+          1 column on mobile.
+        - Fix the missing icon gap (either show the plan icon or
+          remove the space).
+
+  GROUP B - YOUR PAGE
+    B1. Page link card
+        - URL field (read-only) + Copy + Open buttons.
+        - Toggle row: "Remove iveo branding" (PRO) with clear
+          ON/OFF toggle and one-line helper: "Hides the 'Create your
+          own page' link. The report link always stays."
+        (If the URL strip from 3.1 exists on the Links tab, keep this
+        card too but keep both reading from the same component.)
+
+  GROUP C - GROWTH & SEO
+    C1. Integrations card  (title: "Integrations")
+        Sub-rows, each collapsed by default with a status chip on the
+        right: "Connected" (green) / "Not connected" (grey):
+          - Google Analytics 4  (Measurement ID field, Disconnect)
+          - Meta Pixel          (Pixel ID field)
+          - WhatsApp Quick-Chat (phone field with country-code picker)
+        Tap a row to expand its field + helper text + its own "Save"
+        and "Disconnect" buttons. Placeholders must look like
+        placeholders (lighter grey) - do not use a realistic number as
+        the WhatsApp placeholder; use "e.g. +91 98765 43210" style
+        text with a country selector.
+        Remove the single shared "Save integrations" button; each
+        integration saves independently.
+    C2. Search & SEO card  (merge "Custom SEO & Search Preview" and
+        "SEO Health & Search Console" into ONE card)
+        - Fields: Page title (with 60-char counter), Meta description
+          (with 160-char counter), "Reset to default" text link.
+        - Live Google-style search preview of title/URL/description.
+        - Own "Save" button.
+        - Below a divider: "Search Console" sub-section with the short
+          description and ONE button "Open SEO console".
+
+  GROUP D - DATA & PRIVACY
+    D1. Your data card
+        "Export your data (JSON)" + helper "Statistics are not
+        included." Button: Secondary.
+    D2. Session row (inside Account card instead of its own card) -
+        "Sign out" button. Keep one Sign out in the avatar menu and
+        one here at most; recommended: keep it only in the avatar menu
+        and remove the Session card from Settings.
+
+  GROUP E - DANGER ZONE (always last, visually separated)
+    E1. Danger zone card with a red border/heading:
+        Title "Delete account"
+        Copy: "Permanently delete your account, page and all data.
+        This cannot be undone."
+        Button: Destructive "Delete account" -> confirmation dialog
+        requiring the user to type their username or email, with a
+        disabled red "Delete permanently" button until it matches.
+        Remove the dangling "help@iveo.site." text from the sentence.
+
+6.2 Settings layout on desktop
+  - Two-column layout: left sticky sub-navigation (Account, Plan &
+    billing, Your page, Integrations, Search & SEO, Data, Danger
+    zone) with scroll-spy; right the cards. On mobile the sub-nav is
+    hidden and the same sections stack in the order above.
+
+6.3 Pro badge usage (strict)
+  - Show "PRO" ONLY where a feature is locked for Free users, and on
+    the plan card. For Pro users do NOT repeat "PRO" next to every
+    feature.
+  - Verified tick shows next to the username (and public page) only.
+    Remove the extra "Verified Pro" chip in the billing card and the
+    tick inside the URL pill.
+
+
+---------------------------------------------------------------------
+7. DE-DUPLICATION MATRIX (SINGLE HOME FOR EVERY FEATURE)
+---------------------------------------------------------------------
+Feature                        | Keep in ONLY this place
+-------------------------------|----------------------------------------
+Dashboard / Links list         | Links tab (remove from avatar menu)
+Appearance                     | Appearance tab (remove from avatar menu)
+Analytics                      | Analytics tab (remove from avatar menu)
+Account / password / passkeys  | Settings > Account (avatar menu links
+                               | to it as "Account & security")
+Subscription / billing / plan  | Settings > Plan & billing (avatar menu
+                               | links to it as "Plan & billing")
+Plan benefits list             | Plan details screen (not in Settings
+                               | page body)
+Sign out                       | Avatar menu (optional second one in
+                               | Settings > Account)
+Preview                        | Header eye icon (no floating button)
+Share                          | Header share icon
+Page URL copy/open             | "Your page" strip / card (single
+                               | component)
+Custom SEO + SEO Console       | One "Search & SEO" card
+Social profile URLs            | Social icons card (not also as link
+                               | blocks)
+Support / tip button           | One Support block
+Pro / Verified badges          | Plan card + lock icons only
+
+
+---------------------------------------------------------------------
+8. COPY AND CONTENT FIXES
+---------------------------------------------------------------------
+  - Rename "Manage account" -> "Account & security".
+  - Rename "Manage & details" -> "Manage plan".
+  - Rename "Apps & Integrations" -> "Integrations".
+  - Rename "Interactive" filter -> real types (Support, Media, Forms).
+  - Rename "Add other blocks" -> merged into "+ Add".
+  - Use sentence case everywhere ("Remove iveo branding", not
+    mixed casing).
+  - Helper text: one sentence, max ~90 characters per line.
+  - Consistent product naming: always lowercase "iveo".
+
+
+---------------------------------------------------------------------
+9. RESPONSIVE BEHAVIOUR
+---------------------------------------------------------------------
+  - 320-480px : single column, bottom tab bar, bottom sheets for
+    menus/pickers, full-screen editors.
+  - 481-1023px: single column centered (max 640px), top tabs.
+  - >=1024px  : header + top tabs, two-column Settings with sticky
+    sub-nav, persistent live preview column on Links/Appearance.
+  Test at 320, 360, 390, 430, 768, 1024, 1440 widths. Verify no
+  overlap, no clipped labels, no horizontal scroll.
+
+
+---------------------------------------------------------------------
+10. ACCEPTANCE CHECKLIST (ALL MUST PASS)
+---------------------------------------------------------------------
+  [ ] All 5 tabs are fully visible and tappable on a 360px screen.
+  [ ] Avatar menu contains no item that duplicates a tab.
+  [ ] "Manage account" appears at most once; "Subscription" appears
+      once as "Plan & billing".
+  [ ] No floating button overlaps any content; last list item and
+      last card are fully reachable.
+  [ ] Settings page is grouped (Account, Your page, Growth & SEO,
+      Data, Danger zone) with the order given in section 6.
+  [ ] Plan benefits list is not on the Settings page body.
+  [ ] SEO fields and SEO Console are in one card; integrations do not
+      share one save button.
+  [ ] PRO label appears only on locked features and the plan card.
+  [ ] Links filter counts match real block types; no item is counted
+      in the wrong group.
+  [ ] No duplicate destinations between Links and Social icons; the
+      two Support blocks are merged or clearly distinguished.
+  [ ] Every link row has the same anatomy, a visible toggle, a brand
+      icon where known, and a one-line subtitle (no bio text).
+  [ ] Appearance has 5 sections, each showing its current value;
+      info icons are inline.
+  [ ] All toggles/segmented controls show clear selected and
+      unselected states.
+  [ ] Delete account sits last, in a red danger zone, with a typed
+      confirmation; the stray email text is gone.
+  [ ] Spacing, radius, font sizes and button styles follow the tokens
+      in section 2.1 on every screen.
+  [ ] No existing feature, route, or data was removed or broken.
+
+
+---------------------------------------------------------------------
+11. DELIVERABLES
+---------------------------------------------------------------------
+  1. Updated components/screens for: Header, Tab bar, Avatar menu,
+     Links, Appearance (list + editors' shell), Settings, Plan
+     details.
+  2. A shared design-token file / CSS variables and reusable
+     components (Card, Row, Button, Badge, Toggle, Segmented control,
+     Section header, Bottom sheet, Empty state).
+  3. A short change log listing: what was merged, what was moved,
+     what was removed (with reason) - mapped to the matrix in
+     section 7.
+  4. Mobile + desktop screenshots (or a preview) of each tab after
+     the changes.
+
+If anything in this brief conflicts with existing functionality, keep
+the functionality, apply the closest clean layout, and list the
+conflict in the change log instead of guessing.
+=====================================================================
+END OF PROMPT
+=====================================================================

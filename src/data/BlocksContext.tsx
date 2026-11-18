@@ -61,6 +61,7 @@ interface BlocksContextValue {
   toggleActive: (id: string) => Promise<void>;
   reorderBlocks: (orderedIds: string[]) => Promise<void>;
   clearSchedule: (id: string) => Promise<void>;
+  duplicateBlock: (block: Block) => Promise<void>;
 }
 
 const BlocksContext = createContext<BlocksContextValue | null>(null);
@@ -632,6 +633,52 @@ export const BlocksProvider: React.FC<{
     showToast('Schedule cleared');
   };
 
+  const duplicateBlock = async (block: Block) => {
+    const prev = [...blocksRef.current];
+    try {
+      const nextTitle = block.title ? `Copy of ${block.title}` : block.kind === 'divider' ? '' : 'Copy';
+      const newBlock = await createBlock(
+        token,
+        userId,
+        {
+          kind: block.kind,
+          title: nextTitle,
+          url: block.url ?? undefined,
+          icon: block.icon ?? undefined,
+          layout: block.layout,
+          embedProvider: block.embedProvider ?? undefined,
+          embedMeta: block.embedMeta ?? undefined,
+          signup: block.signup ?? undefined,
+          tipJar: block.tipJar ?? undefined,
+          faq: block.faq ?? undefined,
+          vcard: block.vcard ?? undefined,
+          coffee: block.coffee ?? undefined,
+          youtube: block.youtube ?? undefined,
+          product: block.product ?? undefined,
+          booking: block.booking ?? undefined,
+          countdown: block.countdown ?? undefined,
+          promo: block.promo ?? undefined,
+          location: block.location ?? undefined,
+          download: block.download ?? undefined,
+          animation: block.animation ?? undefined,
+          badge: block.badge ?? undefined,
+          position: prev.length,
+        },
+        authCtx
+      );
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockTargets(newBlock).catch(() => {});
+      showToast('Item duplicated');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      if (err instanceof Error && err.message === 'pro_required') {
+        openUpgrade('embeds');
+      } else {
+        showToast("Couldn't duplicate item. Try again.");
+      }
+    }
+  };
+
   return (
     <BlocksContext.Provider
       value={{
@@ -661,6 +708,7 @@ export const BlocksProvider: React.FC<{
         toggleActive,
         reorderBlocks,
         clearSchedule,
+        duplicateBlock,
       }}
     >
       {children}

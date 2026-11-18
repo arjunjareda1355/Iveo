@@ -9,21 +9,29 @@ interface DeleteAccountDialogProps {
   isOpen: boolean;
   onClose: () => void;
   username: string;
+  email?: string | null;
 }
 
 export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
   isOpen,
   onClose,
   username,
+  email,
 }) => {
   const [confirmInput, setConfirmInput] = useState('');
   const { isDeleting, error, deleteAccount } = useDeleteAccount();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
-  const cleanTarget = (username || '').trim().toLowerCase().replace(/^@/, '');
+  const cleanUsername = (username || '').trim().toLowerCase().replace(/^@/, '');
+  const cleanEmail = (email || '').trim().toLowerCase();
   const inputClean = confirmInput.trim().toLowerCase().replace(/^@/, '');
-  const isMatch = Boolean(cleanTarget) && inputClean === cleanTarget;
+
+  const isMatch = Boolean(
+    inputClean &&
+      ((cleanUsername && inputClean === cleanUsername) ||
+        (cleanEmail && inputClean === cleanEmail))
+  );
 
   const host = (() => {
     try {
@@ -35,12 +43,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
 
   const bodyText = copy.deleteAccount.dialogBody
     .replace('{host}', host)
-    .replace('{username}', cleanTarget);
-
-  const confirmLabelText = copy.deleteAccount.confirmLabel.replace(
-    '{username}',
-    cleanTarget
-  );
+    .replace('{username}', cleanUsername);
 
   // Focus management
   useEffect(() => {
@@ -70,7 +73,6 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
 
-      // Cannot close while deletion is running
       if (e.key === 'Escape' && !isDeleting) {
         e.preventDefault();
         onClose();
@@ -109,7 +111,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] transition-opacity duration-150"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 backdrop-blur-[2px] transition-opacity duration-150"
       onClick={() => {
         if (!isDeleting) onClose();
       }}
@@ -129,7 +131,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
           {copy.deleteAccount.dialogTitle}
         </h2>
 
-        <p className="mt-3 text-[15px] leading-relaxed text-ink/80">
+        <p className="mt-3 text-[14px] leading-relaxed text-ink/80">
           {bodyText}
         </p>
 
@@ -138,7 +140,14 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
             htmlFor="confirm-delete-username"
             className="text-[13px] text-muted font-normal"
           >
-            {confirmLabelText}
+            Type <strong className="font-mono text-ink">{cleanUsername}</strong>
+            {cleanEmail ? (
+              <>
+                {' '}
+                or <strong className="font-mono text-ink">{cleanEmail}</strong>
+              </>
+            ) : null}{' '}
+            to confirm:
           </label>
           <Input
             id="confirm-delete-username"
@@ -149,12 +158,11 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
             autoCapitalize="none"
             spellCheck={false}
             className="h-12"
-            placeholder={cleanTarget}
+            placeholder={cleanUsername}
           />
 
-          {/* Error Message */}
           {error && (
-            <div role="alert" className="text-[13px] text-[#B3261E] mt-1 leading-normal">
+            <div role="alert" className="text-[13px] text-[color:var(--error,#B3261E)] mt-1 leading-normal">
               {error === 'first' ? (
                 <span>{copy.deleteAccount.errorFirst}</span>
               ) : (
@@ -181,23 +189,23 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
             disabled={isDeleting}
             className="order-2 sm:order-1"
           >
-            {copy.deleteAccount.cancelButton}
+            Cancel
           </Button>
 
           <Button
-            variant="secondary"
+            variant="primary"
             size="md"
             disabled={!isMatch || isDeleting}
             onClick={handleDelete}
-            className="order-1 sm:order-2 text-[#B3261E] hover:text-[#B3261E] border-border hover:border-[#B3261E]/40"
+            className="order-1 sm:order-2 bg-[color:var(--error,#B3261E)] hover:bg-red-700 text-white disabled:opacity-40"
           >
             {isDeleting ? (
               <span className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 <span>Deleting...</span>
               </span>
             ) : (
-              <span>{copy.deleteAccount.deleteButton}</span>
+              <span>Delete permanently</span>
             )}
           </Button>
         </div>

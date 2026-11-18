@@ -99,3 +99,114 @@ export function inferLinkIconKind(rawUrl: string | null | undefined): FallbackLi
 
   return 'globe';
 }
+
+export interface DetectedPlatformInfo {
+  id: string;
+  name: string;
+  handle: string | null;
+}
+
+export function detectPlatformFromUrl(
+  rawUrl: string | null | undefined
+): DetectedPlatformInfo | null {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase().startsWith('mailto:')) {
+    return { id: 'mail', name: 'Email', handle: trimmed.slice(7) || null };
+  }
+  if (trimmed.toLowerCase().startsWith('tel:') || trimmed.toLowerCase().startsWith('sms:')) {
+    return { id: 'whatsapp', name: 'Phone', handle: trimmed.replace(/^(tel:|sms:)/i, '') || null };
+  }
+
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return null;
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+  const segs = parsed.pathname.split('/').filter(Boolean);
+  const firstSeg = segs[0] ? decodeURIComponent(segs[0]) : null;
+
+  const extractHandle = (): string | null => {
+    if (!firstSeg) return null;
+    if (host === 'linkedin.com' && (firstSeg === 'in' || firstSeg === 'company') && segs[1]) {
+      return decodeURIComponent(segs[1]);
+    }
+    return firstSeg;
+  };
+
+  if (host === 'github.com' || host.endsWith('.github.com')) {
+    return { id: 'github', name: 'GitHub', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'linkedin.com' || host === 'lnkd.in') {
+    const h = extractHandle();
+    return { id: 'linkedin', name: 'LinkedIn', handle: h ? `@${h.replace(/^@/, '')}` : null };
+  }
+  if (host === 'x.com' || host === 'twitter.com') {
+    return { id: 'x', name: 'X', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'instagram.com' || host === 'instagr.am') {
+    return { id: 'instagram', name: 'Instagram', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'youtube.com' || host === 'youtu.be' || host === 'music.youtube.com') {
+    return { id: 'youtube', name: 'YouTube', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'open.spotify.com' || host === 'spotify.com') {
+    return { id: 'spotify', name: 'Spotify', handle: null };
+  }
+  if (host === 'soundcloud.com') {
+    return { id: 'music', name: 'SoundCloud', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'discord.gg' || host === 'discord.com' || host === 'discordapp.com') {
+    return { id: 'discord', name: 'Discord', handle: null };
+  }
+  if (host === 'tiktok.com' || host === 'vm.tiktok.com') {
+    return { id: 'tiktok', name: 'TikTok', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'threads.net' || host === 'threads.com') {
+    return { id: 'threads', name: 'Threads', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'twitch.tv') {
+    return { id: 'twitch', name: 'Twitch', handle: firstSeg || null };
+  }
+  if (host === 't.me' || host === 'telegram.me' || host === 'telegram.org') {
+    return { id: 'telegram', name: 'Telegram', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
+  if (host === 'wa.me' || host === 'api.whatsapp.com' || host === 'whatsapp.com') {
+    return { id: 'whatsapp', name: 'WhatsApp', handle: null };
+  }
+  if (host === 'patreon.com') {
+    return { id: 'patreon', name: 'Patreon', handle: firstSeg || null };
+  }
+  if (host === 'substack.com' || host.endsWith('.substack.com')) {
+    return { id: 'substack', name: 'Substack', handle: null };
+  }
+
+  return null;
+}
+
+/**
+ * Normalizes a URL for duplicate comparison across links and social icons.
+ * Ignores protocol, www./m. prefix, trailing slashes, and case.
+ */
+export function normalizeComparableDestination(rawUrl: string | null | undefined): string {
+  const trimmed = (rawUrl || '').trim().toLowerCase();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('mailto:')) {
+    return trimmed;
+  }
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    let host = parsed.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+    if (host === 'twitter.com') host = 'x.com';
+    const path = parsed.pathname.replace(/\/+$/, '');
+    return `${host}${path}${parsed.search}`;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
+}
+

@@ -100,26 +100,26 @@ export const ExportDataCard: React.FC = () => {
   };
 
   return (
-    <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div className="min-w-0">
-        <h3 className="text-[15px] font-semibold text-ink leading-tight">
-          {copy.exportData.cardTitle}
+        <h3 className="text-[16px] font-semibold text-ink leading-tight">
+          Your data
         </h3>
-        <p className="text-[12px] text-muted mt-0.5">
-          {copy.exportData.cardBody}
+        <p className="text-[13px] text-muted mt-1">
+          Export your data (JSON). Statistics are not included.
         </p>
       </div>
 
       <Button
         variant="secondary"
-        size="sm"
+        size="md"
         onClick={handleExport}
         disabled={isExporting}
-        className="flex items-center gap-1.5 shrink-0 self-start sm:self-center"
+        className="flex items-center gap-2 shrink-0 self-start sm:self-center"
       >
-        <Download size={14} strokeWidth={1.6} />
+        <Download size={16} strokeWidth={1.6} />
         <span>
-          {isExporting ? 'Exporting...' : copy.exportData.exportButton}
+          {isExporting ? 'Exporting...' : 'Export your data'}
         </span>
       </Button>
     </Card>

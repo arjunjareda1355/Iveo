@@ -57,15 +57,15 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'relative inline-flex h-9 w-full max-w-full items-center rounded-[10px] bg-surface-2 p-[3px] border border-border select-none',
+        'relative inline-flex h-11 min-h-[44px] w-full max-w-full items-center rounded-[10px] bg-surface-2 p-[3px] border border-border select-none',
         className
       )}
     >
-      {/* Sliding thumb */}
+      {/* Sliding active dark thumb */}
       <div
-        className="absolute top-[3px] bottom-[3px] rounded-[8px] bg-surface shadow-[0_1px_2px_rgba(10,10,10,0.04)] transition-all duration-200 ease-out"
+        className="absolute top-[3px] bottom-[3px] rounded-[8px] bg-ink shadow-[0_1px_2px_rgba(10,10,10,0.12)] transition-all duration-200 ease-out"
         style={{
-          left: `calc(${activeIndex * optionWidthPercent}% + 3px)`,
+          left: `calc(${activeIndex >= 0 ? activeIndex * optionWidthPercent : 0}% + 3px)`,
           width: `calc(${optionWidthPercent}% - 6px)`,
         }}
         aria-hidden="true"
@@ -97,7 +97,7 @@ export function SegmentedControl<T extends string>({
               isDisabled
                 ? 'opacity-40 cursor-not-allowed text-muted'
                 : 'cursor-pointer',
-              isSelected ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
+              isSelected ? 'text-white font-semibold' : 'text-muted hover:text-ink'
             )}
           >
             {option.label}

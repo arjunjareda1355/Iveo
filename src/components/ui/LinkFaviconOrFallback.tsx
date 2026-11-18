@@ -9,7 +9,12 @@ import {
   ShoppingBag,
   Youtube,
 } from 'lucide-react';
-import { getFaviconUrl, inferLinkIconKind } from '../../lib/favicons';
+import {
+  detectPlatformFromUrl,
+  getFaviconUrl,
+  inferLinkIconKind,
+} from '../../lib/favicons';
+import { SocialIcon } from '../phone/SocialIcons';
 
 interface LinkFaviconOrFallbackProps {
   url?: string | null;
@@ -20,16 +25,39 @@ interface LinkFaviconOrFallbackProps {
 
 export const LinkFaviconOrFallback: React.FC<LinkFaviconOrFallbackProps> = ({
   url,
-  size = 16,
+  size = 18,
   className = '',
   strokeWidth = 1.5,
 }) => {
+  const detected = detectPlatformFromUrl(url);
   const faviconUrl = getFaviconUrl(url, Math.max(32, size * 2));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setFailed(false);
   }, [faviconUrl]);
+
+  // Known social/developer/media platforms always get crisp vector brand icons
+  if (
+    detected &&
+    [
+      'github',
+      'linkedin',
+      'x',
+      'instagram',
+      'youtube',
+      'spotify',
+      'music',
+      'discord',
+      'tiktok',
+      'twitch',
+      'telegram',
+      'whatsapp',
+      'mail',
+    ].includes(detected.id)
+  ) {
+    return <SocialIcon platform={detected.id} size={size} className={className} />;
+  }
 
   if (faviconUrl && !failed) {
     return (

@@ -88,9 +88,9 @@ export const RangeSelector: React.FC<RangeSelectorProps> = ({
               tabIndex={isSelected ? 0 : -1}
               onClick={() => handleSelect(key)}
               onKeyDown={(e) => handleKeyDown(e, index)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-[9px] text-[13px] font-medium transition-colors duration-120 whitespace-nowrap cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-ink ${
+              className={`flex items-center justify-center gap-1.5 min-h-[40px] px-2.5 sm:px-3.5 py-1.5 rounded-[9px] text-[13px] font-medium transition-colors duration-120 whitespace-nowrap cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-ink ${
                 isSelected
-                  ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+                  ? 'bg-ink text-surface shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
                   : 'text-muted hover:text-ink'
               }`}
             >

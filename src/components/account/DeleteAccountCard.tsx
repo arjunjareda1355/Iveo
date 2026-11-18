@@ -2,42 +2,37 @@ import React, { useState } from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
-import { SUPPORT_EMAIL } from '../../lib/site';
-import { copy } from '../../content/copy';
 
 interface DeleteAccountCardProps {
   username: string;
+  email?: string | null;
 }
 
-export const DeleteAccountCard: React.FC<DeleteAccountCardProps> = ({ username }) => {
+export const DeleteAccountCard: React.FC<DeleteAccountCardProps> = ({
+  username,
+  email,
+}) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
     <>
-      <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <Card className="border-red-200 bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-[15px] font-semibold text-ink leading-tight">
-            {copy.deleteAccount.cardTitle}
+          <h3 className="text-[16px] font-semibold text-[color:var(--error,#B3261E)] leading-tight">
+            Delete account
           </h3>
-          <p className="text-[12px] text-muted mt-0.5">
-            {copy.deleteAccount.cardBody}{' '}
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              className="underline hover:text-ink transition-colors"
-            >
-              {SUPPORT_EMAIL}
-            </a>
-            .
+          <p className="text-[13px] text-muted mt-1">
+            Permanently delete your account, page and all data. This cannot be undone.
           </p>
         </div>
 
         <Button
-          variant="secondary"
-          size="sm"
+          variant="destructive"
+          size="md"
           onClick={() => setIsDialogOpen(true)}
-          className="text-[#B3261E] hover:text-[#B3261E] border-border hover:border-[#B3261E]/40 shrink-0 self-start sm:self-center"
+          className="shrink-0 self-start sm:self-center"
         >
-          {copy.deleteAccount.deleteButton}
+          Delete account
         </Button>
       </Card>
 
@@ -45,6 +40,7 @@ export const DeleteAccountCard: React.FC<DeleteAccountCardProps> = ({ username }
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
         username={username}
+        email={email}
       />
     </>
   );

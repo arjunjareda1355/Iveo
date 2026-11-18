@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'inverse';
+  variant?: 'primary' | 'secondary' | 'destructive' | 'ghost' | 'inverse';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   disabled?: boolean;
@@ -40,6 +40,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
   ) => {
     const isPrimary = variant === 'primary';
     const isSecondary = variant === 'secondary';
+    const isDestructive = variant === 'destructive';
     const isGhost = variant === 'ghost';
     const isInverse = variant === 'inverse';
 
@@ -48,10 +49,10 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
 
     const sizeStyles =
       size === 'sm'
-        ? 'h-8 px-3 text-[13px] rounded-[8px] gap-1.5 leading-none'
+        ? 'h-9 min-h-[36px] px-3 text-[13px] rounded-[8px] gap-1.5 leading-none'
         : size === 'md'
-          ? 'h-10 px-4 text-[14px] rounded-[10px] gap-2 leading-none'
-          : 'h-12 px-5 text-[15px] rounded-[10px] gap-2 leading-none';
+          ? 'h-11 min-h-[44px] px-4 text-[14px] rounded-[10px] gap-2 leading-none'
+          : 'h-12 min-h-[48px] px-5 text-[15px] rounded-[10px] gap-2 leading-none';
 
     const variantStyles = cn(
       isPrimary && [
@@ -63,6 +64,11 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
         'bg-surface text-ink border border-border-strong',
         !disabled && 'hover:bg-surface-2',
         'focus-visible:outline-ink',
+      ],
+      isDestructive && [
+        'bg-surface text-[#B3261E] border border-[#FECACA]',
+        !disabled && 'hover:bg-red-50 hover:border-[#B3261E]/50',
+        'focus-visible:outline-[#B3261E]',
       ],
       isGhost && [
         'bg-transparent text-ink',
