@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { UserProfile } from '@clerk/react';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
@@ -20,6 +20,7 @@ import { copy } from '../content/copy';
 
 export const AccountPage: React.FC = () => {
   usePageMeta({ robots: 'noindex, nofollow' });
+  const location = useLocation();
   const session = useIveoSession();
   const { showToast } = useToast();
 
@@ -31,6 +32,18 @@ export const AccountPage: React.FC = () => {
   useEffect(() => {
     document.title = copy.dashboard.titles.account;
   }, []);
+
+  useEffect(() => {
+    const hash = location.hash?.replace(/^#/, '');
+    if (!hash) return;
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(hash);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [location.hash]);
 
   useEffect(() => {
     setDisplayName(session.displayName || '');

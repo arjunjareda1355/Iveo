@@ -1456,11 +1456,20 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
     });
   }
 
+  const oauthErrorDesc =
+    typeof req.query.error_description === 'string' ? req.query.error_description.trim() : '';
+
   if (oauthError || !code) {
+    const fallbackOrigin = getExpressRequestOrigin(req);
+    const { redirectUri } = parseSocialOAuthState(stateParam, fallbackOrigin, providerRaw);
+    const readableErr = oauthErrorDesc || oauthError || 'Authorization was cancelled.';
     return sendPopupHtml({
       type: 'IVEO_SOCIAL_OAUTH_ERROR',
       provider: providerRaw,
-      error: oauthError || 'Authorization was cancelled.',
+      redirectUri,
+      error: /redirect_uri/i.test(readableErr)
+        ? `${readableErr} (Callback URL: ${redirectUri})`
+        : readableErr,
     });
   }
 

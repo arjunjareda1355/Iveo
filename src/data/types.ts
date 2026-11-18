@@ -54,6 +54,7 @@ export type EmbedProvider =
   | 'linkedin'
   | 'x';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
+export type EmbedLookStyle = 'signature' | 'spotlight' | 'glass' | 'minimal' | 'theme';
 
 export interface EmbedMetaData {
   provider: EmbedProvider;
@@ -65,6 +66,11 @@ export interface EmbedMetaData {
   statsLabel?: string | null;
   handle?: string | null;
   htmlSnippet?: string | null;
+  accentColor?: string | null;
+  lookStyle?: EmbedLookStyle | null;
+  showStats?: boolean;
+  showDescription?: boolean;
+  ctaLabel?: string | null;
   connectedViaOAuth?: boolean;
   fetchedAt?: string | null;
 }

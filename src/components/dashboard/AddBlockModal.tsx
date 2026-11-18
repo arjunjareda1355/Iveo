@@ -20,14 +20,21 @@ import {
   MapPin,
   FileDown,
   Share2,
+  Github,
+  Linkedin,
 } from 'lucide-react';
 import { BottomSheet } from '../ui/BottomSheet';
 import { ProBadge } from '../plan/ProBadge';
+import { DiscordGlyph, XMarkGlyph } from '../page/EmbedBlock';
 
 export type FeatureType =
   | 'link'
   | 'social'
   | 'embed'
+  | 'embed_discord'
+  | 'embed_github'
+  | 'embed_linkedin'
+  | 'embed_x'
   | 'vcard'
   | 'signup'
   | 'tip_jar'
@@ -55,7 +62,7 @@ interface FeatureOption {
   id: FeatureType;
   title: string;
   description: string;
-  category: 'links' | 'commerce' | 'audience' | 'layout';
+  category: 'links' | 'social_embeds' | 'commerce' | 'audience' | 'layout';
   icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
   iconBg: string;
   iconColor: string;
@@ -66,7 +73,7 @@ const FEATURES: FeatureOption[] = [
   {
     id: 'link',
     title: 'Standard link',
-    description: 'Button linking to any website, GitHub, LinkedIn, store, or portfolio',
+    description: 'Button linking to any website, store, or portfolio',
     category: 'links',
     icon: Link2,
     iconBg: 'bg-blue-50',
@@ -80,6 +87,42 @@ const FEATURES: FeatureOption[] = [
     icon: Share2,
     iconBg: 'bg-sky-50',
     iconColor: 'text-sky-600',
+  },
+  {
+    id: 'embed_discord',
+    title: 'Discord embed',
+    description: 'Connect your Discord account or server invite card with custom looks',
+    category: 'social_embeds',
+    icon: DiscordGlyph,
+    iconBg: 'bg-indigo-50',
+    iconColor: 'text-[#5865F2]',
+  },
+  {
+    id: 'embed_github',
+    title: 'GitHub embed',
+    description: 'Connect your GitHub profile or showcase a repository card',
+    category: 'social_embeds',
+    icon: Github,
+    iconBg: 'bg-stone-100',
+    iconColor: 'text-[#24292F]',
+  },
+  {
+    id: 'embed_linkedin',
+    title: 'LinkedIn embed',
+    description: 'Connect your LinkedIn profile or company card with custom looks',
+    category: 'social_embeds',
+    icon: Linkedin,
+    iconBg: 'bg-sky-50',
+    iconColor: 'text-[#0A66C2]',
+  },
+  {
+    id: 'embed_x',
+    title: 'X (Twitter) embed',
+    description: 'Connect your X account or feature a post card with custom looks',
+    category: 'social_embeds',
+    icon: XMarkGlyph,
+    iconBg: 'bg-stone-100',
+    iconColor: 'text-black',
   },
   {
     id: 'youtube',
@@ -231,6 +274,7 @@ const FEATURES: FeatureOption[] = [
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },
+  { id: 'social_embeds', label: 'Connected accounts' },
   { id: 'links', label: 'Links & media' },
   { id: 'commerce', label: 'Support & shop' },
   { id: 'audience', label: 'Forms & utilities' },
@@ -262,7 +306,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Add to your page"
-      subtitle="Choose a link, social icon, embed, support block, or form."
+      subtitle="Choose a link, connected account embed, media player, support block, or form."
       maxWidthClass="sm:max-w-2xl"
     >
       <div className="flex flex-col">
@@ -275,7 +319,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
             <input
               type="text"
-              placeholder="Search blocks (link, youtube, support, signup, header)..."
+              placeholder="Search blocks (discord, github, linkedin, x, youtube, spotify)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-11 pl-9 pr-3 bg-surface-2 border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"

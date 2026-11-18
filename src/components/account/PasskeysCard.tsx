@@ -1,6 +1,16 @@
-import React, { useState } from 'react';
-import { useUser } from '@clerk/react';
-import { KeyRound, Plus, Pencil, Trash2, Check, X, ShieldCheck, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { useUser, useReverification } from '@clerk/react';
+import {
+  KeyRound,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  ShieldCheck,
+  AlertCircle,
+  ExternalLink,
+} from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
@@ -13,21 +23,81 @@ function formatPasskeyDate(value: Date | string | null | undefined): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getReadablePasskeyError(err: unknown, fallback: string): string {
+function checkIsIframe(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+function classifyPasskeyError(
+  err: unknown,
+  fallback: string,
+  inIframe: boolean
+): { message: string; needsTopLevelTab: boolean } {
   const anyErr = err as any;
   const code = String(anyErr?.errors?.[0]?.code || anyErr?.code || '');
-  const msg = String(anyErr?.errors?.[0]?.longMessage || anyErr?.errors?.[0]?.message || anyErr?.message || '');
+  const name = String(anyErr?.name || '');
+  const msg = String(
+    anyErr?.errors?.[0]?.longMessage ||
+      anyErr?.errors?.[0]?.message ||
+      anyErr?.message ||
+      ''
+  );
+  const combined = `${code} ${name} ${msg}`;
 
-  if (code === 'passkey_registration_cancelled' || /cancel|abort|NotAllowedError/i.test(msg)) {
-    return 'Passkey setup was cancelled.';
+  if (code === 'reverification_cancelled') {
+    return {
+      message: 'Account verification was cancelled. Verify when prompted to save passkey changes.',
+      needsTopLevelTab: false,
+    };
   }
-  if (code === 'passkey_not_supported' || /not supported/i.test(msg)) {
-    return 'Passkeys are not supported on this device or browser.';
+  if (
+    /publickey-credentials|SecurityError|Permissions-Policy|not enabled in this document|cross-origin/i.test(
+      combined
+    ) ||
+    (inIframe && /NotAllowedError|not allowed/i.test(combined))
+  ) {
+    return {
+      message:
+        'Your browser blocked passkey setup inside this embedded view. Open Account settings in a full browser tab to register your passkey.',
+      needsTopLevelTab: true,
+    };
   }
-  if (/not enabled|feature_not_enabled|passkeys_not_enabled/i.test(code + ' ' + msg)) {
-    return 'Passkeys are currently unavailable for this sign-in environment.';
+  if (
+    code === 'passkey_registration_cancelled' ||
+    /AbortError|passkey_registration_cancelled|cancel/i.test(combined)
+  ) {
+    return {
+      message: 'Passkey setup was cancelled before completing biometric/device verification.',
+      needsTopLevelTab: false,
+    };
   }
-  return msg || fallback;
+  if (/NotAllowedError/i.test(combined)) {
+    return {
+      message:
+        'Passkey prompt was dismissed or timed out. Make sure screen lock / biometrics are enabled on your device and try again.',
+      needsTopLevelTab: false,
+    };
+  }
+  if (code === 'passkey_not_supported' || /not supported/i.test(combined)) {
+    return {
+      message: 'Passkeys are not supported on this device or browser.',
+      needsTopLevelTab: false,
+    };
+  }
+  if (/not enabled|feature_not_enabled|passkeys_not_enabled|passkey_feature_not_enabled/i.test(combined)) {
+    return {
+      message: 'Passkeys are currently unavailable for this sign-in environment.',
+      needsTopLevelTab: false,
+    };
+  }
+  return {
+    message: msg || fallback,
+    needsTopLevelTab: false,
+  };
 }
 
 const ClerkPasskeysCardInner: React.FC = () => {
@@ -40,11 +110,39 @@ const ClerkPasskeysCardInner: React.FC = () => {
   const [savingRenameId, setSavingRenameId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [needsTopLevelTab, setNeedsTopLevelTab] = useState(false);
+
+  const inIframe = useMemo(() => checkIsIframe(), []);
 
   const webAuthnSupported =
     typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined';
 
   const passkeys = user?.passkeys ?? [];
+
+  // Wrap Clerk passkey operations with useReverification so session_reverification_required
+  // automatically opens Clerk's verification modal and retries cleanly.
+  const createPasskeyWithReverify = useReverification(async () => {
+    if (!user) throw new Error('Sign in to add a passkey.');
+    const created = await user.createPasskey();
+    await user.reload?.();
+    return created;
+  });
+
+  const renamePasskeyWithReverify = useReverification(async (passkeyId: string, name: string) => {
+    const target = user?.passkeys?.find((pk) => pk.id === passkeyId);
+    if (!target) throw new Error('Passkey not found.');
+    const updated = await target.update({ name });
+    await user?.reload?.();
+    return updated;
+  });
+
+  const deletePasskeyWithReverify = useReverification(async (passkeyId: string) => {
+    const target = user?.passkeys?.find((pk) => pk.id === passkeyId);
+    if (!target) throw new Error('Passkey not found.');
+    await target.delete();
+    await user?.reload?.();
+    return { deleted: true };
+  });
 
   const handleAddPasskey = async () => {
     if (!user || isCreating) return;
@@ -54,12 +152,19 @@ const ClerkPasskeysCardInner: React.FC = () => {
     }
 
     setErrorMsg(null);
+    setNeedsTopLevelTab(false);
     setIsCreating(true);
     try {
-      await user.createPasskey();
+      await createPasskeyWithReverify();
       showToast('Passkey added to your account');
     } catch (err) {
-      setErrorMsg(getReadablePasskeyError(err, 'Could not register passkey. Please try again.'));
+      const classified = classifyPasskeyError(
+        err,
+        'Could not register passkey. Please try again.',
+        inIframe
+      );
+      setErrorMsg(classified.message);
+      setNeedsTopLevelTab(classified.needsTopLevelTab);
     } finally {
       setIsCreating(false);
     }
@@ -69,6 +174,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
     setEditingId(id);
     setRenameValue(currentName || '');
     setErrorMsg(null);
+    setNeedsTopLevelTab(false);
   };
 
   const handleCancelRename = () => {
@@ -78,35 +184,35 @@ const ClerkPasskeysCardInner: React.FC = () => {
 
   const handleSaveRename = async (e: React.FormEvent, passkeyId: string) => {
     e.preventDefault();
-    const target = passkeys.find((pk) => pk.id === passkeyId);
     const trimmed = renameValue.trim();
-    if (!target || !trimmed) return;
+    if (!trimmed) return;
 
     setSavingRenameId(passkeyId);
     setErrorMsg(null);
+    setNeedsTopLevelTab(false);
     try {
-      await target.update({ name: trimmed });
+      await renamePasskeyWithReverify(passkeyId, trimmed);
       setEditingId(null);
       setRenameValue('');
       showToast('Passkey renamed');
     } catch (err) {
-      setErrorMsg(getReadablePasskeyError(err, 'Could not rename passkey.'));
+      const classified = classifyPasskeyError(err, 'Could not rename passkey.', inIframe);
+      setErrorMsg(classified.message);
     } finally {
       setSavingRenameId(null);
     }
   };
 
   const handleDelete = async (passkeyId: string) => {
-    const target = passkeys.find((pk) => pk.id === passkeyId);
-    if (!target) return;
-
     setDeletingId(passkeyId);
     setErrorMsg(null);
+    setNeedsTopLevelTab(false);
     try {
-      await target.delete();
+      await deletePasskeyWithReverify(passkeyId);
       showToast('Passkey removed');
     } catch (err) {
-      setErrorMsg(getReadablePasskeyError(err, 'Could not remove passkey.'));
+      const classified = classifyPasskeyError(err, 'Could not remove passkey.', inIframe);
+      setErrorMsg(classified.message);
     } finally {
       setDeletingId(null);
     }
@@ -153,13 +259,48 @@ const ClerkPasskeysCardInner: React.FC = () => {
         </div>
       )}
 
+      {inIframe && !errorMsg && (
+        <div
+          role="status"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-[10px] bg-surface-2 border border-border text-[12px] text-muted"
+        >
+          <span>
+            If your browser restricts passkey prompts inside an embedded preview, open this page in a full tab.
+          </span>
+          {typeof window !== 'undefined' && (
+            <a
+              href={window.location.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-semibold text-ink hover:underline shrink-0"
+            >
+              <span>Open in full tab</span>
+              <ExternalLink size={12} />
+            </a>
+          )}
+        </div>
+      )}
+
       {errorMsg && (
         <div
           role="alert"
-          className="flex items-start gap-2.5 p-3 rounded-[10px] bg-red-50 border border-red-200 text-[13px] text-red-700"
+          className="flex flex-col gap-2 p-3 rounded-[10px] bg-red-50 border border-red-200 text-[13px] text-red-700"
         >
-          <AlertCircle size={16} className="shrink-0 mt-0.5" />
-          <span>{errorMsg}</span>
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>{errorMsg}</span>
+          </div>
+          {needsTopLevelTab && typeof window !== 'undefined' && (
+            <a
+              href={window.location.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="self-start inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-red-700 text-white text-[12px] font-semibold hover:bg-red-800 transition-colors ml-6"
+            >
+              <span>Open in full browser tab</span>
+              <ExternalLink size={12} />
+            </a>
+          )}
         </div>
       )}
 

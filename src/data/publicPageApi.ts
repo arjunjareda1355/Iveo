@@ -349,9 +349,15 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           if (!kind) return null;
 
           const layout = row.layout === 'featured' ? 'featured' : 'classic';
-          const embedProvider = ['youtube', 'spotify', 'soundcloud'].includes(
-            row.embed_provider
-          )
+          const embedProvider = [
+            'youtube',
+            'spotify',
+            'soundcloud',
+            'discord',
+            'github',
+            'linkedin',
+            'x',
+          ].includes(row.embed_provider)
             ? row.embed_provider
             : null;
 
@@ -396,6 +402,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             thumbnailUrl: storagePublicUrl(row.thumbnail_path),
             layout,
             embedProvider,
+            embedMeta: row.embed_meta || null,
             isProtected,
             signup: signupConfig,
           };

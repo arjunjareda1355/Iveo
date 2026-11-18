@@ -24,6 +24,7 @@
     { "source": "/api/oauth/youtube/callback", "destination": "/api/data?action=oauth-youtube-callback" },
     { "source": "/api/oauth/:provider/url", "destination": "/api/data?action=oauth-social-url&provider=:provider" },
     { "source": "/api/oauth/:provider/callback", "destination": "/api/data?action=oauth-social-callback&provider=:provider" },
+    { "source": "/api/oauth/:provider/callback/", "destination": "/api/data?action=oauth-social-callback&provider=:provider" },
     { "source": "/api/subscription/cancel", "destination": "/api/data?action=subscription-cancel" },
     { "source": "/api/subscription/reactivate", "destination": "/api/data?action=subscription-reactivate" },
     { "source": "/api/subscription", "destination": "/api/data?action=subscription" },

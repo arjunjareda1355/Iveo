@@ -14,30 +14,108 @@ interface PasskeySignInSectionProps {
   redirectUrl: string;
 }
 
+function isInsideIframe(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+function classifyPasskeySignInError(
+  err: unknown,
+  inIframe: boolean
+): { message: string; needsTopLevelTab: boolean } {
+  const anyErr = err as any;
+  const code = String(anyErr?.code || anyErr?.errors?.[0]?.code || '');
+  const name = String(anyErr?.name || '');
+  const msg = String(
+    anyErr?.longMessage ||
+      anyErr?.errors?.[0]?.longMessage ||
+      anyErr?.message ||
+      anyErr?.errors?.[0]?.message ||
+      ''
+  );
+  const combined = `${code} ${name} ${msg}`;
+
+  if (
+    /publickey-credentials|SecurityError|Permissions-Policy|not enabled in this document|cross-origin/i.test(
+      combined
+    ) ||
+    (inIframe && /NotAllowedError|not allowed/i.test(combined))
+  ) {
+    return {
+      message:
+        'Your browser blocked passkey sign-in inside this embedded preview. Open Login in a full browser tab to use your passkey.',
+      needsTopLevelTab: true,
+    };
+  }
+  if (
+    code === 'passkey_retrieval_cancelled' ||
+    /AbortError|passkey_retrieval_cancelled|cancel/i.test(combined)
+  ) {
+    return {
+      message: 'Passkey sign-in was cancelled.',
+      needsTopLevelTab: false,
+    };
+  }
+  if (
+    /form_identifier_not_found|passkey_not_found|no_passkey|not found/i.test(combined)
+  ) {
+    return {
+      message:
+        'No saved passkey matched on this device. Sign in with email first, then add a passkey in Account settings.',
+      needsTopLevelTab: false,
+    };
+  }
+  if (/NotAllowedError/i.test(combined)) {
+    return {
+      message:
+        'No passkey was selected or verification timed out. Ensure biometrics or screen lock is enabled and try again.',
+      needsTopLevelTab: false,
+    };
+  }
+  return {
+    message: msg || 'Could not sign in with passkey. Try signing in with email or social login above.',
+    needsTopLevelTab: false,
+  };
+}
+
 const PasskeySignInSection: React.FC<PasskeySignInSectionProps> = ({ redirectUrl }) => {
-  const { signIn } = useSignIn();
+  const { signIn, fetchStatus } = useSignIn();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [needsTopLevelTab, setNeedsTopLevelTab] = useState(false);
+  const inIframe = isInsideIframe();
 
   const handlePasskeySignIn = async () => {
-    if (!signIn || isLoading) return;
+    if (!signIn || isLoading || fetchStatus === 'fetching') return;
     if (typeof window === 'undefined' || typeof window.PublicKeyCredential === 'undefined') {
       setErrorMsg('Passkeys are not supported in this browser.');
+      setNeedsTopLevelTab(false);
       return;
     }
 
     setErrorMsg(null);
+    setNeedsTopLevelTab(false);
     setIsLoading(true);
     try {
+      // Reset any in-progress non-passkey sign-in attempt before starting discoverable passkey auth.
+      if (
+        signIn.status &&
+        signIn.status !== 'needs_identifier' &&
+        signIn.status !== 'complete'
+      ) {
+        await signIn.reset();
+      }
+
       const { error } = await signIn.passkey({ flow: 'discoverable' });
       if (error) {
-        const msg = String(error.longMessage || error.message || '');
-        if (/cancel|abort|NotAllowedError|passkey_retrieval_cancelled/i.test(msg + String(error.code || ''))) {
-          setErrorMsg('Passkey sign-in was cancelled.');
-        } else {
-          setErrorMsg(msg || 'Could not sign in with passkey. Try your email or password.');
-        }
+        const classified = classifyPasskeySignInError(error, inIframe);
+        setErrorMsg(classified.message);
+        setNeedsTopLevelTab(classified.needsTopLevelTab);
         return;
       }
 
@@ -52,14 +130,15 @@ const PasskeySignInSection: React.FC<PasskeySignInSectionProps> = ({ redirectUrl
             }
           },
         });
-      }
-    } catch (err: any) {
-      const msg = String(err?.message || '');
-      if (/cancel|abort|NotAllowedError/i.test(msg)) {
-        setErrorMsg('Passkey sign-in was cancelled.');
+      } else if (signIn.status === 'needs_second_factor' || signIn.status === 'needs_client_trust') {
+        setErrorMsg('Passkey verified. Complete the second-step verification prompt above to finish signing in.');
       } else {
-        setErrorMsg(msg || 'Could not sign in with passkey.');
+        setErrorMsg('Sign-in needs another verification step. Please use the form above.');
       }
+    } catch (err: unknown) {
+      const classified = classifyPasskeySignInError(err, inIframe);
+      setErrorMsg(classified.message);
+      setNeedsTopLevelTab(classified.needsTopLevelTab);
     } finally {
       setIsLoading(false);
     }
@@ -79,6 +158,7 @@ const PasskeySignInSection: React.FC<PasskeySignInSectionProps> = ({ redirectUrl
         size="md"
         fullWidth
         loading={isLoading}
+        disabled={!signIn || isLoading || fetchStatus === 'fetching'}
         onClick={handlePasskeySignIn}
       >
         <KeyRound size={16} strokeWidth={1.6} className="mr-2" />
@@ -86,9 +166,19 @@ const PasskeySignInSection: React.FC<PasskeySignInSectionProps> = ({ redirectUrl
       </Button>
 
       {errorMsg && (
-        <p role="alert" className="text-[12px] text-red-600 text-center mt-0.5">
-          {errorMsg}
-        </p>
+        <div role="alert" className="text-[12px] text-red-600 text-center mt-0.5 flex flex-col items-center gap-1.5">
+          <p>{errorMsg}</p>
+          {needsTopLevelTab && typeof window !== 'undefined' && (
+            <a
+              href={window.location.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-semibold underline text-ink hover:text-ink-2"
+            >
+              Open login in full tab
+            </a>
+          )}
+        </div>
       )}
     </div>
   );

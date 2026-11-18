@@ -97,10 +97,11 @@ export function buildSocialOAuthUrl(
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: 'identify',
+      prompt: 'consent',
       state: statePayload,
     });
     return {
-      url: `https://discord.com/api/oauth2/authorize?${params.toString()}`,
+      url: `https://discord.com/oauth2/authorize?${params.toString()}`,
       redirectUri,
     };
   }
@@ -190,7 +191,7 @@ export async function exchangeSocialOAuthCode(
   const creds = getSocialOAuthCredentials(provider);
 
   if (provider === 'discord') {
-    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+    const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -204,7 +205,17 @@ export async function exchangeSocialOAuthCode(
     });
     const tokenJson: any = await tokenRes.json().catch(() => ({}));
     if (!tokenRes.ok || !tokenJson?.access_token) {
-      throw new Error(tokenJson?.error_description || tokenJson?.error || 'Discord token exchange failed.');
+      const detail =
+        tokenJson?.error_description ||
+        tokenJson?.message ||
+        tokenJson?.error ||
+        `Discord token exchange failed (HTTP ${tokenRes.status}).`;
+      const isRedirectIssue = /redirect_uri|invalid_request|invalid_grant/i.test(String(detail));
+      throw new Error(
+        isRedirectIssue
+          ? `${detail} Ensure Discord OAuth Redirect URL includes: ${redirectUri}`
+          : detail
+      );
     }
 
     const userRes = await fetch('https://discord.com/api/v10/users/@me', {
@@ -216,11 +227,31 @@ export async function exchangeSocialOAuthCode(
       throw new Error('Could not read Discord profile details.');
     }
 
+    let defaultAvatarIdx = 0;
+    try {
+      if (user.discriminator && user.discriminator !== '0') {
+        defaultAvatarIdx = Number(user.discriminator) % 5;
+      } else if (/^\d+$/.test(String(user.id))) {
+        defaultAvatarIdx = Number((BigInt(user.id) >> 22n) % 6n);
+      }
+    } catch {
+      defaultAvatarIdx = 0;
+    }
+
     const avatarUrl = user.avatar
       ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${String(user.avatar).startsWith('a_') ? 'gif' : 'png'}?size=128`
-      : null;
+      : `https://cdn.discordapp.com/embed/avatars/${defaultAvatarIdx}.png`;
     const displayName = user.global_name || user.username || 'Discord User';
+    const handleText =
+      user.discriminator && user.discriminator !== '0'
+        ? `${user.username}#${user.discriminator}`
+        : `@${user.username}`;
+    const accentHex =
+      typeof user.accent_color === 'number'
+        ? `#${user.accent_color.toString(16).padStart(6, '0')}`
+        : null;
     const profileUrl = `https://discord.com/users/${user.id}`;
+
     return {
       provider: 'discord',
       url: profileUrl,
@@ -228,11 +259,12 @@ export async function exchangeSocialOAuthCode(
       embedMeta: {
         provider: 'discord',
         title: displayName,
-        subtitle: `@${user.username}`,
+        subtitle: handleText,
         description: 'Connected Discord profile',
         avatarUrl,
         badgeText: 'Discord',
-        handle: `@${user.username}`,
+        handle: handleText,
+        accentColor: accentHex,
         connectedViaOAuth: true,
         fetchedAt: new Date().toISOString(),
       },

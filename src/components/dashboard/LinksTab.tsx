@@ -31,6 +31,8 @@ import {
   MapPin,
   FileDown,
   Globe,
+  Github,
+  Linkedin,
   GripVertical,
   ArrowUp,
   ArrowDown,
@@ -51,6 +53,10 @@ import { ScheduleSection } from '../links/ScheduleSection';
 import { ScheduleChip } from '../links/ScheduleChip';
 import { PasswordSection } from '../links/PasswordSection';
 import { EmbedComposer } from '../links/EmbedComposer';
+import { SocialEmbedComposer } from '../links/SocialEmbedComposer';
+import { EmbedLookSelector } from '../links/EmbedLookSelector';
+import { DiscordGlyph, XMarkGlyph } from '../page/EmbedBlock';
+import { isSocialEmbedProvider } from '../../lib/embedLooks';
 import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
 import { FaqComposer } from '../links/FaqComposer';
@@ -66,7 +72,7 @@ import { LocationCardComposer } from '../links/LocationCardComposer';
 import { DownloadCardComposer } from '../links/DownloadCardComposer';
 import { AddBlockModal, FeatureType } from './AddBlockModal';
 import { AnimationControl } from '../links/AnimationControl';
-import { Block, BlockKind, BlockLayout, LinkAnimation } from '../../data/types';
+import { Block, BlockKind, BlockLayout, EmbedMetaData, LinkAnimation } from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
 import { useClickCounts } from '../../data/hooks/useClickCounts';
 import { useProtectedLinkIds } from '../../data/hooks/useProtectedLinkIds';
@@ -108,7 +114,24 @@ function getBlockTypeChip(block: Block, hasBothSupportTypes: boolean): string | 
     case 'promo':
       return 'Promo';
     case 'embed':
-      return 'Embed';
+      switch (block.embedProvider) {
+        case 'discord':
+          return 'Discord';
+        case 'github':
+          return 'GitHub';
+        case 'linkedin':
+          return 'LinkedIn';
+        case 'x':
+          return 'X';
+        case 'spotify':
+          return 'Spotify';
+        case 'soundcloud':
+          return 'SoundCloud';
+        case 'youtube':
+          return 'YouTube Embed';
+        default:
+          return 'Embed';
+      }
     case 'youtube':
       return 'YouTube';
     case 'instagram':
@@ -260,6 +283,10 @@ export const LinksTab: React.FC = () => {
   type ComposerType =
     | 'link'
     | 'embed'
+    | 'embed_discord'
+    | 'embed_github'
+    | 'embed_linkedin'
+    | 'embed_x'
     | 'signup'
     | 'header'
     | 'tip_jar'
@@ -290,6 +317,7 @@ export const LinksTab: React.FC = () => {
   const [editLayout, setEditLayout] = useState<BlockLayout>('classic');
   const [editAnimation, setEditAnimation] = useState<LinkAnimation>('none');
   const [editBadge, setEditBadge] = useState<string>('');
+  const [editEmbedMeta, setEditEmbedMeta] = useState<EmbedMetaData | null>(null);
   const [editStartAt, setEditStartAt] = useState<string | null>(null);
   const [editEndAt, setEditEndAt] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
@@ -462,6 +490,7 @@ export const LinksTab: React.FC = () => {
     setEditLayout(block.layout || 'classic');
     setEditAnimation(block.animation || 'none');
     setEditBadge(block.badge || '');
+    setEditEmbedMeta(block.embedMeta || null);
     setEditStartAt(block.startAt);
     setEditEndAt(block.endAt);
     setEditError(null);
@@ -522,9 +551,8 @@ export const LinksTab: React.FC = () => {
       }
 
       const urlChanged = parsed.canonicalUrl !== (block.url || '');
-      let nextEmbedMeta = block.embedMeta ?? null;
+      let nextEmbedMeta: EmbedMetaData | null = editEmbedMeta || block.embedMeta || null;
       if (urlChanged) {
-        nextEmbedMeta = null;
         try {
           const res = await fetch(
             `/api/integrations/embed?url=${encodeURIComponent(parsed.canonicalUrl)}`
@@ -532,10 +560,16 @@ export const LinksTab: React.FC = () => {
           const data = await res.json().catch(() => null);
           const resolvedMeta = data?.embed || data?.embedMeta;
           if (res.ok && data?.ok && resolvedMeta) {
-            nextEmbedMeta = resolvedMeta;
+            nextEmbedMeta = {
+              ...resolvedMeta,
+              lookStyle: editEmbedMeta?.lookStyle || block.embedMeta?.lookStyle || 'signature',
+              showStats: editEmbedMeta?.showStats ?? block.embedMeta?.showStats ?? true,
+              showDescription: editEmbedMeta?.showDescription ?? block.embedMeta?.showDescription ?? true,
+              ctaLabel: editEmbedMeta?.ctaLabel ?? block.embedMeta?.ctaLabel ?? null,
+            };
           }
         } catch {
-          nextEmbedMeta = null;
+          // Keep current look customization if lookup fails
         }
       }
 
@@ -807,6 +841,22 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
+      {(activeComposer === 'embed_discord' ||
+        activeComposer === 'embed_github' ||
+        activeComposer === 'embed_linkedin' ||
+        activeComposer === 'embed_x') && (
+        <SocialEmbedComposer
+          initialProvider={
+            activeComposer.replace('embed_', '') as 'discord' | 'github' | 'linkedin' | 'x'
+          }
+          onAdd={async ({ url, caption, provider, embedMeta }) => {
+            await addEmbed(url, caption, provider, embedMeta);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
       {activeComposer === 'signup' && (
         <SignupComposer
           ownerName={username || undefined}
@@ -1033,8 +1083,9 @@ export const LinksTab: React.FC = () => {
             const isLink = block.kind === 'link';
             const isProtected =
               isLink && (protectedIds.has(block.id) || block.isProtected === true);
+            const isMediaEmbed = isEmbed && !isSocialEmbedProvider(block.embedProvider);
             const isProLocked =
-              !isPro && (isEmbed || isSignup || Boolean(block.startAt || block.endAt) || isProtected);
+              !isPro && (isMediaEmbed || isSignup || Boolean(block.startAt || block.endAt) || isProtected);
 
             const clicks = clickCounts.get(block.id) || 0;
             const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
@@ -1069,14 +1120,34 @@ export const LinksTab: React.FC = () => {
               socialDestinationsSet.has(blockNormalizedDest) &&
               (isLink || isInstagram || isYouTube);
 
-            const ProviderGlyph =
-              block.embedProvider === 'youtube'
-                ? Play
-                : block.embedProvider === 'spotify'
-                  ? Music
-                  : block.embedProvider === 'soundcloud'
-                    ? Headphones
-                    : Globe;
+            const renderEmbedListIcon = () => {
+              switch (block.embedProvider) {
+                case 'youtube':
+                  return <Play size={20} strokeWidth={1.6} className="text-red-600" />;
+                case 'spotify':
+                  return <Music size={20} strokeWidth={1.6} className="text-emerald-600" />;
+                case 'soundcloud':
+                  return <Headphones size={20} strokeWidth={1.6} className="text-orange-600" />;
+                case 'discord':
+                  return (
+                    <span className="text-[#5865F2] flex items-center justify-center">
+                      <DiscordGlyph size={19} />
+                    </span>
+                  );
+                case 'github':
+                  return <Github size={20} strokeWidth={1.6} className="text-[#24292F]" />;
+                case 'linkedin':
+                  return <Linkedin size={20} strokeWidth={1.6} className="text-[#0A66C2]" />;
+                case 'x':
+                  return (
+                    <span className="text-ink flex items-center justify-center">
+                      <XMarkGlyph size={17} />
+                    </span>
+                  );
+                default:
+                  return <Globe size={20} strokeWidth={1.5} />;
+              }
+            };
 
             return (
               <Card
@@ -1142,7 +1213,7 @@ export const LinksTab: React.FC = () => {
                                 className="w-full h-full object-cover"
                               />
                             ) : isEmbed ? (
-                              <ProviderGlyph size={20} strokeWidth={1.5} />
+                              renderEmbedListIcon()
                             ) : isSignup ? (
                               <Mail size={20} className="text-muted" strokeWidth={1.5} />
                             ) : isTipJar ? (
@@ -1559,6 +1630,27 @@ export const LinksTab: React.FC = () => {
                     }}
                     onCancel={() => setEditingBlockId(null)}
                   />
+                ) : isEmbed && isSocialEmbedProvider(block.embedProvider) ? (
+                  <SocialEmbedComposer
+                    initialProvider={block.embedProvider}
+                    isEditing
+                    initialValues={{
+                      url: block.url || '',
+                      caption: block.title || '',
+                      embedMeta: block.embedMeta || null,
+                    }}
+                    onAdd={async ({ url, caption, provider, embedMeta }) => {
+                      await updateBlock(block.id, {
+                        title: caption,
+                        url,
+                        embedProvider: provider,
+                        embedMeta: embedMeta || null,
+                      });
+                      setEditingBlockId(null);
+                      showToast('Saved');
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
                 ) : (
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
@@ -1599,6 +1691,32 @@ export const LinksTab: React.FC = () => {
                           className="h-11 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                         />
                       </div>
+                    )}
+
+                    {isEmbed && (
+                      <EmbedLookSelector
+                        provider={
+                          parseEmbedUrl(editUrl)?.provider ||
+                          block.embedProvider ||
+                          'youtube'
+                        }
+                        subtype={parseEmbedUrl(editUrl)?.subtype}
+                        lookStyle={editEmbedMeta?.lookStyle || 'signature'}
+                        showStats={editEmbedMeta?.showStats !== false}
+                        showDescription={editEmbedMeta?.showDescription !== false}
+                        ctaLabel={editEmbedMeta?.ctaLabel || ''}
+                        onChange={(patch) => {
+                          const currentProvider =
+                            parseEmbedUrl(editUrl)?.provider ||
+                            block.embedProvider ||
+                            'youtube';
+                          setEditEmbedMeta((prev) => ({
+                            ...(prev || { provider: currentProvider }),
+                            provider: currentProvider,
+                            ...patch,
+                          }));
+                        }}
+                      />
                     )}
 
                     {isLink && (
