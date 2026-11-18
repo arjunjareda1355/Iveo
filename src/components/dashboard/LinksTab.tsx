@@ -55,7 +55,7 @@ import { PasswordSection } from '../links/PasswordSection';
 import { EmbedComposer } from '../links/EmbedComposer';
 import { SocialEmbedComposer } from '../links/SocialEmbedComposer';
 import { EmbedLookSelector } from '../links/EmbedLookSelector';
-import { DiscordGlyph, XMarkGlyph } from '../page/EmbedBlock';
+import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph } from '../page/EmbedBlock';
 import { isSocialEmbedProvider } from '../../lib/embedLooks';
 import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
@@ -123,6 +123,12 @@ function getBlockTypeChip(block: Block, hasBothSupportTypes: boolean): string | 
           return 'LinkedIn';
         case 'x':
           return 'X';
+        case 'instagram':
+          return 'Instagram';
+        case 'facebook':
+          return 'Facebook';
+        case 'threads':
+          return 'Threads';
         case 'spotify':
           return 'Spotify';
         case 'soundcloud':
@@ -287,6 +293,9 @@ export const LinksTab: React.FC = () => {
     | 'embed_github'
     | 'embed_linkedin'
     | 'embed_x'
+    | 'embed_instagram'
+    | 'embed_facebook'
+    | 'embed_threads'
     | 'signup'
     | 'header'
     | 'tip_jar'
@@ -844,10 +853,20 @@ export const LinksTab: React.FC = () => {
       {(activeComposer === 'embed_discord' ||
         activeComposer === 'embed_github' ||
         activeComposer === 'embed_linkedin' ||
-        activeComposer === 'embed_x') && (
+        activeComposer === 'embed_x' ||
+        activeComposer === 'embed_instagram' ||
+        activeComposer === 'embed_facebook' ||
+        activeComposer === 'embed_threads') && (
         <SocialEmbedComposer
           initialProvider={
-            activeComposer.replace('embed_', '') as 'discord' | 'github' | 'linkedin' | 'x'
+            activeComposer.replace('embed_', '') as
+              | 'discord'
+              | 'github'
+              | 'linkedin'
+              | 'x'
+              | 'instagram'
+              | 'facebook'
+              | 'threads'
           }
           onAdd={async ({ url, caption, provider, embedMeta }) => {
             await addEmbed(url, caption, provider, embedMeta);
@@ -1142,6 +1161,20 @@ export const LinksTab: React.FC = () => {
                   return (
                     <span className="text-ink flex items-center justify-center">
                       <XMarkGlyph size={17} />
+                    </span>
+                  );
+                case 'instagram':
+                  return <Instagram size={20} strokeWidth={1.8} className="text-[#E1306C]" />;
+                case 'facebook':
+                  return (
+                    <span className="text-[#1877F2] flex items-center justify-center">
+                      <FacebookGlyph size={18} />
+                    </span>
+                  );
+                case 'threads':
+                  return (
+                    <span className="text-ink flex items-center justify-center">
+                      <ThreadsGlyph size={18} />
                     </span>
                   );
                 default:

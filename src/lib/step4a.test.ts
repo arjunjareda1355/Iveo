@@ -114,6 +114,35 @@ test('embeds: parses Discord, GitHub, LinkedIn, and X links correctly', () => {
   assert.equal(xProfile?.provider, 'x');
   assert.equal(xProfile?.subtype, 'profile');
   assert.equal(xProfile?.canonicalUrl, 'https://x.com/iveosite');
+
+  const igProfile = parseEmbedUrl('https://www.instagram.com/iveosite/');
+  assert.equal(igProfile?.provider, 'instagram');
+  assert.equal(igProfile?.subtype, 'profile');
+  assert.equal(igProfile?.identifier, 'iveosite');
+  assert.equal(igProfile?.canonicalUrl, 'https://www.instagram.com/iveosite/');
+
+  const igReel = parseEmbedUrl('https://instagram.com/reel/C9abc123XYZ/');
+  assert.equal(igReel?.provider, 'instagram');
+  assert.equal(igReel?.subtype, 'reel');
+
+  const fbPage = parseEmbedUrl('https://www.facebook.com/meta');
+  assert.equal(fbPage?.provider, 'facebook');
+  assert.equal(fbPage?.subtype, 'profile');
+  assert.equal(fbPage?.identifier, 'meta');
+
+  const fbGroup = parseEmbedUrl('https://www.facebook.com/groups/developers');
+  assert.equal(fbGroup?.provider, 'facebook');
+  assert.equal(fbGroup?.subtype, 'group');
+
+  const threadsProfile = parseEmbedUrl('https://www.threads.net/@zuck');
+  assert.equal(threadsProfile?.provider, 'threads');
+  assert.equal(threadsProfile?.subtype, 'profile');
+  assert.equal(threadsProfile?.identifier, 'zuck');
+  assert.equal(threadsProfile?.canonicalUrl, 'https://www.threads.net/@zuck');
+
+  const threadsPost = parseEmbedUrl('https://threads.com/@zuck/post/C8xyz987');
+  assert.equal(threadsPost?.provider, 'threads');
+  assert.equal(threadsPost?.subtype, 'post');
 });
 
 // 4. Scheduling & Time

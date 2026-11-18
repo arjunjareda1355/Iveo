@@ -52,7 +52,10 @@ export type EmbedProvider =
   | 'discord'
   | 'github'
   | 'linkedin'
-  | 'x';
+  | 'x'
+  | 'instagram'
+  | 'facebook'
+  | 'threads';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
 export type EmbedLookStyle = 'signature' | 'spotlight' | 'glass' | 'minimal' | 'theme';
 

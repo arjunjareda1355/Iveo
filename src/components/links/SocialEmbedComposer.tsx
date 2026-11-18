@@ -1,15 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Check, Loader2, Sparkles, ExternalLink, Github, Linkedin } from 'lucide-react';
+import { Check, Loader2, Sparkles, ExternalLink, Github, Linkedin, Instagram } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { parseEmbedUrl, ParsedEmbed } from '../../lib/embeds';
 import { EmbedLookStyle, EmbedMetaData, EmbedProvider } from '../../data/types';
 import { EmbedLookSelector } from './EmbedLookSelector';
-import { EmbedBlock, DiscordGlyph, XMarkGlyph } from '../page/EmbedBlock';
+import { EmbedBlock, DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph } from '../page/EmbedBlock';
 import { VIBES } from '../../lib/vibes';
 import { normalizeEmbedLookStyle } from '../../lib/embedLooks';
 
-export type SocialEmbedProvider = 'discord' | 'github' | 'linkedin' | 'x';
+export type SocialEmbedProvider =
+  | 'discord'
+  | 'github'
+  | 'linkedin'
+  | 'x'
+  | 'instagram'
+  | 'facebook'
+  | 'threads';
 
 interface SocialEmbedComposerProps {
   initialProvider: SocialEmbedProvider;
@@ -69,6 +76,30 @@ const PROVIDER_META: Record<
     placeholder: 'https://x.com/handle or https://x.com/handle/status/123...',
     hint: 'Connect your X account via OAuth or paste a profile or post link.',
     accentBg: 'bg-black hover:bg-neutral-800',
+    accentText: 'text-white',
+  },
+  instagram: {
+    name: 'Instagram',
+    oauthLabel: 'Connect Instagram',
+    placeholder: 'https://www.instagram.com/username/ or /reel/...',
+    hint: 'Connect Instagram via Meta OAuth or paste a profile, reel, or post URL.',
+    accentBg: 'bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF] hover:opacity-95',
+    accentText: 'text-white',
+  },
+  facebook: {
+    name: 'Facebook',
+    oauthLabel: 'Connect Facebook',
+    placeholder: 'https://www.facebook.com/yourpage or /groups/...',
+    hint: 'Connect your Facebook account via Meta OAuth or paste a profile, page, or group link.',
+    accentBg: 'bg-[#1877F2] hover:bg-[#1464D0]',
+    accentText: 'text-white',
+  },
+  threads: {
+    name: 'Threads',
+    oauthLabel: 'Connect Threads',
+    placeholder: 'https://www.threads.net/@username or /post/...',
+    hint: 'Connect your Threads account via OAuth or paste a profile or thread link.',
+    accentBg: 'bg-[#101010] hover:bg-neutral-800',
     accentText: 'text-white',
   },
 };
@@ -346,6 +377,12 @@ export const SocialEmbedComposer: React.FC<SocialEmbedComposerProps> = ({
         return <Linkedin size={size} />;
       case 'x':
         return <XMarkGlyph size={size - 1} />;
+      case 'instagram':
+        return <Instagram size={size} />;
+      case 'facebook':
+        return <FacebookGlyph size={size - 1} />;
+      case 'threads':
+        return <ThreadsGlyph size={size - 1} />;
     }
   };
 

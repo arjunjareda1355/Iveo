@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { BottomSheet } from '../ui/BottomSheet';
 import { ProBadge } from '../plan/ProBadge';
-import { DiscordGlyph, XMarkGlyph } from '../page/EmbedBlock';
+import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph } from '../page/EmbedBlock';
 
 export type FeatureType =
   | 'link'
@@ -35,6 +35,9 @@ export type FeatureType =
   | 'embed_github'
   | 'embed_linkedin'
   | 'embed_x'
+  | 'embed_instagram'
+  | 'embed_facebook'
+  | 'embed_threads'
   | 'vcard'
   | 'signup'
   | 'tip_jar'
@@ -123,6 +126,33 @@ const FEATURES: FeatureOption[] = [
     icon: XMarkGlyph,
     iconBg: 'bg-stone-100',
     iconColor: 'text-black',
+  },
+  {
+    id: 'embed_instagram',
+    title: 'Instagram embed',
+    description: 'Connect Instagram via Meta OAuth or paste a profile, reel, or post',
+    category: 'social_embeds',
+    icon: Instagram,
+    iconBg: 'bg-pink-50',
+    iconColor: 'text-[#E1306C]',
+  },
+  {
+    id: 'embed_facebook',
+    title: 'Facebook embed',
+    description: 'Connect Facebook via Meta OAuth or showcase a page or group card',
+    category: 'social_embeds',
+    icon: FacebookGlyph,
+    iconBg: 'bg-blue-50',
+    iconColor: 'text-[#1877F2]',
+  },
+  {
+    id: 'embed_threads',
+    title: 'Threads embed',
+    description: 'Connect your Threads profile or feature a post with custom looks',
+    category: 'social_embeds',
+    icon: ThreadsGlyph,
+    iconBg: 'bg-stone-100',
+    iconColor: 'text-[#101010]',
   },
   {
     id: 'youtube',
@@ -319,7 +349,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
             <input
               type="text"
-              placeholder="Search blocks (discord, github, linkedin, x, youtube, spotify)..."
+              placeholder="Search blocks (instagram, facebook, threads, discord, github, youtube)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-11 pl-9 pr-3 bg-surface-2 border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"

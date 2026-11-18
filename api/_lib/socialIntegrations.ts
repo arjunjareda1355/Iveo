@@ -2,7 +2,14 @@ import crypto from 'node:crypto';
 import { parseEmbedUrl, type ParsedEmbed } from '../../src/lib/embeds.ts';
 import type { EmbedMetaData, EmbedProvider } from '../../src/data/types.ts';
 
-export type SocialOAuthProvider = 'discord' | 'github' | 'linkedin' | 'x';
+export type SocialOAuthProvider =
+  | 'discord'
+  | 'github'
+  | 'linkedin'
+  | 'x'
+  | 'instagram'
+  | 'facebook'
+  | 'threads';
 
 interface ProviderConfig {
   clientId: string;
@@ -25,6 +32,18 @@ const DEFAULT_OAUTH_CONFIG: Record<SocialOAuthProvider, ProviderConfig> = {
   x: {
     clientId: 'X3ZyX3FXOWVYVjhQdS1MOTVuVnI6MTpjaQ',
     clientSecret: '_3egzeBmhX6GCltSG3OjZFQ1Oht-oaqXVafd39r_i184HtoxMG',
+  },
+  instagram: {
+    clientId: '1698586274962410',
+    clientSecret: '95ceba7ba4b4692ebeefaf7861ec67a0',
+  },
+  facebook: {
+    clientId: '1698586274962410',
+    clientSecret: '95ceba7ba4b4692ebeefaf7861ec67a0',
+  },
+  threads: {
+    clientId: '1744671610719299',
+    clientSecret: 'e3dbc1ca93a80299cbc4da33f983a757',
   },
 };
 
@@ -56,11 +75,46 @@ export function getSocialOAuthCredentials(provider: SocialOAuthProvider): Provid
         clientId: process.env.X_CLIENT_ID?.trim() || fallback.clientId,
         clientSecret: process.env.X_CLIENT_SECRET?.trim() || fallback.clientSecret,
       };
+    case 'instagram':
+      return {
+        clientId:
+          process.env.INSTAGRAM_CLIENT_ID?.trim() ||
+          process.env.META_CLIENT_ID?.trim() ||
+          fallback.clientId,
+        clientSecret:
+          process.env.INSTAGRAM_CLIENT_SECRET?.trim() ||
+          process.env.META_CLIENT_SECRET?.trim() ||
+          fallback.clientSecret,
+      };
+    case 'facebook':
+      return {
+        clientId:
+          process.env.FACEBOOK_CLIENT_ID?.trim() ||
+          process.env.META_CLIENT_ID?.trim() ||
+          fallback.clientId,
+        clientSecret:
+          process.env.FACEBOOK_CLIENT_SECRET?.trim() ||
+          process.env.META_CLIENT_SECRET?.trim() ||
+          fallback.clientSecret,
+      };
+    case 'threads':
+      return {
+        clientId: process.env.THREADS_CLIENT_ID?.trim() || fallback.clientId,
+        clientSecret: process.env.THREADS_CLIENT_SECRET?.trim() || fallback.clientSecret,
+      };
   }
 }
 
 export function isValidSocialOAuthProvider(value: string): value is SocialOAuthProvider {
-  return value === 'discord' || value === 'github' || value === 'linkedin' || value === 'x';
+  return (
+    value === 'discord' ||
+    value === 'github' ||
+    value === 'linkedin' ||
+    value === 'x' ||
+    value === 'instagram' ||
+    value === 'facebook' ||
+    value === 'threads'
+  );
 }
 
 export function resolveSocialOAuthRedirectUri(
@@ -129,6 +183,48 @@ export function buildSocialOAuthUrl(
     });
     return {
       url: `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`,
+      redirectUri,
+    };
+  }
+
+  if (provider === 'facebook') {
+    const params = new URLSearchParams({
+      client_id: creds.clientId,
+      redirect_uri: redirectUri,
+      state: statePayload,
+      response_type: 'code',
+      scope: 'public_profile',
+    });
+    return {
+      url: `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`,
+      redirectUri,
+    };
+  }
+
+  if (provider === 'instagram') {
+    const params = new URLSearchParams({
+      client_id: creds.clientId,
+      redirect_uri: redirectUri,
+      state: statePayload,
+      response_type: 'code',
+      scope: 'public_profile,instagram_basic,pages_show_list',
+    });
+    return {
+      url: `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`,
+      redirectUri,
+    };
+  }
+
+  if (provider === 'threads') {
+    const params = new URLSearchParams({
+      client_id: creds.clientId,
+      redirect_uri: redirectUri,
+      scope: 'threads_basic',
+      response_type: 'code',
+      state: statePayload,
+    });
+    return {
+      url: `https://threads.net/oauth/authorize?${params.toString()}`,
       redirectUri,
     };
   }
@@ -368,6 +464,179 @@ export async function exchangeSocialOAuthCode(
         description: 'Connected LinkedIn profile',
         avatarUrl: user.picture || null,
         badgeText: 'LinkedIn',
+        connectedViaOAuth: true,
+        fetchedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  if (provider === 'facebook' || provider === 'instagram') {
+    const tokenParams = new URLSearchParams({
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
+      redirect_uri: redirectUri,
+      code,
+    });
+    const tokenRes = await fetch(
+      `https://graph.facebook.com/v21.0/oauth/access_token?${tokenParams.toString()}`,
+      { signal: AbortSignal.timeout(6500) }
+    );
+    const tokenJson: any = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokenJson?.access_token) {
+      const detail =
+        tokenJson?.error?.message ||
+        tokenJson?.error_description ||
+        `${provider === 'instagram' ? 'Instagram' : 'Facebook'} token exchange failed.`;
+      throw new Error(detail);
+    }
+
+    const accessToken = String(tokenJson.access_token);
+
+    if (provider === 'instagram') {
+      // Check linked Instagram Business / Creator account via Pages API first
+      try {
+        const accountsRes = await fetch(
+          `https://graph.facebook.com/v21.0/me/accounts?fields=name,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count,biography}&access_token=${encodeURIComponent(accessToken)}`,
+          { signal: AbortSignal.timeout(5500) }
+        );
+        if (accountsRes.ok) {
+          const accountsJson: any = await accountsRes.json().catch(() => null);
+          const igAccount = (accountsJson?.data || [])
+            .map((p: any) => p?.instagram_business_account)
+            .find((ig: any) => ig?.username || ig?.id);
+
+          if (igAccount) {
+            const igHandle = igAccount.username ? `@${igAccount.username}` : igAccount.name || 'Instagram';
+            const igUrl = igAccount.username
+              ? `https://www.instagram.com/${igAccount.username}/`
+              : 'https://www.instagram.com/';
+            const statsParts: string[] = [];
+            if (typeof igAccount.followers_count === 'number') {
+              statsParts.push(`${igAccount.followers_count.toLocaleString()} followers`);
+            }
+            if (typeof igAccount.media_count === 'number') {
+              statsParts.push(`${igAccount.media_count.toLocaleString()} posts`);
+            }
+            return {
+              provider: 'instagram',
+              url: igUrl,
+              title: igAccount.name || igHandle,
+              embedMeta: {
+                provider: 'instagram',
+                title: igAccount.name || igHandle,
+                subtitle: igHandle,
+                description: igAccount.biography || 'Follow on Instagram',
+                avatarUrl: igAccount.profile_picture_url || null,
+                badgeText: 'Instagram',
+                statsLabel: statsParts.join(' · ') || null,
+                handle: igHandle,
+                connectedViaOAuth: true,
+                fetchedAt: new Date().toISOString(),
+              },
+            };
+          }
+        }
+      } catch {}
+    }
+
+    // Standard Meta profile fallback (Facebook profile / Meta account connected for Instagram)
+    const meRes = await fetch(
+      `https://graph.facebook.com/v21.0/me?fields=id,name,link,picture.type(large)&access_token=${encodeURIComponent(accessToken)}`,
+      { signal: AbortSignal.timeout(5500) }
+    );
+    const me: any = await meRes.json().catch(() => null);
+    if (!meRes.ok || !me?.id) {
+      throw new Error(`Could not read ${provider === 'instagram' ? 'Meta' : 'Facebook'} profile details.`);
+    }
+
+    const avatarUrl = me.picture?.data?.url || null;
+    const displayName = me.name || (provider === 'instagram' ? 'Instagram Profile' : 'Facebook Profile');
+    if (provider === 'instagram') {
+      const slug = displayName.toLowerCase().replace(/[^a-z0-9._]+/g, '') || me.id;
+      return {
+        provider: 'instagram',
+        url: `https://www.instagram.com/${slug}/`,
+        title: displayName,
+        embedMeta: {
+          provider: 'instagram',
+          title: displayName,
+          subtitle: `@${slug}`,
+          description: 'Connected Instagram profile via Meta',
+          avatarUrl,
+          badgeText: 'Instagram',
+          handle: `@${slug}`,
+          connectedViaOAuth: true,
+          fetchedAt: new Date().toISOString(),
+        },
+      };
+    }
+
+    const fbUrl = me.link || `https://www.facebook.com/profile.php?id=${me.id}`;
+    return {
+      provider: 'facebook',
+      url: fbUrl,
+      title: displayName,
+      embedMeta: {
+        provider: 'facebook',
+        title: displayName,
+        subtitle: 'Facebook Profile',
+        description: 'Connected Facebook profile',
+        avatarUrl,
+        badgeText: 'Facebook',
+        connectedViaOAuth: true,
+        fetchedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  if (provider === 'threads') {
+    const tokenRes = await fetch('https://graph.threads.net/oauth/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code,
+      }).toString(),
+      signal: AbortSignal.timeout(6500),
+    });
+    const tokenJson: any = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokenJson?.access_token) {
+      const detail =
+        tokenJson?.error_message ||
+        tokenJson?.error?.message ||
+        tokenJson?.error_description ||
+        'Threads token exchange failed.';
+      throw new Error(detail);
+    }
+
+    const userRes = await fetch(
+      `https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${encodeURIComponent(String(tokenJson.access_token))}`,
+      { signal: AbortSignal.timeout(5500) }
+    );
+    const user: any = await userRes.json().catch(() => null);
+    if (!userRes.ok || (!user?.username && !user?.id)) {
+      throw new Error('Could not read Threads profile details.');
+    }
+
+    const username = user.username ? String(user.username).replace(/^@+/, '') : String(user.id);
+    const handle = `@${username}`;
+    const displayName = user.name || handle;
+
+    return {
+      provider: 'threads',
+      url: `https://www.threads.net/@${username}`,
+      title: displayName,
+      embedMeta: {
+        provider: 'threads',
+        title: displayName,
+        subtitle: handle,
+        description: user.threads_biography || 'Follow updates on Threads',
+        avatarUrl: user.threads_profile_picture_url || null,
+        badgeText: 'Threads',
+        handle,
         connectedViaOAuth: true,
         fetchedAt: new Date().toISOString(),
       },
@@ -697,6 +966,66 @@ export async function fetchSocialEmbedMetadata(rawUrl: string): Promise<{
       fetchedAt: nowIso,
     };
     return { parsed, embedMeta: fallback, suggestedTitle: handle };
+  }
+
+  // 5. Instagram profile, reel, or post
+  if (provider === 'instagram') {
+    const isMedia = parsed.subtype === 'reel' || parsed.subtype === 'post';
+    const handle = !isMedia && parsed.identifier ? `@${parsed.identifier}` : null;
+    const title = isMedia
+      ? parsed.subtype === 'reel'
+        ? 'Instagram Reel'
+        : 'Instagram Post'
+      : handle || 'Instagram';
+    const meta: EmbedMetaData = {
+      provider: 'instagram',
+      title,
+      subtitle: handle || parsed.canonicalUrl.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''),
+      description: isMedia
+        ? 'Watch on Instagram'
+        : 'Follow for stories, reels & updates on Instagram',
+      badgeText: parsed.label,
+      handle,
+      fetchedAt: nowIso,
+    };
+    return { parsed, embedMeta: meta, suggestedTitle: title };
+  }
+
+  // 6. Facebook profile, page, or group
+  if (provider === 'facebook') {
+    const cleanName =
+      parsed.identifier && !/^\d+$/.test(parsed.identifier)
+        ? formatReadableSlug(parsed.identifier)
+        : 'Facebook';
+    const meta: EmbedMetaData = {
+      provider: 'facebook',
+      title: cleanName || 'Facebook',
+      subtitle: parsed.canonicalUrl.replace(/^https?:\/\/(www\.)?/, ''),
+      description:
+        parsed.subtype === 'group'
+          ? 'Join the community group on Facebook'
+          : 'Connect & follow updates on Facebook',
+      badgeText: parsed.label,
+      handle: parsed.identifier || null,
+      fetchedAt: nowIso,
+    };
+    return { parsed, embedMeta: meta, suggestedTitle: meta.title || 'Facebook' };
+  }
+
+  // 7. Threads profile or thread post
+  if (provider === 'threads') {
+    const handle = parsed.identifier ? `@${parsed.identifier.split('/')[0]}` : '@threads';
+    const isPost = parsed.subtype === 'post';
+    const meta: EmbedMetaData = {
+      provider: 'threads',
+      title: isPost ? `${handle} on Threads` : handle,
+      subtitle: parsed.canonicalUrl.replace(/^https?:\/\/(www\.)?/, ''),
+      description: isPost ? 'Read this thread on Threads' : 'Follow conversations on Threads',
+      badgeText: parsed.label,
+      handle,
+      fetchedAt: nowIso,
+    };
+    return { parsed, embedMeta: meta, suggestedTitle: meta.title || handle };
   }
 
   return null;

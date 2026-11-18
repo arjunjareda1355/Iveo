@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Star,
   Terminal,
+  Instagram,
 } from 'lucide-react';
 import { EmbedLookStyle, EmbedProvider, PageBlock } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
@@ -45,6 +46,18 @@ export const DiscordGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
 export const XMarkGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
+export const FacebookGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M22.675 0H1.325C.593 0 0 .593 0 1.325v21.351C0 23.407.593 24 1.325 24H12.82v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116c.73 0 1.323-.593 1.323-1.325V1.325C24 .593 23.407 0 22.675 0z" />
+  </svg>
+);
+
+export const ThreadsGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.589 12c.027 3.086.718 5.496 2.057 7.164 1.43 1.781 3.631 2.695 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.964-.065-1.19.408-2.285 1.33-3.082.88-.76 2.119-1.207 3.583-1.291a13.853 13.853 0 0 1 3.02.142c-.126-.742-.375-1.332-.75-1.757-.513-.586-1.308-.883-2.359-.89h-.029c-.844 0-1.992.232-2.721 1.32l-1.757-1.182c.98-1.454 2.513-2.259 4.47-2.259h.044c3.194.02 5.097 1.973 5.287 5.388.108.046.216.094.321.142 1.49.7 2.58 1.761 3.154 3.07.797 1.82.871 4.79-1.548 7.158-1.85 1.81-4.094 2.628-7.277 2.65Zm1.003-11.69c-.242 0-.487.007-.739.021-1.836.103-2.98.946-2.916 2.143.067 1.256 1.452 1.839 2.784 1.767 1.224-.065 2.818-.543 3.086-3.71a10.5 10.5 0 0 0-2.215-.221Z" />
   </svg>
 );
 
@@ -101,6 +114,9 @@ function getProviderPalette(
       github: '#24292F',
       linkedin: '#0A66C2',
       x: '#0F1419',
+      instagram: '#E1306C',
+      facebook: '#1877F2',
+      threads: '#101010',
       youtube: '#FF0000',
       spotify: '#1DB954',
       soundcloud: '#FF5500',
@@ -124,6 +140,9 @@ function getProviderPalette(
       github: '#24292F',
       linkedin: '#0A66C2',
       x: '#000000',
+      instagram: '#E1306C',
+      facebook: '#1877F2',
+      threads: '#101010',
       youtube: '#FF0000',
       spotify: '#1DB954',
       soundcloud: '#FF5500',
@@ -238,6 +257,78 @@ function getProviderPalette(
             badgeText: '#E4E4E7',
             bannerGradient: '#000000',
           };
+    case 'instagram':
+      return look === 'spotlight'
+        ? {
+            bg: '#FFF8FA',
+            text: '#111827',
+            muted: '#6B7280',
+            border: '#FBCFE8',
+            accent: '#E1306C',
+            accentText: '#FFFFFF',
+            badgeBg: '#FCE7F3',
+            badgeText: '#BE185D',
+            bannerGradient: 'linear-gradient(135deg, #F58529 0%, #DD2A7B 52%, #8134AF 100%)',
+          }
+        : {
+            bg: '#FFFFFF',
+            text: '#111827',
+            muted: '#6B7280',
+            border: '#F3E8FF',
+            accent: '#E1306C',
+            accentText: '#FFFFFF',
+            badgeBg: '#FDF2F8',
+            badgeText: '#BE185D',
+            bannerGradient: 'linear-gradient(135deg, #F58529 0%, #DD2A7B 52%, #8134AF 100%)',
+          };
+    case 'facebook':
+      return look === 'spotlight'
+        ? {
+            bg: '#FFFFFF',
+            text: '#050505',
+            muted: '#65676B',
+            border: '#CBD5E1',
+            accent: '#1877F2',
+            accentText: '#FFFFFF',
+            badgeBg: '#E7F3FF',
+            badgeText: '#1877F2',
+            bannerGradient: 'linear-gradient(135deg, #1877F2 0%, #0C5DC7 100%)',
+          }
+        : {
+            bg: '#FFFFFF',
+            text: '#1C1E21',
+            muted: '#65676B',
+            border: '#DCE1E8',
+            accent: '#1877F2',
+            accentText: '#FFFFFF',
+            badgeBg: '#E7F3FF',
+            badgeText: '#1877F2',
+            bannerGradient: '#1877F2',
+          };
+    case 'threads':
+      return look === 'spotlight'
+        ? {
+            bg: '#18181B',
+            text: '#FFFFFF',
+            muted: '#A1A1AA',
+            border: '#27272A',
+            accent: '#FFFFFF',
+            accentText: '#101010',
+            badgeBg: '#27272A',
+            badgeText: '#F4F4F5',
+            bannerGradient: 'linear-gradient(135deg, #101010 0%, #27272A 100%)',
+          }
+        : {
+            bg: '#101010',
+            text: '#F5F5F5',
+            muted: '#A1A1AA',
+            border: '#262626',
+            accent: '#FFFFFF',
+            accentText: '#101010',
+            badgeBg: '#1F1F1F',
+            badgeText: '#E5E5E5',
+            bannerGradient: '#101010',
+          };
     case 'youtube':
       return {
         bg: '#0F0F0F',
@@ -315,7 +406,10 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
     provider === 'discord' ||
     provider === 'github' ||
     provider === 'linkedin' ||
-    provider === 'x';
+    provider === 'x' ||
+    provider === 'instagram' ||
+    provider === 'facebook' ||
+    provider === 'threads';
 
   const lookStyle = normalizeEmbedLookStyle(meta?.lookStyle, 'signature');
   const showDescription = meta?.showDescription !== false;
@@ -334,7 +428,13 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
               ? 'GitHub'
               : provider === 'linkedin'
                 ? 'LinkedIn'
-                : 'X';
+                : provider === 'instagram'
+                  ? 'Instagram'
+                  : provider === 'facebook'
+                    ? 'Facebook'
+                    : provider === 'threads'
+                      ? 'Threads'
+                      : 'X';
 
   const renderProviderGlyph = (iconSize: number) => {
     switch (provider) {
@@ -352,6 +452,12 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         return <Linkedin size={iconSize} strokeWidth={1.8} />;
       case 'x':
         return <XMarkGlyph size={Math.max(13, iconSize - 2)} />;
+      case 'instagram':
+        return <Instagram size={iconSize} strokeWidth={1.9} />;
+      case 'facebook':
+        return <FacebookGlyph size={Math.max(13, iconSize - 1)} />;
+      case 'threads':
+        return <ThreadsGlyph size={Math.max(13, iconSize - 1)} />;
       default:
         return <Globe size={iconSize} strokeWidth={1.7} />;
     }

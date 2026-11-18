@@ -33,7 +33,17 @@
  */
 
 export interface ParsedEmbed {
-  provider: 'youtube' | 'spotify' | 'soundcloud' | 'discord' | 'github' | 'linkedin' | 'x';
+  provider:
+    | 'youtube'
+    | 'spotify'
+    | 'soundcloud'
+    | 'discord'
+    | 'github'
+    | 'linkedin'
+    | 'x'
+    | 'instagram'
+    | 'facebook'
+    | 'threads';
   canonicalUrl: string;
   embedSrc: string;
   label: string;
@@ -369,6 +379,147 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
           canonicalUrl,
           embedSrc: canonicalUrl,
           label: 'X profile',
+          height: null,
+          aspect: null,
+          identifier: handle,
+          subtype: 'profile',
+        };
+      }
+    }
+    return null;
+  }
+
+  // 8. Instagram profile, reel, or post
+  if (['instagram.com', 'www.instagram.com', 'm.instagram.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const ignored = new Set(['explore', 'accounts', 'direct', 'stories', 'reels', 'about', 'legal', 'developer']);
+    if (segments.length >= 2 && ['p', 'reel', 'reels', 'tv'].includes(segments[0].toLowerCase()) && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const kind = segments[0].toLowerCase() === 'p' ? 'post' : 'reel';
+      const pathType = segments[0].toLowerCase() === 'reels' ? 'reel' : segments[0].toLowerCase();
+      const canonicalUrl = `https://www.instagram.com/${pathType}/${segments[1]}/`;
+      return {
+        provider: 'instagram',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: kind === 'reel' ? 'Instagram reel' : 'Instagram post',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: kind,
+      };
+    }
+    if (segments.length >= 1 && !ignored.has(segments[0].toLowerCase())) {
+      const handle = segments[0].replace(/^@+/, '');
+      if (/^[A-Za-z0-9._]{1,30}$/.test(handle)) {
+        const canonicalUrl = `https://www.instagram.com/${handle}/`;
+        return {
+          provider: 'instagram',
+          canonicalUrl,
+          embedSrc: canonicalUrl,
+          label: 'Instagram profile',
+          height: null,
+          aspect: null,
+          identifier: handle,
+          subtype: 'profile',
+        };
+      }
+    }
+    return null;
+  }
+
+  // 9. Facebook profile, page, or group
+  if (['facebook.com', 'www.facebook.com', 'm.facebook.com', 'fb.com', 'www.fb.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const ignored = new Set(['login', 'help', 'settings', 'privacy', 'policies', 'watch', 'marketplace', 'gaming', 'sharer.php', 'share']);
+    if (segments[0]?.toLowerCase() === 'profile.php') {
+      const fbId = parsed.searchParams.get('id');
+      if (fbId && /^\d{4,25}$/.test(fbId)) {
+        const canonicalUrl = `https://www.facebook.com/profile.php?id=${fbId}`;
+        return {
+          provider: 'facebook',
+          canonicalUrl,
+          embedSrc: canonicalUrl,
+          label: 'Facebook profile',
+          height: null,
+          aspect: null,
+          identifier: fbId,
+          subtype: 'profile',
+        };
+      }
+      return null;
+    }
+    if (segments.length >= 2 && segments[0].toLowerCase() === 'groups' && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const canonicalUrl = `https://www.facebook.com/groups/${segments[1]}`;
+      return {
+        provider: 'facebook',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Facebook group',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: 'group',
+      };
+    }
+    if (segments.length >= 1 && !ignored.has(segments[0].toLowerCase())) {
+      const slug = segments[0] === 'pages' && segments[1] ? segments[1] : segments[0];
+      if (SAFE_SEGMENT_REGEX.test(slug)) {
+        const canonicalUrl = `https://www.facebook.com/${slug}`;
+        return {
+          provider: 'facebook',
+          canonicalUrl,
+          embedSrc: canonicalUrl,
+          label: 'Facebook page',
+          height: null,
+          aspect: null,
+          identifier: slug,
+          subtype: 'profile',
+        };
+      }
+    }
+    return null;
+  }
+
+  // 10. Threads profile or thread post
+  if (['threads.net', 'www.threads.net', 'threads.com', 'www.threads.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const ignored = new Set(['login', 'search', 'activity', 'settings', 'about', 'privacy']);
+    if (segments.length >= 3 && segments[1] === 'post' && SAFE_SEGMENT_REGEX.test(segments[2])) {
+      const handle = segments[0].replace(/^@+/, '');
+      const canonicalUrl = `https://www.threads.net/@${handle}/post/${segments[2]}`;
+      return {
+        provider: 'threads',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Threads post',
+        height: null,
+        aspect: null,
+        identifier: `${handle}/post/${segments[2]}`,
+        subtype: 'post',
+      };
+    }
+    if (segments.length >= 2 && segments[0] === 't' && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const canonicalUrl = `https://www.threads.net/t/${segments[1]}`;
+      return {
+        provider: 'threads',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Threads post',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: 'post',
+      };
+    }
+    if (segments.length >= 1 && !ignored.has(segments[0].toLowerCase())) {
+      const handle = segments[0].replace(/^@+/, '');
+      if (/^[A-Za-z0-9._]{1,30}$/.test(handle)) {
+        const canonicalUrl = `https://www.threads.net/@${handle}`;
+        return {
+          provider: 'threads',
+          canonicalUrl,
+          embedSrc: canonicalUrl,
+          label: 'Threads profile',
           height: null,
           aspect: null,
           identifier: handle,

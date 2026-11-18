@@ -357,6 +357,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             'github',
             'linkedin',
             'x',
+            'instagram',
+            'facebook',
+            'threads',
           ].includes(row.embed_provider)
             ? row.embed_provider
             : null;

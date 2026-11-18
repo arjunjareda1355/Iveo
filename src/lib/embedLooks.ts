@@ -304,6 +304,132 @@ const PROVIDER_LOOKS: Record<EmbedProvider, EmbedLookOption[]> = {
       swatchText: '#18181B',
     },
   ],
+  instagram: [
+    {
+      id: 'signature',
+      label: 'Gradient Studio',
+      description: 'Signature Instagram gradient ring with crisp creator card',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#E1306C',
+      swatchText: '#111827',
+    },
+    {
+      id: 'spotlight',
+      label: 'Creator Banner',
+      description: 'Warm sunset-to-magenta header banner with Follow CTA',
+      swatchBg: '#FFF1F5',
+      swatchAccent: '#C13584',
+      swatchText: '#111827',
+    },
+    {
+      id: 'glass',
+      label: 'Frosted Gram',
+      description: 'Translucent glass card with subtle rose-amber highlight',
+      swatchBg: 'rgba(225, 48, 108, 0.12)',
+      swatchAccent: '#E1306C',
+      swatchText: '#0A0A0A',
+    },
+    {
+      id: 'minimal',
+      label: 'Compact Handle',
+      description: 'Slim horizontal Instagram bar with gradient avatar badge',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#E1306C',
+      swatchText: '#111827',
+    },
+    {
+      id: 'theme',
+      label: 'Match Page Vibe',
+      description: 'Follows your selected Vibe colors & button borders',
+      swatchBg: '#F4F4F5',
+      swatchAccent: '#18181B',
+      swatchText: '#18181B',
+    },
+  ],
+  facebook: [
+    {
+      id: 'signature',
+      label: 'Classic Meta Blue',
+      description: 'Clean white card with Facebook blue accent & CTA button',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#1877F2',
+      swatchText: '#1C1E21',
+    },
+    {
+      id: 'spotlight',
+      label: 'Page Cover',
+      description: 'Facebook blue header strip showcasing your Page or group',
+      swatchBg: '#F0F2F5',
+      swatchAccent: '#1877F2',
+      swatchText: '#050505',
+    },
+    {
+      id: 'glass',
+      label: 'Frosted Meta',
+      description: 'Translucent glass card with crisp Facebook blue badge',
+      swatchBg: 'rgba(24, 119, 242, 0.12)',
+      swatchAccent: '#1877F2',
+      swatchText: '#0A0A0A',
+    },
+    {
+      id: 'minimal',
+      label: 'Compact Page Bar',
+      description: 'One-row networking bar linking straight to Facebook',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#1877F2',
+      swatchText: '#111827',
+    },
+    {
+      id: 'theme',
+      label: 'Match Page Vibe',
+      description: 'Follows your selected Vibe colors & button borders',
+      swatchBg: '#F4F4F5',
+      swatchAccent: '#18181B',
+      swatchText: '#18181B',
+    },
+  ],
+  threads: [
+    {
+      id: 'signature',
+      label: 'Monochrome Thread',
+      description: 'Stark high-contrast Threads dark card with crisp white CTA',
+      swatchBg: '#101010',
+      swatchAccent: '#FFFFFF',
+      swatchText: '#F5F5F5',
+    },
+    {
+      id: 'spotlight',
+      label: 'Quoted Thread',
+      description: 'Featured conversation header highlighting your bio or post',
+      swatchBg: '#18181B',
+      swatchAccent: '#FFFFFF',
+      swatchText: '#FFFFFF',
+    },
+    {
+      id: 'glass',
+      label: 'Frosted Thread',
+      description: 'Translucent card with monochrome @ emblem',
+      swatchBg: 'rgba(16, 16, 16, 0.12)',
+      swatchAccent: '#101010',
+      swatchText: '#0A0A0A',
+    },
+    {
+      id: 'minimal',
+      label: 'Compact @Handle',
+      description: 'Single-row Threads bar with instant Follow chip',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#101010',
+      swatchText: '#111827',
+    },
+    {
+      id: 'theme',
+      label: 'Match Page Vibe',
+      description: 'Follows your selected Vibe colors & button borders',
+      swatchBg: '#F4F4F5',
+      swatchAccent: '#18181B',
+      swatchText: '#18181B',
+    },
+  ],
 };
 
 export function getEmbedLookOptions(provider: EmbedProvider): EmbedLookOption[] {
@@ -339,6 +465,12 @@ export function getDefaultEmbedCtaLabel(
       return subtype === 'company' ? 'View Page' : 'Connect';
     case 'x':
       return subtype === 'post' ? 'Read Post' : 'Follow on X';
+    case 'instagram':
+      return subtype === 'reel' ? 'Watch Reel' : subtype === 'post' ? 'View Post' : 'Follow';
+    case 'facebook':
+      return subtype === 'group' ? 'Join Group' : 'View on Facebook';
+    case 'threads':
+      return subtype === 'post' ? 'View Thread' : 'Follow';
     case 'youtube':
       return 'Play';
     case 'spotify':
@@ -352,11 +484,14 @@ export function getDefaultEmbedCtaLabel(
 
 export function isSocialEmbedProvider(
   provider: EmbedProvider | string | null | undefined
-): provider is 'discord' | 'github' | 'linkedin' | 'x' {
+): provider is 'discord' | 'github' | 'linkedin' | 'x' | 'instagram' | 'facebook' | 'threads' {
   return (
     provider === 'discord' ||
     provider === 'github' ||
     provider === 'linkedin' ||
-    provider === 'x'
+    provider === 'x' ||
+    provider === 'instagram' ||
+    provider === 'facebook' ||
+    provider === 'threads'
   );
 }

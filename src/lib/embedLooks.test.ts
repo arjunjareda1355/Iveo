@@ -14,6 +14,9 @@ describe('embedLooks helpers', () => {
     'github',
     'linkedin',
     'x',
+    'instagram',
+    'facebook',
+    'threads',
     'youtube',
     'spotify',
     'soundcloud',
@@ -46,6 +49,9 @@ describe('embedLooks helpers', () => {
     assert.equal(isSocialEmbedProvider('github'), true);
     assert.equal(isSocialEmbedProvider('linkedin'), true);
     assert.equal(isSocialEmbedProvider('x'), true);
+    assert.equal(isSocialEmbedProvider('instagram'), true);
+    assert.equal(isSocialEmbedProvider('facebook'), true);
+    assert.equal(isSocialEmbedProvider('threads'), true);
     assert.equal(isSocialEmbedProvider('youtube'), false);
     assert.equal(isSocialEmbedProvider('spotify'), false);
     assert.equal(isSocialEmbedProvider('soundcloud'), false);
@@ -60,6 +66,12 @@ describe('embedLooks helpers', () => {
     assert.equal(getDefaultEmbedCtaLabel('linkedin', 'company'), 'View Page');
     assert.equal(getDefaultEmbedCtaLabel('x', 'post'), 'Read Post');
     assert.equal(getDefaultEmbedCtaLabel('x', 'profile'), 'Follow on X');
+    assert.equal(getDefaultEmbedCtaLabel('instagram', 'reel'), 'Watch Reel');
+    assert.equal(getDefaultEmbedCtaLabel('instagram', 'profile'), 'Follow');
+    assert.equal(getDefaultEmbedCtaLabel('facebook', 'group'), 'Join Group');
+    assert.equal(getDefaultEmbedCtaLabel('facebook', 'profile'), 'View on Facebook');
+    assert.equal(getDefaultEmbedCtaLabel('threads', 'post'), 'View Thread');
+    assert.equal(getDefaultEmbedCtaLabel('threads', 'profile'), 'Follow');
     assert.equal(getDefaultEmbedCtaLabel('youtube'), 'Play');
   });
 });
