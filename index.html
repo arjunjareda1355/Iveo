@@ -330,7 +330,7 @@
         try {
           var SITE_ROUTES = {
             '': 1, 'pricing': 1, 'legal': 1, 'privacy': 1, 'terms': 1,
-            'discover': 1, 'seo': 1,
+            'discover': 1, 'seo': 1, 'embed': 1, 'report': 1,
             'login': 1, 'signup': 1, 'sso-callback': 1, 'onboarding': 1,
             'dashboard': 1, 'account': 1
           };
@@ -373,10 +373,11 @@
             '@vite': 1, '@react-refresh': 1, '@fs': 1, '@id': 1
           };
           var isUserPage = isUserSub || (firstSeg !== '' && !SITE_ROUTES[firstSeg] && !VITE_INTERNALS[firstSeg]);
+          var skipIntroRoute = isUserPage || firstSeg === 'embed' || firstSeg === 'report';
           var forceIntro = params.has('intro') || params.has('replay-intro');
           var alreadySeen = localStorage.getItem('iveo-intro-seen') === '1' || sessionStorage.getItem('iveo-intro-seen') === '1';
 
-          if (isUserPage || (!forceIntro && alreadySeen)) {
+          if (skipIntroRoute || (!forceIntro && alreadySeen)) {
             var el = document.getElementById('iveo-intro');
             if (el) el.remove();
           } else {

@@ -12,6 +12,7 @@ import {
   Download,
   Contact,
   IdCard,
+  Code2,
 } from 'lucide-react';
 import { makeQrPngDataUrl } from '../../lib/qr';
 import {
@@ -27,6 +28,7 @@ import {
 import { pageUrl as buildCanonicalPageUrl } from '../../lib/site';
 import { BusinessCardPreview } from '../share/BusinessCardPreview';
 import { BusinessCardCustomizer } from '../share/BusinessCardCustomizer';
+import { ProfileEmbedSection } from '../share/ProfileEmbedSection';
 import { VerifiedTick } from '../ui/VerifiedTick';
 import type { Vibe } from '../../lib/vibes';
 
@@ -57,7 +59,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   isPro = false,
   isOwner = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
+  const [activeTab, setActiveTab] = useState<'share' | 'card' | 'embed'>('share');
   const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
   const [copied, setCopied] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
@@ -353,16 +355,41 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('card')}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            className={`flex-1 py-1.5 px-2.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'card'
                 ? 'bg-surface text-ink shadow-xs border border-border/60'
                 : 'text-muted hover:text-ink'
             }`}
           >
             <IdCard size={14} />
-            <span>Business Card</span>
+            <span>Card</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('embed')}
+            className={`flex-1 py-1.5 px-2.5 rounded-lg text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'embed'
+                ? 'bg-surface text-ink shadow-xs border border-border/60'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            <Code2 size={14} />
+            <span>Embed</span>
           </button>
         </div>
+
+        {activeTab === 'embed' && (
+          <div className="mt-4">
+            <ProfileEmbedSection
+              username={cleanUsername}
+              displayName={displayName}
+              bio={bio}
+              avatarUrl={avatarUrl}
+              vibeId={vibe?.id}
+              isPro={isPro}
+            />
+          </div>
+        )}
 
         {activeTab === 'share' && (
           <div className="mt-4 flex flex-col gap-4">

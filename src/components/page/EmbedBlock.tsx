@@ -39,7 +39,11 @@ const XMarkIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
 
 function buildAutoplayEmbedUrl(embedSrc: string, provider: string): string {
   if (provider === 'youtube') {
-    return embedSrc.includes('?') ? `${embedSrc}&autoplay=1` : `${embedSrc}?autoplay=1`;
+    let next = embedSrc.includes('?') ? `${embedSrc}&autoplay=1` : `${embedSrc}?autoplay=1`;
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      next += `&origin=${encodeURIComponent(window.location.origin)}`;
+    }
+    return next;
   }
   if (provider === 'soundcloud') {
     return embedSrc.replace('auto_play=false', 'auto_play=true');
@@ -326,7 +330,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
             src={activeSrc}
             title={block.title || parsed.label}
             loading="eager"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
             className="w-full h-full border-0 block"

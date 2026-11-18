@@ -300,7 +300,10 @@ async function fetchRssFeedVideosByParam(
       `https://www.youtube.com/feeds/videos.xml?${paramName}=${encodeURIComponent(value)}`,
       {
         signal: AbortSignal.timeout(4500),
-        headers: { 'User-Agent': 'iveo-showcase/1.0' },
+        headers: {
+          'User-Agent': YT_FETCH_HEADERS['User-Agent'],
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
       }
     );
     if (!res.ok) return { channelId: null, channelName: null, videos: [] };
@@ -322,6 +325,91 @@ async function fetchRssFeedVideos(
 ): Promise<{ channelName: string | null; videos: YouTubeVideoItem[] }> {
   const res = await fetchRssFeedVideosByParam('channel_id', channelId);
   return { channelName: res.channelName, videos: res.videos };
+}
+
+async function fetchChannelVideosViaInnerTube(browseId: string): Promise<YouTubeVideoItem[]> {
+  if (!browseId) return [];
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': YT_FETCH_HEADERS['User-Agent'],
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20241001.01.00',
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+        browseId,
+        params: 'EgZ2aWRlb3PyBgQKAjoA',
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+    const json: any = await res.json().catch(() => null);
+    const tabs = json?.contents?.twoColumnBrowseResultsRenderer?.tabs;
+    if (!Array.isArray(tabs)) return [];
+
+    const videos: YouTubeVideoItem[] = [];
+    for (const t of tabs) {
+      const grid = t?.tabRenderer?.content?.richGridRenderer?.contents;
+      if (!Array.isArray(grid)) continue;
+      for (const item of grid) {
+        if (videos.length >= 3) break;
+        const content = item?.richItemRenderer?.content;
+        if (!content) continue;
+
+        const lockup = content.lockupViewModel;
+        if (lockup?.contentId && typeof lockup.contentId === 'string') {
+          const videoId = lockup.contentId.trim();
+          const title =
+            lockup?.metadata?.lockupMetadataViewModel?.title?.content ||
+            'Watch on YouTube';
+          const thumbSources = lockup?.contentImage?.thumbnailViewModel?.image?.sources;
+          const thumb =
+            (Array.isArray(thumbSources) && thumbSources[thumbSources.length - 1]?.url) ||
+            `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+          videos.push({
+            videoId,
+            title: String(title),
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            thumbnailUrl: thumb,
+            publishedAt: null,
+          });
+          continue;
+        }
+
+        const vr = content.videoRenderer;
+        if (vr?.videoId && typeof vr.videoId === 'string') {
+          const videoId = vr.videoId.trim();
+          const title =
+            vr?.title?.runs?.[0]?.text ||
+            vr?.title?.simpleText ||
+            'Watch on YouTube';
+          const thumbs = vr?.thumbnail?.thumbnails;
+          const thumb =
+            (Array.isArray(thumbs) && thumbs[thumbs.length - 1]?.url) ||
+            `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+          videos.push({
+            videoId,
+            title: String(title),
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            thumbnailUrl: thumb,
+            publishedAt: null,
+          });
+        }
+      }
+      if (videos.length > 0) break;
+    }
+    return videos;
+  } catch {
+    return [];
+  }
 }
 
 async function resolveChannelViaInnerTube(
@@ -409,7 +497,10 @@ async function resolveChannelViaInnerTube(
       }
     }
 
-    if (!channelTitle && rss.videos.length === 0 && !avatarUrl) {
+    const latestVideos =
+      rss.videos.length > 0 ? rss.videos : await fetchChannelVideosViaInnerTube(browseId);
+
+    if (!channelTitle && latestVideos.length === 0 && !avatarUrl) {
       return null;
     }
 
@@ -422,8 +513,8 @@ async function resolveChannelViaInnerTube(
       channelUrl: handle
         ? `https://www.youtube.com/${handle}`
         : `https://www.youtube.com/channel/${browseId}`,
-      latestVideos: rss.videos,
-      source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
+      latestVideos,
+      source: rss.videos.length > 0 ? 'channel_rss' : latestVideos.length > 0 ? 'channel_rss' : 'manual',
     };
   } catch {
     return null;
@@ -450,8 +541,14 @@ async function fetchChannelDetailsByUrl(
           ? await fetchRssFeedVideosByParam('user', parsed.value.replace(/^@+/, ''))
           : { channelId: null, channelName: null, videos: [] };
 
-      const resolvedChannelId = meta.channelId || ('channelId' in rss ? rss.channelId : null);
-      if (resolvedChannelId || rss.videos.length > 0 || meta.avatarUrl) {
+      const rssChannelId =
+        'channelId' in rss && typeof rss.channelId === 'string' ? rss.channelId : null;
+      const resolvedChannelId = meta.channelId || rssChannelId;
+      let videos = rss.videos;
+      if (videos.length === 0 && resolvedChannelId) {
+        videos = await fetchChannelVideosViaInnerTube(resolvedChannelId);
+      }
+      if (resolvedChannelId || videos.length > 0 || meta.avatarUrl) {
         return {
           channelId: resolvedChannelId,
           channelTitle:
@@ -464,8 +561,8 @@ async function fetchChannelDetailsByUrl(
             : resolvedChannelId
               ? `https://www.youtube.com/channel/${resolvedChannelId}`
               : parsed.canonicalUrl,
-          latestVideos: rss.videos,
-          source: rss.videos.length > 0 ? 'channel_rss' : 'manual',
+          latestVideos: videos,
+          source: videos.length > 0 ? 'channel_rss' : 'manual',
         };
       }
     }

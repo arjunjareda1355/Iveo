@@ -27,6 +27,7 @@ export const RESERVED = new Set([
   'developer',
   'discover',
   'docs',
+  'embed',
   'explore',
   'healthz',
   '_health',
@@ -42,6 +43,7 @@ export const RESERVED = new Set([
   'pay',
   'pricing',
   'privacy',
+  'report',
   'robots',
   'robots.txt',
   'root',
@@ -72,7 +74,7 @@ export const RESERVED = new Set([
 ]);
 
 export const PRIVATE_ROUTES = ['login', 'signup', 'dashboard', 'onboarding', 'account', 'admin'];
-export const PUBLIC_INFO_ROUTES = ['privacy', 'terms', 'pricing', 'legal', 'discover'];
+export const PUBLIC_INFO_ROUTES = ['privacy', 'terms', 'pricing', 'legal', 'discover', 'embed', 'report'];
 
 export const OWNER_EMAILS_LIST = [
   'arjunjareda2007@gmail.com',

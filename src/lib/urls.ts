@@ -115,7 +115,8 @@ export function validateAndFormatSocialInput(
   }
 
   const allowed = SOCIAL_ALLOWED_DOMAINS[platform];
-  const looksLikeUrlOrDomain = /^https?:\/\//i.test(clean) || clean.includes('.');
+  const looksLikeUrlOrDomain =
+    !clean.startsWith('@') && (/^https?:\/\//i.test(clean) || clean.includes('.'));
 
   if (looksLikeUrlOrDomain) {
     const normalizedCandidate = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;

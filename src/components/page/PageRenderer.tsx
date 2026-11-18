@@ -17,6 +17,7 @@ import { TipJarBlock } from '../public/TipJarBlock';
 import { FaqBlock } from '../public/FaqBlock';
 import { VCardBlock } from '../public/VCardBlock';
 import { ShareModal } from '../public/ShareModal';
+import { ReportPageModal } from '../public/ReportPageModal';
 import {
   YouTubeShowcaseCard,
   ProductShowcaseCard,
@@ -258,6 +259,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   let imageCounter = 0;
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const handleShareClick = () => {
     setIsShareModalOpen(true);
@@ -286,14 +288,15 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         />
       )}
 
-      {/* Minimal Top-Right Share Action on Public Page */}
+      {/* Minimal Top-Right Icon-Only Share Action on Public Page */}
       {isPublicPage && displayHandle && (
         <div className={`w-full ${pageMaxWidthClass} flex justify-end mb-2 relative z-10`}>
           <button
             type="button"
             onClick={handleShareClick}
             aria-label="Share this profile"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium backdrop-blur-md transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
+            title="Share profile"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center backdrop-blur-md transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
             style={{
               backgroundColor: tokens.buttonBg,
               color: tokens.buttonText,
@@ -301,8 +304,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               border: `1px solid ${tokens.buttonBorder || 'rgba(0,0,0,0.1)'}`,
             }}
           >
-            <Share2 size={13} strokeWidth={2} />
-            <span>Share</span>
+            <Share2 size={15} strokeWidth={2} />
           </button>
         </div>
       )}
@@ -1288,15 +1290,16 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           </a>
         )}
 
-        {/* "Report this page" (always visible on public page) */}
+        {/* "Report this page" embedded Formspree trigger (always visible on public page) */}
         {isPublicPage && displayHandle && (
-          <a
-            href={`mailto:help@iveo.site?subject=Report%20page%20iveo.site/@${displayHandle}`}
-            className="text-[10px] opacity-25 hover:opacity-70 underline underline-offset-2 transition-opacity"
+          <button
+            type="button"
+            onClick={() => setIsReportModalOpen(true)}
+            className="text-[10px] opacity-30 hover:opacity-75 underline underline-offset-2 transition-opacity cursor-pointer"
             style={{ color: tokens.muted }}
           >
             Report this page
-          </a>
+          </button>
         )}
       </div>
       </div>
@@ -1320,7 +1323,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         );
       })()}
 
-      {/* Enhanced Share Bottom Sheet Dialog with Business Card */}
+      {/* Enhanced Share Bottom Sheet Dialog with Business Card & Embed Styles */}
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
@@ -1334,6 +1337,16 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         isPro={isVerified}
         isOwner={isOwner}
       />
+
+      {/* Embedded Formspree Report Modal */}
+      {isPublicPage && displayHandle && (
+        <ReportPageModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          username={displayHandle}
+          displayName={displayName}
+        />
+      )}
     </div>
   );
 };

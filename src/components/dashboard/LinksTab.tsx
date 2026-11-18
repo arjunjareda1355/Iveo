@@ -329,11 +329,31 @@ export const LinksTab: React.FC = () => {
         return;
       }
 
+      const urlChanged = parsed.canonicalUrl !== (block.url || '');
+      let nextEmbedMeta = block.embedMeta ?? null;
+      if (urlChanged) {
+        nextEmbedMeta = null;
+        try {
+          const res = await fetch(
+            `/api/integrations/embed?url=${encodeURIComponent(parsed.canonicalUrl)}`
+          );
+          const data = await res.json().catch(() => null);
+          const resolvedMeta = data?.embed || data?.embedMeta;
+          if (res.ok && data?.ok && resolvedMeta) {
+            nextEmbedMeta = resolvedMeta;
+          }
+        } catch {
+          // Clear stale metadata when URL changes and live fetch is unavailable
+          nextEmbedMeta = null;
+        }
+      }
+
       try {
         await updateBlock(block.id, {
           title: editTitle.trim(),
           url: parsed.canonicalUrl,
           embedProvider: parsed.provider,
+          embedMeta: nextEmbedMeta,
           startAt: editStartAt,
           endAt: editEndAt,
         });

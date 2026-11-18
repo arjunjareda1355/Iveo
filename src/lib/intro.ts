@@ -13,6 +13,8 @@ const SITE_APP_ROOT_SEGMENTS = new Set([
   'onboarding',
   'dashboard',
   'account',
+  'embed',
+  'report',
 ]);
 
 export interface IntroCheckInput {

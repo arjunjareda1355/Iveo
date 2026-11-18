@@ -429,8 +429,50 @@ export async function fetchSocialEmbedMetadata(rawUrl: string): Promise<{
   const provider: EmbedProvider = parsed.provider;
   const nowIso = new Date().toISOString();
 
-  // Audio/Video players do not require social metadata lookups beyond label
+  // Audio/Video players: enrich via public oEmbed when available, with label fallback
   if (provider === 'youtube' || provider === 'spotify' || provider === 'soundcloud') {
+    let oembedUrl = '';
+    if (provider === 'youtube') {
+      oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(parsed.canonicalUrl)}&format=json`;
+    } else if (provider === 'spotify') {
+      oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(parsed.canonicalUrl)}`;
+    } else if (provider === 'soundcloud') {
+      oembedUrl = `https://soundcloud.com/oembed?format=json&url=${encodeURIComponent(parsed.canonicalUrl)}`;
+    }
+
+    if (oembedUrl) {
+      try {
+        const res = await fetch(oembedUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; IveoEmbed/1.0)' },
+          signal: AbortSignal.timeout(3500),
+        });
+        if (res.ok) {
+          const json: any = await res.json().catch(() => null);
+          const cleanTitle = typeof json?.title === 'string' ? json.title.trim() : '';
+          if (cleanTitle) {
+            const meta: EmbedMetaData = {
+              provider,
+              title: cleanTitle,
+              subtitle:
+                (typeof json?.author_name === 'string' && json.author_name.trim()) ||
+                parsed.canonicalUrl,
+              avatarUrl:
+                typeof json?.thumbnail_url === 'string' && json.thumbnail_url.startsWith('http')
+                  ? json.thumbnail_url
+                  : null,
+              badgeText: parsed.label,
+              fetchedAt: nowIso,
+            };
+            embedCache.set(parsed.canonicalUrl, {
+              data: meta,
+              expiresAt: Date.now() + EMBED_CACHE_TTL_MS,
+            });
+            return { parsed, embedMeta: meta, suggestedTitle: cleanTitle };
+          }
+        }
+      } catch {}
+    }
+
     const basic: EmbedMetaData = {
       provider,
       title: parsed.label,

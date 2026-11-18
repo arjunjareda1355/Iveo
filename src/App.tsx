@@ -22,6 +22,8 @@ const PublicProfilePlaceholder = lazy(
 const SSOCallbackPage = lazy(() => import('./pages/SSOCallbackPage'));
 const DiscoverPage = lazy(() => import('./pages/DiscoverPage'));
 const SeoAdminPage = lazy(() => import('./pages/SeoAdminPage'));
+const EmbedProfilePage = lazy(() => import('./pages/EmbedProfilePage'));
+const ReportPage = lazy(() => import('./pages/ReportPage'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Scroll to top on route change
@@ -175,8 +177,11 @@ export default function App() {
           <Route path="/privacy" element={<Legal />} />
           <Route path="/terms" element={<Legal />} />
 
-          {/* 7. Protected SEO Admin Console */}
+          {/* 7. Protected SEO Admin Console & Public Embed / Report Routes */}
           <Route path="/admin/seo" element={<SeoAdminPage />} />
+          <Route path="/embed/:username" element={<EmbedProfilePage />} />
+          <Route path="/embed" element={<EmbedProfilePage />} />
+          <Route path="/report" element={<ReportPage />} />
 
           {/* 8. Canonical /@username Public Profiles & Legacy /username Redirect */}
           <Route path="/:username" element={<ProfileRouteHandler />} />

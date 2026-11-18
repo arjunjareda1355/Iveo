@@ -1382,6 +1382,7 @@ export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) 
       provider: result.parsed.provider,
       canonicalUrl: result.parsed.canonicalUrl,
       suggestedTitle: result.suggestedTitle,
+      embed: result.embedMeta,
       embedMeta: result.embedMeta,
     });
   } catch (err: any) {

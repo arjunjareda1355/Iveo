@@ -10,6 +10,7 @@ import {
   Check,
   ArrowLeftRight,
   AlertTriangle,
+  Code2,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
@@ -39,6 +40,7 @@ import { TrackedLinkSection } from './TrackedLinkSection';
 import { LinkPreviewSection } from './LinkPreviewSection';
 import { BusinessCardPreview } from './BusinessCardPreview';
 import { BusinessCardCustomizer } from './BusinessCardCustomizer';
+import { ProfileEmbedSection } from './ProfileEmbedSection';
 
 interface ShareDialogProps {
   isOpen: boolean;
@@ -83,7 +85,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   isPublished = true,
 }) => {
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'share' | 'card'>('share');
+  const [activeTab, setActiveTab] = useState<'share' | 'card' | 'embed'>('share');
   const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
   const [copied, setCopied] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
@@ -406,11 +408,34 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             }`}
           >
             <IdCard size={14} />
-            <span>Business Card</span>
+            <span>Card</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('embed')}
+            className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'embed'
+                ? 'bg-surface text-ink shadow-2xs border border-border/60'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            <Code2 size={14} />
+            <span>Embed</span>
           </button>
         </div>
 
-        {activeTab === 'card' ? (
+        {activeTab === 'embed' ? (
+          <div className="mt-5">
+            <ProfileEmbedSection
+              username={username}
+              displayName={displayName}
+              bio={bio}
+              avatarUrl={avatarUrl}
+              vibeId={vibeId}
+              isPro={isPro}
+            />
+          </div>
+        ) : activeTab === 'card' ? (
           <div className="mt-5 flex flex-col gap-4">
             <BusinessCardPreview
               username={username}

@@ -143,10 +143,11 @@ export const EmbedComposer: React.FC<EmbedComposerProps> = ({
           `/api/integrations/embed?url=${encodeURIComponent(result.canonicalUrl)}`
         );
         const data = await res.json().catch(() => null);
-        if (!cancelled && res.ok && data?.ok && data?.embed) {
-          setEmbedMeta(data.embed);
-          if (!captionInput.trim() && data.embed.title) {
-            setCaptionInput(String(data.embed.title).slice(0, 60));
+        const resolvedMeta = data?.embed || data?.embedMeta;
+        if (!cancelled && res.ok && data?.ok && resolvedMeta) {
+          setEmbedMeta(resolvedMeta);
+          if (!captionInput.trim() && resolvedMeta.title) {
+            setCaptionInput(String(resolvedMeta.title).slice(0, 60));
           }
         }
       } catch {
