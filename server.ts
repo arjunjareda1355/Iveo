@@ -576,7 +576,7 @@ async function startServer() {
   });
 
   // 5. Vite Dev Server / Static SPA Fallback
-  if (!isProd) {
+  if (!isProd || !hasBuiltDist) {
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
@@ -678,13 +678,18 @@ async function startServer() {
         }
         return res.status(ssr.status).set({ 'Content-Type': 'text/html; charset=utf-8' }).send(ssr.html);
       } catch {
-        return res.sendFile(prodIndexPath);
+        if (fs.existsSync(prodIndexPath)) {
+          return res.sendFile(prodIndexPath);
+        }
+        return res.status(503).type('text/plain').send('Application build not found.');
       }
     });
   }
 
   app.listen(port, '0.0.0.0', () => {
-    console.log(`iveo server running on http://0.0.0.0:${port} (${isProd ? 'prod' : 'dev'})`);
+    console.log(
+      `iveo server running on http://0.0.0.0:${port} (${isProd && hasBuiltDist ? 'prod' : 'dev'})`
+    );
   });
 }
 
