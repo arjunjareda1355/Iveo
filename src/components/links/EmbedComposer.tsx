@@ -8,7 +8,10 @@ import { EmbedLookSelector } from './EmbedLookSelector';
 import { EmbedBlock } from '../page/EmbedBlock';
 import { VIBES } from '../../lib/vibes';
 
+type MediaProvider = 'youtube' | 'spotify' | 'soundcloud';
+
 interface EmbedComposerProps {
+  initialProvider?: MediaProvider;
   onAdd: (data: {
     url: string;
     caption: string;
@@ -20,7 +23,29 @@ interface EmbedComposerProps {
 
 const MEDIA_PROVIDERS = new Set<EmbedProvider>(['youtube', 'spotify', 'soundcloud']);
 
+const MEDIA_PROVIDER_COPY: Record<
+  MediaProvider,
+  { title: string; subtitle: string; placeholder: string }
+> = {
+  youtube: {
+    title: 'YouTube embed',
+    subtitle: 'Paste a YouTube video or Shorts link to embed a playable card.',
+    placeholder: 'https://www.youtube.com/watch?v=...',
+  },
+  spotify: {
+    title: 'Spotify embed',
+    subtitle: 'Paste an open.spotify.com track, album, or playlist link.',
+    placeholder: 'https://open.spotify.com/track/...',
+  },
+  soundcloud: {
+    title: 'SoundCloud embed',
+    subtitle: 'Paste a soundcloud.com track, album, or set link.',
+    placeholder: 'https://soundcloud.com/artist/track',
+  },
+};
+
 export const EmbedComposer: React.FC<EmbedComposerProps> = ({
+  initialProvider,
   onAdd,
   onCancel,
 }) => {
@@ -114,7 +139,7 @@ export const EmbedComposer: React.FC<EmbedComposerProps> = ({
     }
 
     if (!MEDIA_PROVIDERS.has(res.provider)) {
-      return 'Use the dedicated Discord, GitHub, LinkedIn, or X block in "+ Add" for social accounts. Here paste a YouTube, Spotify, or SoundCloud link.';
+      return 'For social accounts, open the Profiles tab or pick the platform card in "+ Add". Here paste a YouTube, Spotify, or SoundCloud link.';
     }
 
     return null;
@@ -161,7 +186,17 @@ export const EmbedComposer: React.FC<EmbedComposerProps> = ({
   };
 
   const activeProvider: EmbedProvider =
-    parsed && MEDIA_PROVIDERS.has(parsed.provider) ? parsed.provider : 'youtube';
+    parsed && MEDIA_PROVIDERS.has(parsed.provider)
+      ? parsed.provider
+      : initialProvider || 'youtube';
+
+  const headerCopy = initialProvider
+    ? MEDIA_PROVIDER_COPY[initialProvider]
+    : {
+        title: 'Audio & video embed',
+        subtitle: 'YouTube videos, Spotify tracks/playlists, or SoundCloud audio.',
+        placeholder: 'Paste a YouTube, Spotify, or SoundCloud link',
+      };
 
   return (
     <Card className="p-4 sm:p-5 border-ink/20 shadow-[0_2px_8px_rgba(10,10,10,0.06)]">
@@ -184,10 +219,10 @@ export const EmbedComposer: React.FC<EmbedComposerProps> = ({
             </span>
             <div>
               <h3 className="text-[15px] font-semibold text-ink leading-tight">
-                Media player embed
+                {headerCopy.title}
               </h3>
               <p className="text-[12px] text-muted">
-                YouTube videos, Spotify tracks/playlists, or SoundCloud audio.
+                {headerCopy.subtitle}
               </p>
             </div>
           </div>
@@ -217,7 +252,7 @@ export const EmbedComposer: React.FC<EmbedComposerProps> = ({
               setUrlInput(e.target.value);
               if (error) setError(null);
             }}
-            placeholder="Paste a YouTube, Spotify, or SoundCloud link"
+            placeholder={headerCopy.placeholder}
             className="h-10 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-ink"
           />
 

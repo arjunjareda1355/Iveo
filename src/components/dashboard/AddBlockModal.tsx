@@ -3,6 +3,8 @@ import {
   Search,
   Link2,
   Play,
+  Music,
+  Headphones,
   UserCheck,
   Mail,
   Heart,
@@ -31,6 +33,9 @@ export type FeatureType =
   | 'link'
   | 'social'
   | 'embed'
+  | 'embed_youtube'
+  | 'embed_spotify'
+  | 'embed_soundcloud'
   | 'embed_discord'
   | 'embed_github'
   | 'embed_linkedin'
@@ -173,13 +178,33 @@ const FEATURES: FeatureOption[] = [
     iconColor: 'text-rose-600',
   },
   {
-    id: 'embed',
-    title: 'Media player embed',
-    description: 'Embed playable YouTube, Spotify, or SoundCloud content',
+    id: 'embed_youtube',
+    title: 'YouTube embed',
+    description: 'Embed a playable YouTube video or Shorts player on your page',
     category: 'links',
     icon: Play,
-    iconBg: 'bg-purple-50',
-    iconColor: 'text-purple-600',
+    iconBg: 'bg-red-50',
+    iconColor: 'text-red-600',
+    proRequired: true,
+  },
+  {
+    id: 'embed_spotify',
+    title: 'Spotify embed',
+    description: 'Embed a Spotify track, album, or playlist player',
+    category: 'links',
+    icon: Music,
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-600',
+    proRequired: true,
+  },
+  {
+    id: 'embed_soundcloud',
+    title: 'SoundCloud embed',
+    description: 'Embed a SoundCloud track or set waveform player',
+    category: 'links',
+    icon: Headphones,
+    iconBg: 'bg-orange-50',
+    iconColor: 'text-orange-600',
     proRequired: true,
   },
   {

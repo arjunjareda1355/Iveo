@@ -198,25 +198,9 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
           </div>
 
           <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[14px] font-semibold text-ink truncate">
-                {username ? `@${username}` : 'Profile Picture'}
-              </span>
-              <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ${
-                  isCurrentDefault
-                    ? 'bg-ink/10 text-ink'
-                    : currentAvatarUrl
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-sand-200 text-ink/60'
-                }`}
-              >
-                {isCurrentDefault ? 'Library Avatar' : currentAvatarUrl ? 'Custom Photo' : 'No Avatar'}
-              </span>
-            </div>
-            <p className="text-[12px] text-muted mt-0.5">
-              PNG, JPG or WebP. Automatically optimized.
-            </p>
+            <span className="text-[14px] font-semibold text-ink truncate">
+              {username ? `@${username}` : 'Profile photo'}
+            </span>
           </div>
         </div>
 
@@ -264,8 +248,8 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
       {showLibrary && (
         <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-surface border border-border">
           <div className="flex items-center justify-between text-[12px] text-muted px-0.5">
-            <span className="font-medium text-ink">Curated Avatar Library</span>
-            <span>{DEFAULT_AVATAR_LIST.length} styles • Tap to apply instantly</span>
+            <span className="font-medium text-ink">Avatar library</span>
+            <span>{DEFAULT_AVATAR_LIST.length} styles · Tap to apply</span>
           </div>
 
           <div

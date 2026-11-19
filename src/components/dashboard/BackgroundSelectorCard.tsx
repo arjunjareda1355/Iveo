@@ -512,7 +512,7 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
                     : 'none',
                 }}
               >
-                Featured Link
+                Sample link
               </div>
             </div>
           </div>
@@ -1126,7 +1126,7 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between text-[12px] mb-1 text-ink font-medium">
-                <span>Overlay Opacity</span>
+                <span>Overlay opacity</span>
                 <span className="font-mono text-muted">
                   {Math.round((draft.overlayOpacity ?? 0) * 100)}%
                 </span>
@@ -1150,7 +1150,7 @@ export const BackgroundSelectorCard: React.FC<BackgroundSelectorCardProps> = ({
 
             <div>
               <div className="flex items-center justify-between text-[12px] mb-1 text-ink font-medium">
-                <span>Backdrop Blur</span>
+                <span>Backdrop blur</span>
                 <span className="font-mono text-muted">{draft.blur ?? 0}px</span>
               </div>
               <input

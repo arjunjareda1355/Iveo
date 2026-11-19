@@ -3,11 +3,7 @@ import { Link } from 'react-router-dom';
 import { Pencil, Loader2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { Toggle } from '../ui/Toggle';
 import { VerifiedTick } from '../ui/VerifiedTick';
-import { ProBadge } from '../plan/ProBadge';
-import { PageUrlStrip } from './PageUrlStrip';
-import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { SubscriptionCard } from '../plan/SubscriptionCard';
 import { IntegrationsCard } from './IntegrationsCard';
 import { SearchSeoCard } from './SearchSeoCard';
@@ -24,17 +20,15 @@ import {
 const SUB_NAV_ITEMS = [
   { id: 'account', label: 'Account' },
   { id: 'plan', label: 'Plan & billing' },
-  { id: 'page', label: 'Your page' },
   { id: 'integrations', label: 'Integrations' },
-  { id: 'seo', label: 'Search & SEO' },
-  { id: 'data', label: 'Data' },
+  { id: 'seo', label: 'SEO & search' },
+  { id: 'data', label: 'Data & privacy' },
   { id: 'danger', label: 'Danger zone', danger: true },
 ] as const;
 
 export const SettingsTab: React.FC = () => {
   const session = useIvioSession();
   const { showToast } = useToast();
-  const { openUpgrade } = useUpgradeDialog();
 
   const [activeNavId, setActiveNavId] = useState<string>('account');
 
@@ -83,24 +77,6 @@ export const SettingsTab: React.FC = () => {
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const handleFooterMarkToggle = async () => {
-    if (!session.isPro) {
-      openUpgrade('hide_footer');
-      return;
-    }
-
-    const nextVal = !(session.hideIveoFooter || session.hideIvioFooter);
-    try {
-      await session.updatePreferences({
-        hideIveoFooter: nextVal,
-        hideIvioFooter: nextVal,
-      });
-      showToast(nextVal ? 'iveo branding hidden.' : 'iveo branding shown.');
-    } catch {
-      openUpgrade('hide_footer');
     }
   };
 
@@ -170,10 +146,6 @@ export const SettingsTab: React.FC = () => {
     }
   };
 
-  const brandingHidden = Boolean(
-    session.isPro && (session.hideIveoFooter || session.hideIvioFooter)
-  );
-
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -214,13 +186,13 @@ export const SettingsTab: React.FC = () => {
 
         {/* Right Grouped Settings Cards */}
         <div className="flex flex-col gap-7 min-w-0 max-w-[720px] w-full">
-          {/* GROUP A - ACCOUNT */}
+          {/* Account & Plan */}
           <section className="flex flex-col gap-4" aria-labelledby="settings-group-account">
             <h2
               id="settings-group-account"
-              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
+              className="text-[13px] font-medium text-muted px-0.5"
             >
-              Account
+              Account &amp; billing
             </h2>
 
             {/* A1. Account Card */}
@@ -350,54 +322,13 @@ export const SettingsTab: React.FC = () => {
             </div>
           </section>
 
-          {/* GROUP B - YOUR PAGE */}
-          <section className="flex flex-col gap-4" aria-labelledby="settings-group-page">
-            <h2
-              id="settings-group-page"
-              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
-            >
-              Your page
-            </h2>
-
-            <div id="page" className="scroll-mt-32">
-              <Card className="flex flex-col gap-4">
-                <h3 className="text-[16px] font-semibold text-ink leading-tight">
-                  Page link
-                </h3>
-
-                <PageUrlStrip username={session.username} />
-
-                <div className="pt-3 border-t border-divider flex items-center justify-between gap-4">
-                  <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[14px] font-medium text-ink">
-                        Remove iveo branding
-                      </span>
-                      {!session.isPro && <ProBadge locked />}
-                    </div>
-                    <p className="text-[13px] text-muted mt-0.5">
-                      Hides the &apos;Create your own page&apos; link. The report link always stays.
-                    </p>
-                  </div>
-
-                  <Toggle
-                    checked={brandingHidden}
-                    onChange={handleFooterMarkToggle}
-                    ariaLabel="Remove iveo branding"
-                    locked={!session.isPro}
-                  />
-                </div>
-              </Card>
-            </div>
-          </section>
-
-          {/* GROUP C - GROWTH & SEO */}
+          {/* Growth & SEO */}
           <section className="flex flex-col gap-4" aria-labelledby="settings-group-growth">
             <h2
               id="settings-group-growth"
-              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
+              className="text-[13px] font-medium text-muted px-0.5"
             >
-              Growth &amp; SEO
+              Integrations &amp; SEO
             </h2>
 
             <div id="integrations" className="scroll-mt-32">
@@ -409,11 +340,11 @@ export const SettingsTab: React.FC = () => {
             </div>
           </section>
 
-          {/* GROUP D - DATA & PRIVACY */}
+          {/* Data & Privacy */}
           <section className="flex flex-col gap-4" aria-labelledby="settings-group-data">
             <h2
               id="settings-group-data"
-              className="text-[12px] font-semibold uppercase tracking-wider text-muted px-0.5"
+              className="text-[13px] font-medium text-muted px-0.5"
             >
               Data &amp; privacy
             </h2>
@@ -423,11 +354,11 @@ export const SettingsTab: React.FC = () => {
             </div>
           </section>
 
-          {/* GROUP E - DANGER ZONE */}
+          {/* Danger Zone */}
           <section className="flex flex-col gap-4" aria-labelledby="settings-group-danger">
             <h2
               id="settings-group-danger"
-              className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--error,#B3261E)] px-0.5"
+              className="text-[13px] font-medium text-[color:var(--error,#B3261E)] px-0.5"
             >
               Danger zone
             </h2>

@@ -18,8 +18,11 @@ import {
   resolveEffectiveTokens,
 } from './colors.ts';
 import {
+  DEFAULT_BUSINESS_CARD_CONFIG,
   parseBusinessCardConfig,
   mergeBusinessCardConfig,
+  resolveFrontCardAppearance,
+  resolveBackCardAppearance,
   BUSINESS_CARD_TEMPLATES,
 } from './businessCardConfig.ts';
 import { VIBES } from './vibes.ts';
@@ -173,6 +176,8 @@ test('resolveEffectiveTokens applies custom button hex colors and auto-contrast 
 // ── 4. Business Card config parsing & merging ─────────────────────────────────
 test('business card config parses templates, custom hex colors, and contact fields', () => {
   assert.ok(BUSINESS_CARD_TEMPLATES.length >= 5);
+  assert.equal(DEFAULT_BUSINESS_CARD_CONFIG.metallicVibe, 'page-vibe');
+
   const parsed = parseBusinessCardConfig({
     template: 'executive',
     bgColor: '111827',
@@ -187,6 +192,7 @@ test('business card config parses templates, custom hex colors, and contact fiel
   });
   assert.ok(parsed);
   assert.equal(parsed.template, 'executive');
+  assert.equal(parsed.metallicVibe, 'page-vibe');
   assert.equal(parsed.bgColor, '#111827');
   assert.equal(parsed.accentColor, '#38BDF8');
   assert.equal(parsed.showQr, false);
@@ -195,4 +201,20 @@ test('business card config parses templates, custom hex colors, and contact fiel
   const merged = mergeBusinessCardConfig(parsed, { showQr: true });
   assert.equal(merged.showQr, true);
   assert.equal(merged.role, 'Product Designer');
+
+  const front = resolveFrontCardAppearance(
+    { ...DEFAULT_BUSINESS_CARD_CONFIG, template: 'editorial' },
+    { bg: '#F4F1EA', text: '#1C1917', accent: '#2563EB', buttonBg: '#2563EB' }
+  );
+  assert.equal(front.bgColor, '#F4F1EA');
+  assert.equal(front.textColor, '#1C1917');
+  assert.equal(front.accentColor, '#2563EB');
+
+  const back = resolveBackCardAppearance(
+    { ...DEFAULT_BUSINESS_CARD_CONFIG, template: 'midnight' },
+    { bg: '#111827', text: '#F9FAFB', accent: '#38BDF8', buttonBg: '#38BDF8' }
+  );
+  assert.equal(back.bgColor, '#111827');
+  assert.equal(back.textColor, '#F9FAFB');
+  assert.equal(back.accentColor, '#38BDF8');
 });

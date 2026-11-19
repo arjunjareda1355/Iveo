@@ -436,6 +436,15 @@ export function getEmbedLookOptions(provider: EmbedProvider): EmbedLookOption[] 
   return PROVIDER_LOOKS[provider] || PROVIDER_LOOKS.youtube;
 }
 
+export function getLookLabelForProvider(
+  provider: EmbedProvider,
+  lookStyle?: EmbedLookStyle | string | null
+): string {
+  const options = getEmbedLookOptions(provider);
+  const normalized = normalizeEmbedLookStyle(lookStyle, 'signature');
+  return options.find((opt) => opt.id === normalized)?.label || options[0]?.label || 'Signature';
+}
+
 export function normalizeEmbedLookStyle(
   value: unknown,
   fallback: EmbedLookStyle = 'signature'

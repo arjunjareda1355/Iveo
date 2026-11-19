@@ -125,7 +125,7 @@ test('Profile SEO payload produces dynamic title, description, canonical, Profil
 
   const payload = await buildProfileSeoPayload('https://iveo.site', samplePage);
   assert.equal(payload.decision.indexable, true);
-  assert.match(payload.headTags, /<link rel="canonical" href="https:\/\/iveo\.site\/arjun" \/>/);
+  assert.match(payload.headTags, /<link rel="canonical" href="https:\/\/iveo\.site\/@arjun" \/>/);
   assert.match(payload.headTags, /"@type":"ProfilePage"/);
   assert.match(payload.headTags, /"@type":"Person"/);
   assert.match(payload.headTags, /https:\/\/github\.com\/arjun/);
@@ -150,8 +150,8 @@ test('robots.txt disallows private routes and references root sitemap', () => {
 test('Paginated XML sitemap includes public creators and excludes dashboard/admin/404 routes', async () => {
   const rootSitemap = await generateSitemapXml('https://iveo.site', 50000);
   assert.ok(rootSitemap.totalUrls >= 2);
-  assert.match(rootSitemap.xml, /https:\/\/iveo\.site\//);
-  assert.match(rootSitemap.xml, /https:\/\/iveo\.site\/discover/);
+  assert.match(rootSitemap.xml, /https:\/\/iveo\.site\/sitemap-pages\.xml/);
+  assert.match(rootSitemap.xml, /https:\/\/iveo\.site\/sitemap-profiles\.xml/);
   assert.doesNotMatch(rootSitemap.xml, /\/dashboard/);
   assert.doesNotMatch(rootSitemap.xml, /\/admin/);
   assert.doesNotMatch(rootSitemap.xml, /\/login/);
@@ -161,7 +161,7 @@ test('Paginated XML sitemap includes public creators and excludes dashboard/admi
   assert.equal(pagedIndex.isIndex, true);
   assert.ok(pagedIndex.pages >= 2);
   assert.match(pagedIndex.xml, /<sitemapindex/);
-  assert.match(pagedIndex.xml, /sitemap-1\.xml/);
+  assert.match(pagedIndex.xml, /sitemap-profiles-1\.xml/);
 
   const page1 = await generateSitemapPageXml('https://iveo.site', 1, 2);
   assert.equal(page1.found, true);
@@ -372,15 +372,24 @@ test('2-sided metallic business card resolves distinct dual-tone front/back face
   assert.equal(parsed?.backSubheadline, 'connect.');
   assert.equal(parsed?.showSocialsOnBack, true);
 
-  // Default obsidian metallic resolves dark obsidian front + pearl white back
+  // Default page-vibe resolves clean light front + clean light back when no vibeTheme passed
   const defaultFront = resolveFrontCardAppearance({});
   const defaultBack = resolveBackCardAppearance({});
-  assert.equal(defaultFront.bgColor, '#1C1C21');
-  assert.equal(defaultFront.bgColor2, '#070709');
-  assert.equal(defaultFront.isLight, false);
+  assert.equal(defaultFront.metallicVibe, 'page-vibe');
+  assert.equal(defaultFront.bgColor, '#FFFFFF');
+  assert.equal(defaultFront.isLight, true);
   assert.equal(defaultBack.bgColor, '#FFFFFF');
-  assert.equal(defaultBack.bgColor2, '#ECEFF4');
   assert.equal(defaultBack.isLight, true);
+
+  // Explicit obsidian metallic resolves dark obsidian front + pearl white back
+  const obsidianFront = resolveFrontCardAppearance({ metallicVibe: 'obsidian' });
+  const obsidianBack = resolveBackCardAppearance({ metallicVibe: 'obsidian' });
+  assert.equal(obsidianFront.bgColor, '#1C1C21');
+  assert.equal(obsidianFront.bgColor2, '#070709');
+  assert.equal(obsidianFront.isLight, false);
+  assert.equal(obsidianBack.bgColor, '#FFFFFF');
+  assert.equal(obsidianBack.bgColor2, '#ECEFF4');
+  assert.equal(obsidianBack.isLight, true);
 
   // Page-vibe preset honors theme bg on front while keeping clean back fallback
   const vibeFront = resolveFrontCardAppearance(

@@ -43,12 +43,30 @@ function classifyPasskeySignInError(
     /publickey-credentials|SecurityError|Permissions-Policy|not enabled in this document|cross-origin/i.test(
       combined
     ) ||
-    (inIframe && /NotAllowedError|not allowed/i.test(combined))
+    (inIframe &&
+      (code === 'passkey_retrieval_cancelled' ||
+        /NotAllowedError|not allowed/i.test(combined)))
   ) {
     return {
       message:
         'Your browser blocked passkey sign-in inside this embedded preview. Open Login in a full browser tab to use your passkey.',
       needsTopLevelTab: true,
+    };
+  }
+  if (
+    code === 'passkey_invalid_rpID_or_domain' ||
+    /rpId|relying party|domain does not match/i.test(combined)
+  ) {
+    return {
+      message:
+        'Passkey sign-in cannot be verified on this domain. Open Login on the primary domain or sign in with email.',
+      needsTopLevelTab: inIframe,
+    };
+  }
+  if (code === 'passkey_pa_not_supported' || code === 'passkey_not_supported') {
+    return {
+      message: 'This device or browser does not support passkey authentication.',
+      needsTopLevelTab: false,
     };
   }
   if (
@@ -102,18 +120,26 @@ const PasskeySignInSection: React.FC<PasskeySignInSectionProps> = ({ redirectUrl
     setNeedsTopLevelTab(false);
     setIsLoading(true);
     try {
-      // Reset any in-progress non-passkey sign-in attempt before starting discoverable passkey auth.
-      if (
-        signIn.status &&
-        signIn.status !== 'needs_identifier' &&
-        signIn.status !== 'complete'
-      ) {
+      // Always reset any prior or completed sign-in attempt before starting discoverable passkey auth.
+      if (signIn.status && signIn.status !== 'needs_identifier') {
         await signIn.reset();
       }
 
-      const { error } = await signIn.passkey({ flow: 'discoverable' });
-      if (error) {
-        const classified = classifyPasskeySignInError(error, inIframe);
+      let passkeyResult = await signIn.passkey({ flow: 'discoverable' });
+      if (
+        passkeyResult.error &&
+        /SignIn\.create|strategy|sign_in_no_identification|attempt/i.test(
+          `${(passkeyResult.error as any)?.code || ''} ${passkeyResult.error?.message || ''}`
+        )
+      ) {
+        const created = await signIn.create({ strategy: 'passkey' });
+        if (!created.error) {
+          passkeyResult = await signIn.passkey();
+        }
+      }
+
+      if (passkeyResult.error) {
+        const classified = classifyPasskeySignInError(passkeyResult.error, inIframe);
         setErrorMsg(classified.message);
         setNeedsTopLevelTab(classified.needsTopLevelTab);
         return;

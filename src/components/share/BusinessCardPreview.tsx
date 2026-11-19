@@ -177,44 +177,22 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
   );
 
   return (
-    <div className="flex flex-col gap-2.5 w-full">
-      {/* Front / Back Toggle Control */}
+    <div className="flex flex-col gap-2 w-full">
+      {/* Header row with current face label and icon-only flip button */}
       <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex items-center p-0.5 rounded-lg bg-surface-2 border border-border">
-          <button
-            type="button"
-            data-testid="card-side-front-btn"
-            onClick={() => setActiveSide('front')}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-              activeSide === 'front'
-                ? 'bg-surface text-ink shadow-2xs border border-border/60'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            Front Side
-          </button>
-          <button
-            type="button"
-            data-testid="card-side-back-btn"
-            onClick={() => setActiveSide('back')}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-              activeSide === 'back'
-                ? 'bg-surface text-ink shadow-2xs border border-border/60'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            Back Side (QR &amp; Links)
-          </button>
-        </div>
+        <span className="text-[12px] font-medium text-muted">
+          {activeSide === 'front' ? 'Front' : 'Back'}
+        </span>
 
         <button
           type="button"
           data-testid="card-flip-btn"
+          aria-label="Flip card"
+          title="Flip card"
           onClick={() => setActiveSide(activeSide === 'front' ? 'back' : 'front')}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-muted hover:text-ink px-2 py-1 rounded-md hover:bg-surface-2 transition-colors cursor-pointer"
+          className="w-10 h-10 -mr-1.5 rounded-xl flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
         >
-          <RotateCw size={12} />
-          <span>Flip card</span>
+          <RotateCw size={16} />
         </button>
       </div>
 

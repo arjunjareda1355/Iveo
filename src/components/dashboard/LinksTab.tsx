@@ -289,6 +289,9 @@ export const LinksTab: React.FC = () => {
   type ComposerType =
     | 'link'
     | 'embed'
+    | 'embed_youtube'
+    | 'embed_spotify'
+    | 'embed_soundcloud'
     | 'embed_discord'
     | 'embed_github'
     | 'embed_linkedin'
@@ -670,7 +673,10 @@ export const LinksTab: React.FC = () => {
       {/* 1. Your page URL strip */}
       <PageUrlStrip username={username} />
 
-      {/* 2. Single Toolbar: "+ Add" + Search */}
+      {/* 2. Social Icons Card (collapsible, positioned above link blocks) */}
+      <SocialLinksCard externalAddTrigger={socialAddTrigger} />
+
+      {/* 3. Single Toolbar: "+ Add" + Search */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2.5">
           <Button
@@ -840,8 +846,20 @@ export const LinksTab: React.FC = () => {
         </Card>
       )}
 
-      {activeComposer === 'embed' && (
+      {(activeComposer === 'embed' ||
+        activeComposer === 'embed_youtube' ||
+        activeComposer === 'embed_spotify' ||
+        activeComposer === 'embed_soundcloud') && (
         <EmbedComposer
+          initialProvider={
+            activeComposer === 'embed_youtube'
+              ? 'youtube'
+              : activeComposer === 'embed_spotify'
+                ? 'spotify'
+                : activeComposer === 'embed_soundcloud'
+                  ? 'soundcloud'
+                  : undefined
+          }
           onAdd={async ({ url, caption, provider, embedMeta }) => {
             await addEmbed(url, caption, provider, embedMeta);
             handleCloseComposer();
@@ -1889,10 +1907,7 @@ export const LinksTab: React.FC = () => {
         </div>
       )}
 
-      {/* 6. Social Icons Card (collapsible) */}
-      <SocialLinksCard externalAddTrigger={socialAddTrigger} />
-
-      {/* 7. Delete Confirm Dialog */}
+      {/* 6. Delete Confirm Dialog */}
       {deletingBlock && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[2px] sm:p-4"

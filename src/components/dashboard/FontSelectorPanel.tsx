@@ -260,10 +260,10 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
         }}
       >
         <span
-          className="text-[10px] uppercase tracking-widest font-mono opacity-60"
+          className="text-[11px] font-medium opacity-75"
           style={{ color: activeVibe.tokens.muted }}
         >
-          Typography Live Preview
+          Live preview
         </span>
         <h4
           className="text-[20px] font-semibold leading-tight"
@@ -272,7 +272,7 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
             color: activeVibe.tokens.text,
           }}
         >
-          Maya Ellis
+          Your display name
         </h4>
         <p
           className="text-[13px] max-w-[34ch]"
@@ -281,7 +281,7 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
             color: activeVibe.tokens.muted,
           }}
         >
-          Illustrator and writer sharing zines, prints &amp; creative tools.
+          A short bio about what you create and share.
         </p>
         <div
           className="mt-1.5 px-5 py-2.5 text-[13px] font-medium shadow-2xs"
@@ -295,16 +295,16 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
               : 'none',
           }}
         >
-          Explore latest collection
+          Explore links
         </div>
       </div>
 
       {/* Quick Font Pairings */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[12px] font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5">
-            <Sparkles size={13} />
-            <span>Quick Pairings</span>
+          <span className="text-[13px] font-semibold text-ink flex items-center gap-1.5">
+            <Sparkles size={13} className="text-muted" />
+            <span>Quick pairings</span>
           </span>
           {hasAnyOverride && (
             <button
@@ -396,7 +396,7 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
       {/* Free Fonts Section */}
       <div>
         <div className="flex items-center justify-between mb-2.5">
-          <h4 className="text-[13px] font-semibold text-ink">Free Fonts</h4>
+          <h4 className="text-[13px] font-semibold text-ink">Free fonts</h4>
           <span className="text-[11px] text-muted">{freeFonts.length} typefaces</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -408,7 +408,7 @@ export const FontSelectorPanel: React.FC<FontSelectorPanelProps> = ({
       <div>
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2">
-            <h4 className="text-[13px] font-semibold text-ink">Pro Fonts</h4>
+            <h4 className="text-[13px] font-semibold text-ink">Pro fonts</h4>
             {!isPro && <ProBadge className="scale-90 origin-left" />}
           </div>
           <span className="text-[11px] text-muted">{proFonts.length} studio &amp; editorial fonts</span>

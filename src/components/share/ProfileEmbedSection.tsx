@@ -20,6 +20,11 @@ interface ProfileEmbedSectionProps {
   avatarUrl?: string | null;
   vibeId?: string;
   isPro?: boolean;
+  embedStyle?: ProfileEmbedStyle;
+  onEmbedStyleChange?: (next: ProfileEmbedStyle) => void;
+  embedTheme?: ProfileEmbedTheme;
+  onEmbedThemeChange?: (next: ProfileEmbedTheme) => void;
+  hideActions?: boolean;
 }
 
 export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
@@ -29,10 +34,27 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
   avatarUrl,
   vibeId,
   isPro = false,
+  embedStyle: controlledStyle,
+  onEmbedStyleChange,
+  embedTheme: controlledTheme,
+  onEmbedThemeChange,
+  hideActions = false,
 }) => {
-  const [embedStyle, setEmbedStyle] = useState<ProfileEmbedStyle>('card');
-  const [embedTheme, setEmbedTheme] = useState<ProfileEmbedTheme>('auto');
+  const [internalStyle, setInternalStyle] = useState<ProfileEmbedStyle>('card');
+  const [internalTheme, setInternalTheme] = useState<ProfileEmbedTheme>('auto');
   const [copiedCode, setCopiedCode] = useState(false);
+
+  const embedStyle = controlledStyle ?? internalStyle;
+  const setEmbedStyle = (next: ProfileEmbedStyle) => {
+    if (controlledStyle === undefined) setInternalStyle(next);
+    onEmbedStyleChange?.(next);
+  };
+
+  const embedTheme = controlledTheme ?? internalTheme;
+  const setEmbedTheme = (next: ProfileEmbedTheme) => {
+    if (controlledTheme === undefined) setInternalTheme(next);
+    onEmbedThemeChange?.(next);
+  };
 
   const cleanUsername = (username || 'creator').replace(/^@+/, '').toLowerCase().trim();
   const titleName = displayName || `@${cleanUsername}`;
@@ -112,9 +134,9 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-0.5">
-        <span className="text-[13px] font-semibold text-ink">Embed Style</span>
-        <p className="text-[12px] text-muted">
-          Add your Iveo profile to Notion, portfolios, blogs, or any website.
+        <span className="text-[14px] font-semibold text-ink">Style</span>
+        <p className="text-[13px] text-muted">
+          Add your iveo profile to Notion, portfolios, blogs, or any website.
         </p>
       </div>
 
@@ -129,14 +151,14 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
               onClick={() => setEmbedStyle(opt.id)}
               className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 selected
-                  ? 'border-ink bg-surface shadow-xs ring-1 ring-ink/15'
+                  ? 'border-ink bg-surface ring-1 ring-ink/20'
                   : 'border-border bg-surface-2/60 hover:bg-surface-2'
               }`}
             >
-              <div className="text-[12.5px] font-semibold text-ink leading-tight">
+              <div className="text-[13px] font-medium text-ink leading-tight">
                 {opt.label}
               </div>
-              <div className="text-[11px] text-muted mt-0.5 leading-snug line-clamp-2">
+              <div className="text-[12px] text-muted mt-0.5 leading-snug line-clamp-2">
                 {opt.description}
               </div>
             </button>
@@ -146,14 +168,14 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
 
       {/* Theme Selector */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-medium text-muted">Widget Theme</span>
+        <span className="text-[13px] font-medium text-muted">Theme</span>
         <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface-2 border border-border">
           {PROFILE_EMBED_THEMES.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setEmbedTheme(t.id)}
-              className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
                 embedTheme === t.id
                   ? 'bg-ink text-surface'
                   : 'text-muted hover:text-ink'
@@ -169,7 +191,7 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
       <div className="rounded-2xl border border-border bg-surface-2/80 p-4 flex flex-col items-center justify-center min-h-[132px]">
         {embedStyle === 'badge' ? (
           <div
-            className="w-full max-w-[300px] flex items-center justify-between gap-2.5 px-3 py-2 rounded-full border shadow-xs"
+            className="w-full max-w-[300px] flex items-center justify-between gap-2.5 px-3 py-2 rounded-full border"
             style={{
               backgroundColor: previewPalette.bg,
               color: previewPalette.text,
@@ -211,7 +233,7 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
           </div>
         ) : embedStyle === 'minimal' ? (
           <div
-            className="w-full rounded-xl border p-3.5 shadow-xs flex flex-col gap-2"
+            className="w-full rounded-xl border p-3.5 flex flex-col gap-2"
             style={{
               backgroundColor: previewPalette.bg,
               color: previewPalette.text,
@@ -260,7 +282,7 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
           </div>
         ) : (
           <div
-            className="w-full max-w-[300px] rounded-xl border p-4 shadow-xs flex flex-col items-center text-center gap-2"
+            className="w-full max-w-[300px] rounded-xl border p-4 flex flex-col items-center text-center gap-2"
             style={{
               backgroundColor: previewPalette.bg,
               color: previewPalette.text,
@@ -289,20 +311,23 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
             <span className="text-[11px] font-mono -mt-1.5" style={{ color: previewPalette.muted }}>
               @{cleanUsername}
             </span>
+            {bio && (
+              <p className="text-[11.5px] line-clamp-2" style={{ color: previewPalette.muted }}>
+                {bio}
+              </p>
+            )}
             <div className="w-full flex flex-col gap-1.5 mt-1">
               <div
                 className="w-full h-8 rounded-lg flex items-center justify-center text-[11.5px] font-medium"
                 style={{ backgroundColor: previewPalette.btnBg, color: previewPalette.btnText }}
               >
-                Featured Link
+                Open page
               </div>
               {embedStyle === 'full' && (
                 <div
-                  className="w-full h-8 rounded-lg flex items-center justify-center text-[11.5px] font-medium opacity-85"
-                  style={{ backgroundColor: previewPalette.btnBg, color: previewPalette.btnText }}
-                >
-                  All Showcases &amp; Links
-                </div>
+                  className="w-full h-7 rounded-lg opacity-20"
+                  style={{ backgroundColor: previewPalette.btnBg }}
+                />
               )}
             </div>
           </div>
@@ -312,11 +337,11 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
       {/* Embed Code Box */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-[12px] font-medium text-ink inline-flex items-center gap-1.5">
-            <Code2 size={13} />
-            <span>HTML Embed Code</span>
+          <span className="text-[13px] font-medium text-ink inline-flex items-center gap-1.5">
+            <Code2 size={14} />
+            <span>HTML embed code</span>
           </span>
-          <span className="text-[11px] text-muted font-mono">
+          <span className="text-[12px] text-muted font-mono">
             {styleMeta.defaultHeight}px · max {styleMeta.maxWidth}
           </span>
         </div>
@@ -330,24 +355,26 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button variant="primary" size="md" onClick={handleCopySnippet} fullWidth>
-          {copiedCode ? <Check size={14} /> : <Copy size={14} />}
-          <span>{copiedCode ? 'Copied Code!' : 'Copy Embed Code'}</span>
-        </Button>
-        <Button
-          as="a"
-          href={embedSrc}
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="secondary"
-          size="md"
-          fullWidth
-        >
-          <ExternalLink size={14} />
-          <span>Live Preview</span>
-        </Button>
-      </div>
+      {!hideActions && (
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="primary" size="md" onClick={handleCopySnippet} fullWidth>
+            {copiedCode ? <Check size={14} /> : <Copy size={14} />}
+            <span>{copiedCode ? 'Copied code' : 'Copy embed code'}</span>
+          </Button>
+          <Button
+            as="a"
+            href={embedSrc}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="secondary"
+            size="md"
+            fullWidth
+          >
+            <ExternalLink size={14} />
+            <span>Live preview</span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

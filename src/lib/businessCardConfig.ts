@@ -164,7 +164,7 @@ export interface BusinessCardConfig {
 
 export const DEFAULT_BUSINESS_CARD_CONFIG: Required<BusinessCardConfig> = {
   template: 'classic',
-  metallicVibe: 'obsidian',
+  metallicVibe: 'page-vibe',
   metallicFinish: true,
   bgColor: null,
   bgColor2: null,
@@ -246,7 +246,7 @@ export function parseBusinessCardConfig(raw: unknown): BusinessCardConfig | null
   const metallicVibe =
     typeof r.metallicVibe === 'string' && VALID_METALLIC_VIBES.has(r.metallicVibe as MetallicCardVibe)
       ? (r.metallicVibe as MetallicCardVibe)
-      : 'obsidian';
+      : 'page-vibe';
 
   const cleanStr = (v: unknown, maxLen: number): string | null => {
     if (typeof v !== 'string') return null;
@@ -341,7 +341,7 @@ export function resolveFrontCardAppearance(
   vibeTheme?: VibeCardThemeInput
 ): ResolvedCardAppearance {
   const template: BusinessCardTemplate = cfg.template || 'classic';
-  const metallicVibe: MetallicCardVibe = cfg.metallicVibe || 'obsidian';
+  const metallicVibe: MetallicCardVibe = cfg.metallicVibe || 'page-vibe';
   const metallicFinish = cfg.metallicFinish !== false;
   const preset = getMetallicCardPreset(metallicVibe === 'page-vibe' ? 'obsidian' : metallicVibe);
 
@@ -350,37 +350,16 @@ export function resolveFrontCardAppearance(
   let accentColor: string;
   let textColor: string;
 
-  if (metallicVibe === 'page-vibe' && vibeTheme?.bg) {
-    bgColor = cfg.bgColor || vibeTheme.bg;
-    bgColor2 = cfg.bgColor2 || (metallicFinish ? '#0F172A' : null);
-    accentColor = cfg.accentColor || vibeTheme.accent || vibeTheme.buttonBg || '#4F46E5';
-    textColor = cfg.textColor || vibeTheme.text || (isLightHexColor(bgColor) ? '#0A0A0A' : '#FFFFFF');
+  if (metallicVibe === 'page-vibe') {
+    bgColor = cfg.bgColor || vibeTheme?.bg || '#FFFFFF';
+    bgColor2 = cfg.bgColor2 ?? null;
+    accentColor = cfg.accentColor || vibeTheme?.accent || vibeTheme?.buttonBg || '#0A0A0A';
+    textColor = cfg.textColor || vibeTheme?.text || (isLightHexColor(bgColor) ? '#0A0A0A' : '#FFFFFF');
   } else {
     bgColor = cfg.bgColor || preset.frontBg;
     bgColor2 = cfg.bgColor2 !== undefined && cfg.bgColor2 !== null ? cfg.bgColor2 : (cfg.bgColor ? null : preset.frontBg2);
     accentColor = cfg.accentColor || preset.frontAccent;
     textColor = cfg.textColor || preset.frontText;
-  }
-
-  // Template-specific fallbacks when user leaves custom front color unset
-  if (!cfg.bgColor && metallicVibe === 'page-vibe') {
-    if (template === 'gradient') {
-      bgColor = '#0F172A';
-      accentColor = cfg.accentColor || '#38BDF8';
-      textColor = cfg.textColor || '#FFFFFF';
-    } else if (template === 'midnight') {
-      bgColor = '#09090B';
-      textColor = cfg.textColor || '#FAFAFA';
-      accentColor = cfg.accentColor || '#A855F7';
-    } else if (template === 'executive') {
-      bgColor = '#111827';
-      textColor = cfg.textColor || '#F9FAFB';
-      accentColor = cfg.accentColor || '#38BDF8';
-    } else if (template === 'editorial') {
-      bgColor = '#FAF8F5';
-      textColor = cfg.textColor || '#1C1917';
-      accentColor = cfg.accentColor || '#B45309';
-    }
   }
 
   const isLight = isLightHexColor(bgColor);
@@ -429,8 +408,8 @@ export function resolveFrontCardAppearance(
     mutedColor,
     borderColor,
     isLight,
-    qrFg: cfg.qrFgColor || preset.qrFg,
-    qrBg: cfg.qrBgColor || preset.qrBg,
+    qrFg: cfg.qrFgColor || (metallicVibe === 'page-vibe' ? '#0A0A0A' : preset.qrFg),
+    qrBg: cfg.qrBgColor || (metallicVibe === 'page-vibe' ? '#FFFFFF' : preset.qrBg),
     cornerRadius,
     innerCornerRadius,
     backgroundCssImage,
@@ -442,25 +421,35 @@ export function resolveBackCardAppearance(
   vibeTheme?: VibeCardThemeInput
 ): ResolvedCardAppearance {
   const template: BusinessCardTemplate = cfg.template || 'classic';
-  const metallicVibe: MetallicCardVibe = cfg.metallicVibe || 'obsidian';
+  const metallicVibe: MetallicCardVibe = cfg.metallicVibe || 'page-vibe';
   const metallicFinish = cfg.metallicFinish !== false;
   const preset = getMetallicCardPreset(metallicVibe === 'page-vibe' ? 'obsidian' : metallicVibe);
 
-  const bgColor = cfg.backBgColor || preset.backBg;
+  const bgColor =
+    cfg.backBgColor ||
+    (metallicVibe === 'page-vibe' ? vibeTheme?.bg || '#FFFFFF' : preset.backBg);
   const bgColor2 =
     cfg.backBgColor2 !== undefined && cfg.backBgColor2 !== null
       ? cfg.backBgColor2
-      : cfg.backBgColor
+      : cfg.backBgColor || metallicVibe === 'page-vibe'
         ? null
         : preset.backBg2;
 
   const isLight = isLightHexColor(bgColor);
   const textColor =
     cfg.backTextColor ||
-    (cfg.backBgColor ? (isLight ? '#0A0A0A' : '#FFFFFF') : preset.backText);
+    (metallicVibe === 'page-vibe'
+      ? vibeTheme?.text || (isLight ? '#0A0A0A' : '#FFFFFF')
+      : cfg.backBgColor
+        ? isLight
+          ? '#0A0A0A'
+          : '#FFFFFF'
+        : preset.backText);
   const accentColor =
     cfg.backAccentColor ||
-    (metallicVibe === 'page-vibe' ? vibeTheme?.accent || preset.backAccent : preset.backAccent);
+    (metallicVibe === 'page-vibe'
+      ? vibeTheme?.accent || vibeTheme?.buttonBg || (isLight ? '#0A0A0A' : '#FFFFFF')
+      : preset.backAccent);
 
   const mutedColor = isLight ? 'rgba(15, 23, 42, 0.66)' : 'rgba(255, 255, 255, 0.72)';
   const borderColor = isLight ? 'rgba(15, 23, 42, 0.13)' : 'rgba(255, 255, 255, 0.18)';

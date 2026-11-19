@@ -4,6 +4,7 @@ import {
   Eye,
   Share2,
   Link2,
+  Plug,
   Palette,
   Users,
   BarChart3,
@@ -14,6 +15,7 @@ import { Container } from '../components/ui/Container';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { IvioUserButton } from '../auth/IvioUserButton';
 import { LinksTab } from '../components/dashboard/LinksTab';
+import { ProfilesTab } from '../components/dashboard/ProfilesTab';
 import { AppearanceTab } from '../components/dashboard/AppearanceTab';
 import { SettingsTab } from '../components/dashboard/SettingsTab';
 import { AnalyticsTab } from './AnalyticsTab';
@@ -77,11 +79,12 @@ const DashboardContent: React.FC = () => {
     session.layoutSettings,
   ]);
 
+  const isProfiles = location.pathname.includes('/profiles');
   const isAppearance = location.pathname.includes('/appearance');
   const isContacts = location.pathname.includes('/contacts');
   const isAnalytics = location.pathname.includes('/analytics');
   const isSettings = location.pathname.includes('/settings');
-  const isLinks = !isAppearance && !isContacts && !isAnalytics && !isSettings;
+  const isLinks = !isProfiles && !isAppearance && !isContacts && !isAnalytics && !isSettings;
 
   useEffect(() => {
     if (!isAppearance) {
@@ -98,7 +101,9 @@ const DashboardContent: React.FC = () => {
   }, [location.search]);
 
   useEffect(() => {
-    if (isAppearance) {
+    if (isProfiles) {
+      document.title = copy.dashboard.titles.profiles;
+    } else if (isAppearance) {
       document.title = copy.dashboard.titles.appearance;
     } else if (isContacts) {
       document.title = copy.dashboard.titles.contacts;
@@ -109,7 +114,7 @@ const DashboardContent: React.FC = () => {
     } else {
       document.title = copy.dashboard.titles.links;
     }
-  }, [isAppearance, isContacts, isAnalytics, isSettings]);
+  }, [isProfiles, isAppearance, isContacts, isAnalytics, isSettings]);
 
   const activeVibe = VIBES.find((v) => v.id === previewVibeId) || VIBES[0];
 
@@ -140,13 +145,14 @@ const DashboardContent: React.FC = () => {
 
   const navItems = [
     { to: `/dashboard${demoSearch}`, label: copy.dashboard.tabs.links, end: true, icon: Link2 },
+    { to: `/dashboard/profiles${demoSearch}`, label: copy.dashboard.tabs.profiles, end: false, icon: Plug },
     { to: `/dashboard/appearance${demoSearch}`, label: copy.dashboard.tabs.appearance, end: false, icon: Palette },
     { to: `/dashboard/contacts${demoSearch}`, label: copy.dashboard.tabs.contacts, end: false, icon: Users },
     { to: `/dashboard/analytics${demoSearch}`, label: copy.dashboard.tabs.analytics, end: false, icon: BarChart3 },
     { to: `/dashboard/settings${demoSearch}`, label: copy.dashboard.tabs.settings, end: false, icon: Settings },
   ];
 
-  const showLivePreviewColumn = isLinks || isAppearance;
+  const showLivePreviewColumn = isLinks || isProfiles || isAppearance;
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
@@ -236,6 +242,7 @@ const DashboardContent: React.FC = () => {
               {/* Left Column: Centered 720px max */}
               <div className="w-full max-w-[720px] mx-auto lg:mx-0 min-w-0">
                 {isLinks && <LinksTab />}
+                {isProfiles && <ProfilesTab />}
                 {isAppearance && (
                   <AppearanceTab
                     onPreviewVibeChange={(vId) => setPreviewVibeId(vId)}
@@ -283,12 +290,12 @@ const DashboardContent: React.FC = () => {
         </Container>
       </main>
 
-      {/* Mobile Fixed Bottom Tab Bar (<768px) — 5 equal columns, zero scroll/clipping */}
+      {/* Mobile Fixed Bottom Tab Bar (<768px) — 6 equal columns, zero scroll/clipping */}
       <nav
         aria-label="Mobile dashboard navigation"
         className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-border pb-[env(safe-area-inset-bottom,0px)]"
       >
-        <div className="grid grid-cols-5 h-16">
+        <div className="grid grid-cols-6 h-16">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -297,15 +304,15 @@ const DashboardContent: React.FC = () => {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex flex-col items-center justify-center gap-1 min-w-0 px-1 transition-colors select-none ${
+                  `flex flex-col items-center justify-center gap-1 min-w-0 px-0.5 transition-colors select-none ${
                     isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <Icon size={20} strokeWidth={isActive ? 2 : 1.5} className="shrink-0" />
-                    <span className="text-[11px] leading-none tracking-tight truncate max-w-full">
+                    <Icon size={18} strokeWidth={isActive ? 2 : 1.5} className="shrink-0" />
+                    <span className="text-[10px] leading-none tracking-tight truncate max-w-full">
                       {item.label}
                     </span>
                   </>

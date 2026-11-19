@@ -83,6 +83,17 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Allow WebAuthn passkey creation/get in top-level and self-origin contexts (skip /embed widgets)
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/embed')) {
+    res.setHeader(
+      'Permissions-Policy',
+      'publickey-credentials-create=(self), publickey-credentials-get=(self)'
+    );
+  }
+  next();
+});
+
 /**
  * Adapts standard Web Request/Response handlers for Express
  */

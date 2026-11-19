@@ -127,6 +127,7 @@ export async function loadPublicPage(
         vibe_id?: string | null;
         hide_from_search?: boolean;
         plan?: string | null;
+        socials?: Record<string, string> | null;
       } | null;
     }>('get_public_page', { p_username: clean });
 
@@ -148,7 +149,7 @@ export async function loadPublicPage(
         updatedAt: null,
         customSeoTitle: null,
         customSeoDescription: null,
-        socials: {},
+        socials: p.socials && typeof p.socials === 'object' ? p.socials : {},
       };
     }
   } catch {}

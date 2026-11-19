@@ -141,7 +141,7 @@ export const LayoutEffectsPanel: React.FC<LayoutEffectsPanelProps> = ({
         <div className="flex items-center gap-2">
           <UserSquare size={15} className="text-muted shrink-0" />
           <div>
-            <h4 className="text-[14px] font-semibold text-ink">Avatar Frame</h4>
+            <h4 className="text-[14px] font-semibold text-ink">Avatar frame</h4>
             <p className="text-[12px] text-muted">Shape and border style for your profile photo</p>
           </div>
         </div>
@@ -189,7 +189,7 @@ export const LayoutEffectsPanel: React.FC<LayoutEffectsPanelProps> = ({
         <div className="flex items-center gap-2">
           <Layers size={15} className="text-muted shrink-0" />
           <div>
-            <h4 className="text-[14px] font-semibold text-ink">Button Surface &amp; Effects</h4>
+            <h4 className="text-[14px] font-semibold text-ink">Button surface &amp; effects</h4>
             <p className="text-[12px] text-muted">Visual finish applied to every link button on your page</p>
           </div>
         </div>
@@ -256,7 +256,7 @@ export const LayoutEffectsPanel: React.FC<LayoutEffectsPanelProps> = ({
       {/* 3. Header Alignment + Spacing + Width */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="p-4 rounded-xl border border-border bg-surface-2/60 flex flex-col gap-2.5">
-          <span className="text-[13px] font-semibold text-ink">Header Alignment</span>
+          <span className="text-[13px] font-semibold text-ink">Header alignment</span>
           <div className="grid grid-cols-2 gap-2">
             {HEADER_ALIGNS.map((opt) => {
               const active = resolved.headerAlign === opt.id;
@@ -283,7 +283,7 @@ export const LayoutEffectsPanel: React.FC<LayoutEffectsPanelProps> = ({
         </div>
 
         <div className="p-4 rounded-xl border border-border bg-surface-2/60 flex flex-col gap-2.5">
-          <span className="text-[13px] font-semibold text-ink">Link Spacing</span>
+          <span className="text-[13px] font-semibold text-ink">Link spacing</span>
           <div className="grid grid-cols-3 gap-1.5">
             {LINK_SPACINGS.map((opt) => {
               const active = resolved.linkSpacing === opt.id;
@@ -311,7 +311,7 @@ export const LayoutEffectsPanel: React.FC<LayoutEffectsPanelProps> = ({
         <div className="flex items-center justify-between gap-2">
           <span className="text-[13px] font-semibold text-ink flex items-center gap-1.5">
             <Maximize2 size={14} className="text-muted" />
-            <span>Page Column Width</span>
+            <span>Page column width</span>
           </span>
           <span className="text-[11px] font-mono text-muted capitalize">{resolved.pageWidth}</span>
         </div>

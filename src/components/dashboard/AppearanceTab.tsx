@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ArrowLeft,
-  ChevronRight,
+  ChevronDown,
   Image as ImageIcon,
   Info,
   Layers,
@@ -11,8 +10,9 @@ import {
   X,
 } from 'lucide-react';
 import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
+import { Toggle } from '../ui/Toggle';
 import { SegmentedControl } from '../ui/SegmentedControl';
+import { ProBadge } from '../plan/ProBadge';
 import { VibeTileGroup } from '../onboarding/VibeTileGroup';
 import { BackgroundSelectorCard } from './BackgroundSelectorCard';
 import { FontSelectorPanel } from './FontSelectorPanel';
@@ -33,7 +33,7 @@ import { ButtonColors, resolveEffectiveTokens } from '../../lib/colors';
 import { getBackgroundPreset } from '../../lib/backgrounds';
 import { BackgroundConfig } from '../../data/types';
 
-type AppearancePanel = 'hub' | 'vibe' | 'background' | 'fonts' | 'buttons' | 'layout';
+type AppearanceSection = 'vibe' | 'background' | 'fonts' | 'buttons' | 'layout';
 
 interface AppearanceTabProps {
   onPreviewVibeChange?: (vibeId: VibeId) => void;
@@ -50,32 +50,6 @@ const BUTTON_SHAPE_OPTIONS: readonly { value: ButtonShape; label: string }[] = [
   { value: 'rounded', label: 'Rounded' },
   { value: 'pill', label: 'Pill' },
 ];
-
-const PANEL_META: Record<
-  Exclude<AppearancePanel, 'hub'>,
-  { title: string; subtitle: string }
-> = {
-  vibe: {
-    title: 'Theme',
-    subtitle: 'Choose a cohesive color palette and personality for your page.',
-  },
-  background: {
-    title: 'Background',
-    subtitle: 'Set a solid color, gradient, preset texture, or custom photo.',
-  },
-  fonts: {
-    title: 'Typography',
-    subtitle: 'Customize Name, Bio, and Button typefaces.',
-  },
-  buttons: {
-    title: 'Buttons',
-    subtitle: 'Set corner shape, fill color, text contrast, and border.',
-  },
-  layout: {
-    title: 'Layout & effects',
-    subtitle: 'Adjust avatar frame, alignment, button finish, spacing & width.',
-  },
-};
 
 const getNativeShape = (vibeId: VibeId): ButtonShape => {
   const v = VIBES.find((item) => item.id === vibeId);
@@ -95,8 +69,8 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
 
-  const [activePanel, setActivePanel] = useState<AppearancePanel>('hub');
-  const [openInfoId, setOpenInfoId] = useState<Exclude<AppearancePanel, 'hub'> | null>(null);
+  const [openSection, setOpenSection] = useState<AppearanceSection | null>('vibe');
+  const [openInfoId, setOpenInfoId] = useState<AppearanceSection | null>(null);
   const [currentVibeId, setCurrentVibeId] = useState<VibeId>(session.vibeId);
   const [currentShape, setCurrentShape] = useState<ButtonShape>(() =>
     session.buttonShape || getNativeShape(session.vibeId)
@@ -149,11 +123,11 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
 
     try {
       await session.updatePreferences({ vibeId: id, buttonShape: null });
-      showToast('Theme saved');
+      showToast('Vibe saved');
     } catch {
       setCurrentVibeId(previous);
       onPreviewVibeChange?.(previous);
-      showToast("Couldn't save theme");
+      showToast("Couldn't save vibe");
     }
   };
 
@@ -180,7 +154,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     onPreviewButtonColorsChange?.(null);
     try {
       await session.updatePreferences({ buttonShape: null, buttonColors: null });
-      showToast('Buttons reset to theme default');
+      showToast('Buttons reset to vibe default');
     } catch {
       showToast("Couldn't reset buttons");
     }
@@ -233,21 +207,39 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     }
   };
 
-  const handleResetActivePanel = async () => {
-    if (activePanel === 'vibe') {
+  const handleResetSection = async (section: AppearanceSection) => {
+    if (section === 'vibe') {
       await handleSelectVibe('clean');
-    } else if (activePanel === 'background') {
+    } else if (section === 'background') {
       onPreviewBackgroundChange?.(DEFAULT_BACKGROUND_CONFIG);
       await handleBackgroundChange(DEFAULT_BACKGROUND_CONFIG);
       showToast('Background reset to Pure White');
-    } else if (activePanel === 'fonts') {
+    } else if (section === 'fonts') {
       await handleSaveFonts(null);
-      showToast('Typography reset to theme default');
-    } else if (activePanel === 'buttons') {
+      showToast('Typography reset to vibe default');
+    } else if (section === 'buttons') {
       await handleResetButtonsToDefault();
-    } else if (activePanel === 'layout') {
+    } else if (section === 'layout') {
       await handleSaveLayout(null);
       showToast('Layout reset to default');
+    }
+  };
+
+  const handleFooterMarkToggle = async () => {
+    if (!session.isPro) {
+      openUpgrade('hide_footer');
+      return;
+    }
+
+    const nextVal = !(session.hideIveoFooter || session.hideIvioFooter);
+    try {
+      await session.updatePreferences({
+        hideIveoFooter: nextVal,
+        hideIvioFooter: nextVal,
+      });
+      showToast(nextVal ? 'iveo branding hidden.' : 'iveo branding shown.');
+    } catch {
+      openUpgrade('hide_footer');
     }
   };
 
@@ -258,7 +250,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     session.background
   );
 
-  // Summaries for the 5 hub rows
   const backgroundSummary = (() => {
     const bg = session.background;
     if (!bg || bg.type === 'none') return 'Pure White';
@@ -308,7 +299,11 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     if (bg.type === 'solid' && bg.value) {
       return { backgroundColor: bg.value };
     }
-    if ((bg.type === 'gradient' || bg.type === 'mesh') && bg.gradientStops && bg.gradientStops.length >= 2) {
+    if (
+      (bg.type === 'gradient' || bg.type === 'mesh') &&
+      bg.gradientStops &&
+      bg.gradientStops.length >= 2
+    ) {
       return {
         backgroundImage: `linear-gradient(135deg, ${bg.gradientStops[0]}, ${bg.gradientStops[1]})`,
       };
@@ -323,201 +318,8 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     return { backgroundColor: bg.value || activeVibe.tokens.bg };
   })();
 
-  // ── Dedicated Sub-Screen View ───────────────────────────────────────────────
-  if (activePanel !== 'hub') {
-    const meta = PANEL_META[activePanel];
-    return (
-      <div className="flex flex-col gap-4 w-full min-w-0">
-        {/* Back navigation bar */}
-        <div className="flex items-center justify-between gap-3 pb-3 border-b border-divider">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => {
-                onPreviewBackgroundChange?.(null);
-                setActivePanel('hub');
-              }}
-              aria-label="Back to Appearance"
-              className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-[10px] border border-border bg-surface text-[13px] font-medium text-ink hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
-            >
-              <ArrowLeft size={16} strokeWidth={1.75} />
-              <span>Appearance</span>
-            </button>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-[18px] sm:text-[20px] font-semibold text-ink leading-tight">
-                {meta.title}
-              </h2>
-              <p className="text-[13px] text-muted leading-snug truncate">{meta.subtitle}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile/Tablet pinned compact live preview (<lg only) */}
-        {mobilePhonePreview && (
-          <div className="lg:hidden rounded-[16px] border border-border bg-surface-2/60 py-3 px-4 flex flex-col items-center justify-center">
-            {mobilePhonePreview}
-          </div>
-        )}
-
-        {/* Sub-screen Body */}
-        {activePanel === 'vibe' && (
-          <Card className="flex flex-col gap-5">
-            <VibeTileGroup
-              selectedVibeId={currentVibeId}
-              onSelect={handleSelectVibe}
-              isPro={session.isPro}
-              onProBlocked={() => openUpgrade('pro_vibes')}
-            />
-          </Card>
-        )}
-
-        {activePanel === 'background' && (
-          <Card>
-            <BackgroundSelectorCard
-              embedded
-              currentBackground={session.background}
-              vibe={activeVibe}
-              isPro={session.isPro}
-              username={session.username}
-              userId={session.userId}
-              primaryEmail={session.primaryEmail}
-              onBackgroundChange={handleBackgroundChange}
-              onPreviewBackgroundChange={onPreviewBackgroundChange}
-            />
-          </Card>
-        )}
-
-        {activePanel === 'fonts' && (
-          <Card>
-            <FontSelectorPanel
-              currentFonts={currentFonts}
-              activeVibe={activeVibe}
-              isPro={session.isPro}
-              onFontsChange={handleSaveFonts}
-              onPreviewFontsChange={(next) => {
-                setCurrentFonts(next);
-                onPreviewFontSettingsChange?.(next);
-              }}
-            />
-          </Card>
-        )}
-
-        {activePanel === 'buttons' && (
-          <div className="flex flex-col gap-4">
-            <Card className="flex flex-col gap-4">
-              <div>
-                <h3 className="text-[16px] font-semibold text-ink">Button shape</h3>
-                <p className="text-[13px] text-muted mt-0.5">
-                  Choose corner curvature for links and social buttons.
-                </p>
-              </div>
-
-              <div className="max-w-[360px] w-full">
-                <SegmentedControl<ButtonShape>
-                  options={BUTTON_SHAPE_OPTIONS}
-                  value={currentShape}
-                  onChange={handleSelectShape}
-                  ariaLabel="Button shape"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2.5">
-                {(
-                  [
-                    { id: 'square', label: 'Square', radius: '0px' },
-                    { id: 'rounded', label: 'Rounded', radius: '12px' },
-                    { id: 'pill', label: 'Pill', radius: '999px' },
-                  ] as const
-                ).map((item) => {
-                  const selected = currentShape === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => handleSelectShape(item.id)}
-                      className={`p-3 rounded-[12px] border text-center transition-all cursor-pointer flex flex-col items-center gap-2 ${
-                        selected
-                          ? 'border-ink bg-surface ring-1 ring-ink'
-                          : 'border-border bg-surface-2/40 hover:border-border-strong'
-                      }`}
-                    >
-                      <div
-                        className="w-full h-9 flex items-center justify-center text-[12px] font-medium"
-                        style={{
-                          borderRadius: item.radius,
-                          backgroundColor: effectiveTokens.buttonBg,
-                          color: effectiveTokens.buttonText,
-                          border: effectiveTokens.buttonBorder
-                            ? `${effectiveTokens.buttonBorderWidth || '1px'} solid ${effectiveTokens.buttonBorder}`
-                            : 'none',
-                        }}
-                      >
-                        {item.label}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </Card>
-
-            <Card className="w-full min-w-0 overflow-hidden">
-              <ButtonColorsPanel
-                currentColors={currentButtonColors}
-                activeVibe={activeVibe}
-                background={session.background}
-                onColorsChange={handleSaveButtonColors}
-                onPreviewColorsChange={(next) => {
-                  setCurrentButtonColors(next);
-                  onPreviewButtonColorsChange?.(next);
-                }}
-              />
-            </Card>
-          </div>
-        )}
-
-        {activePanel === 'layout' && (
-          <Card className="w-full min-w-0 overflow-hidden">
-            <LayoutEffectsPanel
-              currentLayout={currentLayout}
-              activeVibe={activeVibe}
-              buttonColors={currentButtonColors}
-              background={session.background}
-              onLayoutChange={handleSaveLayout}
-              onPreviewLayoutChange={(next) => {
-                setCurrentLayout(next);
-                onPreviewLayoutChange?.(next);
-              }}
-            />
-          </Card>
-        )}
-
-        {/* Sticky Sub-Editor Footer Bar */}
-        <div className="sticky bottom-16 md:bottom-3 z-20 p-3 rounded-[14px] bg-surface/95 backdrop-blur-sm border border-border shadow-sm flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleResetActivePanel}
-            className="min-h-[44px] px-2 text-[13px] font-medium text-muted hover:text-ink underline underline-offset-2 cursor-pointer"
-          >
-            Reset to default
-          </button>
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => {
-              onPreviewBackgroundChange?.(null);
-              setActivePanel('hub');
-            }}
-          >
-            Done
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Main 5-Row Appearance Hub ───────────────────────────────────────────────
   const sections: {
-    id: Exclude<AppearancePanel, 'hub'>;
+    id: AppearanceSection;
     label: string;
     summary: string;
     infoText: string;
@@ -526,9 +328,9 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   }[] = [
     {
       id: 'vibe',
-      label: 'Theme',
-      summary: `Vibe · ${activeVibe.name}`,
-      infoText: 'Choose a cohesive color palette and theme personality for your entire profile.',
+      label: 'Vibe',
+      summary: activeVibe.name,
+      infoText: 'Choose a cohesive color palette and personality for your entire profile.',
       icon: <Sparkles size={20} strokeWidth={1.5} />,
       swatch: (
         <div className="flex items-center -space-x-1.5 shrink-0" aria-hidden="true">
@@ -550,7 +352,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'background',
       label: 'Background',
-      summary: `Background · ${backgroundSummary}`,
+      summary: backgroundSummary,
       infoText:
         'Personalize your backdrop with Pure White, solid colors, custom gradients, presets, textures, or uploaded photos.',
       icon: <ImageIcon size={20} strokeWidth={1.5} />,
@@ -565,8 +367,8 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'fonts',
       label: 'Typography',
-      summary: `Font · ${fontsSummary}`,
-      infoText: 'Customize typography for your display name, bio, and link buttons.',
+      summary: fontsSummary,
+      infoText: 'Customize typefaces for your display name, bio, and link buttons.',
       icon: <Type size={20} strokeWidth={1.5} />,
       swatch: (
         <span
@@ -583,8 +385,9 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'buttons',
       label: 'Buttons',
-      summary: `Buttons · ${shapeSummary}, ${buttonColorHex}`,
-      infoText: 'Set link button curvature (Square, Rounded, Pill) and customize fill, text, and border colors.',
+      summary: `${shapeSummary}, ${buttonColorHex}`,
+      infoText:
+        'Set link button curvature (Square, Rounded, Pill) and customize fill, text, and border colors.',
       icon: <RectangleHorizontal size={20} strokeWidth={1.5} />,
       swatch: (
         <span
@@ -604,8 +407,9 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     {
       id: 'layout',
       label: 'Layout & effects',
-      summary: `Layout · ${layoutSummary}`,
-      infoText: 'Adjust avatar frame shape, header alignment, button finish, link spacing, and page width.',
+      summary: layoutSummary,
+      infoText:
+        'Adjust avatar frame shape, header alignment, button finish, link spacing, and page width.',
       icon: <Layers size={20} strokeWidth={1.5} />,
       swatch: (
         <div
@@ -620,8 +424,12 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     },
   ];
 
+  const brandingHidden = Boolean(
+    session.isPro && (session.hideIveoFooter || session.hideIvioFooter)
+  );
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-[20px] sm:text-[22px] font-semibold text-ink leading-tight">
           Appearance
@@ -631,9 +439,19 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
         </p>
       </div>
 
+      {/* Mobile/Tablet compact live preview (<lg only) */}
+      {mobilePhonePreview && (
+        <div className="lg:hidden rounded-[16px] border border-border bg-surface-2/60 py-3 px-4 flex flex-col items-center justify-center">
+          {mobilePhonePreview}
+        </div>
+      )}
+
+      {/* Single-screen 5-section accordion */}
       <Card className="p-0 sm:p-0 overflow-hidden divide-y divide-divider">
         {sections.map((section) => {
+          const isOpen = openSection === section.id;
           const isInfoOpen = openInfoId === section.id;
+
           return (
             <div key={section.id} className="flex flex-col">
               <div className="relative min-h-[72px] px-4 py-3 flex items-center justify-between gap-2.5 hover:bg-surface-2/50 transition-colors">
@@ -641,9 +459,16 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                   type="button"
                   onClick={() => {
                     setOpenInfoId(null);
-                    setActivePanel(section.id);
+                    setOpenSection((prev) => {
+                      const next = prev === section.id ? null : section.id;
+                      if (prev === 'background' && next !== 'background') {
+                        onPreviewBackgroundChange?.(null);
+                      }
+                      return next;
+                    });
                   }}
-                  aria-label={`Edit ${section.label}`}
+                  aria-expanded={isOpen}
+                  aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${section.label}`}
                   className="absolute inset-0 z-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-ink"
                 />
 
@@ -675,9 +500,15 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                   </div>
                 </div>
 
-                <div className="relative z-10 pointer-events-none flex items-center gap-2 shrink-0">
+                <div className="relative z-10 pointer-events-none flex items-center gap-2.5 shrink-0">
                   {section.swatch}
-                  <ChevronRight size={18} strokeWidth={1.5} className="text-muted" />
+                  <ChevronDown
+                    size={18}
+                    strokeWidth={1.5}
+                    className={`text-muted transition-transform duration-150 ${
+                      isOpen ? 'rotate-180' : 'rotate-0'
+                    }`}
+                  />
                 </div>
               </div>
 
@@ -698,9 +529,178 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                   </button>
                 </div>
               )}
+
+              {isOpen && (
+                <div className="px-4 py-4 sm:px-5 sm:py-5 border-t border-divider bg-surface-2/25 flex flex-col gap-4">
+                  {section.id === 'vibe' && (
+                    <VibeTileGroup
+                      selectedVibeId={currentVibeId}
+                      onSelect={handleSelectVibe}
+                      isPro={session.isPro}
+                      onProBlocked={() => openUpgrade('pro_vibes')}
+                    />
+                  )}
+
+                  {section.id === 'background' && (
+                    <BackgroundSelectorCard
+                      embedded
+                      currentBackground={session.background}
+                      vibe={activeVibe}
+                      isPro={session.isPro}
+                      username={session.username}
+                      userId={session.userId}
+                      primaryEmail={session.primaryEmail}
+                      onBackgroundChange={handleBackgroundChange}
+                      onPreviewBackgroundChange={onPreviewBackgroundChange}
+                    />
+                  )}
+
+                  {section.id === 'fonts' && (
+                    <FontSelectorPanel
+                      currentFonts={currentFonts}
+                      activeVibe={activeVibe}
+                      isPro={session.isPro}
+                      onFontsChange={handleSaveFonts}
+                      onPreviewFontsChange={(next) => {
+                        setCurrentFonts(next);
+                        onPreviewFontSettingsChange?.(next);
+                      }}
+                    />
+                  )}
+
+                  {section.id === 'buttons' && (
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <h3 className="text-[15px] font-semibold text-ink">Button shape</h3>
+                          <p className="text-[13px] text-muted mt-0.5">
+                            Choose corner curvature for links and social buttons.
+                          </p>
+                        </div>
+
+                        <div className="max-w-[360px] w-full">
+                          <SegmentedControl<ButtonShape>
+                            options={BUTTON_SHAPE_OPTIONS}
+                            value={currentShape}
+                            onChange={handleSelectShape}
+                            ariaLabel="Button shape"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2.5">
+                          {(
+                            [
+                              { id: 'square', label: 'Square', radius: '0px' },
+                              { id: 'rounded', label: 'Rounded', radius: '12px' },
+                              { id: 'pill', label: 'Pill', radius: '999px' },
+                            ] as const
+                          ).map((item) => {
+                            const selected = currentShape === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => handleSelectShape(item.id)}
+                                className={`p-3 rounded-[12px] border text-center transition-all cursor-pointer flex flex-col items-center gap-2 ${
+                                  selected
+                                    ? 'border-ink bg-surface ring-1 ring-ink'
+                                    : 'border-border bg-surface hover:border-border-strong'
+                                }`}
+                              >
+                                <div
+                                  className="w-full h-9 flex items-center justify-center text-[12px] font-medium"
+                                  style={{
+                                    borderRadius: item.radius,
+                                    backgroundColor: effectiveTokens.buttonBg,
+                                    color: effectiveTokens.buttonText,
+                                    border: effectiveTokens.buttonBorder
+                                      ? `${effectiveTokens.buttonBorderWidth || '1px'} solid ${effectiveTokens.buttonBorder}`
+                                      : 'none',
+                                  }}
+                                >
+                                  {item.label}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-divider">
+                        <ButtonColorsPanel
+                          currentColors={currentButtonColors}
+                          activeVibe={activeVibe}
+                          background={session.background}
+                          onColorsChange={handleSaveButtonColors}
+                          onPreviewColorsChange={(next) => {
+                            setCurrentButtonColors(next);
+                            onPreviewButtonColorsChange?.(next);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {section.id === 'layout' && (
+                    <LayoutEffectsPanel
+                      currentLayout={currentLayout}
+                      activeVibe={activeVibe}
+                      buttonColors={currentButtonColors}
+                      background={session.background}
+                      onLayoutChange={handleSaveLayout}
+                      onPreviewLayoutChange={(next) => {
+                        setCurrentLayout(next);
+                        onPreviewLayoutChange?.(next);
+                      }}
+                    />
+                  )}
+
+                  <div className="pt-2 border-t border-divider flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleResetSection(section.id)}
+                      className="min-h-[36px] text-[13px] font-medium text-muted hover:text-ink underline underline-offset-2 cursor-pointer"
+                    >
+                      Reset to default
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (section.id === 'background') onPreviewBackgroundChange?.(null);
+                        setOpenSection(null);
+                      }}
+                      className="min-h-[36px] px-3 rounded-[10px] text-[13px] font-medium text-ink hover:bg-surface-2 cursor-pointer"
+                    >
+                      Collapse
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
+      </Card>
+
+      {/* Page Footer Branding Toggle (moved here from Settings) */}
+      <Card className="p-4 flex items-center justify-between gap-4">
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[14px] font-medium text-ink">
+              Remove iveo branding
+            </span>
+            {!session.isPro && <ProBadge locked />}
+          </div>
+          <p className="text-[13px] text-muted mt-0.5">
+            Hides the iveo mark in your page footer. The report link always stays.
+          </p>
+        </div>
+
+        <Toggle
+          checked={brandingHidden}
+          onChange={handleFooterMarkToggle}
+          ariaLabel="Remove iveo branding"
+          locked={!session.isPro}
+        />
       </Card>
     </div>
   );

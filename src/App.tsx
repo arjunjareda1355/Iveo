@@ -135,6 +135,14 @@ export default function App() {
             }
           />
           <Route
+            path="/dashboard/profiles"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
             path="/dashboard/appearance"
             element={
               <RequireOnboarded>

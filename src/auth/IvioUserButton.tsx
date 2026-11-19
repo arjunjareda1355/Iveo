@@ -6,9 +6,9 @@ import {
   HelpCircle,
   LogOut,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 import { useIveoSession } from './useIvioSession';
-import { ProBadge } from '../components/plan/ProBadge';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { pageUrl } from '../lib/site';
 
@@ -108,7 +108,6 @@ export const IveoUserButton: React.FC = () => {
             <span className="text-[14px] font-semibold text-ink truncate">
               {displayName}
             </span>
-            {session.isPro && <ProBadge className="shrink-0" />}
           </div>
           {handle && (
             <span className="text-[12px] text-muted truncate block mt-0.5">
@@ -130,6 +129,18 @@ export const IveoUserButton: React.FC = () => {
           <ExternalLink size={18} strokeWidth={1.5} className="text-muted shrink-0" />
           <span>View my page</span>
         </a>
+
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            navigate(`/account${preserveDemoSearch}`);
+          }}
+          className="min-h-[44px] px-4 flex items-center gap-3 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer"
+        >
+          <User size={18} strokeWidth={1.5} className="text-muted shrink-0" />
+          <span>Profile &amp; bio</span>
+        </button>
 
         <button
           type="button"

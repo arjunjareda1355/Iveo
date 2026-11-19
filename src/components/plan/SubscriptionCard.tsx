@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { ProBadge } from './ProBadge';
 import { PlanDetailsModal } from './PlanDetailsModal';
 import { useUpgradeDialog } from './UpgradeDialogProvider';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -152,7 +151,6 @@ export const SubscriptionCard: React.FC = () => {
                 <h3 className="text-[16px] font-semibold text-ink leading-tight whitespace-nowrap">
                   {isPro ? 'iveo Pro' : 'iveo free'}
                 </h3>
-                {isPro && <ProBadge />}
               </div>
               <p className="text-[13px] text-muted mt-0.5 truncate">
                 {statusLine}
@@ -177,7 +175,7 @@ export const SubscriptionCard: React.FC = () => {
               onClick={() => setIsDetailsOpen(true)}
               className="w-full sm:w-auto"
             >
-              Manage plan
+              Manage billing
             </Button>
           </div>
         </div>

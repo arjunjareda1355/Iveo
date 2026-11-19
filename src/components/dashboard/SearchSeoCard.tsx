@@ -83,7 +83,7 @@ export const SearchSeoCard: React.FC = () => {
     <Card className="flex flex-col gap-5">
       <div>
         <h3 className="text-[16px] font-semibold text-ink leading-tight">
-          Search &amp; SEO
+          SEO &amp; search
         </h3>
         <p className="mt-1 text-[13px] text-muted">
           Control how your page appears on Google and social search previews.
@@ -133,7 +133,7 @@ export const SearchSeoCard: React.FC = () => {
 
         {/* Live Google Search Preview */}
         <div className="p-3.5 rounded-[12px] bg-surface-2/60 border border-border flex flex-col gap-1">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted">
+          <span className="text-[11px] font-medium text-muted">
             Search preview
           </span>
           <span className="text-[12px] text-muted truncate font-mono">
@@ -194,7 +194,7 @@ export const SearchSeoCard: React.FC = () => {
         <div className="pt-4 border-t border-divider flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <h4 className="text-[14px] font-semibold text-ink leading-tight">
-              Search Console
+              Search console
             </h4>
             <p className="mt-0.5 text-[12px] text-muted">
               Inspect profile indexability, regenerate sitemaps, and submit updates to search engines.

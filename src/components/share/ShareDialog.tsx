@@ -11,8 +11,16 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   Code2,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  SlidersHorizontal,
+  Link2,
+  Eye,
+  Save,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Toggle } from '../ui/Toggle';
 import { useToast } from '../ui/Toast';
 import { pageUrl } from '../../lib/site';
 import {
@@ -33,6 +41,12 @@ import {
   BusinessCardConfig,
   DEFAULT_BUSINESS_CARD_CONFIG,
 } from '../../lib/businessCardConfig';
+import {
+  buildProfileEmbedIframeCode,
+  buildProfileEmbedUrl,
+  ProfileEmbedStyle,
+  ProfileEmbedTheme,
+} from '../../lib/profileEmbed';
 import { ButtonColors, resolveEffectiveTokens, normalizeHexColor } from '../../lib/colors';
 import { FontSettings } from '../../lib/fonts';
 import { VIBES } from '../../lib/vibes';
@@ -68,6 +82,8 @@ const QR_PRESETS = [
   { label: 'Amber', fg: '#B45309', bg: '#FFFBEB' },
 ];
 
+type LinkAccordionSection = 'qr' | 'tracked' | 'preview';
+
 export const ShareDialog: React.FC<ShareDialogProps> = ({
   isOpen,
   onClose,
@@ -87,8 +103,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'share' | 'card' | 'embed'>('share');
   const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
+  const [openLinkSection, setOpenLinkSection] = useState<LinkAccordionSection | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
   const [isDownloadingCard, setIsDownloadingCard] = useState(false);
   const [isSavingCard, setIsSavingCard] = useState(false);
 
@@ -102,6 +120,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const [qrPngDataUrl, setQrPngDataUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Embed tab state (shared with sticky action footer)
+  const [embedStyle, setEmbedStyle] = useState<ProfileEmbedStyle>('card');
+  const [embedTheme, setEmbedTheme] = useState<ProfileEmbedTheme>('auto');
 
   const [cardConfig, setCardConfig] = useState<BusinessCardConfig>(() => ({
     ...DEFAULT_BUSINESS_CARD_CONFIG,
@@ -120,6 +142,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
+  const cleanUsername = (username || 'creator').replace(/^@+/, '').toLowerCase().trim();
   const fullUrl = pageUrl(username);
   const qrUrl = pageUrl(username, { src: 'qr' });
   const displayAddress = `iveo.site/@${username}`;
@@ -135,6 +158,17 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
   const contrastRatio = getHexContrastRatio(qrFgColor, qrBgColor);
   const lowContrast = contrastRatio < 3.0;
+
+  const embedSrc = buildProfileEmbedUrl(cleanUsername, {
+    style: embedStyle,
+    theme: embedTheme,
+  });
+  const embedIframeSnippet = buildProfileEmbedIframeCode(cleanUsername, {
+    style: embedStyle,
+    theme: embedTheme,
+    displayName: displayName || `@${cleanUsername}`,
+    origin: 'https://iveo.site',
+  });
 
   useEffect(() => {
     if (!isOpen || !username) return;
@@ -307,7 +341,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   };
 
   const handleShareCard = async () => {
-    const cardText = `Digital Business Card: ${displayName || username} (@${username})\n${bio ? `${bio}\n` : ''}Connect: ${fullUrl}`;
+    const cardText = `Digital business card: ${displayName || username} (@${username})\n${bio ? `${bio}\n` : ''}Connect: ${fullUrl}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         const pngDataUrl = await generateBusinessCardPng({
@@ -327,7 +361,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         const file = new File([blob], `iveo-card-${username}.png`, { type: 'image/png' });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
-            title: `${displayName || username}'s Business Card`,
+            title: `${displayName || username}'s business card`,
             text: cardText,
             files: [file],
           });
@@ -337,7 +371,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
       try {
         await navigator.share({
-          title: `${displayName || username}'s Business Card`,
+          title: `${displayName || username}'s business card`,
           text: cardText,
           url: fullUrl,
         });
@@ -353,6 +387,21 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     } catch {}
   };
 
+  const handleCopyEmbedCode = async () => {
+    try {
+      await navigator.clipboard.writeText(embedIframeSnippet);
+      setCopiedEmbed(true);
+      showToast('Embed code copied');
+      setTimeout(() => setCopiedEmbed(false), 1800);
+    } catch {
+      showToast('Failed to copy embed code');
+    }
+  };
+
+  const toggleLinkSection = (sec: LinkAccordionSection) => {
+    setOpenLinkSection((prev) => (prev === sec ? null : sec));
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -366,66 +415,70 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         aria-modal="true"
         aria-labelledby="share-dialog-title"
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-[460px] bg-surface border border-border rounded-t-[20px] sm:rounded-[20px] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.12)] max-h-[90vh] overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
+        className="w-full sm:max-w-[460px] bg-surface border border-border rounded-t-[20px] sm:rounded-[20px] shadow-[0_10px_30px_rgba(0,0,0,0.12)] max-h-[90vh] flex flex-col overflow-hidden"
       >
-        <div className="sm:hidden flex justify-center -mt-2 mb-4">
-          <div className="w-[36px] h-[5px] rounded-full bg-border" />
+        {/* Fixed Header & Top Tabs */}
+        <div className="px-6 pt-5 pb-3.5 border-b border-border/60 shrink-0">
+          <div className="sm:hidden flex justify-center -mt-2 mb-3">
+            <div className="w-[36px] h-[5px] rounded-full bg-border" />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <h2 id="share-dialog-title" className="text-[20px] font-semibold text-ink leading-tight">
+              Share your page
+            </h2>
+            <button
+              onClick={onClose}
+              aria-label="Close share dialog"
+              className="w-9 h-9 -mr-1.5 rounded-[10px] flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors duration-120 cursor-pointer"
+            >
+              <X size={18} strokeWidth={1.5} />
+            </button>
+          </div>
+
+          <div className="mt-3.5 p-1 bg-surface-2 rounded-[10px] border border-border flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('share')}
+              className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'share'
+                  ? 'bg-surface text-ink shadow-2xs border border-border/60'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              <QrCode size={14} />
+              <span>Link &amp; QR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('card')}
+              className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'card'
+                  ? 'bg-surface text-ink shadow-2xs border border-border/60'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              <IdCard size={14} />
+              <span>Card</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('embed')}
+              className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'embed'
+                  ? 'bg-surface text-ink shadow-2xs border border-border/60'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              <Code2 size={14} />
+              <span>Embed</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <h2 id="share-dialog-title" className="text-[20px] font-semibold text-ink leading-tight">
-            Share your page
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close share dialog"
-            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors duration-120 cursor-pointer"
-          >
-            <X size={18} strokeWidth={1.5} />
-          </button>
-        </div>
-
-        <div className="mt-4 p-1 bg-surface-2 rounded-[10px] border border-border flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('share')}
-            className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'share'
-                ? 'bg-surface text-ink shadow-2xs border border-border/60'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            <QrCode size={14} />
-            <span>Share &amp; QR</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('card')}
-            className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'card'
-                ? 'bg-surface text-ink shadow-2xs border border-border/60'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            <IdCard size={14} />
-            <span>Card</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('embed')}
-            className={`flex-1 h-8 rounded-[7px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'embed'
-                ? 'bg-surface text-ink shadow-2xs border border-border/60'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            <Code2 size={14} />
-            <span>Embed</span>
-          </button>
-        </div>
-
-        {activeTab === 'embed' ? (
-          <div className="mt-5">
+        {/* Scrollable Tab Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {activeTab === 'embed' ? (
             <ProfileEmbedSection
               username={username}
               displayName={displayName}
@@ -433,392 +486,530 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
               avatarUrl={avatarUrl}
               vibeId={vibeId}
               isPro={isPro}
+              embedStyle={embedStyle}
+              onEmbedStyleChange={setEmbedStyle}
+              embedTheme={embedTheme}
+              onEmbedThemeChange={setEmbedTheme}
+              hideActions
             />
-          </div>
-        ) : activeTab === 'card' ? (
-          <div className="mt-5 flex flex-col gap-4">
-            <BusinessCardPreview
-              username={username}
-              displayName={displayName || username}
-              bio={bio}
-              avatarUrl={avatarUrl}
-              socials={socials}
-              isPro={isPro}
-              qrDataUrl={qrPngDataUrl}
-              side={cardSide}
-              onSideChange={setCardSide}
-              vibeTheme={cardTheme}
-              config={cardConfig}
-            />
+          ) : activeTab === 'card' ? (
+            <div className="flex flex-col gap-4">
+              <BusinessCardPreview
+                username={username}
+                displayName={displayName || username}
+                bio={bio}
+                avatarUrl={avatarUrl}
+                socials={socials}
+                isPro={isPro}
+                qrDataUrl={qrPngDataUrl}
+                side={cardSide}
+                onSideChange={setCardSide}
+                vibeTheme={cardTheme}
+                config={cardConfig}
+              />
 
-            <BusinessCardCustomizer
-              value={cardConfig}
-              onChange={setCardConfig}
-              onSelectSide={setCardSide}
-              onSave={onSaveCardConfig ? handleSaveCardDesign : undefined}
-              isSaving={isSavingCard}
-            />
+              <BusinessCardCustomizer
+                value={cardConfig}
+                onChange={setCardConfig}
+                onSelectSide={setCardSide}
+                onSave={onSaveCardConfig ? handleSaveCardDesign : undefined}
+                isSaving={isSavingCard}
+                hideSave
+              />
 
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={() => handleDownloadBusinessCard(cardSide)}
-                  disabled={isDownloadingCard}
-                  fullWidth
-                >
-                  <Download size={14} />
-                  <span>
-                    {isDownloadingCard
-                      ? 'Rendering HD...'
-                      : `Download ${cardSide === 'front' ? 'Front' : 'Back'}`}
-                  </span>
-                </Button>
-
+              {/* Secondary export/share utilities */}
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   variant="secondary"
-                  size="md"
+                  size="sm"
                   onClick={() => handleDownloadBusinessCard('both')}
                   disabled={isDownloadingCard}
                   fullWidth
                 >
-                  <Download size={14} />
-                  <span>Both Sides Sheet</span>
+                  <Download size={13} />
+                  <span>Both sides</span>
                 </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary" size="md" onClick={handleSaveContactVcf} fullWidth>
-                  <Contact size={15} />
-                  <span>Contact (.vcf)</span>
+                <Button variant="secondary" size="sm" onClick={handleSaveContactVcf} fullWidth>
+                  <Contact size={13} />
+                  <span>Contact</span>
                 </Button>
-                <Button variant="secondary" size="md" onClick={handleShareCard} fullWidth>
-                  {copiedCard ? <Check size={15} className="text-emerald-600" /> : <Share2 size={15} />}
-                  <span>{copiedCard ? 'Copied!' : 'Share Card'}</span>
-                </Button>
-              </div>
-            </div>
-
-            <p className="text-center text-[12px] text-muted leading-relaxed">
-              Exports pixel-true 2040×1200 HD PNG for Front &amp; Back with brushed metallic tones, QR code &amp; social links.
-            </p>
-          </div>
-        ) : (
-        <div className="mt-5 flex flex-col gap-5">
-          {/* 1. Link row */}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-11 px-3.5 bg-surface-2 border border-border rounded-[10px] flex items-center overflow-hidden">
-              <span className="font-mono text-[14px] sm:text-[15px] text-ink truncate select-all">
-                {displayAddress}
-              </span>
-            </div>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleCopyLink}
-              className="shrink-0 min-w-[96px]"
-            >
-              {copied ? 'Copied' : 'Copy link'}
-            </Button>
-          </div>
-
-          {typeof navigator !== 'undefined' && 'share' in navigator && (
-            <Button variant="secondary" size="md" onClick={handleNativeShare} fullWidth>
-              <Share2 size={16} strokeWidth={1.5} />
-              <span>More sharing options...</span>
-            </Button>
-          )}
-
-          {/* 3. QR Code Studio with Arbitrary Colors */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-ink">QR Code Studio</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted">Card frame</span>
-                <button
-                  type="button"
-                  onClick={() => setShowBrandedFrame((prev) => !prev)}
-                  className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative p-0.5 ${
-                    showBrandedFrame ? 'bg-ink' : 'bg-border'
-                  }`}
-                  aria-label="Toggle branded card frame"
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full bg-surface shadow-xs transition-transform ${
-                      showBrandedFrame ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="flex items-center gap-2 overflow-x-auto py-1">
-              {QR_PRESETS.map((c) => {
-                const isActive = qrFgColor === c.fg && qrBgColor === c.bg;
-                return (
-                  <button
-                    key={c.label}
-                    type="button"
-                    onClick={() => {
-                      setQrFgColor(c.fg);
-                      setQrBgColor(c.bg);
-                    }}
-                    title={c.label}
-                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-transform cursor-pointer shrink-0 border border-border ${
-                      isActive ? 'ring-2 ring-offset-2 ring-ink scale-105' : 'hover:scale-105 opacity-85 hover:opacity-100'
-                    }`}
-                    style={{ backgroundColor: c.fg }}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full border border-black/15" style={{ backgroundColor: c.bg }} />
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Any-Color Pickers + Hex + ECC */}
-            <div className="p-3 rounded-xl bg-surface-2/70 border border-border flex flex-col gap-2.5">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
-                <div className="flex flex-col gap-1 min-w-0">
-                  <span className="text-[11px] font-medium text-muted">QR Dots Color</span>
-                  <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border border-border bg-surface min-w-0">
-                    <input
-                      type="color"
-                      aria-label="QR Foreground Color Picker"
-                      value={qrFgColor}
-                      onChange={(e) => setQrFgColor(e.target.value.toUpperCase())}
-                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
-                    />
-                    <input
-                      type="text"
-                      aria-label="QR Foreground Hex"
-                      defaultValue={qrFgColor}
-                      key={`fg-${qrFgColor}`}
-                      onBlur={(e) => {
-                        const norm = normalizeHexColor(e.target.value);
-                        if (norm) setQrFgColor(norm);
-                      }}
-                      className="w-full min-w-0 text-[11px] font-mono text-ink bg-transparent outline-none uppercase"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const prevFg = qrFgColor;
-                    setQrFgColor(qrBgColor);
-                    setQrBgColor(prevFg);
-                  }}
-                  title="Swap QR colors"
-                  className="h-8 w-8 rounded-lg border border-border bg-surface hover:bg-surface-2 flex items-center justify-center text-muted hover:text-ink cursor-pointer shrink-0"
-                >
-                  <ArrowLeftRight size={13} />
-                </button>
-
-                <div className="flex flex-col gap-1 min-w-0">
-                  <span className="text-[11px] font-medium text-muted">QR Background</span>
-                  <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border border-border bg-surface min-w-0">
-                    <input
-                      type="color"
-                      aria-label="QR Background Color Picker"
-                      value={qrBgColor}
-                      onChange={(e) => setQrBgColor(e.target.value.toUpperCase())}
-                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
-                    />
-                    <input
-                      type="text"
-                      aria-label="QR Background Hex"
-                      defaultValue={qrBgColor}
-                      key={`bg-${qrBgColor}`}
-                      onBlur={(e) => {
-                        const norm = normalizeHexColor(e.target.value);
-                        if (norm) setQrBgColor(norm);
-                      }}
-                      className="w-full min-w-0 text-[11px] font-mono text-ink bg-transparent outline-none uppercase"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <span className="text-[11px] text-muted">Error Correction</span>
-                <div className="flex items-center gap-1 p-0.5 rounded-md bg-surface border border-border">
-                  {(
-                    [
-                      { id: 'M', label: 'Standard (M)' },
-                      { id: 'H', label: 'Print High (H)' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setQrEcc(opt.id)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                        qrEcc === opt.id ? 'bg-ink text-surface' : 'text-muted hover:text-ink'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {showBrandedFrame && (
-                <input
-                  type="text"
-                  value={qrCaption}
-                  onChange={(e) => setQrCaption(e.target.value.slice(0, 48))}
-                  placeholder="Frame caption (e.g. Scan to connect)"
-                  className="h-8 px-2.5 rounded-lg border border-border bg-surface text-[12px] text-ink outline-none focus:border-ink"
-                />
-              )}
-
-              {lowContrast && (
-                <div className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                  <AlertTriangle size={13} className="shrink-0" />
-                  <span>Low contrast ({contrastRatio}:1). Increase difference between dots &amp; background for reliable scans.</span>
-                </div>
-              )}
-            </div>
-
-            {/* QR Card Container */}
-            <div
-              className="w-full flex flex-col items-center justify-center border border-border rounded-[14px] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] text-center transition-colors"
-              style={{ backgroundColor: showBrandedFrame ? '#FFFFFF' : qrBgColor }}
-            >
-              {showBrandedFrame && (
-                <div className="flex flex-col items-center mb-3">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={displayName || username}
-                      referrerPolicy="no-referrer"
-                      className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-xs mb-1.5"
-                    />
+                <Button variant="secondary" size="sm" onClick={handleShareCard} fullWidth>
+                  {copiedCard ? (
+                    <Check size={13} className="text-emerald-600" />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-surface-2 border border-border flex items-center justify-center font-bold text-ink text-[16px] mb-1.5 shadow-xs">
-                      {(displayName || username).charAt(0).toUpperCase()}
-                    </div>
+                    <Share2 size={13} />
                   )}
-                  <span className="text-[14px] font-semibold text-ink leading-tight">
-                    {displayName || `@${username}`}
-                  </span>
-                  <span className="text-[11px] text-muted mt-0.5">
-                    {qrCaption || 'Scan to view my profile'}
+                  <span>{copiedCard ? 'Copied' : 'Share'}</span>
+                </Button>
+              </div>
+
+              <p className="text-center text-[12px] text-muted leading-relaxed">
+                Exports 2040×1200 HD PNG for front &amp; back with your selected finish and QR code.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {/* 1. Link display */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-11 px-3.5 bg-surface-2 border border-border rounded-[10px] flex items-center overflow-hidden">
+                  <span className="font-mono text-[14px] sm:text-[15px] text-ink truncate select-all">
+                    {displayAddress}
                   </span>
                 </div>
-              )}
-
-              <div
-                className="w-[200px] h-[200px] flex items-center justify-center rounded-xl overflow-hidden"
-                style={{ backgroundColor: qrBgColor }}
-              >
-                {qrSvg ? (
-                  <img
-                    src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvg)}`}
-                    alt={`QR code that opens ${fullUrl}`}
-                    width={200}
-                    height={200}
-                    className="w-[200px] h-[200px] block object-contain"
-                  />
-                ) : qrError ? (
-                  <div className="flex flex-col items-center text-center p-4">
-                    <p className="text-[13px] text-muted">
-                      We couldn't create the QR code. Try again.
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setQrError(false);
-                        setIsGenerating(true);
-                        Promise.all([
-                          makeQrSvg(qrUrl, { darkColor: qrFgColor, lightColor: qrBgColor, errorCorrectionLevel: qrEcc }),
-                          makeQrPngDataUrl(qrUrl, { darkColor: qrFgColor, lightColor: qrBgColor, errorCorrectionLevel: qrEcc }),
-                        ])
-                          .then(([svg, png]) => {
-                            setQrSvg(svg);
-                            setQrPngDataUrl(png);
-                            setIsGenerating(false);
-                          })
-                          .catch(() => {
-                            setQrError(true);
-                            setIsGenerating(false);
-                          });
-                      }}
-                      className="mt-2"
-                    >
-                      Try again
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="w-[200px] h-[200px] bg-surface-2 rounded-[8px] animate-pulse" />
+                {typeof navigator !== 'undefined' && 'share' in navigator && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={handleNativeShare}
+                    aria-label="Share via device"
+                    title="Share via device"
+                    className="shrink-0"
+                  >
+                    <Share2 size={16} strokeWidth={1.5} />
+                  </Button>
                 )}
               </div>
 
-              {showBrandedFrame && (
-                <div className="mt-3 pt-2.5 border-t border-border/60 w-full flex items-center justify-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-ink tracking-tight font-sans">iveo</span>
-                  <span className="text-[10px] text-muted">· iveo.site/@{username}</span>
+              {!isPublished && (
+                <div className="flex items-center justify-between gap-3 bg-surface-2 border border-border rounded-[10px] p-3 text-[13px] text-muted">
+                  <span>Your page is hidden, so visitors will see an unavailable message.</span>
+                  <Button
+                    as={Link}
+                    to="/dashboard/settings"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={onClose}
+                  >
+                    Open settings
+                  </Button>
                 </div>
               )}
-            </div>
 
-            <div className="w-full grid grid-cols-2 gap-2.5">
+              {/* 2. QR Code Preview Card */}
+              <div
+                className="w-full flex flex-col items-center justify-center border border-border rounded-[14px] p-5 text-center transition-colors"
+                style={{ backgroundColor: showBrandedFrame ? '#FFFFFF' : qrBgColor }}
+              >
+                {showBrandedFrame && (
+                  <div className="flex flex-col items-center mb-3">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName || username}
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-xs mb-1.5"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-surface-2 border border-border flex items-center justify-center font-bold text-ink text-[16px] mb-1.5 shadow-xs">
+                        {(displayName || username).charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-[14px] font-semibold text-ink leading-tight">
+                      {displayName || `@${username}`}
+                    </span>
+                    <span className="text-[12px] text-muted mt-0.5">
+                      {qrCaption || 'Scan to view my profile'}
+                    </span>
+                  </div>
+                )}
+
+                <div
+                  className="w-[200px] h-[200px] flex items-center justify-center rounded-xl overflow-hidden"
+                  style={{ backgroundColor: qrBgColor }}
+                >
+                  {qrSvg ? (
+                    <img
+                      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvg)}`}
+                      alt={`QR code that opens ${fullUrl}`}
+                      width={200}
+                      height={200}
+                      className="w-[200px] h-[200px] block object-contain"
+                    />
+                  ) : qrError ? (
+                    <div className="flex flex-col items-center text-center p-4">
+                      <p className="text-[13px] text-muted">
+                        We couldn't create the QR code. Try again.
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setQrError(false);
+                          setIsGenerating(true);
+                          Promise.all([
+                            makeQrSvg(qrUrl, {
+                              darkColor: qrFgColor,
+                              lightColor: qrBgColor,
+                              errorCorrectionLevel: qrEcc,
+                            }),
+                            makeQrPngDataUrl(qrUrl, {
+                              darkColor: qrFgColor,
+                              lightColor: qrBgColor,
+                              errorCorrectionLevel: qrEcc,
+                            }),
+                          ])
+                            .then(([svg, png]) => {
+                              setQrSvg(svg);
+                              setQrPngDataUrl(png);
+                              setIsGenerating(false);
+                            })
+                            .catch(() => {
+                              setQrError(true);
+                              setIsGenerating(false);
+                            });
+                        }}
+                        className="mt-2"
+                      >
+                        Try again
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="w-[200px] h-[200px] bg-surface-2 rounded-[8px] animate-pulse" />
+                  )}
+                </div>
+
+                {showBrandedFrame && (
+                  <div className="mt-3 pt-2.5 border-t border-border/60 w-full flex items-center justify-center gap-1.5">
+                    <span className="text-[12px] font-semibold text-ink tracking-tight font-sans">
+                      iveo
+                    </span>
+                    <span className="text-[12px] text-muted">· iveo.site/@{username}</span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-center text-[12px] text-muted leading-relaxed">
+                Scans directly to iveo.site/@{username}.
+              </p>
+
+              {/* 3. Secondary Options Accordions */}
+              <div className="flex flex-col gap-2">
+                {/* Customize QR Accordion */}
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleLinkSection('qr')}
+                    aria-expanded={openLinkSection === 'qr'}
+                    className="w-full px-3.5 py-3 flex items-center justify-between text-[14px] font-medium text-ink hover:bg-surface-2/60 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <SlidersHorizontal size={15} className="text-muted shrink-0" />
+                      <span>Customize QR</span>
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-muted transition-transform duration-150 ${
+                        openLinkSection === 'qr' ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {openLinkSection === 'qr' && (
+                    <div className="px-3.5 pb-4 pt-3 border-t border-border/70 flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[13px] font-medium text-ink">Card frame</span>
+                        <Toggle
+                          checked={showBrandedFrame}
+                          onChange={() => setShowBrandedFrame((prev) => !prev)}
+                          ariaLabel="Toggle branded card frame"
+                        />
+                      </div>
+
+                      {showBrandedFrame && (
+                        <input
+                          type="text"
+                          value={qrCaption}
+                          onChange={(e) => setQrCaption(e.target.value.slice(0, 48))}
+                          placeholder="Frame caption (e.g. Scan to connect)"
+                          className="h-9 px-2.5 rounded-lg border border-border bg-surface text-[13px] text-ink outline-none focus:border-ink"
+                        />
+                      )}
+
+                      <div className="flex items-center gap-2 overflow-x-auto py-1">
+                        {QR_PRESETS.map((c) => {
+                          const isActive = qrFgColor === c.fg && qrBgColor === c.bg;
+                          return (
+                            <button
+                              key={c.label}
+                              type="button"
+                              onClick={() => {
+                                setQrFgColor(c.fg);
+                                setQrBgColor(c.bg);
+                              }}
+                              title={c.label}
+                              aria-label={`${c.label} QR preset`}
+                              className={`w-7 h-7 rounded-full flex items-center justify-center transition-transform cursor-pointer shrink-0 border border-border ${
+                                isActive
+                                  ? 'ring-2 ring-offset-2 ring-ink scale-105'
+                                  : 'hover:scale-105 opacity-85 hover:opacity-100'
+                              }`}
+                              style={{ backgroundColor: c.fg }}
+                            >
+                              <span
+                                className="w-2.5 h-2.5 rounded-full border border-black/15"
+                                style={{ backgroundColor: c.bg }}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <span className="text-[12px] font-medium text-muted">QR dots color</span>
+                          <div className="flex items-center gap-1.5 h-9 px-2 rounded-lg border border-border bg-surface min-w-0">
+                            <input
+                              type="color"
+                              aria-label="QR foreground color picker"
+                              value={qrFgColor}
+                              onChange={(e) => setQrFgColor(e.target.value.toUpperCase())}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+                            />
+                            <input
+                              type="text"
+                              aria-label="QR foreground hex"
+                              defaultValue={qrFgColor}
+                              key={`fg-${qrFgColor}`}
+                              onBlur={(e) => {
+                                const norm = normalizeHexColor(e.target.value);
+                                if (norm) setQrFgColor(norm);
+                              }}
+                              className="w-full min-w-0 text-[12px] font-mono text-ink bg-transparent outline-none uppercase"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const prevFg = qrFgColor;
+                            setQrFgColor(qrBgColor);
+                            setQrBgColor(prevFg);
+                          }}
+                          title="Swap QR colors"
+                          aria-label="Swap QR colors"
+                          className="h-9 w-9 rounded-lg border border-border bg-surface hover:bg-surface-2 flex items-center justify-center text-muted hover:text-ink cursor-pointer shrink-0"
+                        >
+                          <ArrowLeftRight size={14} />
+                        </button>
+
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <span className="text-[12px] font-medium text-muted">QR background</span>
+                          <div className="flex items-center gap-1.5 h-9 px-2 rounded-lg border border-border bg-surface min-w-0">
+                            <input
+                              type="color"
+                              aria-label="QR background color picker"
+                              value={qrBgColor}
+                              onChange={(e) => setQrBgColor(e.target.value.toUpperCase())}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+                            />
+                            <input
+                              type="text"
+                              aria-label="QR background hex"
+                              defaultValue={qrBgColor}
+                              key={`bg-${qrBgColor}`}
+                              onBlur={(e) => {
+                                const norm = normalizeHexColor(e.target.value);
+                                if (norm) setQrBgColor(norm);
+                              }}
+                              className="w-full min-w-0 text-[12px] font-mono text-ink bg-transparent outline-none uppercase"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <span className="text-[12px] text-muted">Error correction</span>
+                        <div className="flex items-center gap-1 p-0.5 rounded-md bg-surface-2 border border-border">
+                          {(
+                            [
+                              { id: 'M', label: 'Standard (M)' },
+                              { id: 'H', label: 'Print high (H)' },
+                            ] as const
+                          ).map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setQrEcc(opt.id)}
+                              className={`px-2 py-0.5 rounded text-[12px] font-medium cursor-pointer ${
+                                qrEcc === opt.id
+                                  ? 'bg-ink text-surface'
+                                  : 'text-muted hover:text-ink'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {lowContrast && (
+                        <div className="flex items-center gap-1.5 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                          <AlertTriangle size={13} className="shrink-0" />
+                          <span>
+                            Low contrast ({contrastRatio}:1). Increase difference between dots &amp;
+                            background for reliable scans.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tracked Links Accordion */}
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleLinkSection('tracked')}
+                    aria-expanded={openLinkSection === 'tracked'}
+                    className="w-full px-3.5 py-3 flex items-center justify-between text-[14px] font-medium text-ink hover:bg-surface-2/60 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Link2 size={15} className="text-muted shrink-0" />
+                      <span>Tracked link</span>
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-muted transition-transform duration-150 ${
+                        openLinkSection === 'tracked' ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {openLinkSection === 'tracked' && (
+                    <div className="px-3.5 pb-4 pt-3 border-t border-border/70">
+                      <TrackedLinkSection username={username} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Link Preview Accordion */}
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleLinkSection('preview')}
+                    aria-expanded={openLinkSection === 'preview'}
+                    className="w-full px-3.5 py-3 flex items-center justify-between text-[14px] font-medium text-ink hover:bg-surface-2/60 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Eye size={15} className="text-muted shrink-0" />
+                      <span>Link preview</span>
+                    </span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-muted transition-transform duration-150 ${
+                        openLinkSection === 'preview' ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {openLinkSection === 'preview' && (
+                    <div className="px-3.5 pb-4 pt-3 border-t border-border/70">
+                      <LinkPreviewSection
+                        username={username}
+                        displayName={displayName}
+                        bio={bio}
+                        avatarUrl={avatarUrl}
+                        vibeId={vibeId}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sticky Bottom Action Bar */}
+        <div className="shrink-0 border-t border-border bg-surface px-6 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))]">
+          {activeTab === 'share' ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleCopyLink}
+                className="flex-1 min-w-0"
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                <span>{copied ? 'Copied' : 'Copy link'}</span>
+              </Button>
               <Button
                 variant="secondary"
                 size="md"
                 onClick={handleDownloadPng}
                 disabled={!qrPngDataUrl || isGenerating}
-                fullWidth
+                className="shrink-0"
               >
-                Download PNG
+                <Download size={14} />
+                <span>PNG</span>
               </Button>
               <Button
                 variant="secondary"
                 size="md"
                 onClick={handleDownloadSvg}
                 disabled={!qrSvg || isGenerating}
-                fullWidth
+                className="shrink-0"
               >
-                Download SVG
+                <Download size={14} />
+                <span>SVG</span>
               </Button>
             </div>
-
-            <p className="text-center text-[12px] text-muted leading-relaxed">
-              Scans directly to iveo.site/@{username}. Any custom color &amp; print-ready vector SVG/PNG.
-            </p>
-          </div>
-
-          <TrackedLinkSection username={username} />
-
-          <LinkPreviewSection
-            username={username}
-            displayName={displayName}
-            bio={bio}
-            avatarUrl={avatarUrl}
-            vibeId={vibeId}
-          />
-
-          {!isPublished && (
-            <div className="flex items-center justify-between gap-3 bg-surface-2 border border-border rounded-[10px] p-3 text-[14px] text-muted">
-              <span>Your page is hidden, so visitors will see an unavailable message.</span>
+          ) : activeTab === 'card' ? (
+            <div className="flex items-center gap-2">
               <Button
-                as={Link}
-                to="/dashboard/settings"
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-                onClick={onClose}
+                variant="primary"
+                size="md"
+                onClick={() => handleDownloadBusinessCard(cardSide)}
+                disabled={isDownloadingCard}
+                className="flex-1 min-w-0"
               >
-                Open settings
+                <Download size={14} />
+                <span>
+                  {isDownloadingCard
+                    ? 'Rendering...'
+                    : `Download ${cardSide === 'front' ? 'front' : 'back'}`}
+                </span>
+              </Button>
+              {onSaveCardConfig && (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => handleSaveCardDesign(cardConfig)}
+                  disabled={isSavingCard}
+                  className="shrink-0"
+                >
+                  <Save size={14} />
+                  <span>{isSavingCard ? 'Saving...' : 'Save'}</span>
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleCopyEmbedCode}
+                className="flex-1 min-w-0"
+              >
+                {copiedEmbed ? <Check size={14} /> : <Copy size={14} />}
+                <span>{copiedEmbed ? 'Copied' : 'Copy embed code'}</span>
+              </Button>
+              <Button
+                as="a"
+                href={embedSrc}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="secondary"
+                size="md"
+                className="shrink-0"
+              >
+                <ExternalLink size={14} />
+                <span>Live preview</span>
               </Button>
             </div>
           )}
         </div>
-        )}
       </div>
     </div>
   );

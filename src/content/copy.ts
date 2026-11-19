@@ -259,6 +259,7 @@ export const copy = {
   dashboard: {
     tabs: {
       links: 'Links',
+      profiles: 'Profiles',
       appearance: 'Appearance',
       contacts: 'Contacts',
       analytics: 'Analytics',
@@ -266,6 +267,7 @@ export const copy = {
     },
     titles: {
       links: 'Links | iveo',
+      profiles: 'Profiles | iveo',
       appearance: 'Appearance | iveo',
       contacts: 'Contacts | iveo',
       analytics: 'Analytics | iveo',

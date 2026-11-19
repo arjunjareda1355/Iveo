@@ -163,7 +163,7 @@ export const AccountPage: React.FC = () => {
             <Card className="flex flex-col gap-5">
               <div>
                 <h1 className="text-[20px] font-semibold text-ink leading-tight">
-                  Profile &amp; Bio
+                  Profile &amp; bio
                 </h1>
                 <p className="mt-1 text-[14px] text-muted">
                   Customize your avatar, display name, and public page bio.
@@ -173,7 +173,7 @@ export const AccountPage: React.FC = () => {
               <form onSubmit={handleSaveProfileInfo} className="flex flex-col gap-4">
                 <div>
                   <label className="block text-[13px] font-medium text-ink mb-2">
-                    Avatar &amp; Photo
+                    Avatar &amp; photo
                   </label>
                   <ProfilePhotoUploader
                     currentAvatarUrl={session.imageUrl}
@@ -190,14 +190,14 @@ export const AccountPage: React.FC = () => {
 
                 <div>
                   <label htmlFor="account-display-name" className="block text-[13px] font-medium text-ink mb-1.5">
-                    Display Name
+                    Display name
                   </label>
                   <input
                     id="account-display-name"
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="e.g. Maya Ellis"
+                    placeholder="Your display name"
                     className="w-full h-11 px-3.5 rounded-[10px] bg-surface-2 border border-border text-[14px] text-ink outline-none focus:border-ink transition-colors"
                   />
                 </div>
@@ -250,7 +250,7 @@ export const AccountPage: React.FC = () => {
             </div>
 
             {/* Seamless Clerk Security & Account Controls (No Side Borders) */}
-            <section aria-label="Account Security">
+            <section aria-label="Account security">
               <UserProfile routing="path" path="/account" appearance={accountAppearance} />
             </section>
           </div>

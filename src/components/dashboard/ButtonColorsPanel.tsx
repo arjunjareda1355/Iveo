@@ -285,9 +285,9 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
           color: effectiveTokens.text,
         }}
       >
-        <div className="w-full flex flex-wrap items-center justify-between gap-1.5 text-[11px] font-mono opacity-65">
-          <span>BUTTON COLOR PREVIEW</span>
-          <span className="truncate max-w-full">
+        <div className="w-full flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-muted">
+          <span>Button preview</span>
+          <span className="font-mono truncate max-w-full">
             {effectiveTokens.buttonBg} · {effectiveTokens.buttonText}
           </span>
         </div>
@@ -304,15 +304,15 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
             boxShadow: effectiveTokens.buttonShadow || 'none',
           }}
         >
-          Portfolio &amp; Latest Work
+          Sample link button
         </div>
       </div>
 
       {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5 min-w-0">
-          <Palette size={13} className="shrink-0" />
-          <span className="truncate">Custom Button Colors (Hex or Picker)</span>
+        <span className="text-[13px] font-semibold text-ink flex items-center gap-1.5 min-w-0">
+          <Palette size={14} className="text-muted shrink-0" />
+          <span className="truncate">Custom button colors</span>
         </span>
         {hasCustomColors && (
           <button
@@ -321,14 +321,14 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
             className="text-[12px] text-muted hover:text-ink flex items-center gap-1 cursor-pointer shrink-0"
           >
             <RotateCcw size={12} />
-            <span>Reset to Vibe default</span>
+            <span>Reset to vibe default</span>
           </button>
         )}
       </div>
 
       {renderField(
         'bg',
-        'Button Fill Color',
+        'Button fill color',
         'Enter any #RRGGBB hex code, pick a color, or use Transparent.',
         activeVibe.tokens.buttonBg,
         true
@@ -336,7 +336,7 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
 
       {renderField(
         'text',
-        'Button Text Color',
+        'Button text color',
         'Auto-contrasts when left blank, or set an explicit hex color.',
         activeVibe.tokens.buttonText,
         false
@@ -344,7 +344,7 @@ export const ButtonColorsPanel: React.FC<ButtonColorsPanelProps> = ({
 
       {renderField(
         'border',
-        'Button Border Color',
+        'Button border color',
         'Outline color around your link buttons (supports Transparent).',
         activeVibe.tokens.buttonBorder || '#0A0A0A',
         true

@@ -1260,20 +1260,20 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             href="https://iveo.site/signup"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-normal transition-all duration-150 opacity-40 hover:opacity-85 hover:underline underline-offset-4 select-none"
+            className="inline-flex items-center gap-1 text-[11px] font-normal transition-all duration-150 opacity-80 hover:opacity-100 hover:underline underline-offset-4 select-none"
             style={{ color: tokens.muted }}
           >
             <span>Create your page</span>
           </a>
         )}
 
-        {/* Refined and very small iveo mark at the bottom */}
+        {/* Refined and small iveo mark at the bottom */}
         {!hideFooterMark && (
           <a
             href="https://iveo.site"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 opacity-35 hover:opacity-80 transition-opacity duration-150 select-none group"
+            className="inline-flex items-center gap-1.5 opacity-80 hover:opacity-100 transition-opacity duration-150 select-none group"
             aria-label="iveo"
           >
             <img
@@ -1295,7 +1295,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           <button
             type="button"
             onClick={() => setIsReportModalOpen(true)}
-            className="text-[10px] opacity-30 hover:opacity-75 underline underline-offset-2 transition-opacity cursor-pointer"
+            className="text-[10px] opacity-75 hover:opacity-100 underline underline-offset-2 transition-opacity cursor-pointer"
             style={{ color: tokens.muted }}
           >
             Report this page

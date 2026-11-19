@@ -58,7 +58,9 @@ function classifyPasskeyError(
     /publickey-credentials|SecurityError|Permissions-Policy|not enabled in this document|cross-origin/i.test(
       combined
     ) ||
-    (inIframe && /NotAllowedError|not allowed/i.test(combined))
+    (inIframe &&
+      (code === 'passkey_registration_cancelled' ||
+        /NotAllowedError|not allowed/i.test(combined)))
   ) {
     return {
       message:
@@ -67,11 +69,28 @@ function classifyPasskeyError(
     };
   }
   if (
+    code === 'passkey_invalid_rpID_or_domain' ||
+    /rpId|relying party|domain does not match/i.test(combined)
+  ) {
+    return {
+      message:
+        'Passkey setup cannot run on this preview domain. Open Account settings on your primary app domain.',
+      needsTopLevelTab: inIframe,
+    };
+  }
+  if (code === 'passkey_already_exists' || /already registered|InvalidStateError/i.test(combined)) {
+    return {
+      message: 'A passkey for this device or security key is already registered to your account.',
+      needsTopLevelTab: false,
+    };
+  }
+  if (
     code === 'passkey_registration_cancelled' ||
+    code === 'passkey_operation_aborted' ||
     /AbortError|passkey_registration_cancelled|cancel/i.test(combined)
   ) {
     return {
-      message: 'Passkey setup was cancelled before completing biometric/device verification.',
+      message: 'Passkey setup was cancelled before completing biometric or device verification.',
       needsTopLevelTab: false,
     };
   }
@@ -82,7 +101,11 @@ function classifyPasskeyError(
       needsTopLevelTab: false,
     };
   }
-  if (code === 'passkey_not_supported' || /not supported/i.test(combined)) {
+  if (
+    code === 'passkey_not_supported' ||
+    code === 'passkey_pa_not_supported' ||
+    /not supported/i.test(combined)
+  ) {
     return {
       message: 'Passkeys are not supported on this device or browser.',
       needsTopLevelTab: false,
@@ -198,6 +221,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
     } catch (err) {
       const classified = classifyPasskeyError(err, 'Could not rename passkey.', inIframe);
       setErrorMsg(classified.message);
+      setNeedsTopLevelTab(classified.needsTopLevelTab);
     } finally {
       setSavingRenameId(null);
     }
@@ -213,6 +237,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
     } catch (err) {
       const classified = classifyPasskeyError(err, 'Could not remove passkey.', inIframe);
       setErrorMsg(classified.message);
+      setNeedsTopLevelTab(classified.needsTopLevelTab);
     } finally {
       setDeletingId(null);
     }
