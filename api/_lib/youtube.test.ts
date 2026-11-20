@@ -8,9 +8,17 @@ import {
 } from './youtube';
 
 test('getYouTubeApiKey resolves configured server API key cleanly', () => {
-  const key = getYouTubeApiKey();
-  assert.ok(key.length > 20);
-  assert.equal(key.startsWith(['AIza', 'Sy'].join('')), true);
+  const prev = process.env.YOUTUBE_API_KEY;
+  try {
+    delete process.env.YOUTUBE_API_KEY;
+    assert.equal(getYouTubeApiKey(), '');
+
+    process.env.YOUTUBE_API_KEY = 'mock_youtube_server_key_for_test_only';
+    assert.equal(getYouTubeApiKey(), 'mock_youtube_server_key_for_test_only');
+  } finally {
+    if (prev === undefined) delete process.env.YOUTUBE_API_KEY;
+    else process.env.YOUTUBE_API_KEY = prev;
+  }
 });
 
 test('parseYouTubeInput resolves handles, channel IDs, custom URLs, shorts, and watch links', () => {

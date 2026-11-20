@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { Camera, Trash2, Upload, Sparkles, Loader2, Check, User } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Trash2, Upload, Sparkles, Loader2, Check, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import { Avatar } from '../ui/Avatar';
@@ -38,6 +38,8 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   className = '',
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedDefaultId, setSelectedDefaultId] = useState<string | null>(() => {
@@ -51,10 +53,28 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
 
   const { showToast } = useToast();
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
+
   const isCurrentDefault = Boolean(
     avatarType === 'default' ||
-    selectedDefaultId ||
-    (currentAvatarUrl && getDefaultAvatarByUrl(currentAvatarUrl))
+      selectedDefaultId ||
+      (currentAvatarUrl && getDefaultAvatarByUrl(currentAvatarUrl))
   );
 
   const handleSelectDefault = async (avatar: DefaultAvatar) => {
@@ -66,9 +86,10 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
         avatarType: 'default',
         avatarId: avatar.id,
       });
-      showToast('Avatar updated');
+      showToast('Photo updated');
+      setShowLibrary(false);
     } catch {
-      showToast('Failed to select avatar');
+      showToast('Failed to select photo');
     } finally {
       setIsProcessing(false);
     }
@@ -140,7 +161,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
         avatarType: 'uploaded',
         avatarId: null,
       });
-      showToast('Custom photo updated');
+      showToast('Photo updated');
     } catch (err: any) {
       showToast(err?.message || 'Could not upload photo');
     } finally {
@@ -150,6 +171,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   };
 
   const handleRemove = async () => {
+    setMenuOpen(false);
     setIsProcessing(true);
     try {
       setSelectedDefaultId(null);
@@ -158,7 +180,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
         avatarType: 'default',
         avatarId: null,
       });
-      showToast('Avatar reset to default');
+      showToast('Photo removed');
     } catch {
       showToast('Failed to remove photo');
     } finally {
@@ -167,8 +189,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   };
 
   return (
-    <div className={`flex flex-col gap-4 ${className}`}>
-      {/* Hidden File Input for Custom Upload */}
+    <div className={`flex flex-col gap-3 ${className}`}>
       <input
         ref={fileInputRef}
         type="file"
@@ -179,8 +200,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
         aria-hidden="true"
       />
 
-      {/* Header: Current Avatar Preview + Quick Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-surface-2 border border-border">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="relative shrink-0">
             <Avatar
@@ -188,7 +208,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
               alt={username || 'Profile avatar'}
               size="lg"
               fallbackInitials={initials}
-              className="ring-2 ring-border shadow-xs"
+              className="border border-border"
             />
             {isProcessing && (
               <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center text-white">
@@ -198,64 +218,101 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
           </div>
 
           <div className="flex flex-col min-w-0">
-            <span className="text-[14px] font-semibold text-ink truncate">
-              {username ? `@${username}` : 'Profile photo'}
+            <span className="text-[14px] font-medium text-ink">
+              Profile photo
             </span>
+            <span className="text-[12px] text-muted mt-0.5">
+              PNG, JPG or WebP, optimised automatically.
+            </span>
+            {currentAvatarUrl && isCurrentDefault && (
+              <span className="text-[12px] text-muted mt-0.5">
+                Using library avatar
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Action Buttons: Direct Upload & Library Toggle (no duplicate buttons) */}
-        <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0 flex-wrap">
+        {/* Single "Change photo" menu (AR-3 / AU-7) */}
+        <div ref={menuRef} className="relative shrink-0">
           <Button
             type="button"
-            variant="primary"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
+            variant="secondary"
+            size="md"
+            onClick={() => setMenuOpen((prev) => !prev)}
             disabled={isProcessing}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
           >
-            <Upload size={14} className="mr-1.5" />
-            <span>Upload photo</span>
+            <span>Change photo</span>
+            <ChevronDown size={15} className="ml-1.5 text-muted" />
           </Button>
 
-          <Button
-            type="button"
-            variant={showLibrary ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setShowLibrary(!showLibrary)}
-            disabled={isProcessing}
-          >
-            <Sparkles size={14} className="mr-1.5" />
-            <span>{showLibrary ? 'Hide styles' : 'Browse styles'}</span>
-          </Button>
-
-          {currentAvatarUrl && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleRemove}
-              disabled={isProcessing}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 text-[12px]"
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label="Photo actions"
+              className="absolute right-0 top-[calc(100%+6px)] w-52 rounded-[12px] bg-surface border border-border shadow-[0_12px_32px_rgba(10,10,10,0.12)] py-1.5 z-40"
             >
-              <Trash2 size={13} className="mr-1" />
-              <span>Reset</span>
-            </Button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  fileInputRef.current?.click();
+                }}
+                className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer"
+              >
+                <Upload size={16} className="text-muted shrink-0" />
+                <span>Upload photo</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setShowLibrary((prev) => !prev);
+                }}
+                className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer"
+              >
+                <Sparkles size={16} className="text-muted shrink-0" />
+                <span>{showLibrary ? 'Hide library' : 'Choose from library'}</span>
+              </button>
+
+              {currentAvatarUrl && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleRemove}
+                  className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer border-t border-divider mt-1 pt-1"
+                >
+                  <Trash2 size={16} className="text-muted shrink-0" />
+                  <span>Remove photo</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
 
       {/* Expandable Default Avatar Library Grid */}
       {showLibrary && (
-        <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-surface border border-border">
-          <div className="flex items-center justify-between text-[12px] text-muted px-0.5">
+        <div className="flex flex-col gap-2.5 pt-2">
+          <div className="flex items-center justify-between text-[12px] text-muted">
             <span className="font-medium text-ink">Avatar library</span>
-            <span>{DEFAULT_AVATAR_LIST.length} styles · Tap to apply</span>
+            <button
+              type="button"
+              onClick={() => setShowLibrary(false)}
+              className="text-[12px] text-muted hover:text-ink underline underline-offset-2 cursor-pointer"
+            >
+              Done
+            </button>
           </div>
 
           <div
-            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 gap-2.5 max-h-[260px] overflow-y-auto p-1.5 rounded-lg bg-surface-2/60 border border-border/80 custom-scrollbar"
+            className="grid grid-cols-5 sm:grid-cols-7 md:grid-cols-8 gap-2.5 max-h-[240px] overflow-y-auto p-1 custom-scrollbar"
             role="radiogroup"
-            aria-label="Default avatar library"
+            aria-label="Avatar library"
           >
             {DEFAULT_AVATAR_LIST.map((avatar) => {
               const isSelected =
@@ -270,7 +327,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
                   title={avatar.name}
                   aria-checked={isSelected}
                   role="radio"
-                  className={`group relative aspect-square rounded-full p-0.5 transition-all duration-150 cursor-pointer focus:outline-hidden ${
+                  className={`group relative aspect-square rounded-full p-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-ink ${
                     isSelected
                       ? 'ring-2 ring-ink ring-offset-2 scale-105'
                       : 'hover:scale-105 hover:ring-1 hover:ring-ink/30 active:scale-95'
@@ -282,7 +339,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
                     loading="lazy"
                     referrerPolicy="no-referrer"
                     crossOrigin="anonymous"
-                    className="w-full h-full rounded-full object-cover bg-sand-100"
+                    className="w-full h-full rounded-full object-cover bg-surface-2"
                   />
                   {isSelected && (
                     <div className="absolute inset-0 rounded-full bg-black/25 flex items-center justify-center text-white">

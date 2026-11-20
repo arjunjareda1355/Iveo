@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "test": "tsx --test src/lib/*.test.ts",
+    "test": "tsx --test src/lib/*.test.ts src/lib/providers/*.test.ts api/_lib/*.test.ts src/auth/*.test.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

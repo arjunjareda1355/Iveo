@@ -2,9 +2,13 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 
-export const SITE_LOGO_SRC = 'https://i.postimg.cc/HkbTTdWH/File-Kit-1000252682-compress-image.jpg';
-export const SITE_LOGO_ALT = 'File-Kit-1000252682-compress-image';
-export const SITE_LOGO_HREF = 'https://postimg.cc/9DX6p3qN';
+export const SITE_LOGO_SRC = 'https://i.postimg.cc/d1cqB7Dm/iveo-logo-04-tile-white-shadow-4k.png';
+export const SITE_LOGO_ALT = 'iveo';
+export const SITE_LOGO_HREF = 'https://postimg.cc/t1DQR43Y';
+
+export const SITE_WORDMARK_SRC = 'https://i.postimg.cc/1t19Hg43/iveo-logo-12-wordmark-i-mark-black-4k.png';
+export const SITE_WORDMARK_ALT = 'iveo';
+export const SITE_WORDMARK_HREF = 'https://postimg.cc/SXVFQxWB';
 
 interface LogoProps {
   tone?: 'light' | 'dark';
@@ -13,6 +17,7 @@ interface LogoProps {
   isLink?: boolean;
   externalLink?: boolean;
   compactMobile?: boolean;
+  showWordmark?: boolean;
 }
 
 export const Logo: React.FC<LogoProps> = ({
@@ -22,30 +27,36 @@ export const Logo: React.FC<LogoProps> = ({
   isLink = true,
   externalLink = false,
   compactMobile = false,
+  showWordmark = true,
 }) => {
   const isDark = tone === 'dark';
-  const heightClass = size === 'sm' ? 'h-6' : size === 'lg' ? 'h-9' : 'h-7';
+  const tileHeightClass = size === 'sm' ? 'h-6' : size === 'lg' ? 'h-9' : 'h-7';
+  const wordmarkHeightClass = size === 'sm' ? 'h-3.5' : size === 'lg' ? 'h-5' : 'h-4';
 
   const content = (
-    <span className={cn('inline-flex items-center gap-2.5 select-none', className)}>
+    <span className={cn('inline-flex items-center gap-2 select-none shrink-0', className)}>
       <img
         src={SITE_LOGO_SRC}
-        alt={SITE_LOGO_ALT}
+        alt={showWordmark ? '' : SITE_LOGO_ALT}
         className={cn(
-          'w-auto object-contain rounded-[6px] shadow-2xs transition-transform duration-150 group-hover:scale-[1.03]',
-          heightClass
+          'w-auto object-contain rounded-[7px] transition-transform duration-150 group-hover:scale-[1.03]',
+          tileHeightClass
         )}
         loading="eager"
       />
-      <span
-        className={cn(
-          'font-semibold tracking-[-0.03em] text-[17px] text-ink transition-colors',
-          compactMobile && 'hidden sm:inline',
-          isDark && 'text-white'
-        )}
-      >
-        iveo
-      </span>
+      {showWordmark && (
+        <img
+          src={SITE_WORDMARK_SRC}
+          alt={SITE_WORDMARK_ALT}
+          className={cn(
+            'w-auto object-contain transition-opacity duration-150',
+            wordmarkHeightClass,
+            compactMobile && 'hidden sm:inline-block',
+            isDark && 'brightness-0 invert'
+          )}
+          loading="eager"
+        />
+      )}
     </span>
   );
 

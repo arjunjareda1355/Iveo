@@ -15,6 +15,7 @@ interface VibePhoneProps {
   className?: string;
   ariaLabel?: string;
   protectedIds?: ReadonlySet<string>;
+  disableScroll?: boolean;
 }
 
 export const VibePhone: React.FC<VibePhoneProps> = React.memo(
@@ -29,6 +30,7 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
     className,
     ariaLabel,
     protectedIds,
+    disableScroll = false,
   }) => {
     const scale = width / 300;
 
@@ -38,6 +40,7 @@ export const VibePhone: React.FC<VibePhoneProps> = React.memo(
         vibe={currentVibe}
         ariaLabel={ariaLabel}
         className={className}
+        disableScroll={disableScroll}
       >
         <div className="relative w-full min-h-full flex flex-col">
           <PhonePage

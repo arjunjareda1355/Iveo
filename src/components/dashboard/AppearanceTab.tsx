@@ -4,6 +4,7 @@ import {
   Image as ImageIcon,
   Info,
   Layers,
+  LayoutGrid,
   RectangleHorizontal,
   Sparkles,
   Type,
@@ -18,6 +19,7 @@ import { BackgroundSelectorCard } from './BackgroundSelectorCard';
 import { FontSelectorPanel } from './FontSelectorPanel';
 import { ButtonColorsPanel } from './ButtonColorsPanel';
 import { LayoutEffectsPanel } from './LayoutEffectsPanel';
+import { CardLookTileGrid } from '../links/CardLookTile';
 import { useIvioSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
@@ -27,13 +29,15 @@ import {
   DEFAULT_BACKGROUND_CONFIG,
   DEFAULT_LAYOUT_SETTINGS,
   LayoutSettings,
+  normalizeCardLookKey,
 } from '../../lib/preferences';
+import { getCardLookOption } from '../../lib/embedLooks';
 import { FontSettings, getFontCssFamily, getFontOption, loadGoogleFonts } from '../../lib/fonts';
 import { ButtonColors, resolveEffectiveTokens } from '../../lib/colors';
 import { getBackgroundPreset } from '../../lib/backgrounds';
-import { BackgroundConfig } from '../../data/types';
+import { BackgroundConfig, CardLookStyle } from '../../data/types';
 
-type AppearanceSection = 'vibe' | 'background' | 'fonts' | 'buttons' | 'layout';
+type AppearanceSection = 'vibe' | 'background' | 'fonts' | 'buttons' | 'cards' | 'layout';
 
 interface AppearanceTabProps {
   onPreviewVibeChange?: (vibeId: VibeId) => void;
@@ -219,9 +223,29 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
       showToast('Typography reset to vibe default');
     } else if (section === 'buttons') {
       await handleResetButtonsToDefault();
+    } else if (section === 'cards') {
+      const nextLayout: LayoutSettings = {
+        ...(currentLayout || DEFAULT_LAYOUT_SETTINGS),
+        cardLook: 'match_page',
+      };
+      await handleSaveLayout(nextLayout);
+      showToast('Card look reset to Match page');
     } else if (section === 'layout') {
       await handleSaveLayout(null);
       showToast('Layout reset to default');
+    }
+  };
+
+  const handleSelectPageCardLook = async (nextLook: CardLookStyle) => {
+    const nextLayout: LayoutSettings = {
+      ...(currentLayout || DEFAULT_LAYOUT_SETTINGS),
+      cardLook: nextLook,
+    };
+    try {
+      await handleSaveLayout(nextLayout);
+      showToast('Card look saved');
+    } catch {
+      showToast("Couldn't save card look");
     }
   };
 
@@ -285,6 +309,11 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
   const buttonColorHex = (currentButtonColors?.bg || effectiveTokens.buttonBg).toUpperCase();
 
   const layoutBtnStyle = currentLayout?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle;
+  const activeCardLook = normalizeCardLookKey(
+    currentLayout?.cardLook || DEFAULT_LAYOUT_SETTINGS.cardLook,
+    'match_page'
+  );
+  const activeCardLookOption = getCardLookOption(activeCardLook);
   const layoutSummary = `${layoutBtnStyle.charAt(0).toUpperCase()}${layoutBtnStyle.slice(1)}, ${
     (currentLayout?.headerAlign || DEFAULT_LAYOUT_SETTINGS.headerAlign) === 'left'
       ? 'Left-aligned'
@@ -402,6 +431,26 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
           }}
           aria-hidden="true"
         />
+      ),
+    },
+    {
+      id: 'cards',
+      label: 'Cards',
+      summary: activeCardLookOption.label,
+      infoText:
+        'Pick a default look for every social and media card on your page. Individual cards can override this.',
+      icon: <LayoutGrid size={20} strokeWidth={1.5} />,
+      swatch: (
+        <span
+          className="w-7 h-7 rounded-[8px] border border-border flex items-center justify-center shrink-0"
+          style={{ backgroundColor: effectiveTokens.buttonBg }}
+          aria-hidden="true"
+        >
+          <span
+            className="w-3.5 h-2 rounded-[3px]"
+            style={{ backgroundColor: effectiveTokens.buttonText, opacity: 0.7 }}
+          />
+        </span>
       ),
     },
     {
@@ -638,6 +687,24 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                           }}
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {section.id === 'cards' && (
+                    <div className="flex flex-col gap-3">
+                      <CardLookTileGrid
+                        value={activeCardLook}
+                        onChange={(nextLook) => void handleSelectPageCardLook(nextLook)}
+                        pageBg={activeVibe.tokens.bg}
+                        pageSurface={effectiveTokens.buttonBg}
+                        pageText={effectiveTokens.buttonText}
+                        pageBorder={effectiveTokens.buttonBorder}
+                        pageAccent={effectiveTokens.buttonBg}
+                        ariaLabel="Default card look"
+                      />
+                      <p className="text-[12px] text-muted leading-snug">
+                        {activeCardLookOption.description} Individual cards can override this.
+                      </p>
                     </div>
                   )}
 

@@ -1,0 +1,369 @@
+IVEO EMBEDS, CARD LOOKS AND ACCOUNT AREA PROMPT
+Addendum to iveo-cleanup-prompt.txt: platform cards and players (YouTube, X, GitHub, LinkedIn, Instagram, Facebook, Threads, Discord, Linktree, Spotify, Pinterest), card looks and styling options, Spotify and Pinterest support, and the Account page
+Prepared 20 November 2026
+
+SCREENS REVIEWED: (1) a phone screenshot of the Links tab with the "Edit LinkedIn embed" editor open (the new toolbar, filter chips and rows are visible); (2) a phone screenshot of iveo.site/account (Profile & Bio, plan card, Passkeys card, and Clerk's account component rendered inline).
+
+HOW TO USE
+- Give your AI coding assistant this file and access to the iveo repository. If you also have iveo-cleanup-prompt.txt (the "master prompt"), give it that too: this file extends it and wins wherever section 0.3 says so. This file also stands alone.
+- If the tool has a size limit, give it PART 0 plus one part at a time (E first, then F).
+- Every requirement has an ID (RU-, CH-, EP-, ED-, LK-, PV-, AU-, AR-, AK-). When you finish, report the status of every ID (section G3).
+
+SECURITY NOTICE - READ FIRST
+While this prompt was being prepared, the owner pasted a Spotify client secret and a Pinterest access token into a chat. They are deliberately NOT in this file and must never be pasted into code, prompts, tests, screenshots, issues or git history. Treat them as exposed: rotate them in the Spotify and Pinterest developer dashboards before real use, and put only the new values in server-side environment variables (PV-6). If you find real credentials anywhere in the repository, stop and report it.
+
+CONTENTS
+PART 0  Context, rules, changes to the master prompt, vocabulary, shared design rules
+PART E  Platform cards and players: one editor, card looks and styling options, providers, Spotify and Pinterest
+PART F  Account area: profile, sign-in and security (Clerk, themed as iveo), connected platforms, plan, data
+PART G  Acceptance criteria, regression tests, report format
+
+
+================================================================================
+PART 0 - CONTEXT AND RULES
+================================================================================
+
+0.1 CONTEXT AND GOAL
+
+iveo is a page builder: creators add blocks (links, support, platform cards, players, forms) to a public page at iveo.site/@username, styled with a "vibe", and manage it from a dashboard (Links, Appearance, Contacts, Analytics, Settings). Sign-in and accounts are handled by Clerk.
+
+Two areas still feel messy:
+1. The editors for platform blocks (LinkedIn, X, YouTube, GitHub, Spotify, Instagram, Facebook, Threads, Discord, Linktree, Pinterest ...). The LinkedIn editor opens inline in the list, is about two and a half phone screens tall, puts the preview at the bottom, shows platform-specific look names, and leaks owner-facing wording onto the public card.
+2. The /account page, which stacks three custom cards on top of Clerk's own profile component rendered inline. It looks like another app pasted into iveo, and profile, passkeys and plan are each handled in more than one place.
+
+GOAL
+- One small, consistent editor for every platform block, with one set of card looks and a short list of styling options.
+- Spotify and Pinterest supported safely (server-side secrets, caching, graceful fallbacks, brand rules).
+- One iveo-native Account area where profile, sign-in security, connected platforms, plan and data each have exactly one home, and every Clerk screen that remains is themed as iveo.
+- Nothing is removed, nothing breaks, and the result works on a 360px phone and a 1440px desktop.
+
+
+0.2 WHAT WAS REVIEWED AND WHAT WAS NOT
+
+REVIEWED
+- Links tab (phone): toolbar "+ Add" and "Search blocks...", filter chips (All, Support, Media, Archived), rows with drag handle, icon tile, title, type badge, subtitle, switch and "..." menu; the open "Edit LinkedIn embed" editor.
+- /account (phone): Profile & Bio, iveo Pro plan card, Passkeys card, and Clerk's profile component (Profile details, Email addresses, Connected accounts) rendered inline.
+
+NOT REVIEWED (read the code; keep behaviour; follow this file)
+- The editors for YouTube, X, GitHub, Spotify, Instagram, Facebook, Threads, Discord and Linktree (assumed to follow the LinkedIn pattern - verify), and how those cards look on the public page.
+- Clerk's configuration (enabled strategies, MFA, passkeys), the billing portal, and the Settings tab after the earlier cleanup.
+
+
+0.3 RULES AND CHANGES TO THE MASTER PROMPT
+
+RU-1 Preserve every feature: editor options, OAuth connections, saved blocks and their settings. Existing saved looks and presets keep working through the alias map in LK-1; never rewrite stored user content.
+RU-2 Presentation first. No schema changes unless a rule here says so; if one is unavoidable, keep it backward compatible, add a migration and list it in the report.
+RU-3 Keep every existing route (/account, /dashboard ...), the public URLs and every embed widget already pasted on other sites working (add redirects when moving anything).
+RU-4 Use the project's stack and the shared design rules in section 0.5 (a recap of the master prompt's design system).
+RU-5 One renderer. The editor preview, the public page, the dashboard preview and the Share-sheet widgets draw cards from the same components and tokens. Never build a second hand-made mock.
+RU-6 No fake data, no placeholder content in production UI. If a value does not exist, hide the row.
+RU-7 Secrets: only in server environment variables; never in client code, the repository, logs, error messages, tests, screenshots or prompts; `.env.example` lists names with empty values.
+RU-8 One home per feature. Anywhere else it may only be a plain link to that home.
+RU-9 Free vs Pro gating is unchanged (players stay Pro if they are Pro today). Test with a Pro and a Free account.
+RU-10 Verify before coding. Provider APIs, quotas, terms and brand rules changed several times in 2026 (see PV-8 and PV-9). Before relying on an endpoint or field, read the provider's current documentation; when something is unavailable, follow the fallback order in PV-2 instead of failing.
+
+CHANGES TO THE MASTER PROMPT (where the two files disagree, this file wins)
+CH-1 Account-level settings move to /account (Part F). The Settings tab keeps only page-level sections: Integrations and SEO & search (master S-4, S-5) plus one link row "Account, plan and security - Open account". Master S-1 (five sections), S-2 (Account), S-3 (Plan & billing), S-6 (Data & privacy) and S-7 are replaced by AR-3 and AR-13. With only two sections the "On this page" list is not shown.
+CH-2 The home of avatar, display name, username and bio is /account#profile (AR-3). Master L-1(a) becomes a read-only summary row on the Links tab with an "Edit profile" link to /account#profile.
+CH-3 Master G-2 (avatar menu): "Account settings" becomes "Account" (-> /account) and "Plan & billing" points to /account#plan.
+CH-4 Master PG-20's sentence "Platform colours are not used for borders, bars or fills" is replaced by the card looks in LK-1 to LK-13. The default look is "Match page", which behaves exactly like PG-20. PG-20's call-to-action texts are replaced by PV-3. Owner-facing status text ("Connected ...") never appears on a public card.
+CH-5 Master T-1: the plan button is "Manage plan" (as built). The word "embed" is reserved for the Share sheet's Embed tab and its site widgets; blocks are cards (profile or item cards) and players (playable media). The Links filter chip "Media" is replaced by ED-14.
+CH-6 Master L-3 (block picker) gets a first tile "Paste a link" (ED-1).
+CH-7 Master AP-1 section order becomes Vibe, Background, Fonts, Buttons, Cards, Layout & effects; the new "Cards" section is LK-9.
+CH-8 Master PG-36 and PG-37 (stored snapshots, image copies) are extended by PV-2 to PV-5.
+
+
+0.4 VOCABULARY (add to the master glossary)
+
+- Card: a platform block drawn as a card on the public page. Profile card = a person, channel or organisation (avatar-led). Item card = a single thing such as a track, video or pin (artwork-led).
+- Player: a playable or interactive embed (YouTube video, Spotify, SoundCloud, Pinterest widget, Instagram/Facebook/Threads post).
+- Look: the visual style of a card (LK-1). Options: the small set of styling controls (LK-11).
+- Provider: a platform iveo understands; a provider definition is one file (PV-1).
+- Source: the link or connected account a card reads from. Snapshot: the stored copy of what the provider returned (PV-4).
+- Connected platform: a third-party account the owner authorised with OAuth (managed only in Account > Connected platforms, AR-3).
+- "Embed" means only the Share sheet's site widget.
+
+
+0.5 SHARED DESIGN RULES (recap of the master prompt so this file stands alone)
+
+- Tokens: spacing 4/8/12/16/24/32/48; corners Sharp 6px, Rounded 16px, Pill 999px (large surfaces cap Pill at 28px); control radius 12px; 1px neutral borders; shadows only on floating layers.
+- Buttons: four types only - Primary (solid dark), Secondary (outlined), Tertiary (text), Destructive (red, only for destructive actions); 44px high on touch; one primary per section or view; never a primary action as grey text.
+- Choice controls: segmented control for 2-4 short options; tile grid for visual options; select for long lists; switches (never checkboxes) for on/off. Selected = filled dark (segments, chips) or dark ring plus check (tiles); unselected = outline or plain; disabled = 50% opacity with a reason.
+- Sections: H2 + one-line description + one flat card with divider rows; accordions (one open at a time, header shows the current value) for secondary groups; never nested tabs.
+- Forms: label above, white inputs with a 1px border, 44px high, inline validation, counters where limits exist. Instant choices autosave and show "Saved"; text forms use an explicit Save in the section footer, disabled until dirty.
+- Badges: PRO (only for users who lack access), status chip (dot + text), type badge (neutral).
+- Copy: sentence case, buttons start with a verb, helper text at most about 90 characters, no marketing, brand "iveo" always lower case, no vendor names in iveo-owned text.
+- Accessibility: 44px targets, text contrast 4.5:1 and component borders 3:1, keyboard path for everything (including drag and drop), visible focus ring, reduced motion, safe areas, dialogs and sheets trap focus.
+- Public page: two shells (BUTTON shell for simple links, SURFACE shell for rich blocks), tokens --surface, --border, --text, --text-muted, --button-*, --accent, corners token; vibes change paint, not structure.
+
+
+================================================================================
+PART E - PLATFORM CARDS AND PLAYERS
+================================================================================
+
+E1 WHAT IS WRONG TODAY (LinkedIn editor and Links tab)
+
+EP-1 [Container] The editor expands inline inside a 2px black frame with a second card inside it: two borders and double padding on a 390px screen, the list jumps, and one block takes about 2.5 phone screens.
+EP-2 [Order] The preview - the thing being designed - sits at the very bottom, below every control, and Save/Cancel are below that, so the owner scrolls back and forth.
+EP-3 [Source] The source is set in two ways at once: a large blue "Reconnect LinkedIn" button with an "Account connected" chip, and "Or paste LinkedIn link" with a detected-type check. The loudest button is the rarest action.
+EP-4 [Copy] Owner-facing status text reaches the public card: the preview body says "Connected LinkedIn profile" and the button says "Connect" (the placeholder of "Button text"). The title says "embed" (reserved for Share-sheet widgets) and the helper says "OAuth".
+EP-5 [Looks] Five LinkedIn-specific looks ("Executive Blue", "Cover Banner", "Frosted Network", "Compact Business", "Match Page Vibe"), each with a two-line description; every other platform presumably invents its own list. The mini thumbnails are near-identical blue bars, so they do not show what differs. The selected state is a thick outline with a tiny corner check.
+EP-6 [Controls] Checkboxes for "Show bio / summary" and "Show stats" instead of switches, shown even where the platform has no stats (LinkedIn has no public stats); "Button text" has only a placeholder.
+EP-7 [Labels] "Card title / caption", "Card look & style", "LinkedIn Preset", "Live look preview" and an uppercase "LINKEDIN" banner label: Title Case, tracked caps, and several names for the same two things.
+EP-8 [List] The filter chips are cut off at the right edge ("Archived (1..."). "Media" mixes profile cards (LinkedIn, GitHub, X) with playable media (YouTube). Row titles and subtitles are cut ("Arjun Bharti ...", "youtube.com/...", "github.com/Arj...") so similar rows are hard to tell apart.
+EP-9 [Many editors] The same editor is presumably repeated for YouTube, X, GitHub, Spotify, Instagram, Facebook, Threads, Discord and Linktree with small differences; each difference is accidental complexity and a maintenance cost.
+EP-10 [Connections] "Reconnect LinkedIn" means connections are managed inside each editor; there is no single place to see or revoke them (the Account page shows none).
+
+
+E2 ONE EDITOR FOR EVERY PLATFORM BLOCK
+
+ED-1 SMART ADD. In the block picker the first tile is "Paste a link". Pasting any URL detects the provider (YouTube, X, GitHub, LinkedIn, Instagram, Facebook, Threads, Discord, Linktree, Spotify, Pinterest, SoundCloud, or generic) and the kind (profile, video, playlist, track, board, post ...), creates the matching block with that provider's defaults, and opens the editor with the live preview already showing real data. An unknown URL becomes a plain Link (BUTTON shell). The per-provider tiles stay in the picker under "Social" and "Players" for people who browse. Detection is one pure function with unit tests covering www., m. and mobile hosts, short links (youtu.be, spotify.link, pin.it, lnkd.in, discord.gg) and tracking parameters.
+
+ED-2 ONE EDITOR, ONE DEFINITION. Every platform block opens the same editor component with the same anatomy, order and wording. The provider definition (PV-1) only decides which fields and toggles appear. No per-provider editor screens. Adding a provider needs a definition file and an icon, nothing else.
+
+ED-3 CONTAINER. Phones: a full-height bottom sheet (drag handle, close button). Desktop: a dialog with two columns, form on the left and live preview on the right (same pattern as the Share sheet, master SH-1). Never expand inline in the list and never add an outer frame. The row being edited keeps its place in the list with the active state from the shared rules. Title: "Edit {Platform} card" or "Edit {Platform} player" (never "embed").
+
+ED-4 SHEET LAYOUT, top to bottom: header (icon, title, close) -> pinned live preview -> Source -> Content -> Look (or Size for players) -> More options (collapsed) -> sticky footer. The preview is pinned at the top while the form scrolls (about 30% of the viewport, 160-260px, with a small handle to collapse it); on desktop it is the sticky right column. It is the real renderer with real data (RU-5, RU-6) and updates 150ms after every change and when the source resolves.
+
+ED-5 SOURCE. One field labelled "Link" with a provider-specific placeholder (for example "linkedin.com/in/yourname"). On success a small chip names what was detected ("LinkedIn profile", "YouTube channel", "Spotify playlist"); on failure an inline message ("This doesn't look like a LinkedIn link"). While resolving show a spinner, then fill Title and the preview. If resolving fails, the owner can continue with manual details (ED-13) and sees "We couldn't load details from {Platform}. Your card will use what you enter below." For providers that support a connection, a compact row sits under the field: a "Connected" chip with a small menu (Reconnect, Disconnect) when connected, or a tertiary "Connect account" button when not; connecting returns to the editor with its state intact. The large blue "Reconnect" button is removed. Copy never says "OAuth" ("Connect your account to show verified details and live numbers."). Listing and revoking connections lives only in Account > Connected platforms (AR-3); the editor only starts the flow and shows status.
+
+ED-6 DISPLAY AS. Where a provider supports both, a segmented control "Card | Player" (for example Spotify, YouTube videos, Pinterest, Instagram/Facebook/Threads posts). Changing it swaps the preview. Providers with one mode hide the control. Registry defaults (PV-1): players for videos, audio and posts; cards for profiles.
+
+ED-7 CONTENT (always visible). "Title" (prefilled from the source, 60 characters, replaces "Card title / caption"), a "Show summary" switch, a "Show stats" switch and "Button text" (placeholder = the provider default from PV-3, 24 characters; empty uses the default). Toggles appear only when the provider can supply that data (capabilities in PV-1); if it cannot, the toggle is hidden, not disabled.
+
+ED-8 LOOK. For cards: five look tiles in a 2-column grid (names and meaning in LK-1). Each tile draws its own silhouette in the current brand colour (LK-13), so differences are visible. Selected = ring + check. The one-line description of the selected look appears under the grid, not inside every tile. A tertiary link "Use page default" clears a block-level override. For players this section becomes "Size" (for example Compact | Standard | Large) where the provider offers sizes, and is hidden where it does not.
+
+ED-9 MORE OPTIONS (collapsed; the header summarises non-default values, for example "Brand accent, Pill corners"): Accent (Brand | Page | Custom colour), Corners (Page | Sharp | Rounded | Pill), "Show avatar" (artwork for items), "Show platform label", "Button style" (Filled | Outline | Text | Hidden), and "Override details" (ED-13). A tertiary "Reset to defaults" restores them.
+
+ED-10 FOOTER. Sticky: primary "Save changes", tertiary "Cancel". Save is disabled until something changes, shows a spinner, then closes the sheet with a "Saved" toast and updates the row. Cancel with unsaved changes asks to discard. Delete, archive and duplicate stay in the row's "..." menu, not in the editor.
+
+ED-11 CONTROL VOCABULARY. Follow section 0.5: switches (never checkboxes), segmented controls for 2-4 options, tiles for looks, sentence case, no uppercase tracked labels, no truncated labels.
+
+ED-12 STATES. Empty (no link yet): the preview shows a neutral skeleton with "Paste a link to see your card". Resolving: spinner. Error: inline message plus manual details. Connection expired: warning chip "Needs reconnecting" plus a Reconnect button. Rate limited or provider down: keep the last snapshot and show "Showing saved details". Private or unsupported source: "This profile is private. Add details yourself below."
+
+ED-13 MANUAL DETAILS ("Override details", inside More options, opened automatically when a source cannot be resolved): Name, Handle, Image (upload), Summary (160 characters). A filled field overrides the resolved value; an empty field uses it. For providers without a usable data source (Instagram, Facebook and Threads profiles, Linktree, Pinterest profiles, LinkedIn headline) these fields are the normal way to fill the card.
+
+ED-14 LIST ROWS AND FILTERS (extends master L-4 and L-5). Chips wrap onto several lines (no clipping) and show only groups that have items: All, Links, Social (profile and item cards), Players, Support, Forms, Headers, Archived. "Media" is retired. A row shows: drag handle, icon tile (brand icon), title with a type badge holding the provider name, a subtitle (handle, or domain and path; an ellipsis only at the end), the visibility switch and the "..." menu. A small "needs attention" icon (disconnected, source failing for 3 refreshes) appears on the row with a tooltip and opens the editor. Archive stays reversible and archived blocks never render publicly.
+
+
+E3 CARD LOOKS AND STYLING OPTIONS
+
+LK-1 FIVE LOOKS, THE SAME FOR EVERY PROVIDER (names and one-line meanings; legacy preset names keep working through an alias table).
+1. Match page - "Uses your page colors and button style." The default. Legacy: "Match Page Vibe".
+2. Brand - "Clean card with the platform's color on the icon and button." Legacy: "Executive Blue" and the classic or corporate preset of any other platform.
+3. Banner - "Colored banner with the avatar overlapping it." Legacy: "Cover Banner".
+4. Glass - "Frosted card that lets your background show through." Legacy: "Frosted Network".
+5. Compact - "One slim row: picture, name and button." Legacy: "Compact Business".
+Other platforms' existing preset names map to the closest of the five by purpose (read the preset lists in the code). The mapping is applied when reading; stored values are never rewritten; an unknown value falls back to Match page.
+
+LK-2 ANATOMY AND SLOTS (shared by every look). Slots: banner (optional) - picture (avatar for profile cards, artwork for item cards) - name and subtitle - summary - stats - button - platform glyph. A look only changes arrangement, surface and accent; a provider only supplies data and never layout. Two content kinds: profile cards (avatar-led: LinkedIn, X, GitHub, Instagram, Facebook, Threads, YouTube channel, Linktree, Discord server, Pinterest profile) and item cards (artwork-led: Spotify items, YouTube videos and playlists, Pinterest pins and boards).
+
+LK-3 MEASUREMENTS (phone column, 328-640px). Card padding 16px; 8px between lines in a group, 12px between groups. Picture: avatar 48px circle (Banner 56px, Compact 40px); item artwork 64px square (Compact 48px) with an 8px radius. Text: name 16/22 semibold; subtitle 14/20 muted; summary 14/20 in the secondary colour, two lines at most; stats 13/18 muted; platform glyph 16px. Button: 36px high (Compact 32px), label 13/16 semibold, radius from the Corners token. The whole card is one link (master PG-17); minimum height 64px (Compact 64px, others grow with content).
+
+LK-4 MATCH PAGE. SURFACE shell exactly as master PG-17 and PG-20: --surface, --border, the page's corner radius (capped at 28px), a monochrome platform glyph at the top right, summary, stats on the left and the button on the right. Default button style: Text (14/20 semibold plus an external-link icon). No platform colour anywhere.
+
+LK-5 BRAND. Same SURFACE shell and layout as Match page, plus the platform's brand colour: a 1px border at 24% brand colour over --surface (the boundary must still reach 3:1 against the page background, otherwise use --border-strong), the platform glyph in the brand colour, and a filled button in the brand colour with automatic black or white text (at least 4.5:1). If the brand colour reaches less than 3:1 against --surface (for example black on a dark vibe) use --text as the accent instead; the accent is never invisible. Default button style: Filled.
+
+LK-6 BANNER. A 72px banner across the top of the card, clipped by the card radius. Profile cards: a gradient from the brand colour to a darker shade of it. Item cards with a wide image (YouTube thumbnail, Pinterest pin): the image, centre-cropped, under a 30% black scrim. In the banner: the platform glyph and platform name in sentence case (no uppercase), white, at the top left over a 40% black scrim strip for contrast. The avatar (56px) overlaps the banner's bottom edge by 28px with a 3px ring in --surface. Name, subtitle, summary, stats and the button sit below. Default button style: Filled. Provider restrictions override this (LK-12): artwork that must stay unmodified is never used as a banner.
+
+LK-7 GLASS. The surface is --surface at 60% opacity over the page background with a 16px backdrop blur and a 1px light border (white at 28%, or --border on light vibes), plus a 6-8% brand tint. Text must stay at 4.5:1 against the worst case of the page background (use the scrim logic of master PG-7); if the page background could break that, raise the surface opacity to 85% automatically. Without backdrop-filter support the surface is opaque. The editor shows a hint when the page background is a plain colour: "Glass looks best over a photo or gradient background." Default button style: Outline.
+
+LK-8 COMPACT. One row, 64px high: picture 40px (artwork 48px) | name over one line of summary or handle | a small button (32px; icon-only arrow under 340px). No stats row; with "Show stats" on, append the first stat to the subtitle ("12 followers"). Default button style: Filled.
+
+LK-9 PAGE DEFAULT (Appearance > Cards, master AP-1 order). A "Cards" accordion section with the same five look tiles as ED-8 and the helper "Individual cards can override this." It applies to every card without its own override. Corners follow Appearance > Buttons; there is no separate corners control here. A block's look is inherited by default; choosing a tile sets an override; "Use page default" clears it. Resolution order: block override, page default, Match page.
+
+LK-10 ACCENT AND BRAND COLOURS. Accent options: Brand (the provider's colour), Page (--accent) or Custom (the owner's colour). Every accent passes the same contrast guard (button text at least 4.5:1, glyph and border at least 3:1 against --surface; otherwise fall back to --text). Default brand colours (confirm against each platform's brand page): LinkedIn #0A66C2; X #000000; YouTube #FF0000; GitHub #181717; Spotify - Spotify green from Spotify's brand page (commonly #1DB954, with black text on it); Instagram #E4405F (no gradients); Facebook #1877F2; Threads #000000; Discord #5865F2; Linktree #43E660 (black text); Pinterest #E60023; SoundCloud #FF5500.
+
+LK-11 THE COMPLETE OPTION LIST (nothing else is exposed). Look (5), Accent (3), Corners (Page, Sharp, Rounded, Pill), Show avatar (artwork for items), Show summary, Show stats, Show platform label, Button text, Button style (Filled, Outline, Text, Hidden), Display as (Card, Player), Size (players), Override details (name, handle, summary, image). No free-form CSS, per-card fonts, shadows or sizes. Cards inherit the page's fonts and vibe tokens. Store the choices as one presentation-only settings object on the block, for example { look, accent, accentColor, corners, show: { avatar, summary, stats, label }, buttonText, buttonStyle, displayAs, size, override: { name, handle, summary, image } }, with sensible defaults when a key is missing (old blocks keep working).
+
+LK-12 FIT RULES AND PROVIDER RESTRICTIONS. Every look must render correctly with: a 60-character name (two lines, then ellipsis), a missing avatar (fallback tile with the platform glyph), a missing summary (the row disappears), zero or unavailable stats (hidden), missing artwork (a glyph tile), right-to-left text (dir="auto"), and a 320px screen. A provider definition can restrict looks through flags: for example Spotify requires unmodified artwork, the Spotify logo and a link back (PV-8); the renderer obeys the flags, and the editor hides or disables options that would break them with a reason ("Spotify artwork can't be recoloured").
+
+LK-13 LOOK TILES. In the editor and in Appearance > Cards each tile draws its own silhouette with the current tokens and the provider's brand colour: Match page = surface with two text bars and a text-style button; Brand = surface with a brand glyph and a filled brand button; Banner = a coloured band with an overlapping circle; Glass = a translucent card over a gradient; Compact = one slim row. Tiles are 4:3, the name sits under the drawing, the selected tile has the ring and check. Tiles are drawn from the real renderer at small scale when that is cheap; otherwise from the silhouettes. They must never all look the same.
+
+
+E4 PROVIDERS, DATA PIPELINE AND CREDENTIALS
+
+PV-1 PROVIDER REGISTRY. One definition per provider in one folder: id, name, brand colour, icon, URL patterns mapped to kinds, per-kind capabilities (avatar, artwork, banner image, name, handle, summary, list of stats, player), the resolution strategies in order (PV-2), default button text per kind (PV-3), allowed display modes and the default, player sizes, connection support (yes or no, scopes), refresh interval (PV-4), brand and terms flags (for example Spotify: artwork stays unmodified, logo required, link back required) and the link-field placeholder per kind. The editor, the renderer, the detector and the refresh job all read the registry; there is no provider-specific code anywhere else.
+
+PV-2 RESOLUTION STRATEGIES, in order; the first that works wins; every result is stored as a snapshot with its source and time. (1) The provider's official API with server-side credentials, when available and allowed. (2) The provider's oEmbed endpoint (no credentials). (3) Open Graph unfurl of the public page (title, image, description; public pages only, honour robots.txt and the provider's terms, 3 second timeout, 1 MB cap). (4) The owner's manual details (ED-13). Visitors' browsers never call third-party APIs (master PG-36). A resolver returns one shape: kind, title, subtitle, avatar, artwork, banner, summary, stats (list of key and value), embed (src plus aspect or height plus allowed attributes), canonicalUrl, brand colour, fetchedAt, source.
+
+PV-3 DEFAULT BUTTON TEXT (the owner can change it; never owner-facing status text on a public card). LinkedIn "View profile"; X "Follow"; YouTube channel "Subscribe", video and playlist "Watch"; GitHub profile "View profile", repo "View repo"; Instagram, Threads and Facebook "Follow" (posts "View post"); Discord "Join server"; Linktree "Open"; Spotify "Listen on Spotify"; Pinterest pin "View pin", board "View board", profile "Follow"; generic "Open". Strings are translatable.
+
+PV-4 SNAPSHOTS AND REFRESH (extends master PG-36). Store one snapshot per block (the PV-2 shape) and render it on the server. Refresh profile stats every 6 hours and profile details and media metadata every 24 hours, with jitter; the row menu has "Refresh" (once a minute per block). A failure keeps the last snapshot; after 3 consecutive failures set "needs attention" (ED-14). Copy images (avatars, artwork) to iveo storage unless the provider's rules say otherwise: Spotify artwork and Pinterest widgets stay unmodified and are shown as the provider supplies them (PV-8, PV-9), so the renderer loads the provider's image URL with explicit width and height.
+
+PV-5 URLS AND SAFETY. Normalise links (lower-case host, strip tracking parameters such as si, utm_*, igshid, fbclid). Expand short links on the server (at most 3 redirects, http and https only, ports 80 and 443, block private and local addresses to prevent SSRF, 3 second timeout, 1 MB cap). Accept only http, https, mailto and tel (master PG-39). Render all provider text as text, never as HTML. Never insert an oEmbed "html" field raw: use only the iframe src and the attributes the provider definition allows.
+
+PV-6 SECRETS. Credentials live only in server environment variables and are read through one server-only configuration module that fails at boot in production when a required one is missing. Names (values stay empty in the repository):
+SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
+PINTEREST_APP_ID, PINTEREST_ACCESS_TOKEN, PINTEREST_APP_SECRET (only when available), PINTEREST_OAUTH_ENABLED (default false)
+YOUTUBE_API_KEY (only if the YouTube Data API is used), GITHUB_TOKEN (optional, read-only public access)
+plus the existing LinkedIn and X variables, if any.
+Rules: no public prefix (nothing the framework exposes to the browser); never committed; never logged (mask in logs and errors); never returned by an API or placed in a client bundle; never used in tests (use mocks); an `.env.example` with empty values; secret scanning in CI. The values pasted into the chat must be rotated before use (see the security notice). A Pinterest app id is an identifier rather than a secret, but it also belongs in the environment, not in code.
+
+PV-7 OTHER PROVIDERS (defaults; re-verify each provider's current documentation before relying on an endpoint, RU-10).
+- YouTube - channel, video, playlist. Channel card: avatar, name, handle, subscriber and video counts when public, from the YouTube Data API v3 with a server-side key (cached 24 hours, quota-aware); fallback oEmbed (title, thumbnail), then manual. Player: youtube-nocookie.com embed, 16:9, lazy. No connection needed.
+- X - profile, post. Card: keep today's data source (check the code) and show only the stats it can supply. Post: X's official embed only as a Player, loaded on interaction because it needs a heavy third-party script.
+- GitHub - user or organisation, repo. Card from the public REST API (user: name, login, avatar, bio, public repos, followers; repo: description, stars, forks, main language) with an optional read-only server token (GITHUB_TOKEN) to avoid the unauthenticated rate limit; cached 6 hours.
+- LinkedIn - profile, company. There is no public profile API for ordinary apps: the card uses the owner's connection (name and photo of the connecting user) plus a manual headline; no stats; no scraping.
+- Instagram - profile, post, reel. Profile card = manual details plus the link (no stats unless a supported source exists). Posts and reels: Meta's oEmbed as a Player. Meta opened its oEmbed endpoints for public Facebook, Threads and Instagram content without an access token in June 2026; rate limits may be lower than token-based access, and oEmbed returns embed HTML for posts and videos, not profile data.
+- Facebook - page, profile, post, video. Page and profile cards = manual details plus link. Posts and videos: Meta oEmbed Player. The Page Plugin iframe is an optional Player for pages.
+- Threads - profile, post. Profile card = manual details plus link. Posts: Meta oEmbed Player.
+- Discord - server invite. Card from Discord's public invite lookup with counts (server name, icon, approximate member and online numbers) - verify the current endpoint and limits. An expired or invalid invite sets "needs attention" and keeps the last snapshot.
+- Linktree - page. No API: Open Graph unfurl (title, image, description) or manual details.
+- SoundCloud - the existing player; oEmbed for title and artwork.
+- Any other URL - Open Graph unfurl, then manual details.
+
+PV-8 SPOTIFY (checked against Spotify's documentation in November 2026; re-check before coding, RU-10).
+- Kinds: track, album, playlist, artist, show, episode. Accept open.spotify.com links (with or without an intl- path), spotify: URIs and spotify.link short links; strip ?si= and utm parameters.
+- Player, no credentials needed: an iframe to https://open.spotify.com/embed/{kind}/{id}?utm_source=generator, width 100%, no border, lazy, allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture", title "{Title} on Spotify", corners from the Corners token. Sizes follow Spotify's "Choosing an Embed size" guide (typically about 152px compact and 352px standard). Display as defaults to Player. Spotify's Embeds Terms of Use apply.
+- Card metadata: the Web API with the client-credentials flow, server-side only. POST https://accounts.spotify.com/api/token with grant_type=client_credentials and the id and secret from SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET; cache the token for its lifetime minus 60 seconds; allow one refresh in flight at a time; refresh once on a 401. Fetch one item per request (GET /v1/tracks/{id}, /albums/{id}, /artists/{id}, /playlists/{id}, /shows/{id}, /episodes/{id}); the batch endpoints were removed.
+- What changed in 2026 and must be tolerated: Development Mode apps need the app owner to hold an active Spotify Premium subscription (if it lapses the API stops working); new apps are limited in the number of client IDs per developer and to 5 authorised users (this affects user sign-in flows, not catalogue reads); fields were removed (artist followers and popularity, track and album popularity, show publisher, available markets); playlist contents only come back for playlists the user owns or collaborates on; search returns at most 10 results. So: never rely on removed fields; Spotify cards have no "Show stats" (hide the toggle); show playlist metadata only (name, description, cover, owner name if present), never a track list.
+- Failure order: Web API -> oEmbed (https://open.spotify.com/oembed?url=..., no credentials, gives title and thumbnail) -> manual details. On a 429 honour Retry-After and serve the snapshot. If every Web API call starts failing (for example the owner's Premium lapsed) switch the whole provider to oEmbed and log an alert; visitors never see an error.
+- Brand and display rules (Spotify Design & Branding Guidelines): any card showing Spotify metadata or artwork carries the Spotify logo - the full logo (icon plus wordmark) at least 70px wide, or the icon alone (at least 21px) only when space is short; the green logo only on black or white backgrounds, otherwise a monochrome logo (black on light, white on dark); keep the logo's clear space (half the icon height); never put it on artwork or a busy area; never pair it with another brand in one lock-up. Artwork stays unmodified: no cropping, blur, tint, overlay or animation, no text or controls on top of it, corners rounded at 4px (8px on large screens). Titles and names appear exactly as Spotify provides them and may be truncated only if the full text stays reachable (title attribute and accessible name). Every card links back to Spotify with "Listen on Spotify" (or "Play on Spotify" / "Open Spotify") in a new tab. Lay out for names of about 25 characters (playlist, album), 18 (artist) and 23 (track).
+- Looks for Spotify: the artwork sits in its own opaque square slot in every look; Banner uses a solid or gradient banner, never the artwork; Compact uses a 48px square artwork. Spotify green is used only for the button or glyph accent, with black text on it.
+- Terms: Spotify's Developer Terms and Developer Policy apply, including the limits on using Spotify content to train machine-learning models and on building streaming services. Store only what the card needs; refresh at least daily and drop snapshots of deleted items.
+
+PV-9 PINTEREST (checked in November 2026; re-check before coding, RU-10).
+- Kinds: pin, board, profile. Accept pinterest.com and pin.it links.
+- Public content needs no credentials. Players use Pinterest's official widgets: a plain anchor with data-pin-do="embedPin", "embedBoard" or "embedUser" plus the single pinit.js script (//assets.pinterest.com/js/pinit.js, async defer), loaded once per page, only when a Pinterest player is on that page, and ideally after the visitor scrolls it into view or taps it. Widgets are shown unmodified (no overlays or restyling) and sized by the Size control. Display as defaults to Player.
+- API access: the owner's app id and access token (PINTEREST_APP_ID, PINTEREST_ACCESS_TOKEN) belong to the owner's own Pinterest developer app and account. Use them only for the owner's own content during development (for example a test "Connect Pinterest" flow); never use them to fetch other creators' content or to serve visitors. API v5 facts that shape this: apps with Trial access get 1,000 requests per day and calls can fail with a 401 ("consumer type is not supported") until Trial access is approved; the app secret is unavailable while Trial is pending; pins created under Trial are sandbox-only; Standard access (a review with a demo video of the OAuth flow) allows 100 requests per second per user per app and is needed for real creators.
+- Per-creator connection (optional, behind PINTEREST_OAUTH_ENABLED, off until Standard access is granted): the OAuth authorization-code flow with read-only scopes (boards:read, pins:read, user_accounts:read), client secret from PINTEREST_APP_SECRET, tokens encrypted at rest, refresh handled on the server, listed and revoked in Account > Connected platforms. It enables Card display (cover, title, board name, pin count) for the creator's own boards and pins. Until it exists, Pinterest Card display uses manual details (ED-13) and the widget is the default.
+- Brand: use Pinterest's widgets and buttons as provided, always link back, never alter pins. Pinterest red is only the button or glyph accent (contrast guard).
+
+PV-10 PRIVACY AND THIRD-PARTY SCRIPTS. Players load third-party iframes or scripts only when needed: lazy, and behind a click-to-load facade (poster plus play glyph, same size) wherever that does not change how playback works today; never on first paint (master PG-38); referrerpolicy="strict-origin-when-cross-origin"; one script per provider per page (Pinterest: once); no provider tracking before interaction. Cards (images and text) need no provider script at all.
+
+PV-11 ANALYTICS. A click on a card or player's button counts as a link click exactly like any link today (block id, the same events, GA4 and Meta Pixel unchanged). Do not add provider SDKs to measure plays.
+
+PV-12 LIMITS, ABUSE, MONITORING. Rate-limit the resolve endpoint per user (for example 20 per minute). Cache resolved public data by canonical URL for all users (6-24 hours per provider) so repeated blocks do not multiply API calls. Log provider status codes and latency without secrets. Alert when a provider fails more than 20% of calls over 15 minutes, or when a required secret is missing in production.
+
+
+================================================================================
+PART F - ACCOUNT AREA (iveo.site/account)
+================================================================================
+
+F1 WHAT IS WRONG TODAY
+
+AU-1 [Foreign UI] The lower half is Clerk's own profile component rendered inline: a different typeface and heading scale ("Profile details" is far larger than any iveo heading), text-only buttons, different spacing, a grey "Account" bar with a hamburger (Clerk's mobile navigation), and a tall empty area under the content (a fixed minimum height). It looks like another app pasted into iveo.
+AU-2 [Duplicate profile] "Profile & Bio" (avatar, display name, bio) and Clerk's "Profile details" (avatar, name, "Update profile") overlap, with two ways to save; it is unclear which one the public page uses.
+AU-3 [Duplicate passkeys] A custom "Passkeys" card and (presumably) Clerk's Security page both manage passkeys; the custom card says "Managed by Clerk", which leaks the vendor name into iveo copy.
+AU-4 [Order] There is no logical order: public profile, plan, passkeys, then email and connected accounts inside the embedded component. Security is split between a custom card and the embedded component; password, signed-in devices and two-step verification are not visible; delete account is hidden inside the vendor's Security page; data export and sign-out live on the Settings tab.
+AU-5 [Containers] Four different card styles: "Profile & Bio" (H2 with nested grey boxes), the plan card (no heading, icon tile), "Passkeys" (icon tile, H2 and a nested box) and the vendor card. The nested grey boxes add borders and padding for nothing.
+AU-6 [Inputs and buttons] Inputs are grey-filled (they look disabled) while the dashboard uses white inputs with a border; "Save profile" is a small left-aligned button; buttons differ in size and style from card to card.
+AU-7 [Avatar actions] Three separate avatar actions in two rows (Upload photo, Browse styles, Reset) plus a "Library Avatar" chip. "Reset" is red although removing a photo is not destructive; "Browse styles" does not say what it browses.
+AU-8 [Status and contrast] The "Primary" email badge is almost invisible; "This account has been disconnected." (a warning) is plain grey text with a text-only "Reconnect"; the "Rename" and "Remove" row actions are small targets.
+AU-9 [Navigation] The header differs from the dashboard (logo, "Dashboard" back link, avatar), there is no H1 and no section navigation, and the page is one long scroll ending in blank space.
+AU-10 [Copy] Title Case ("Avatar & Photo", "Display Name") and "Managed by Clerk"; the plan button says "Manage plan" while other screens said "Manage billing".
+AU-11 [Missing here] No username field (the public page handle), no data export and no delete account on this page: account-level actions are scattered across two pages and a vendor component.
+
+
+F2 TARGET ACCOUNT AREA
+
+AR-1 ONE HOME. /account is the single home for everything about the person: Profile, Sign-in & security, Connected platforms, Plan & billing, Data & privacy. The dashboard Settings tab keeps only page-level settings (CH-1). Everything else that is on /account today is removed or merged as listed in AR-3.
+
+AR-2 SHELL. /account uses the dashboard shell: the same header (logo and avatar menu; no Preview or Share), a visible H1 "Account", and a back control to the dashboard (arrow plus "Dashboard" on tablet and desktop, arrow only on phones). Same container rules as the dashboard (content up to 720px, 16px gutters on phones). No bottom tab bar on /account on phones; the header back arrow replaces it. Desktop (1024px and up): a sticky left "On this page" list of the five sections with scroll-spy; phones and tablets: one column. Each section follows the shared section pattern (H2, one-line description, one flat card with divider rows). The anchors #profile, #security, #connections, #plan and #data scroll to the section and highlight it briefly.
+
+AR-3 SECTIONS, in this order.
+1. Profile (#profile) - "How you appear on your public page."
+   - Photo: the current avatar plus one "Change photo" button that opens a small menu: Upload photo, Choose from library, Remove photo (neutral, not red). Helper: "PNG, JPG or WebP, optimised automatically." The "Library Avatar" chip becomes a muted caption when a library avatar is in use.
+   - Display name (50 characters, with a counter).
+   - Username: prefix "iveo.site/@", availability check while typing, today's rules and reserved names, the warning "Changing your username changes your page link." (AR-10).
+   - Bio (160 characters, counter, three-row textarea).
+   - One "Save profile" primary button in the section footer, disabled until something changes, with a spinner and a "Saved" toast.
+2. Sign-in & security (#security) - "How you sign in and keep your account safe." Rows:
+   - Email addresses: each with a "Primary" chip (readable contrast) and a menu (Make primary, Remove); "+ Add email address" (the verification-code step opens in a themed modal).
+   - Password: status ("Set" or "Not set") and a "Change password" or "Add password" button.
+   - Passkeys: a list (name, "Added 18 Nov 2026 - Last used 19 Nov 2026"), Rename and Remove per item (an overflow menu on phones) and "+ Add passkey". Helper without any vendor name: "Sign in with Face ID, Touch ID, Windows Hello or a security key." Empty state: "No passkeys yet. Add one to sign in with your fingerprint or face."
+   - Sign-in providers (for example Google with its email): a status chip "Connected" or "Needs reconnecting" (warning) with "Reconnect"; "+ Connect account" lists the enabled providers.
+   - Two-step verification: only if it is enabled for the product; status plus "Manage".
+   - Signed-in devices: browser and system, approximate location, last active, a "This device" chip, "Sign out" per other device and "Sign out of all other devices".
+3. Connected platforms (#connections) - "Accounts iveo uses to show your cards and players." One row per connection made from a card editor (LinkedIn today; Pinterest and others when they exist): provider icon, account name, a status chip (Connected, Needs reconnecting), "Used by N blocks", and a menu with Reconnect and Disconnect (a confirm dialog says what stops updating). Empty state: "No connected platforms. Connect one from a card editor." This list is the only place connections are listed or revoked (ED-5). If a platform connection is stored as a sign-in provider's external account, list it here and exclude it from the Sign-in providers list above (one home).
+4. Plan & billing (#plan) - the master S-3 component moved here: plan name and status chip, "Manage plan" (opens the billing portal), billing facts that exist (renewal or expiry date, price, payment method, invoices), the collapsed "What's included" list; Free users see "Upgrade to Pro" and the Free vs Pro comparison.
+5. Data & privacy (#data) - "Export your data" (JSON, statistics not included) and a "Danger zone" with "Delete account" (typed username confirmation; deletes the iveo data and the sign-in account, signs out and redirects), copy as in master S-6.
+REMOVED from /account: the free-standing plan card, the free-standing Passkeys card, the embedded vendor component, the nested grey boxes and the red "Reset".
+
+AR-4 NO INLINE VENDOR UI. Do not render Clerk's profile component inline anywhere in iveo. Build the sections above natively with the SDK's current-user data and methods - for example the user's email addresses (create, verify, set primary, remove), passkeys (create, rename, delete), external accounts (connect, reauthorize, disconnect), sessions (list, revoke), password update and user deletion - and confirm the exact names in the installed SDK version. Where the SDK needs its own UI or a code step (email verification, two-step enrolment, password change), open it as a modal or sheet themed per AR-5. If the SDK requires recent re-verification for a sensitive action, use its re-verification flow and handle cancellation gracefully. Passkeys are bound to the domain where they were created; do not change the auth domain setup as part of this work.
+
+AR-5 THEME EVERY VENDOR SCREEN THAT REMAINS (modals, sign-in, sign-up, verification, the account menu opened from the avatar). One shared `appearance` configuration, passed once to the provider and to any component opened from another component (for example the user menu's profile props). Map the iveo tokens:
+- variables: font family and sizes from the iveo type scale; primary colour = the iveo primary (near-black); text and secondary text colours; background = white surface; input background white with a 1px border; danger, success and warning = the iveo semantic colours; border radius 12px.
+- elements: card with no shadow, a 1px border and a 16px radius; primary and secondary buttons = the iveo Primary and Secondary; badges = the iveo chip; headings = the iveo H2 scale; footer and any "secured by" branding hidden only where the plan and the vendor's terms allow it.
+- layout options (named "options" in current SDKs, "layout" in older ones) set to the product's needs; logo = the iveo mark.
+Keep the mapping in one file; no per-page overrides. Check the installed version's documentation for the exact keys.
+
+AR-6 NO VENDOR NAME IN IVEO COPY. Remove "Managed by Clerk" and any similar text from iveo-owned screens, emails and errors. The vendor's own legal or branding text inside its modals may stay if the plan requires it.
+
+AR-7 CONSISTENT CONTROLS. Apply the shared rules (section 0.5): four button types; red only for destructive actions (Remove passkey, Remove email, Disconnect, Delete account); chips for Primary, Connected, Needs reconnecting and This device at 4.5:1 contrast; row actions are 44px targets (an overflow menu on phones with Rename and Remove); confirm dialogs with verb buttons; success toasts; inline errors in plain language, never vendor error codes.
+
+AR-8 STATES. Loading: skeletons with fixed heights per section (no layout shift). Empty: as written in AR-3. Error: message plus Retry. Offline: a short banner and disabled saves. Session expired: the re-authentication flow, then back to the same section. "Needs reconnecting": a warning chip plus a button, never plain grey text.
+
+AR-9 PROFILE DATA OWNERSHIP. Decide in the code which store is the source of truth for display name and avatar (the iveo page profile or the sign-in provider's user profile). The Profile section writes the iveo page profile; if the sign-in profile has its own name or image, keep it in sync on the server in one function when saving - never show two editors and never ask the person to update the same thing twice. The public page, the share outputs, the link preview image and the embed widgets read only the iveo profile.
+
+AR-10 USERNAME. One home: the Profile section. Keep today's validation (length, characters, reserved names), check availability while typing (debounced), and when the person already has a published page confirm the change in a dialog that says the old link stops working (or, if redirects from old usernames already exist, that it keeps working). Do not build a redirect system as part of this work.
+
+AR-11 ROUTES AND DEEP LINKS. /account keeps working. Add the anchors (#profile, #security, #connections, #plan, #data). Any existing vendor sub-route (for example /account/security) redirects to the matching anchor.
+
+AR-12 AVATAR MENU (master G-2 as changed by CH-3): profile header; "Account" (/account); "Plan & billing" (/account#plan; "Upgrade to Pro" for Free users); "Help & support"; "Sign out". Sign out exists only here.
+
+AR-13 SETTINGS TAB AFTER THIS CHANGE. Sections: Integrations and SEO & search (master S-4, S-5), preceded by one link row "Account, plan and security - Open account". The Account, Plan & billing, Data & privacy and Session cards no longer exist on Settings. Update the Settings description and the avatar menu accordingly.
+
+AR-14 RESPONSIVE AND ACCESSIBILITY. Works at 360px and 1440px; lists stack on phones; 44px targets; dialogs and sheets trap focus and return it; skeletons set aria-busy; passkey and device lists are real lists with labelled actions ("Remove passkey Google Password Manager"); status is never colour alone; every flow works with the keyboard only.
+
+
+================================================================================
+PART G - ACCEPTANCE, TESTS, REPORT
+================================================================================
+
+G1 ACCEPTANCE CRITERIA (all must pass)
+
+AK-1 One editor: every platform block opens the same editor (same anatomy, order and wording); no provider has its own screen; a new provider needs only a definition file and an icon (prove it by adding a test provider).
+AK-2 Container: a bottom sheet on phones and a two-column dialog on desktop; no inline expansion and no double frame; the preview is pinned; Save and Cancel are sticky; with "More options" collapsed the default state fits in 1.5 phone screens.
+AK-3 Smart add: pasting a link for each provider in PV-7, PV-8 and PV-9 (including youtu.be, spotify.link, pin.it, lnkd.in, discord.gg and mobile hosts) creates the right block with real data in the preview; an unknown URL becomes a plain Link.
+AK-4 Looks: the five looks render for every provider at 320, 390 and 768px with real data, long names, a missing avatar, a missing summary and zero stats; an automated contrast test passes for every vibe x five looks x every default brand colour; provider restrictions (Spotify) are enforced by the renderer.
+AK-5 Public copy: no owner-facing status text ("Connected ...") on any public card; default button texts follow PV-3; toggles for unavailable data are hidden, not disabled; the word "OAuth" appears nowhere in the UI.
+AK-6 Secrets: a search of the repository, the client bundle, build logs and test fixtures finds no credentials of any kind (Spotify client secrets, Pinterest tokens, long hex or token-like strings); `.env.example` lists the names with empty values; the app refuses to start in production when a required server variable is missing; logs and error responses mask secrets; secret scanning runs in CI.
+AK-7 Spotify: tracks, albums, playlists, artists, shows and episodes in every supported URL form produce the right card and player; an editorial or unavailable playlist falls back to oEmbed; a simulated 429 serves the snapshot; there is one token request per hour under load; removed fields are never read; the card shows the Spotify logo, unmodified artwork, no stats toggle and a "Listen on Spotify" link back; a simulated Web API failure (the owner's Premium lapsed) switches to oEmbed with no visitor-facing error.
+AK-8 Pinterest: pin, board and profile links work as widgets with no token; the script loads once and only when needed; the owner's token is never used for other users and never reaches a browser; the OAuth connection stays behind its flag.
+AK-9 Other providers: YouTube, X, GitHub, LinkedIn, Instagram, Facebook, Threads, Discord and Linktree each resolve, fall back to manual details when needed, and show only the toggles their data supports.
+AK-10 Account page: no inline vendor component; five sections in the order of AR-3; no duplicate profile, passkey, plan, delete or sign-out controls anywhere in the product; the Settings tab has only Integrations, SEO & search and the link row; avatar menu links and anchors work.
+AK-11 Theming: every remaining vendor screen (verification, password change, two-step setup, sign-in, sign-up, user menu) matches iveo's font, colours, radii and buttons in a side-by-side screenshot check; the vendor's name appears in no iveo-owned copy.
+AK-12 Rules: no "embed" for blocks; no checkboxes for settings; no Title Case or uppercase tracked labels on these screens; buttons use the four types; red only for destructive actions.
+AK-13 Accessibility: look tiles and chips are keyboard-operable radio groups; sheets and dialogs trap and return focus; skeletons use aria-busy; row actions are labelled; Lighthouse accessibility 95 or more on the editor, the Links tab and /account; contrast 4.5:1 for text and 3:1 for components.
+AK-14 Performance: the public page budget (master PG-38) is unchanged after adding providers: no provider script before interaction or visibility, images have explicit dimensions, no layout shift.
+AK-15 Compatibility: existing blocks keep their data and look (legacy presets through the alias table), and routes, public URLs and embed widgets keep working; no schema change unless it is listed in the report.
+AK-16 Build, lint and type-check pass; no new console errors or warnings.
+
+
+G2 REGRESSION TESTS (use a test account; never put real secrets in tests - use mocks)
+
+EDITOR AND LOOKS
+- Add one block per provider by pasting a link; edit each one; change look, accent, corners, display as and size; save; reload; open the public page at 320, 390, 768 and 1280px.
+- Open an existing LinkedIn block saved before this change: its old preset maps to the matching look and nothing else changes.
+- Connect and reconnect LinkedIn from the editor; disconnect it from Account > Connected platforms; confirm the row shows "needs attention" and the public card keeps its last snapshot.
+- Archive and unarchive; reorder; toggle visibility; the filter chips wrap at 320px.
+- Failure drills: unknown link, private profile, expired Discord invite, rate-limited response, offline resolve.
+
+SPOTIFY AND PINTEREST
+- Everything in AK-7 and AK-8; also run with a deliberately invalid client secret: no crash, oEmbed fallback, an alert is logged without the secret.
+- Inspect the client bundle and the browser's network calls: no secrets, and no visitor calls to provider APIs.
+
+ACCOUNT
+- Edit the profile (photo upload, library avatar, remove photo, name, username valid / invalid / taken, bio) and confirm the public page, share image and embed widgets update.
+- Add, verify, make primary and remove an email; set and change a password; add, rename and remove a passkey; connect and reconnect a sign-in provider; list devices and sign out another one; two-step verification if enabled.
+- Plan: open the billing portal; a Free account shows the upgrade button and the comparison.
+- Export data; start account deletion and stop before the final confirmation.
+- A session that expires during a sensitive action returns to the same section.
+- Phone 360px and desktop 1440px; keyboard only.
+
+
+G3 FINAL REPORT (send this back when you finish)
+
+1. A short paragraph per area: editor and looks; providers (Spotify, Pinterest, others); account area.
+2. A table of every ID (RU-, CH-, EP-, ED-, LK-, PV-, AU-, AR-, AK-) with Done / Partial / Skipped and a reason for anything that is not Done.
+3. The provider registry as implemented: each provider's strategies, capabilities and defaults.
+4. The alias table for legacy looks.
+5. Files added, changed and removed, and the environment variable names added (names only, never values).
+6. What you verified in provider or SDK documentation (RU-10), with the date you checked it.
+7. Data changes, migrations, routes and redirects (ideally none).
+8. Open questions that need the owner's decision, including whether the Pinterest app has Standard access and whether the Spotify app owner has an active Premium subscription.
+9. Before and after screenshots at 390px and 1280px: the editor (card and player), the Links tab, the public page with each look, /account, and one themed vendor modal.
+
+END OF PROMPT

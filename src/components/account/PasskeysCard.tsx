@@ -1,26 +1,25 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useUser, useReverification } from '@clerk/react';
 import {
-  KeyRound,
   Plus,
   Pencil,
   Trash2,
   Check,
   X,
-  ShieldCheck,
   AlertCircle,
   ExternalLink,
+  MoreHorizontal,
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import { HAS_CLERK_KEY } from '../../lib/env';
 
-function formatPasskeyDate(value: Date | string | null | undefined): string {
+export function formatPasskeyDate(value: Date | string | null | undefined): string {
   if (!value) return 'Never';
   const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (Number.isNaN(d.getTime())) return 'Never';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function checkIsIframe(): boolean {
@@ -32,7 +31,7 @@ function checkIsIframe(): boolean {
   }
 }
 
-function classifyPasskeyError(
+export function classifyPasskeyError(
   err: unknown,
   fallback: string,
   inIframe: boolean
@@ -50,7 +49,7 @@ function classifyPasskeyError(
 
   if (code === 'reverification_cancelled') {
     return {
-      message: 'Account verification was cancelled. Verify when prompted to save passkey changes.',
+      message: 'Verification was cancelled. Confirm when prompted to save passkey changes.',
       needsTopLevelTab: false,
     };
   }
@@ -64,7 +63,7 @@ function classifyPasskeyError(
   ) {
     return {
       message:
-        'Your browser blocked passkey setup inside this embedded view. Open Account settings in a full browser tab to register your passkey.',
+        'Your browser blocked passkey setup inside this embedded view. Open Account in a full browser tab to add a passkey.',
       needsTopLevelTab: true,
     };
   }
@@ -74,13 +73,13 @@ function classifyPasskeyError(
   ) {
     return {
       message:
-        'Passkey setup cannot run on this preview domain. Open Account settings on your primary app domain.',
+        'Passkey setup cannot run on this preview domain. Open Account on your primary app domain.',
       needsTopLevelTab: inIframe,
     };
   }
   if (code === 'passkey_already_exists' || /already registered|InvalidStateError/i.test(combined)) {
     return {
-      message: 'A passkey for this device or security key is already registered to your account.',
+      message: 'A passkey for this device or security key is already added to your account.',
       needsTopLevelTab: false,
     };
   }
@@ -90,14 +89,14 @@ function classifyPasskeyError(
     /AbortError|passkey_registration_cancelled|cancel/i.test(combined)
   ) {
     return {
-      message: 'Passkey setup was cancelled before completing biometric or device verification.',
+      message: 'Passkey setup was cancelled before completing verification.',
       needsTopLevelTab: false,
     };
   }
   if (/NotAllowedError/i.test(combined)) {
     return {
       message:
-        'Passkey prompt was dismissed or timed out. Make sure screen lock / biometrics are enabled on your device and try again.',
+        'Passkey prompt was dismissed or timed out. Make sure screen lock or biometrics are enabled on your device and try again.',
       needsTopLevelTab: false,
     };
   }
@@ -113,17 +112,97 @@ function classifyPasskeyError(
   }
   if (/not enabled|feature_not_enabled|passkeys_not_enabled|passkey_feature_not_enabled/i.test(combined)) {
     return {
-      message: 'Passkeys are currently unavailable for this sign-in environment.',
+      message: 'Passkeys are currently unavailable in this environment.',
       needsTopLevelTab: false,
     };
   }
   return {
-    message: msg || fallback,
+    message: fallback,
     needsTopLevelTab: false,
   };
 }
 
-const ClerkPasskeysCardInner: React.FC = () => {
+interface PasskeyRowMenuProps {
+  label: string;
+  disabled?: boolean;
+  onRename: () => void;
+  onRemove: () => void;
+}
+
+const PasskeyRowMenu: React.FC<PasskeyRowMenuProps> = ({
+  label,
+  disabled,
+  onRename,
+  onRemove,
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        disabled={disabled}
+        aria-label={`Actions for passkey ${label}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="w-11 h-11 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-[12px] text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer disabled:opacity-50"
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+4px)] w-44 rounded-[12px] bg-surface border border-border shadow-[0_12px_32px_rgba(10,10,10,0.12)] py-1.5 z-40"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onRename();
+            }}
+            className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-[14px] font-medium text-ink hover:bg-surface-2 text-left cursor-pointer"
+          >
+            <Pencil size={15} className="text-muted shrink-0" />
+            <span>Rename</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onRemove();
+            }}
+            className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-[14px] font-medium text-[color:var(--error,#B3261E)] hover:bg-red-50 text-left cursor-pointer"
+          >
+            <Trash2 size={15} className="shrink-0" />
+            <span>Remove</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const PasskeysSection: React.FC<{ offline?: boolean }> = ({ offline = false }) => {
   const { user, isLoaded } = useUser();
   const { showToast } = useToast();
 
@@ -136,14 +215,11 @@ const ClerkPasskeysCardInner: React.FC = () => {
   const [needsTopLevelTab, setNeedsTopLevelTab] = useState(false);
 
   const inIframe = useMemo(() => checkIsIframe(), []);
-
   const webAuthnSupported =
     typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined';
 
   const passkeys = user?.passkeys ?? [];
 
-  // Wrap Clerk passkey operations with useReverification so session_reverification_required
-  // automatically opens Clerk's verification modal and retries cleanly.
   const createPasskeyWithReverify = useReverification(async () => {
     if (!user) throw new Error('Sign in to add a passkey.');
     const created = await user.createPasskey();
@@ -168,9 +244,9 @@ const ClerkPasskeysCardInner: React.FC = () => {
   });
 
   const handleAddPasskey = async () => {
-    if (!user || isCreating) return;
+    if (!user || isCreating || offline) return;
     if (!webAuthnSupported) {
-      setErrorMsg('Your current browser or device does not support WebAuthn passkeys.');
+      setErrorMsg('Your browser or device does not support passkeys.');
       return;
     }
 
@@ -179,11 +255,11 @@ const ClerkPasskeysCardInner: React.FC = () => {
     setIsCreating(true);
     try {
       await createPasskeyWithReverify();
-      showToast('Passkey added to your account');
+      showToast('Passkey added');
     } catch (err) {
       const classified = classifyPasskeyError(
         err,
-        'Could not register passkey. Please try again.',
+        'Could not add passkey. Try again.',
         inIframe
       );
       setErrorMsg(classified.message);
@@ -208,7 +284,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
   const handleSaveRename = async (e: React.FormEvent, passkeyId: string) => {
     e.preventDefault();
     const trimmed = renameValue.trim();
-    if (!trimmed) return;
+    if (!trimmed || offline) return;
 
     setSavingRenameId(passkeyId);
     setErrorMsg(null);
@@ -228,6 +304,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
   };
 
   const handleDelete = async (passkeyId: string) => {
+    if (offline) return;
     setDeletingId(passkeyId);
     setErrorMsg(null);
     setNeedsTopLevelTab(false);
@@ -244,29 +321,24 @@ const ClerkPasskeysCardInner: React.FC = () => {
   };
 
   return (
-    <Card className="flex flex-col gap-5">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-[10px] bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0 mt-0.5">
-            <KeyRound size={18} strokeWidth={1.6} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-[18px] font-semibold text-ink leading-tight">
-              Passkeys
-            </h2>
-            <p className="mt-1 text-[13px] text-muted leading-relaxed">
-              Sign in quickly and securely using Face ID, Touch ID, Windows Hello, or a hardware security key. Managed by Clerk.
-            </p>
-          </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[14px] font-semibold text-ink leading-snug">
+            Passkeys
+          </h3>
+          <p className="mt-0.5 text-[13px] text-muted">
+            Sign in with Face ID, Touch ID, Windows Hello or a security key.
+          </p>
         </div>
 
         <Button
           type="button"
-          variant="primary"
-          size="sm"
+          variant="secondary"
+          size="md"
           onClick={handleAddPasskey}
           loading={isCreating}
-          disabled={!isLoaded || !user || !webAuthnSupported || isCreating}
+          disabled={!isLoaded || !user || !webAuthnSupported || isCreating || offline}
           className="shrink-0 self-start"
         >
           <Plus size={15} className="mr-1.5" />
@@ -275,29 +347,20 @@ const ClerkPasskeysCardInner: React.FC = () => {
       </div>
 
       {!webAuthnSupported && (
-        <div
-          role="status"
-          className="flex items-start gap-2.5 p-3 rounded-[10px] bg-surface-2 border border-border text-[13px] text-muted"
-        >
-          <AlertCircle size={16} className="shrink-0 mt-0.5 text-ink" />
-          <span>Passkeys require a modern browser with WebAuthn support (Chrome, Safari, Edge, or Firefox).</span>
-        </div>
+        <p className="text-[13px] text-muted">
+          Passkeys require a modern browser with WebAuthn support.
+        </p>
       )}
 
       {inIframe && !errorMsg && (
-        <div
-          role="status"
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-[10px] bg-surface-2 border border-border text-[12px] text-muted"
-        >
-          <span>
-            If your browser restricts passkey prompts inside an embedded preview, open this page in a full tab.
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted">
+          <span>Passkey prompts may require opening this page in a full tab.</span>
           {typeof window !== 'undefined' && (
             <a
               href={window.location.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-ink hover:underline shrink-0"
+              className="inline-flex items-center gap-1 font-medium text-ink hover:underline shrink-0"
             >
               <span>Open in full tab</span>
               <ExternalLink size={12} />
@@ -309,9 +372,9 @@ const ClerkPasskeysCardInner: React.FC = () => {
       {errorMsg && (
         <div
           role="alert"
-          className="flex flex-col gap-2 p-3 rounded-[10px] bg-red-50 border border-red-200 text-[13px] text-red-700"
+          className="flex flex-col gap-2 p-3 rounded-[12px] bg-red-50 border border-red-200 text-[13px] text-[color:var(--error,#B3261E)]"
         >
-          <div className="flex items-start gap-2.5">
+          <div className="flex items-start gap-2">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
@@ -320,7 +383,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
               href={window.location.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="self-start inline-flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-red-700 text-white text-[12px] font-semibold hover:bg-red-800 transition-colors ml-6"
+              className="self-start inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-[10px] bg-[color:var(--error,#B3261E)] text-white text-[12px] font-medium hover:bg-red-700 transition-colors ml-6"
             >
               <span>Open in full browser tab</span>
               <ExternalLink size={12} />
@@ -330,22 +393,19 @@ const ClerkPasskeysCardInner: React.FC = () => {
       )}
 
       {!isLoaded ? (
-        <div className="h-16 rounded-[10px] bg-surface-2 animate-pulse" aria-hidden="true" />
+        <div className="h-14 rounded-[12px] bg-surface-2 animate-pulse" aria-busy="true" />
       ) : passkeys.length === 0 ? (
-        <div className="p-4 rounded-[10px] bg-surface-2 border border-border flex items-center gap-3">
-          <ShieldCheck size={18} className="text-muted shrink-0" />
-          <div className="text-[13px] text-muted">
-            No passkeys registered yet. Add a passkey on this device for passwordless one-tap sign-in.
-          </div>
-        </div>
+        <p className="text-[13px] text-muted">
+          No passkeys yet. Add one to sign in with your fingerprint or face.
+        </p>
       ) : (
-        <ul className="divide-y divide-border rounded-[10px] border border-border bg-surface">
+        <ul className="divide-y divide-divider border-t border-divider pt-1">
           {passkeys.map((pk) => {
             const isEditing = editingId === pk.id;
             const label = pk.name || 'Passkey';
 
             return (
-              <li key={pk.id} className="p-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <li key={pk.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 {isEditing ? (
                   <form
                     onSubmit={(e) => handleSaveRename(e, pk.id)}
@@ -356,10 +416,10 @@ const ClerkPasskeysCardInner: React.FC = () => {
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
                       placeholder="e.g. MacBook Touch ID"
-                      aria-label="Passkey name"
+                      aria-label={`Rename passkey ${label}`}
                       maxLength={64}
                       autoFocus
-                      className="flex-1 h-9 px-3 rounded-[8px] bg-surface-2 border border-border text-[14px] text-ink outline-none focus:border-ink"
+                      className="flex-1 h-11 px-3 rounded-[12px] bg-surface border border-border text-[14px] text-ink outline-none focus:border-ink"
                     />
                     <div className="flex items-center gap-1.5 shrink-0">
                       <Button
@@ -367,7 +427,7 @@ const ClerkPasskeysCardInner: React.FC = () => {
                         variant="primary"
                         size="sm"
                         loading={savingRenameId === pk.id}
-                        disabled={!renameValue.trim() || savingRenameId === pk.id}
+                        disabled={!renameValue.trim() || savingRenameId === pk.id || offline}
                       >
                         <Check size={14} className="mr-1" />
                         <span>Save</span>
@@ -387,38 +447,46 @@ const ClerkPasskeysCardInner: React.FC = () => {
                 ) : (
                   <>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[14px] font-medium text-ink truncate">
-                          {label}
-                        </span>
-                      </div>
+                      <span className="text-[14px] font-medium text-ink block truncate">
+                        {label}
+                      </span>
                       <p className="text-[12px] text-muted mt-0.5">
                         Added {formatPasskeyDate(pk.createdAt)} · Last used {formatPasskeyDate(pk.lastUsedAt)}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleStartRename(pk.id, pk.name)}
-                        aria-label={`Rename ${label}`}
-                        title="Rename passkey"
-                        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-[13px] font-medium text-ink hover:bg-surface-2 transition-colors cursor-pointer"
-                      >
-                        <Pencil size={13} />
-                        <span>Rename</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(pk.id)}
-                        disabled={deletingId === pk.id}
-                        aria-label={`Remove ${label}`}
-                        title="Remove passkey"
-                        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[8px] text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        <Trash2 size={13} />
-                        <span>{deletingId === pk.id ? 'Removing...' : 'Remove'}</span>
-                      </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <div className="hidden sm:flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStartRename(pk.id, pk.name)}
+                          aria-label={`Rename passkey ${label}`}
+                          disabled={offline}
+                        >
+                          Rename
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(pk.id)}
+                          disabled={deletingId === pk.id || offline}
+                          aria-label={`Remove passkey ${label}`}
+                          className="text-[color:var(--error,#B3261E)] hover:bg-red-50"
+                        >
+                          {deletingId === pk.id ? 'Removing...' : 'Remove'}
+                        </Button>
+                      </div>
+                      <div className="sm:hidden">
+                        <PasskeyRowMenu
+                          label={label}
+                          disabled={deletingId === pk.id || offline}
+                          onRename={() => handleStartRename(pk.id, pk.name)}
+                          onRemove={() => handleDelete(pk.id)}
+                        />
+                      </div>
                     </div>
                   </>
                 )}
@@ -427,30 +495,25 @@ const ClerkPasskeysCardInner: React.FC = () => {
           })}
         </ul>
       )}
-    </Card>
+    </div>
   );
 };
 
 export const PasskeysCard: React.FC = () => {
   if (!HAS_CLERK_KEY) {
     return (
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-[10px] bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0">
-            <KeyRound size={18} strokeWidth={1.6} />
-          </div>
-          <div>
-            <h2 className="text-[18px] font-semibold text-ink leading-tight">
-              Passkeys
-            </h2>
-            <p className="mt-1 text-[13px] text-muted">
-              Sign in with biometrics or a hardware security key when signed into a live Clerk session.
-            </p>
-          </div>
-        </div>
+      <Card className="flex flex-col gap-2">
+        <h2 className="text-[16px] font-semibold text-ink leading-tight">Passkeys</h2>
+        <p className="text-[13px] text-muted">
+          Sign in with Face ID, Touch ID, Windows Hello or a security key when signed into a live session.
+        </p>
       </Card>
     );
   }
 
-  return <ClerkPasskeysCardInner />;
+  return (
+    <Card>
+      <PasskeysSection />
+    </Card>
+  );
 };

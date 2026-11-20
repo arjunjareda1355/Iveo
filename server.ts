@@ -142,13 +142,18 @@ function adaptWebHandler(
         res.end();
       }
     } catch (err: any) {
-      console.error('API handler error:', err);
-      res.status(500).json({ error: 'internal_server_error', message: err?.message });
+      const { redactSecrets } = await import('./api/_lib/serverConfig.ts');
+      const safeMsg = redactSecrets(String(err?.message || 'Internal error'));
+      console.error('API handler error:', safeMsg);
+      res.status(500).json({ error: 'internal_server_error', message: safeMsg });
     }
   };
 }
 
 async function startServer() {
+  const { assertProductionConfig } = await import('./api/_lib/serverConfig.ts');
+  assertProductionConfig();
+
   // 0. Container Health Checks
   app.get('/_health', (_req, res) => res.status(200).send('ok'));
   app.get('/healthz', (_req, res) => res.status(200).send('ok'));

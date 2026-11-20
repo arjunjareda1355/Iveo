@@ -308,3 +308,132 @@ export function resolveEffectiveTokens(
     buttonBorderWidth: finalButtonBorderWidth,
   };
 }
+
+/**
+ * Extracts a solid #RRGGBB color from CSS hex, rgb(), or rgba() strings by blending against a backdrop if needed.
+ */
+export function resolveCssColorToHex(
+  cssColor: string | null | undefined,
+  backdropHex = '#FFFFFF'
+): string {
+  const norm = normalizeHexColor(cssColor);
+  if (norm) return norm;
+  if (!cssColor || typeof cssColor !== 'string') return normalizeHexColor(backdropHex) || '#FFFFFF';
+
+  const rgbaMatch = cssColor.match(
+    /rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*[,/]\s*([0-9.]+))?\s*\)/i
+  );
+  if (rgbaMatch) {
+    const r = Math.min(255, Math.max(0, Number(rgbaMatch[1])));
+    const g = Math.min(255, Math.max(0, Number(rgbaMatch[2])));
+    const b = Math.min(255, Math.max(0, Number(rgbaMatch[3])));
+    const a = rgbaMatch[4] !== undefined ? Math.min(1, Math.max(0, Number(rgbaMatch[4]))) : 1;
+    const hex = `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+    if (a >= 0.99) return hex;
+    return blendHex(normalizeHexColor(backdropHex) || '#FFFFFF', hex, a);
+  }
+  return normalizeHexColor(backdropHex) || '#FFFFFF';
+}
+
+export function hexWithAlpha(hex: string, alpha: number, fallbackHex = '#0A0A0A'): string {
+  const norm = normalizeHexColor(hex) || normalizeHexColor(fallbackHex) || '#0A0A0A';
+  const rgb = parseHexRgb(norm);
+  if (!rgb) return norm;
+  const a = Math.min(1, Math.max(0, Number(alpha.toFixed(3))));
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${a})`;
+}
+
+export function darkenHex(hex: string, ratio = 0.25): string {
+  return blendHex(normalizeHexColor(hex) || '#0A0A0A', '#000000', Math.min(1, Math.max(0, ratio)));
+}
+
+/**
+ * Guarantees >= 4.5:1 text contrast on an arbitrary fill color (LK-5, LK-10).
+ */
+export function ensureContrastText(
+  preferredFg: string | null | undefined,
+  bgCss: string,
+  minRatio = 4.5,
+  backdropHex = '#FFFFFF'
+): '#0A0A0A' | '#FFFFFF' | string {
+  const resolvedBg = resolveCssColorToHex(bgCss, backdropHex);
+  const normPref = normalizeHexColor(preferredFg);
+  if (normPref) {
+    const prefRatio = getContrastRatio(normPref, resolvedBg) ?? 0;
+    if (prefRatio >= minRatio) return normPref;
+  }
+  const blackRatio = getContrastRatio('#0A0A0A', resolvedBg) ?? 0;
+  const whiteRatio = getContrastRatio('#FFFFFF', resolvedBg) ?? 0;
+  return whiteRatio >= blackRatio ? '#FFFFFF' : '#0A0A0A';
+}
+
+/**
+ * Guarantees >= 3.0:1 UI/icon/border contrast against a surface (LK-5, LK-10).
+ * Falls back to surfaceFallbackTextHex (or #0A0A0A/#FFFFFF) if accent fails contrast.
+ */
+export function ensureUiAccentContrast(
+  accentHex: string,
+  surfaceCss: string,
+  fallbackTextCss: string,
+  minRatio = 3.0,
+  backdropHex = '#FFFFFF'
+): string {
+  const resolvedSurface = resolveCssColorToHex(surfaceCss, backdropHex);
+  const cleanAccent = normalizeHexColor(accentHex) || '#0A0A0A';
+  const ratio = getContrastRatio(cleanAccent, resolvedSurface) ?? 0;
+  if (ratio >= minRatio) return cleanAccent;
+
+  const fallbackHex = resolveCssColorToHex(fallbackTextCss, backdropHex);
+  const fallbackRatio = getContrastRatio(fallbackHex, resolvedSurface) ?? 0;
+  if (fallbackRatio >= minRatio) return fallbackHex;
+
+  const whiteRatio = getContrastRatio('#FFFFFF', resolvedSurface) ?? 0;
+  const blackRatio = getContrastRatio('#0A0A0A', resolvedSurface) ?? 0;
+  return whiteRatio >= blackRatio ? '#FFFFFF' : '#0A0A0A';
+}
+
+/**
+ * Computes Glass look surface opacity (0.60 default, auto-raised to 0.85 if page backdrop
+ * compromises 4.5:1 text legibility per LK-7).
+ */
+export function resolveGlassSurfaceConfig(
+  vibeTokens: VibeTokens,
+  accentHex: string,
+  background?: BackgroundConfig | null
+): {
+  backgroundCss: string;
+  borderColor: string;
+  textColor: string;
+  mutedColor: string;
+  opacity: number;
+} {
+  const pageSample = extractBackgroundSampleHex(background, resolveCssColorToHex(vibeTokens.bg, '#FFFFFF')) || '#FFFFFF';
+  const isDarkPage = (getHexLuminance(pageSample) ?? 255) < 135;
+  const baseSurfaceHex = isDarkPage ? '#141418' : '#FFFFFF';
+  const preferredText = isDarkPage ? '#F8FAFC' : '#0A0A0A';
+
+  let opacity = 0.6;
+  const blended60 = blendHex(pageSample, baseSurfaceHex, opacity);
+  const ratio60 = getContrastRatio(preferredText, blended60) ?? 0;
+  if (ratio60 < 4.5) {
+    opacity = 0.85;
+  }
+
+  const surfaceEffective = blendHex(pageSample, baseSurfaceHex, opacity);
+  const textColor = ensureContrastText(preferredText, surfaceEffective, 4.5, pageSample);
+  const mutedColor =
+    textColor === '#FFFFFF' ? 'rgba(248, 250, 252, 0.78)' : 'rgba(10, 10, 10, 0.72)';
+
+  const tinted = blendHex(baseSurfaceHex, normalizeHexColor(accentHex) || baseSurfaceHex, 0.07);
+  const rgb = parseHexRgb(tinted) || [255, 255, 255];
+  const borderColor = isDarkPage ? 'rgba(255, 255, 255, 0.28)' : resolveCssColorToHex(vibeTokens.buttonBorder, '#E5E7EB');
+
+  return {
+    backgroundCss: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${opacity})`,
+    borderColor,
+    textColor,
+    mutedColor,
+    opacity,
+  };
+}
+

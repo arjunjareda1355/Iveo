@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Play,
   Music,
@@ -7,24 +7,41 @@ import {
   Linkedin,
   Globe,
   ExternalLink,
-  Star,
-  Terminal,
   Instagram,
 } from 'lucide-react';
-import { EmbedLookStyle, EmbedProvider, PageBlock } from '../../data/types';
+import { CardLookStyle, EmbedProvider, PageBlock, BackgroundConfig } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
-import { parseEmbedUrl } from '../../lib/embeds';
+import { parseEmbedUrl, detectProviderUrl } from '../../lib/embeds';
 import { formatExternalUrl } from '../../lib/urls';
 import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
 } from '../../lib/preferences';
+import { normalizeEmbedLookStyle } from '../../lib/embedLooks';
 import {
-  getDefaultEmbedCtaLabel,
-  normalizeEmbedLookStyle,
-} from '../../lib/embedLooks';
+  getProviderDefinition,
+  getProviderKindDefinition,
+} from '../../lib/providers/definitions';
+import {
+  darkenHex,
+  ensureContrastText,
+  ensureUiAccentContrast,
+  hexWithAlpha,
+  normalizeHexColor,
+  resolveCssColorToHex,
+  resolveGlassSurfaceConfig,
+} from '../../lib/colors';
+import {
+  BlueskySocialIcon,
+  DiscordIcon,
+  FacebookSocialIcon,
+  LinktreeSocialIcon,
+  PinterestSocialIcon,
+  ThreadsSocialIcon,
+  XIcon,
+} from '../phone/SocialIcons';
 
-interface EmbedBlockProps {
+export interface EmbedBlockProps {
   block: PageBlock;
   vibe: Vibe;
   effectiveRadius: number;
@@ -35,37 +52,150 @@ interface EmbedBlockProps {
   scale?: number;
   onLinkClick?: (block: PageBlock) => void;
   surfaceStyle?: React.CSSProperties;
+  pageCardLook?: CardLookStyle;
+  background?: BackgroundConfig | null;
 }
 
 export const DiscordGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028ZM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418Zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z" />
-  </svg>
+  <DiscordIcon size={size} />
 );
-
 export const XMarkGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-  </svg>
+  <XIcon size={size} />
 );
-
 export const FacebookGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M22.675 0H1.325C.593 0 0 .593 0 1.325v21.351C0 23.407.593 24 1.325 24H12.82v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116c.73 0 1.323-.593 1.323-1.325V1.325C24 .593 23.407 0 22.675 0z" />
-  </svg>
+  <FacebookSocialIcon size={size} />
 );
-
 export const ThreadsGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.589 12c.027 3.086.718 5.496 2.057 7.164 1.43 1.781 3.631 2.695 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.964-.065-1.19.408-2.285 1.33-3.082.88-.76 2.119-1.207 3.583-1.291a13.853 13.853 0 0 1 3.02.142c-.126-.742-.375-1.332-.75-1.757-.513-.586-1.308-.883-2.359-.89h-.029c-.844 0-1.992.232-2.721 1.32l-1.757-1.182c.98-1.454 2.513-2.259 4.47-2.259h.044c3.194.02 5.097 1.973 5.287 5.388.108.046.216.094.321.142 1.49.7 2.58 1.761 3.154 3.07.797 1.82.871 4.79-1.548 7.158-1.85 1.81-4.094 2.628-7.277 2.65Zm1.003-11.69c-.242 0-.487.007-.739.021-1.836.103-2.98.946-2.916 2.143.067 1.256 1.452 1.839 2.784 1.767 1.224-.065 2.818-.543 3.086-3.71a10.5 10.5 0 0 0-2.215-.221Z" />
-  </svg>
+  <ThreadsSocialIcon size={size} />
+);
+export const PinterestGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <PinterestSocialIcon size={size} />
 );
 
-export const PinterestGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12Z" />
-  </svg>
-);
+/**
+ * Deduplicated official Pinterest pinit.js loader (PV-9 & PV-10):
+ * Loads at most once per page, never on initial first paint unless visible/activated.
+ */
+let pinitLoadPromise: Promise<void> | null = null;
+function ensurePinterestScriptLoaded(): Promise<void> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve();
+  }
+  const win = window as unknown as { PinUtils?: { build?: (el?: HTMLElement) => void } };
+  if (win.PinUtils?.build) {
+    return Promise.resolve();
+  }
+  if (pinitLoadPromise) return pinitLoadPromise;
+
+  pinitLoadPromise = new Promise<void>((resolve) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src*="assets.pinterest.com/js/pinit.js"]'
+    );
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://assets.pinterest.com/js/pinit.js';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => resolve();
+    document.body.appendChild(script);
+  });
+  return pinitLoadPromise;
+}
+
+export const ProviderGlyph: React.FC<{ provider: string; size?: number }> = ({
+  provider,
+  size = 16,
+}) => {
+  switch (provider) {
+    case 'youtube':
+      return <Play size={size} strokeWidth={1.7} fill="currentColor" />;
+    case 'spotify':
+      return <Music size={size} strokeWidth={1.8} />;
+    case 'soundcloud':
+      return <Headphones size={size} strokeWidth={1.8} />;
+    case 'discord':
+      return <DiscordIcon size={size} />;
+    case 'github':
+      return <Github size={size} strokeWidth={1.8} />;
+    case 'linkedin':
+      return <Linkedin size={size} strokeWidth={1.8} />;
+    case 'x':
+      return <XIcon size={Math.max(12, size - 2)} />;
+    case 'instagram':
+      return <Instagram size={size} strokeWidth={1.8} />;
+    case 'facebook':
+      return <FacebookSocialIcon size={Math.max(12, size - 1)} />;
+    case 'threads':
+      return <ThreadsSocialIcon size={Math.max(12, size - 1)} />;
+    case 'pinterest':
+      return <PinterestSocialIcon size={Math.max(12, size - 1)} />;
+    case 'linktree':
+      return <LinktreeSocialIcon size={Math.max(12, size - 1)} />;
+    case 'bluesky':
+      return <BlueskySocialIcon size={Math.max(12, size - 1)} />;
+    default:
+      return <Globe size={size} strokeWidth={1.7} />;
+  }
+};
+
+/**
+ * Official Spotify logo lock-up complying with Spotify Design & Branding Guidelines (PV-8):
+ * - Green (#1DB954) only on pure black/near-black or pure white backgrounds; monochrome otherwise.
+ * - Full logo >= 70px wide, or standalone icon >= 21px when compact.
+ */
+const SpotifyBrandLogo: React.FC<{
+  compact?: boolean;
+  surfaceHex: string;
+  textColor: string;
+}> = ({ compact = false, surfaceHex, textColor }) => {
+  const normBg = surfaceHex.toUpperCase();
+  const isNeutralBw =
+    normBg === '#FFFFFF' || normBg === '#FAFAFA' || normBg === '#0A0A0A' || normBg === '#121212' || normBg === '#000000';
+  const fill = isNeutralBw ? '#1DB954' : textColor;
+
+  if (compact) {
+    return (
+      <svg
+        width="21"
+        height="21"
+        viewBox="0 0 24 24"
+        fill={fill}
+        aria-label="Spotify"
+        role="img"
+        className="shrink-0"
+      >
+        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+      </svg>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 shrink-0" style={{ minWidth: '72px' }}>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill={fill} aria-hidden="true">
+        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+      </svg>
+      <span
+        className="font-semibold tracking-tight leading-none"
+        style={{ fontSize: '13px', color: textColor }}
+      >
+        Spotify
+      </span>
+    </span>
+  );
+};
+
+function sanitizePublicOwnerCopy(text: string | null | undefined): string | null {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (/^connected\s+(via\s+oauth|.*profile)/i.test(trimmed)) return null;
+  if (/\boauth\b/i.test(trimmed)) return null;
+  return trimmed;
+}
 
 function buildAutoplayEmbedUrl(embedSrc: string, provider: string): string {
   if (provider === 'youtube') {
@@ -81,337 +211,6 @@ function buildAutoplayEmbedUrl(embedSrc: string, provider: string): string {
   return embedSrc;
 }
 
-interface ProviderPalette {
-  bg: string;
-  text: string;
-  muted: string;
-  border: string;
-  accent: string;
-  accentText: string;
-  badgeBg: string;
-  badgeText: string;
-  bannerGradient: string;
-}
-
-function getProviderPalette(
-  provider: EmbedProvider,
-  look: EmbedLookStyle,
-  vibe: Vibe,
-  baseSurface: React.CSSProperties
-): ProviderPalette {
-  const { tokens } = vibe;
-  const themeFallback: ProviderPalette = {
-    bg: String(baseSurface.backgroundColor || tokens.buttonBg),
-    text: String(baseSurface.color || tokens.buttonText),
-    muted: 'rgba(120,120,128,0.85)',
-    border: tokens.buttonBorder || 'rgba(128,128,128,0.22)',
-    accent: tokens.text,
-    accentText: tokens.bg,
-    badgeBg: 'rgba(128,128,128,0.12)',
-    badgeText: String(baseSurface.color || tokens.buttonText),
-    bannerGradient: `linear-gradient(135deg, ${tokens.text}, ${tokens.buttonBg})`,
-  };
-
-  if (look === 'theme') return themeFallback;
-
-  if (look === 'glass') {
-    const accentMap: Record<EmbedProvider, string> = {
-      discord: '#5865F2',
-      github: '#24292F',
-      linkedin: '#0A66C2',
-      x: '#0F1419',
-      instagram: '#E1306C',
-      facebook: '#1877F2',
-      threads: '#101010',
-      pinterest: '#E60023',
-      youtube: '#FF0000',
-      spotify: '#1DB954',
-      soundcloud: '#FF5500',
-    };
-    return {
-      bg: 'rgba(255, 255, 255, 0.72)',
-      text: '#0F172A',
-      muted: '#475569',
-      border: 'rgba(255, 255, 255, 0.55)',
-      accent: accentMap[provider],
-      accentText: '#FFFFFF',
-      badgeBg: 'rgba(15, 23, 42, 0.08)',
-      badgeText: '#0F172A',
-      bannerGradient: `linear-gradient(135deg, ${accentMap[provider]}33, rgba(255,255,255,0.2))`,
-    };
-  }
-
-  if (look === 'minimal') {
-    const accentMap: Record<EmbedProvider, string> = {
-      discord: '#5865F2',
-      github: '#24292F',
-      linkedin: '#0A66C2',
-      x: '#000000',
-      instagram: '#E1306C',
-      facebook: '#1877F2',
-      threads: '#101010',
-      pinterest: '#E60023',
-      youtube: '#FF0000',
-      spotify: '#1DB954',
-      soundcloud: '#FF5500',
-    };
-    return {
-      bg: '#FFFFFF',
-      text: '#111827',
-      muted: '#6B7280',
-      border: '#E5E7EB',
-      accent: accentMap[provider],
-      accentText: '#FFFFFF',
-      badgeBg: '#F3F4F6',
-      badgeText: '#374151',
-      bannerGradient: accentMap[provider],
-    };
-  }
-
-  switch (provider) {
-    case 'discord':
-      return look === 'spotlight'
-        ? {
-            bg: '#2B2D31',
-            text: '#FFFFFF',
-            muted: '#B5BAC1',
-            border: 'rgba(88, 101, 242, 0.45)',
-            accent: '#5865F2',
-            accentText: '#FFFFFF',
-            badgeBg: 'rgba(88, 101, 242, 0.25)',
-            badgeText: '#E0E3FF',
-            bannerGradient: 'linear-gradient(135deg, #5865F2 0%, #8045DD 100%)',
-          }
-        : {
-            bg: '#1E1F22',
-            text: '#F2F3F5',
-            muted: '#949BA4',
-            border: '#313338',
-            accent: '#5865F2',
-            accentText: '#FFFFFF',
-            badgeBg: 'rgba(88, 101, 242, 0.22)',
-            badgeText: '#C9CDFB',
-            bannerGradient: '#5865F2',
-          };
-    case 'github':
-      return look === 'spotlight'
-        ? {
-            bg: '#161B22',
-            text: '#F0F6FC',
-            muted: '#8B949E',
-            border: '#30363D',
-            accent: '#2EA043',
-            accentText: '#FFFFFF',
-            badgeBg: 'rgba(88, 166, 255, 0.14)',
-            badgeText: '#79C0FF',
-            bannerGradient: 'linear-gradient(135deg, #0D1117 0%, #1F2937 100%)',
-          }
-        : {
-            bg: '#0D1117',
-            text: '#F0F6FC',
-            muted: '#8B949E',
-            border: '#30363D',
-            accent: '#F0F6FC',
-            accentText: '#0D1117',
-            badgeBg: '#21262D',
-            badgeText: '#C9D1D9',
-            bannerGradient: '#161B22',
-          };
-    case 'linkedin':
-      return look === 'spotlight'
-        ? {
-            bg: '#FFFFFF',
-            text: '#0F172A',
-            muted: '#475569',
-            border: '#CBD5E1',
-            accent: '#0A66C2',
-            accentText: '#FFFFFF',
-            badgeBg: '#E8F2FC',
-            badgeText: '#0A66C2',
-            bannerGradient: 'linear-gradient(135deg, #0A66C2 0%, #004182 100%)',
-          }
-        : {
-            bg: '#FFFFFF',
-            text: '#111827',
-            muted: '#4B5563',
-            border: '#D1D5DB',
-            accent: '#0A66C2',
-            accentText: '#FFFFFF',
-            badgeBg: '#EFF6FF',
-            badgeText: '#0A66C2',
-            bannerGradient: '#0A66C2',
-          };
-    case 'x':
-      return look === 'spotlight'
-        ? {
-            bg: '#101419',
-            text: '#FFFFFF',
-            muted: '#8B98A5',
-            border: '#2F3336',
-            accent: '#1D9BF0',
-            accentText: '#FFFFFF',
-            badgeBg: 'rgba(29, 155, 240, 0.16)',
-            badgeText: '#71C9F8',
-            bannerGradient: 'linear-gradient(135deg, #000000 0%, #16202A 100%)',
-          }
-        : {
-            bg: '#000000',
-            text: '#FFFFFF',
-            muted: '#A1A1AA',
-            border: '#27272A',
-            accent: '#FFFFFF',
-            accentText: '#000000',
-            badgeBg: '#18181B',
-            badgeText: '#E4E4E7',
-            bannerGradient: '#000000',
-          };
-    case 'instagram':
-      return look === 'spotlight'
-        ? {
-            bg: '#FFF8FA',
-            text: '#111827',
-            muted: '#6B7280',
-            border: '#FBCFE8',
-            accent: '#E1306C',
-            accentText: '#FFFFFF',
-            badgeBg: '#FCE7F3',
-            badgeText: '#BE185D',
-            bannerGradient: 'linear-gradient(135deg, #F58529 0%, #DD2A7B 52%, #8134AF 100%)',
-          }
-        : {
-            bg: '#FFFFFF',
-            text: '#111827',
-            muted: '#6B7280',
-            border: '#F3E8FF',
-            accent: '#E1306C',
-            accentText: '#FFFFFF',
-            badgeBg: '#FDF2F8',
-            badgeText: '#BE185D',
-            bannerGradient: 'linear-gradient(135deg, #F58529 0%, #DD2A7B 52%, #8134AF 100%)',
-          };
-    case 'facebook':
-      return look === 'spotlight'
-        ? {
-            bg: '#FFFFFF',
-            text: '#050505',
-            muted: '#65676B',
-            border: '#CBD5E1',
-            accent: '#1877F2',
-            accentText: '#FFFFFF',
-            badgeBg: '#E7F3FF',
-            badgeText: '#1877F2',
-            bannerGradient: 'linear-gradient(135deg, #1877F2 0%, #0C5DC7 100%)',
-          }
-        : {
-            bg: '#FFFFFF',
-            text: '#1C1E21',
-            muted: '#65676B',
-            border: '#DCE1E8',
-            accent: '#1877F2',
-            accentText: '#FFFFFF',
-            badgeBg: '#E7F3FF',
-            badgeText: '#1877F2',
-            bannerGradient: '#1877F2',
-          };
-    case 'threads':
-      return look === 'spotlight'
-        ? {
-            bg: '#18181B',
-            text: '#FFFFFF',
-            muted: '#A1A1AA',
-            border: '#27272A',
-            accent: '#FFFFFF',
-            accentText: '#101010',
-            badgeBg: '#27272A',
-            badgeText: '#F4F4F5',
-            bannerGradient: 'linear-gradient(135deg, #101010 0%, #27272A 100%)',
-          }
-        : {
-            bg: '#101010',
-            text: '#F5F5F5',
-            muted: '#A1A1AA',
-            border: '#262626',
-            accent: '#FFFFFF',
-            accentText: '#101010',
-            badgeBg: '#1F1F1F',
-            badgeText: '#E5E5E5',
-            bannerGradient: '#101010',
-          };
-    case 'pinterest':
-      return look === 'spotlight'
-        ? {
-            bg: '#FFF8F8',
-            text: '#111827',
-            muted: '#6B7280',
-            border: '#FECDD3',
-            accent: '#E60023',
-            accentText: '#FFFFFF',
-            badgeBg: '#FFE4E6',
-            badgeText: '#BE123C',
-            bannerGradient: 'linear-gradient(135deg, #E60023 0%, #9F1239 100%)',
-          }
-        : {
-            bg: '#FFFFFF',
-            text: '#111827',
-            muted: '#6B7280',
-            border: '#F3E5E7',
-            accent: '#E60023',
-            accentText: '#FFFFFF',
-            badgeBg: '#FFF1F2',
-            badgeText: '#BE123C',
-            bannerGradient: '#E60023',
-          };
-    case 'youtube':
-      return {
-        bg: '#0F0F0F',
-        text: '#FFFFFF',
-        muted: '#AAAAAA',
-        border: '#272727',
-        accent: '#FF0000',
-        accentText: '#FFFFFF',
-        badgeBg: 'rgba(255, 0, 0, 0.18)',
-        badgeText: '#FF8A8A',
-        bannerGradient: 'linear-gradient(135deg, #280808 0%, #0F0F0F 100%)',
-      };
-    case 'spotify':
-      return {
-        bg: '#121212',
-        text: '#FFFFFF',
-        muted: '#B3B3B3',
-        border: '#282828',
-        accent: '#1DB954',
-        accentText: '#000000',
-        badgeBg: 'rgba(29, 185, 84, 0.18)',
-        badgeText: '#1ED760',
-        bannerGradient: 'linear-gradient(135deg, #12331D 0%, #121212 100%)',
-      };
-    case 'soundcloud':
-      return look === 'spotlight'
-        ? {
-            bg: '#FFF7F2',
-            text: '#1C1917',
-            muted: '#78716C',
-            border: '#FED7AA',
-            accent: '#FF5500',
-            accentText: '#FFFFFF',
-            badgeBg: '#FFEDD5',
-            badgeText: '#C2410C',
-            bannerGradient: 'linear-gradient(135deg, #FF5500 0%, #FF8800 100%)',
-          }
-        : {
-            bg: '#18181B',
-            text: '#FFFFFF',
-            muted: '#A1A1AA',
-            border: '#27272A',
-            accent: '#FF5500',
-            accentText: '#FFFFFF',
-            badgeBg: 'rgba(255, 85, 0, 0.2)',
-            badgeText: '#FDBA74',
-            bannerGradient: 'linear-gradient(135deg, #431407 0%, #18181B 100%)',
-          };
-  }
-}
-
 export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   block,
   vibe,
@@ -423,617 +222,420 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   scale = 1,
   onLinkClick,
   surfaceStyle,
+  pageCardLook = 'match_page',
+  background,
 }) => {
   const { tokens } = vibe;
-  const parsed = parseEmbedUrl(block.url || '');
-  const provider = parsed?.provider || block.embedProvider || 'youtube';
   const meta = block.embedMeta;
+  const strictParsed = parseEmbedUrl(block.url || '');
+  const smartDetected = detectProviderUrl(block.url || '');
+
+  const provider: EmbedProvider =
+    (meta?.provider as EmbedProvider) ||
+    strictParsed?.provider ||
+    smartDetected?.provider ||
+    block.embedProvider ||
+    'generic';
+
+  const subtype = meta?.subtype || strictParsed?.subtype || smartDetected?.subtype || null;
+  const providerDef = getProviderDefinition(provider);
+  const kindDef = getProviderKindDefinition(provider, subtype);
+
   const [avatarError, setAvatarError] = useState(false);
   const [coverError, setCoverError] = useState(false);
+  const pinterestContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const effectivePictureUrl =
+    meta?.override?.imageUrl?.trim() ||
+    (kindDef.contentKind === 'item' ? meta?.coverUrl || meta?.avatarUrl : meta?.avatarUrl || meta?.coverUrl) ||
+    null;
 
   useEffect(() => {
     setAvatarError(false);
-  }, [meta?.avatarUrl]);
+  }, [effectivePictureUrl]);
 
   useEffect(() => {
     setCoverError(false);
-  }, [meta?.coverUrl]);
+  }, [meta?.coverUrl, meta?.override?.imageUrl]);
 
-  const isSocialCardProvider =
-    provider === 'discord' ||
-    provider === 'github' ||
-    provider === 'linkedin' ||
-    provider === 'x' ||
-    provider === 'instagram' ||
-    provider === 'facebook' ||
-    provider === 'threads' ||
-    provider === 'pinterest';
+  //Corners override (LK-11)
+  const resolvedBaseCornerPx =
+    meta?.corners === 'sharp'
+      ? 6
+      : meta?.corners === 'rounded'
+        ? 16
+        : meta?.corners === 'pill'
+          ? 28
+          : effectiveRadius;
+  const cardRadius = resolveCardBorderRadius(resolvedBaseCornerPx, scale, 'card');
+  const controlRadius = resolveButtonControlRadius(resolvedBaseCornerPx, scale);
 
-  const lookStyle = normalizeEmbedLookStyle(meta?.lookStyle, 'signature');
-  const showDescription = meta?.showDescription !== false;
-  const showStats = meta?.showStats !== false;
+  // Look resolution order: block override -> page default -> Match page (LK-9)
+  const look: CardLookStyle = meta?.lookStyle
+    ? normalizeEmbedLookStyle(meta.lookStyle, pageCardLook)
+    : normalizeEmbedLookStyle(pageCardLook, 'match_page');
 
-  const providerLabel =
-    provider === 'youtube'
-      ? 'YouTube'
-      : provider === 'spotify'
-        ? 'Spotify'
-        : provider === 'soundcloud'
-          ? 'SoundCloud'
-          : provider === 'discord'
-            ? 'Discord'
-            : provider === 'github'
-              ? 'GitHub'
-              : provider === 'linkedin'
-                ? 'LinkedIn'
-                : provider === 'instagram'
-                  ? 'Instagram'
-                  : provider === 'facebook'
-                    ? 'Facebook'
-                    : provider === 'threads'
-                      ? 'Threads'
-                      : provider === 'pinterest'
-                        ? 'Pinterest'
-                        : 'X';
+  // Display mode resolution: Player vs Card (ED-6)
+  const requestedDisplayAs = meta?.displayAs || (kindDef.capabilities.player ? providerDef.defaultDisplayMode : 'card');
+  const displayAs: 'card' | 'player' =
+    requestedDisplayAs === 'player' && kindDef.capabilities.player ? 'player' : 'card';
+  const playerSize = meta?.playerSize || providerDef.defaultPlayerSize || 'standard';
 
-  const renderProviderGlyph = (iconSize: number) => {
-    switch (provider) {
-      case 'youtube':
-        return <Play size={iconSize} strokeWidth={1.7} fill="currentColor" />;
-      case 'spotify':
-        return <Music size={iconSize} strokeWidth={1.7} />;
-      case 'soundcloud':
-        return <Headphones size={iconSize} strokeWidth={1.7} />;
-      case 'discord':
-        return <DiscordGlyph size={iconSize} />;
-      case 'github':
-        return <Github size={iconSize} strokeWidth={1.8} />;
-      case 'linkedin':
-        return <Linkedin size={iconSize} strokeWidth={1.8} />;
-      case 'x':
-        return <XMarkGlyph size={Math.max(13, iconSize - 2)} />;
-      case 'instagram':
-        return <Instagram size={iconSize} strokeWidth={1.9} />;
-      case 'facebook':
-        return <FacebookGlyph size={Math.max(13, iconSize - 1)} />;
-      case 'threads':
-        return <ThreadsGlyph size={Math.max(13, iconSize - 1)} />;
-      case 'pinterest':
-        return <PinterestGlyph size={Math.max(13, iconSize - 1)} />;
-      default:
-        return <Globe size={iconSize} strokeWidth={1.7} />;
-    }
-  };
+  // Surface & color tokens with contrast guards (LK-4..LK-7, LK-10)
+  const pageBgHex = resolveCssColorToHex(tokens.bg, '#FFFFFF');
+  const vibeSurfaceCss =
+    surfaceStyle?.backgroundColor && surfaceStyle.backgroundColor !== 'transparent'
+      ? String(surfaceStyle.backgroundColor)
+      : tokens.buttonBg === 'transparent'
+        ? tokens.bg
+        : tokens.buttonBg;
+  const vibeSurfaceHex = resolveCssColorToHex(vibeSurfaceCss, pageBgHex);
+  const cardTextOnSurface = ensureContrastText(
+    surfaceStyle?.color ? String(surfaceStyle.color) : tokens.text,
+    vibeSurfaceHex,
+    4.5,
+    pageBgHex
+  );
+  const cardMutedOnSurface =
+    cardTextOnSurface === '#FFFFFF' ? 'rgba(248, 250, 252, 0.76)' : 'rgba(10, 10, 10, 0.68)';
 
+  // Accent computation (LK-10): Brand | Page | Custom
+  const accentMode = meta?.accentMode || (look === 'match_page' ? 'page' : 'brand');
+  const rawPageAccentHex = resolveCssColorToHex(
+    tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg,
+    pageBgHex
+  );
+  const rawChosenAccent =
+    accentMode === 'custom'
+      ? normalizeHexColor(meta?.accentColor) || providerDef.brandColor
+      : accentMode === 'page'
+        ? rawPageAccentHex
+        : providerDef.brandColor;
+
+  // Guarded UI accent (>=3:1 against card surface, otherwise page text)
+  const guardedAccent = ensureUiAccentContrast(
+    rawChosenAccent,
+    vibeSurfaceHex,
+    cardTextOnSurface,
+    3.0,
+    pageBgHex
+  );
+  const buttonFillColor =
+    look === 'match_page' ? rawPageAccentHex : normalizeHexColor(rawChosenAccent) || providerDef.brandColor;
+  const buttonFillText = ensureContrastText(
+    accentMode === 'brand' && rawChosenAccent === providerDef.brandColor ? providerDef.brandTextOnFill : null,
+    buttonFillColor,
+    4.5,
+    vibeSurfaceHex
+  );
+
+  // Content fields respecting overrides & capabilities (ED-13, PV-8, AK-5)
+  const canonicalUrl =
+    strictParsed?.canonicalUrl ||
+    smartDetected?.canonicalUrl ||
+    (block.url ? formatExternalUrl(block.url) : '#');
+
+  const rawTitle =
+    meta?.override?.title?.trim() ||
+    meta?.title?.trim() ||
+    block.title?.trim() ||
+    kindDef.label;
+
+  const rawSubtitle =
+    meta?.override?.subtitle?.trim() ||
+    meta?.handle?.trim() ||
+    sanitizePublicOwnerCopy(meta?.subtitle) ||
+    (canonicalUrl !== '#' ? canonicalUrl.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '') : '');
+
+  const rawSummary =
+    meta?.showDescription !== false
+      ? sanitizePublicOwnerCopy(meta?.override?.description?.trim() || meta?.description)
+      : null;
+
+  // Spotify has no stats per 2026 API (PV-8)
+  const statsLabel =
+    kindDef.capabilities.stats && meta?.showStats !== false
+      ? sanitizePublicOwnerCopy(meta?.statsLabel)
+      : null;
+  const firstStat =
+    meta?.stats && meta.stats.length > 0
+      ? `${meta.stats[0].value} ${meta.stats[0].key}`.trim()
+      : statsLabel?.split(/[·•]/)[0]?.trim() || null;
+
+  const ctaText =
+    meta?.ctaLabel?.trim() ||
+    kindDef.defaultButtonText ||
+    'Open';
+
+  const defaultButtonStyleForLook =
+    look === 'match_page' ? 'text' : look === 'glass' ? 'outline' : 'filled';
+  const effectiveButtonStyle = meta?.buttonStyle || defaultButtonStyleForLook;
+
+  const showPicture = meta?.showAvatar !== false;
+  const showPlatformLabel = meta?.showPlatformLabel !== false;
+  const isSpotify = provider === 'spotify';
+  const isItemArtwork = kindDef.contentKind === 'item';
+
+  // ==========================================================================
+  // RENDER PLAYER MODE (Lazy & click-to-load for YouTube/Spotify/SoundCloud/Meta/X/Pinterest)
+  // ==========================================================================
   const isActivePlayer = activeEmbedId === block.id;
-  const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
-  const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
 
-  const baseSurface: React.CSSProperties = surfaceStyle || {
-    backgroundColor: tokens.buttonBg,
-    color: tokens.buttonText,
-    border: tokens.buttonBorder
-      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-      : 'none',
-    boxShadow: tokens.buttonShadow || 'none',
-  };
-
-  const palette = getProviderPalette(provider, lookStyle, vibe, baseSurface);
-
-  // ============================================================================
-  // 1. SOCIAL / DEVELOPER EMBED CARDS (Discord, GitHub, LinkedIn, X)
-  // ============================================================================
-  if (isSocialCardProvider) {
-    const targetUrl = parsed?.canonicalUrl || (block.url ? formatExternalUrl(block.url) : '#');
-    const cardTitle = meta?.title || block.title || parsed?.label || `${providerLabel} link`;
-    const cardSubtitle = meta?.subtitle || (parsed?.identifier ? `@${parsed.identifier}` : undefined);
-    const cardDesc = showDescription ? meta?.description : null;
-    const statsLabel = showStats ? meta?.statsLabel : null;
-    const badgeText = meta?.badgeText || providerLabel;
-    const customCta = meta?.ctaLabel?.trim();
-    const ctaText = customCta || getDefaultEmbedCtaLabel(provider, parsed?.subtype);
-
-    const cardSurfaceStyle: React.CSSProperties =
-      lookStyle === 'theme'
-        ? {
-            ...baseSurface,
-            fontFamily: fontFamily || vibe.fontFamily,
-            borderRadius: `${cardRadius}px`,
+  // Official Pinterest Widget renderer (PV-9 & PV-10: script loaded once & on view/click)
+  useEffect(() => {
+    if (
+      embedMode === 'live' &&
+      displayAs === 'player' &&
+      provider === 'pinterest' &&
+      (isActivePlayer || playerSize !== 'compact')
+    ) {
+      const el = pinterestContainerRef.current;
+      if (!el || typeof IntersectionObserver === 'undefined') return;
+      const obs = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            obs.disconnect();
+            void ensurePinterestScriptLoaded().then(() => {
+              const win = window as unknown as { PinUtils?: { build?: (node?: HTMLElement) => void } };
+              win.PinUtils?.build?.(el);
+            });
           }
-        : {
-            backgroundColor: palette.bg,
-            color: palette.text,
-            border: `1px solid ${palette.border}`,
-            backdropFilter: lookStyle === 'glass' ? 'blur(14px)' : undefined,
-            WebkitBackdropFilter: lookStyle === 'glass' ? 'blur(14px)' : undefined,
-            boxShadow:
-              lookStyle === 'spotlight'
-                ? '0 10px 26px rgba(10, 10, 18, 0.16)'
-                : lookStyle === 'glass'
-                  ? '0 6px 20px rgba(10, 10, 18, 0.08)'
-                  : '0 2px 8px rgba(10, 10, 10, 0.06)',
-            fontFamily: fontFamily || vibe.fontFamily,
-            borderRadius: `${cardRadius}px`,
-          };
+        },
+        { rootMargin: '120px' }
+      );
+      obs.observe(el);
+      return () => obs.disconnect();
+    }
+  }, [embedMode, displayAs, provider, isActivePlayer, playerSize]);
 
-    // MINIMAL LOOK: Compact one-row sleek bar with distinct provider emblem
-    if (lookStyle === 'minimal') {
-      const minimalContent = (
+  if (displayAs === 'player') {
+    const embedSrc = strictParsed?.embedSrc || smartDetected?.embedSrc || null;
+    const basePlayerHeight =
+      provider === 'spotify'
+        ? playerSize === 'compact'
+          ? 152
+          : 352
+        : provider === 'soundcloud'
+          ? playerSize === 'compact'
+            ? 166
+            : 300
+          : provider === 'pinterest'
+            ? playerSize === 'compact'
+              ? 220
+              : playerSize === 'large'
+                ? 440
+                : 320
+            : undefined;
+
+    const scaledHeight = basePlayerHeight ? Math.round(basePlayerHeight * scale) : undefined;
+    const aspectRatio =
+      provider === 'youtube'
+        ? '16 / 9'
+        : strictParsed?.aspect || (smartDetected?.aspect === '16/9' ? '16 / 9' : undefined);
+
+    // 1. Live active iframe for YouTube / Spotify / SoundCloud / Instagram / Facebook / Threads
+    if (embedMode === 'live' && isActivePlayer && embedSrc && provider !== 'pinterest' && provider !== 'x') {
+      const activeSrc = buildAutoplayEmbedUrl(embedSrc, provider);
+      return (
+        <div className="w-full flex flex-col gap-1.5" style={{ fontFamily: fontFamily || vibe.fontFamily }}>
+          <div
+            className="w-full overflow-hidden bg-black/5 border"
+            style={{
+              borderRadius: `${cardRadius}px`,
+              borderColor: tokens.buttonBorder || 'rgba(128,128,128,0.2)',
+              height: scaledHeight ? `${scaledHeight}px` : undefined,
+              aspectRatio: !scaledHeight ? aspectRatio : undefined,
+            }}
+          >
+            <iframe
+              src={activeSrc}
+              title={isSpotify ? `${rawTitle} on Spotify` : rawTitle}
+              loading="lazy"
+              allow={
+                isSpotify
+                  ? 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture'
+                  : 'accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share'
+              }
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+              className="w-full h-full border-0 block"
+              style={{ borderRadius: `${cardRadius}px` }}
+            />
+          </div>
+          {canonicalUrl !== '#' && (
+            <a
+              href={canonicalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="self-end inline-flex items-center gap-1 text-[12px] font-medium hover:underline px-1"
+              style={{ color: tokens.muted }}
+            >
+              <span>{isSpotify ? 'Listen on Spotify' : `Open on ${providerDef.name}`}</span>
+              <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+      );
+    }
+
+    // 2. Live Pinterest Widget when activated
+    if (embedMode === 'live' && provider === 'pinterest' && isActivePlayer) {
+      const pinDo =
+        subtype === 'board' ? 'embedBoard' : subtype === 'profile' ? 'embedUser' : 'embedPin';
+      return (
         <div
-          className="w-full flex items-center justify-between gap-2.5 text-left transition-all duration-150"
+          ref={pinterestContainerRef}
+          className="w-full overflow-hidden flex flex-col items-center justify-center p-3 border bg-white"
           style={{
-            ...cardSurfaceStyle,
-            padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
+            borderRadius: `${cardRadius}px`,
+            borderColor: tokens.buttonBorder || '#E5E7EB',
+            minHeight: scaledHeight ? `${scaledHeight}px` : '240px',
           }}
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            {meta?.avatarUrl && !avatarError ? (
+          <a
+            data-pin-do={pinDo}
+            data-pin-width={playerSize === 'large' ? 'large' : playerSize === 'compact' ? 'medium' : 'medium'}
+            href={canonicalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[13px] font-medium text-[#0A0A0A] underline"
+          >
+            {rawTitle} on Pinterest
+          </a>
+        </div>
+      );
+    }
+
+    // 3. Click-to-load Facade (zero third-party script or iframe on first paint per PV-10!)
+    const facadeSurfaceBg = vibeSurfaceHex;
+    const facadeText = cardTextOnSurface;
+    const facadeMuted = cardMutedOnSurface;
+    const facadeBtnBg = look === 'match_page' ? buttonFillColor : providerDef.brandColor;
+    const facadeBtnText = ensureContrastText(
+      providerDef.brandTextOnFill,
+      facadeBtnBg,
+      4.5,
+      facadeSurfaceBg
+    );
+
+    const facadeInner = (
+      <div
+        className="w-full overflow-hidden border transition-all duration-150 flex flex-col justify-between text-left"
+        style={{
+          backgroundColor: vibeSurfaceCss,
+          color: facadeText,
+          borderColor: tokens.buttonBorder || hexWithAlpha(facadeText, 0.16),
+          borderRadius: `${cardRadius}px`,
+          fontFamily: fontFamily || vibe.fontFamily,
+          minHeight: `${Math.round((playerSize === 'compact' ? 88 : 168) * scale)}px`,
+          padding: `${Math.round(16 * scale)}px`,
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {showPicture && effectivePictureUrl && !avatarError ? (
               <img
-                src={meta.avatarUrl}
-                alt={cardTitle}
+                src={effectivePictureUrl}
+                alt={rawTitle}
+                width={isSpotify ? 64 : 56}
+                height={isSpotify ? 64 : 56}
                 referrerPolicy="no-referrer"
+                loading="lazy"
                 onError={() => setAvatarError(true)}
-                className="rounded-full object-cover border border-black/10 shrink-0"
+                className="object-cover shrink-0 bg-black/5"
                 style={{
-                  width: `${Math.round(32 * scale)}px`,
-                  height: `${Math.round(32 * scale)}px`,
+                  width: `${Math.round((isSpotify ? 64 : 56) * scale)}px`,
+                  height: `${Math.round((isSpotify ? 64 : 56) * scale)}px`,
+                  borderRadius: isSpotify ? '8px' : '8px',
                 }}
               />
             ) : (
               <div
-                className="rounded-full flex items-center justify-center shrink-0"
+                className="shrink-0 flex items-center justify-center rounded-[8px]"
                 style={{
-                  width: `${Math.round(32 * scale)}px`,
-                  height: `${Math.round(32 * scale)}px`,
-                  backgroundColor: palette.accent,
-                  color: palette.accentText,
+                  width: `${Math.round(56 * scale)}px`,
+                  height: `${Math.round(56 * scale)}px`,
+                  backgroundColor: hexWithAlpha(guardedAccent, 0.12),
+                  color: guardedAccent,
                 }}
               >
-                {renderProviderGlyph(Math.round(16 * scale))}
+                <ProviderGlyph provider={provider} size={Math.round(22 * scale)} />
               </div>
             )}
-            <div className="min-w-0">
+
+            <div className="min-w-0 flex-1">
               <div
-                className="font-semibold truncate leading-tight"
-                style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
+                dir="auto"
+                title={rawTitle}
+                className="font-semibold leading-[22px] line-clamp-2 break-words"
+                style={{ fontSize: `${Math.max(14, Math.round(16 * scale))}px`, color: facadeText }}
               >
-                {cardTitle}
+                {rawTitle}
               </div>
-              <div
-                className="truncate leading-tight mt-0.5 flex items-center gap-1"
-                style={{
-                  fontSize: `${Math.max(10, Math.round(11 * scale))}px`,
-                  color: palette.muted,
-                  fontFamily: provider === 'github' ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
-                }}
-              >
-                <span className="truncate">{cardSubtitle || badgeText}</span>
-                {statsLabel && <span className="shrink-0">· {statsLabel}</span>}
-              </div>
+              {rawSubtitle && (
+                <div
+                  dir="auto"
+                  className="truncate leading-[20px] mt-0.5"
+                  style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px`, color: facadeMuted }}
+                >
+                  {rawSubtitle}
+                </div>
+              )}
             </div>
           </div>
 
+          {isSpotify ? (
+            <SpotifyBrandLogo compact surfaceHex={facadeSurfaceBg} textColor={facadeText} />
+          ) : (
+            showPlatformLabel && (
+              <span style={{ color: guardedAccent }} aria-label={providerDef.name}>
+                <ProviderGlyph provider={provider} size={Math.round(16 * scale)} />
+              </span>
+            )
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-3 mt-auto">
+          {isSpotify ? (
+            <SpotifyBrandLogo surfaceHex={facadeSurfaceBg} textColor={facadeText} />
+          ) : (
+            <span className="text-[12px] truncate" style={{ color: facadeMuted }}>
+              {providerDef.name} player
+            </span>
+          )}
+
           <span
-            className="inline-flex items-center gap-1 font-semibold px-2.5 py-1 shrink-0 whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-1.5 font-semibold shrink-0 whitespace-nowrap"
             style={{
-              backgroundColor: palette.accent,
-              color: palette.accentText,
+              height: `${Math.round(36 * scale)}px`,
+              paddingInline: `${Math.round(14 * scale)}px`,
+              backgroundColor: facadeBtnBg,
+              color: facadeBtnText,
               borderRadius: `${controlRadius}px`,
-              fontSize: `${Math.max(10, Math.round(11.5 * scale))}px`,
+              fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
             }}
           >
-            <span>{ctaText}</span>
-            <ExternalLink size={Math.max(10, Math.round(10 * scale))} />
+            <Play size={12} fill="currentColor" />
+            <span>{isSpotify ? 'Listen on Spotify' : ctaText}</span>
           </span>
         </div>
-      );
+      </div>
+    );
 
-      return embedMode === 'placeholder' ? (
-        minimalContent
-      ) : (
+    if (embedMode === 'placeholder') return facadeInner;
+
+    // X post in live mode opens target on click unless we render interactive tweet load
+    if (provider === 'x' || (!embedSrc && provider !== 'pinterest')) {
+      return (
         <a
-          href={targetUrl}
+          href={canonicalUrl}
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => onLinkClick?.(block)}
           className="block w-full hover:scale-[1.01] transition-transform duration-150"
-          aria-label={`${cardTitle} on ${providerLabel}`}
+          aria-label={`${rawTitle} on ${providerDef.name}`}
         >
-          {minimalContent}
-        </a>
-      );
-    }
-
-    // SPOTLIGHT, SIGNATURE, GLASS, THEME LOOKS (with provider-distinct chrome & accents)
-    const isSpotlight = lookStyle === 'spotlight';
-    const isGitHubMonospace = provider === 'github';
-    const isDiscordOnlineDot = provider === 'discord' && lookStyle !== 'theme';
-    const isLinkedInLeftStripe = provider === 'linkedin' && lookStyle === 'signature';
-
-    const richContent = (
-      <div
-        className="w-full flex flex-col overflow-hidden text-left transition-all duration-150 relative"
-        style={{
-          ...cardSurfaceStyle,
-          borderLeft: isLinkedInLeftStripe ? '4px solid #0A66C2' : cardSurfaceStyle.border,
-        }}
-      >
-        {/* Spotlight Banner Header (bespoke per provider) */}
-        {isSpotlight && (
-          <div
-            className="w-full flex items-center justify-between px-3 py-1.5"
-            style={{
-              background: palette.bannerGradient,
-              color: '#FFFFFF',
-            }}
-          >
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide uppercase">
-              {provider === 'github' ? (
-                <>
-                  <span className="inline-flex items-center gap-1 mr-1" aria-hidden="true">
-                    <span className="w-2 h-2 rounded-full bg-red-400/90" />
-                    <span className="w-2 h-2 rounded-full bg-amber-300/90" />
-                    <span className="w-2 h-2 rounded-full bg-emerald-400/90" />
-                  </span>
-                  <Terminal size={11} />
-                  <span>{badgeText}</span>
-                </>
-              ) : (
-                <>
-                  {renderProviderGlyph(12)}
-                  <span>{badgeText}</span>
-                </>
-              )}
-            </div>
-            {meta?.handle && (
-              <span
-                className="text-[10px] opacity-90 truncate max-w-[130px]"
-                style={{ fontFamily: isGitHubMonospace ? 'ui-monospace, SFMono-Regular, monospace' : undefined }}
-              >
-                {meta.handle}
-              </span>
-            )}
-          </div>
-        )}
-
-        <div
-          className="w-full flex flex-col gap-2.5"
-          style={{ padding: `${Math.round(13 * scale)}px` }}
-        >
-          <div className="flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="relative shrink-0">
-                {meta?.avatarUrl && !avatarError ? (
-                  <img
-                    src={meta.avatarUrl}
-                    alt={cardTitle}
-                    referrerPolicy="no-referrer"
-                    onError={() => setAvatarError(true)}
-                    className={`${
-                      provider === 'discord' ? 'rounded-[12px]' : 'rounded-full'
-                    } object-cover border border-current/20 shrink-0`}
-                    style={{
-                      width: `${Math.round(40 * scale)}px`,
-                      height: `${Math.round(40 * scale)}px`,
-                    }}
-                  />
-                ) : (
-                  <div
-                    className={`${
-                      provider === 'discord' ? 'rounded-[12px]' : 'rounded-full'
-                    } flex items-center justify-center shrink-0`}
-                    style={{
-                      width: `${Math.round(38 * scale)}px`,
-                      height: `${Math.round(38 * scale)}px`,
-                      backgroundColor: palette.accent,
-                      color: palette.accentText,
-                    }}
-                  >
-                    {renderProviderGlyph(Math.round(18 * scale))}
-                  </div>
-                )}
-                {isDiscordOnlineDot && (
-                  <span
-                    className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#23A55A] border-2"
-                    style={{ borderColor: palette.bg }}
-                    aria-hidden="true"
-                  />
-                )}
-              </div>
-
-              <div className="flex flex-col min-w-0">
-                <span
-                  className="font-semibold leading-tight truncate"
-                  style={{ fontSize: `${Math.max(13, Math.round(14 * scale))}px` }}
-                >
-                  {cardTitle}
-                </span>
-                {cardSubtitle && (
-                  <span
-                    className="truncate leading-tight mt-0.5"
-                    style={{
-                      fontSize: `${Math.max(11, Math.round(12 * scale))}px`,
-                      color: lookStyle === 'theme' ? undefined : palette.muted,
-                      opacity: lookStyle === 'theme' ? 0.78 : 1,
-                      fontFamily: isGitHubMonospace ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
-                    }}
-                  >
-                    {cardSubtitle}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {!isSpotlight && (
-              <span
-                className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold shrink-0 whitespace-nowrap"
-                style={{
-                  fontSize: `${Math.max(10, Math.round(11 * scale))}px`,
-                  borderRadius: `${controlRadius}px`,
-                  backgroundColor: palette.badgeBg,
-                  color: palette.badgeText,
-                  border: lookStyle === 'theme' ? '1px solid currentColor' : 'none',
-                }}
-              >
-                {renderProviderGlyph(Math.max(10, Math.round(11 * scale)))}
-                <span>{badgeText}</span>
-              </span>
-            )}
-          </div>
-
-          {meta?.coverUrl && !coverError && (
-            <div
-              className="w-full overflow-hidden border border-current/10 bg-black/5"
-              style={{
-                borderRadius: `${Math.max(8, cardRadius - 4)}px`,
-                maxHeight: `${Math.round(132 * scale)}px`,
-              }}
-            >
-              <img
-                src={meta.coverUrl}
-                alt={cardTitle}
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                onError={() => setCoverError(true)}
-                className="w-full h-full object-cover"
-                style={{ maxHeight: `${Math.round(132 * scale)}px` }}
-              />
-            </div>
-          )}
-
-          {cardDesc && (
-            <p
-              className={`line-clamp-2 leading-snug ${
-                provider === 'x' && lookStyle === 'spotlight'
-                  ? 'pl-2.5 border-l-2 border-sky-400/70 italic'
-                  : ''
-              }`}
-              style={{
-                fontSize: `${Math.max(11, Math.round(12 * scale))}px`,
-                color: lookStyle === 'theme' ? undefined : palette.muted,
-                opacity: lookStyle === 'theme' ? 0.85 : 1,
-              }}
-            >
-              {cardDesc}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-2 pt-0.5">
-            {statsLabel ? (
-              <span
-                className="inline-flex items-center gap-1 font-medium truncate"
-                style={{
-                  fontSize: `${Math.max(10, Math.round(11 * scale))}px`,
-                  color: lookStyle === 'theme' ? undefined : palette.muted,
-                  opacity: lookStyle === 'theme' ? 0.85 : 1,
-                }}
-              >
-                {provider === 'github' && <Star size={11} className="text-amber-400 shrink-0" />}
-                {provider === 'discord' && (
-                  <span className="w-2 h-2 rounded-full bg-[#23A55A] shrink-0" aria-hidden="true" />
-                )}
-                <span className="truncate">{statsLabel}</span>
-              </span>
-            ) : (
-              <span />
-            )}
-
-            <span
-              className="inline-flex items-center gap-1 font-semibold px-3 py-1 shrink-0 whitespace-nowrap"
-              style={{
-                backgroundColor: palette.accent,
-                color: palette.accentText,
-                borderRadius: `${controlRadius}px`,
-                fontSize: `${Math.max(11, Math.round(12 * scale))}px`,
-              }}
-            >
-              <span>{ctaText}</span>
-              <ExternalLink size={Math.max(10, Math.round(11 * scale))} />
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-
-    if (embedMode === 'placeholder') {
-      return richContent;
-    }
-
-    return (
-      <a
-        href={targetUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={() => onLinkClick?.(block)}
-        className="block w-full hover:scale-[1.01] transition-transform duration-150"
-        aria-label={`${cardTitle} on ${providerLabel}`}
-      >
-        {richContent}
-      </a>
-    );
-  }
-
-  // ============================================================================
-  // 2. PLAYABLE MEDIA PLAYER EMBEDS (YouTube, Spotify, SoundCloud)
-  // ============================================================================
-  const defaultHeight =
-    lookStyle === 'minimal'
-      ? Math.round(78 * scale)
-      : provider === 'youtube'
-        ? Math.round(190 * scale)
-        : parsed?.height
-          ? Math.round(Math.min(parsed.height, 220) * scale)
-          : Math.round(152 * scale);
-
-  const mediaTitle = block.title || meta?.title || parsed?.label || `${providerLabel} player`;
-  const mediaSubtitle = meta?.subtitle && !meta.subtitle.startsWith('http')
-    ? meta.subtitle
-    : parsed?.label || `${providerLabel} media`;
-  const ctaPlayText =
-    meta?.ctaLabel?.trim() || getDefaultEmbedCtaLabel(provider, parsed?.subtype);
-  const externalFallbackUrl = parsed?.canonicalUrl || (block.url ? formatExternalUrl(block.url) : '');
-
-  const mediaCardSurface: React.CSSProperties =
-    lookStyle === 'theme'
-      ? {
-          ...baseSurface,
-          fontFamily: fontFamily || vibe.fontFamily,
-          borderRadius: `${cardRadius}px`,
-        }
-      : {
-          backgroundColor: palette.bg,
-          color: palette.text,
-          border: `1px solid ${palette.border}`,
-          backdropFilter: lookStyle === 'glass' ? 'blur(14px)' : undefined,
-          WebkitBackdropFilter: lookStyle === 'glass' ? 'blur(14px)' : undefined,
-          fontFamily: fontFamily || vibe.fontFamily,
-          borderRadius: `${cardRadius}px`,
-        };
-
-  // Live active iframe player once user clicks Play / Load
-  if (embedMode === 'live' && isActivePlayer && parsed) {
-    const activeSrc = buildAutoplayEmbedUrl(parsed.embedSrc, parsed.provider);
-    return (
-      <div className="w-full flex flex-col gap-1.5">
-        <div
-          className="w-full overflow-hidden transition-all duration-150 bg-black/5"
-          style={{
-            borderRadius: `${cardRadius}px`,
-            height: parsed.height ? `${parsed.height}px` : undefined,
-            aspectRatio: parsed.aspect || undefined,
-          }}
-        >
-          <iframe
-            src={activeSrc}
-            title={block.title || parsed.label}
-            loading="eager"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="w-full h-full border-0 block"
-            style={{ borderRadius: `${cardRadius}px` }}
-          />
-        </div>
-        {externalFallbackUrl && (
-          <a
-            href={externalFallbackUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="self-end inline-flex items-center gap-1 text-[11px] font-medium opacity-65 hover:opacity-100 transition-opacity px-1"
-            style={{ color: tokens.muted }}
-          >
-            <span>Open on {providerLabel}</span>
-            <ExternalLink size={10} />
-          </a>
-        )}
-      </div>
-    );
-  }
-
-  // Minimal bar facade for playable media (works cleanly in placeholder + live)
-  if (lookStyle === 'minimal') {
-    const minimalMediaInner = (
-      <div
-        className="w-full flex items-center justify-between gap-2.5 text-left transition-all duration-150"
-        style={{
-          ...mediaCardSurface,
-          padding: `${Math.round(10 * scale)}px ${Math.round(12 * scale)}px`,
-        }}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          {(meta?.coverUrl || meta?.avatarUrl) && !avatarError ? (
-            <img
-              src={meta?.coverUrl || meta?.avatarUrl || ''}
-              alt={mediaTitle}
-              referrerPolicy="no-referrer"
-              onError={() => setAvatarError(true)}
-              className="rounded-[8px] object-cover border border-black/10 shrink-0"
-              style={{
-                width: `${Math.round(36 * scale)}px`,
-                height: `${Math.round(36 * scale)}px`,
-              }}
-            />
-          ) : (
-            <div
-              className="rounded-full flex items-center justify-center shrink-0"
-              style={{
-                width: `${Math.round(34 * scale)}px`,
-                height: `${Math.round(34 * scale)}px`,
-                backgroundColor: palette.accent,
-                color: palette.accentText,
-              }}
-            >
-              {renderProviderGlyph(Math.round(16 * scale))}
-            </div>
-          )}
-          <div className="min-w-0">
-            <div
-              className="font-semibold truncate leading-tight"
-              style={{ fontSize: `${Math.max(12, Math.round(13.5 * scale))}px` }}
-            >
-              {mediaTitle}
-            </div>
-            <div
-              className="truncate leading-tight mt-0.5"
-              style={{
-                fontSize: `${Math.max(10, Math.round(11 * scale))}px`,
-                color: palette.muted,
-              }}
-            >
-              {mediaSubtitle}
-            </div>
-          </div>
-        </div>
-
-        <span
-          className="inline-flex items-center gap-1 font-semibold px-3 py-1.5 shrink-0 whitespace-nowrap"
-          style={{
-            backgroundColor: palette.accent,
-            color: palette.accentText,
-            borderRadius: `${controlRadius}px`,
-            fontSize: `${Math.max(11, Math.round(12 * scale))}px`,
-          }}
-        >
-          <Play size={12} fill="currentColor" />
-          <span>{ctaPlayText}</span>
-        </span>
-      </div>
-    );
-
-    if (embedMode === 'placeholder') {
-      return minimalMediaInner;
-    }
-
-    if (!parsed && externalFallbackUrl) {
-      return (
-        <a
-          href={externalFallbackUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => onLinkClick?.(block)}
-          className="block w-full hover:scale-[1.01] transition-transform"
-        >
-          {minimalMediaInner}
+          {facadeInner}
         </a>
       );
     }
@@ -1045,234 +647,492 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
           onActivate(block.id);
           onLinkClick?.(block);
         }}
-        className="w-full cursor-pointer hover:scale-[1.01] transition-transform"
+        className="block w-full text-left cursor-pointer hover:scale-[1.01] transition-transform duration-150"
+        aria-label={`Play ${rawTitle} on ${providerDef.name}`}
       >
-        {minimalMediaInner}
+        {facadeInner}
       </button>
     );
   }
 
-  // Rich Media Facade (placeholder OR live before user presses play)
-  const renderMediaArtworkHeader = () => {
-    const artwork = meta?.coverUrl || meta?.avatarUrl;
-    if (lookStyle === 'spotlight' && artwork && !avatarError) {
+  // ==========================================================================
+  // RENDER CARD MODE — 5 UNIFIED LOOKS (LK-1..LK-12)
+  // ==========================================================================
+
+  // Surface styles per look
+  const glassCfg = look === 'glass' ? resolveGlassSurfaceConfig(tokens, guardedAccent, background) : null;
+
+  const resolvedCardBg =
+    look === 'glass' && glassCfg
+      ? glassCfg.backgroundCss
+      : vibeSurfaceCss;
+  const resolvedSurfaceHex =
+    look === 'glass' && glassCfg
+      ? resolveCssColorToHex(glassCfg.backgroundCss, pageBgHex)
+      : vibeSurfaceHex;
+
+  const textPrimary =
+    look === 'glass' && glassCfg
+      ? glassCfg.textColor
+      : ensureContrastText(cardTextOnSurface, resolvedSurfaceHex, 4.5, pageBgHex);
+  const textMuted =
+    look === 'glass' && glassCfg
+      ? glassCfg.mutedColor
+      : textPrimary === '#FFFFFF'
+        ? 'rgba(248, 250, 252, 0.76)'
+        : 'rgba(10, 10, 10, 0.68)';
+
+  // 3:1 Border contrast check for Brand / Match page / Banner
+  const defaultBorderHex =
+    tokens.buttonBorder && tokens.buttonBorder !== 'transparent'
+      ? resolveCssColorToHex(tokens.buttonBorder, pageBgHex)
+      : hexWithAlpha(textPrimary, 0.16);
+  const brandTintedBorder = hexWithAlpha(
+    ensureUiAccentContrast(rawChosenAccent, pageBgHex, textPrimary, 2.2, pageBgHex),
+    0.34
+  );
+
+  const cardContainerStyle: React.CSSProperties = {
+    backgroundColor: resolvedCardBg,
+    color: textPrimary,
+    border: `1px solid ${
+      look === 'brand'
+        ? brandTintedBorder
+        : look === 'glass' && glassCfg
+          ? glassCfg.borderColor
+          : defaultBorderHex
+    }`,
+    borderRadius: `${cardRadius}px`,
+    fontFamily: fontFamily || vibe.fontFamily,
+    backdropFilter: look === 'glass' ? 'blur(16px)' : undefined,
+    WebkitBackdropFilter: look === 'glass' ? 'blur(16px)' : undefined,
+    minHeight: `${Math.round(64 * scale)}px`,
+  };
+
+  // Icon & CTA rendering helpers
+  const glyphColor =
+    look === 'match_page'
+      ? textPrimary
+      : ensureUiAccentContrast(rawChosenAccent, resolvedSurfaceHex, textPrimary, 3.0, pageBgHex);
+
+  const renderCtaButton = (isCompactBtn = false) => {
+    if (effectiveButtonStyle === 'hidden') return null;
+
+    const btnHeight = Math.round((isCompactBtn ? 32 : 36) * scale);
+
+    if (effectiveButtonStyle === 'text') {
       return (
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-30 pointer-events-none"
-          style={{ backgroundImage: `url(${artwork})` }}
-          aria-hidden="true"
+        <span
+          className="inline-flex items-center gap-1.5 font-semibold shrink-0 whitespace-nowrap"
+          style={{
+            color: textPrimary,
+            fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
+            lineHeight: '20px',
+          }}
+        >
+          {!isCompactBtn && <span>{ctaText}</span>}
+          {isCompactBtn && <span className="hidden min-[340px]:inline">{ctaText}</span>}
+          <ExternalLink size={Math.max(12, Math.round(14 * scale))} />
+        </span>
+      );
+    }
+
+    if (effectiveButtonStyle === 'outline') {
+      const outlineBorder = ensureUiAccentContrast(
+        buttonFillColor,
+        resolvedSurfaceHex,
+        textPrimary,
+        3.0,
+        pageBgHex
+      );
+      return (
+        <span
+          className="inline-flex items-center justify-center gap-1.5 font-semibold shrink-0 whitespace-nowrap border"
+          style={{
+            height: `${btnHeight}px`,
+            paddingInline: `${Math.round((isCompactBtn ? 10 : 14) * scale)}px`,
+            borderRadius: `${controlRadius}px`,
+            borderColor: outlineBorder,
+            color: outlineBorder,
+            fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+          }}
+        >
+          {isCompactBtn ? (
+            <>
+              <span className="hidden min-[340px]:inline">{ctaText}</span>
+              <ExternalLink size={12} />
+            </>
+          ) : (
+            <>
+              <span>{ctaText}</span>
+              <ExternalLink size={12} />
+            </>
+          )}
+        </span>
+      );
+    }
+
+    // Filled button
+    return (
+      <span
+        className="inline-flex items-center justify-center gap-1.5 font-semibold shrink-0 whitespace-nowrap"
+        style={{
+          height: `${btnHeight}px`,
+          paddingInline: `${Math.round((isCompactBtn ? 10 : 14) * scale)}px`,
+          borderRadius: `${controlRadius}px`,
+          backgroundColor: buttonFillColor,
+          color: buttonFillText,
+          fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+        }}
+      >
+        {isCompactBtn ? (
+          <>
+            <span className="hidden min-[340px]:inline">{ctaText}</span>
+            <ExternalLink size={12} />
+          </>
+        ) : (
+          <>
+            <span>{ctaText}</span>
+            <ExternalLink size={12} />
+          </>
+        )}
+      </span>
+    );
+  };
+
+  // Picture slot renderer (LK-3 & PV-8)
+  const renderPicture = (sizePx: number, extraRingColor?: string) => {
+    if (!showPicture) return null;
+    const isSquareItem = isSpotify || isItemArtwork;
+    const radiusCss = isSpotify
+      ? `${sizePx >= 60 ? 8 : 4}px`
+      : isSquareItem
+        ? '8px'
+        : '9999px';
+
+    if (effectivePictureUrl && !avatarError) {
+      return (
+        <img
+          src={effectivePictureUrl}
+          alt={rawTitle}
+          width={sizePx}
+          height={sizePx}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={() => setAvatarError(true)}
+          className="object-cover shrink-0 block"
+          style={{
+            width: `${sizePx}px`,
+            height: `${sizePx}px`,
+            borderRadius: radiusCss,
+            border: extraRingColor ? `3px solid ${extraRingColor}` : undefined,
+            backgroundColor: isSpotify ? resolvedSurfaceHex : undefined,
+          }}
         />
       );
     }
-    if (provider === 'soundcloud' && lookStyle !== 'theme') {
-      const bars = [12, 22, 16, 28, 19, 25, 14, 24, 30, 17, 22, 13, 26, 18];
-      return (
-        <div className="flex items-end justify-center gap-1 h-7 mb-2 opacity-85" aria-hidden="true">
-          {bars.map((h, i) => (
-            <span
-              key={i}
-              className="w-1 rounded-full"
-              style={{
-                height: `${Math.round(h * scale)}px`,
-                backgroundColor: i < 7 ? palette.accent : 'rgba(255,255,255,0.28)',
-              }}
-            />
-          ))}
-        </div>
-      );
-    }
-    if (provider === 'spotify' && lookStyle === 'spotlight') {
-      return (
-        <div className="flex items-end justify-center gap-1 h-5 mb-2" aria-hidden="true">
-          {[10, 18, 14, 20, 12].map((h, i) => (
-            <span
-              key={i}
-              className="w-1 rounded-full"
-              style={{
-                height: `${Math.round(h * scale)}px`,
-                backgroundColor: palette.accent,
-              }}
-            />
-          ))}
-        </div>
-      );
-    }
-    return null;
-  };
 
-  if (embedMode === 'placeholder') {
     return (
       <div
-        className="w-full relative flex flex-col items-center justify-center overflow-hidden transition-all duration-150 p-4 text-center"
+        className="flex items-center justify-center shrink-0"
         style={{
-          minHeight: `${defaultHeight}px`,
-          ...mediaCardSurface,
+          width: `${sizePx}px`,
+          height: `${sizePx}px`,
+          borderRadius: radiusCss,
+          border: extraRingColor ? `3px solid ${extraRingColor}` : undefined,
+          backgroundColor: look === 'match_page' ? hexWithAlpha(textPrimary, 0.08) : hexWithAlpha(glyphColor, 0.14),
+          color: look === 'match_page' ? textPrimary : glyphColor,
         }}
       >
-        {renderMediaArtworkHeader()}
-        <div className="relative z-10 flex flex-col items-center">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center mb-2 shrink-0 shadow-sm"
-            style={{
-              backgroundColor: palette.accent,
-              color: palette.accentText,
-            }}
-          >
-            {renderProviderGlyph(19)}
+        <ProviderGlyph provider={provider} size={Math.round(sizePx * 0.45)} />
+      </div>
+    );
+  };
+
+  // ---------- LOOK 5: COMPACT (LK-8) ----------
+  if (look === 'compact') {
+    const picSize = Math.round((isItemArtwork ? 48 : 40) * scale);
+    const compactSubtitle = firstStat && rawSubtitle
+      ? `${rawSubtitle} · ${firstStat}`
+      : firstStat || rawSubtitle;
+
+    const compactEl = (
+      <div
+        className="w-full flex items-center justify-between gap-3 text-left transition-all duration-150"
+        style={{
+          ...cardContainerStyle,
+          padding: `${Math.round(10 * scale)}px ${Math.round(14 * scale)}px`,
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {renderPicture(picSize)}
+          <div className="min-w-0 flex-1">
+            <div
+              dir="auto"
+              title={rawTitle}
+              className="font-semibold truncate leading-[22px]"
+              style={{ fontSize: `${Math.max(14, Math.round(16 * scale))}px`, color: textPrimary }}
+            >
+              {rawTitle}
+            </div>
+            {(compactSubtitle || rawSummary) && (
+              <div
+                dir="auto"
+                className="truncate leading-[20px]"
+                style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px`, color: textMuted }}
+              >
+                {rawSummary || compactSubtitle}
+              </div>
+            )}
           </div>
-          <span className="text-[13px] font-semibold leading-tight max-w-[92%] truncate">
-            {mediaTitle}
-          </span>
-          <span
-            className="text-[11px] mt-1 max-w-[90%] truncate"
-            style={{ color: lookStyle === 'theme' ? undefined : palette.muted, opacity: lookStyle === 'theme' ? 0.78 : 1 }}
-          >
-            {mediaSubtitle}
-          </span>
-          <span
-            className="mt-2.5 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-semibold"
-            style={{
-              backgroundColor: palette.accent,
-              color: palette.accentText,
-              borderRadius: `${controlRadius}px`,
-            }}
-          >
-            <Play size={10} fill="currentColor" />
-            <span>{ctaPlayText}</span>
-          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {isSpotify && <SpotifyBrandLogo compact surfaceHex={resolvedSurfaceHex} textColor={textPrimary} />}
+          {renderCtaButton(true)}
         </div>
       </div>
     );
-  }
 
-  // Fallback card if a saved media embed URL could not be parsed cleanly into an iframe
-  if (!parsed && externalFallbackUrl) {
-    return (
+    return embedMode === 'placeholder' ? (
+      compactEl
+    ) : (
       <a
-        href={externalFallbackUrl}
+        href={canonicalUrl}
         target="_blank"
         rel="noopener noreferrer"
         onClick={() => onLinkClick?.(block)}
-        className="w-full overflow-hidden relative flex flex-col items-center justify-center p-6 text-center transition-all duration-150 hover:scale-[1.01]"
-        style={{
-          minHeight: `${defaultHeight}px`,
-          ...mediaCardSurface,
-        }}
+        className="block w-full hover:scale-[1.01] transition-transform duration-150"
+        aria-label={`${rawTitle} — ${ctaText}`}
       >
-        <div
-          className="w-12 h-12 rounded-full flex items-center justify-center mb-3 shrink-0"
-          style={{
-            backgroundColor: palette.accent,
-            color: palette.accentText,
-          }}
-        >
-          {renderProviderGlyph(22)}
-        </div>
-        {mediaTitle && (
-          <h4 className="text-[15px] font-semibold mb-1 max-w-[85%] truncate">
-            {mediaTitle}
-          </h4>
-        )}
-        <span
-          className="h-9 px-5 font-semibold text-[13px] inline-flex items-center gap-1.5 mt-2 whitespace-nowrap"
-          style={{
-            backgroundColor: palette.accent,
-            color: palette.accentText,
-            borderRadius: `${controlRadius}px`,
-          }}
-        >
-          <span>Open on {providerLabel}</span>
-          <ExternalLink size={13} />
-        </span>
+        {compactEl}
       </a>
     );
   }
 
-  const accessibleName =
-    provider === 'youtube'
-      ? `Play YouTube video ${block.title || ''}`.trim()
-      : provider === 'spotify'
-        ? `Load Spotify player ${block.title || ''}`.trim()
-        : `Load SoundCloud player ${block.title || ''}`.trim();
+  // ---------- LOOK 3: BANNER (LK-6) ----------
+  if (look === 'banner') {
+    const canUseWideArtworkBanner =
+      isItemArtwork &&
+      !providerDef.restrictions?.noArtworkBanner &&
+      Boolean(meta?.coverUrl) &&
+      !coverError;
+    const bannerGradient = `linear-gradient(135deg, ${normalizeHexColor(rawChosenAccent) || providerDef.brandColor} 0%, ${darkenHex(normalizeHexColor(rawChosenAccent) || providerDef.brandColor, 0.36)} 100%)`;
 
-  return (
-    <div
-      className="w-full overflow-hidden relative flex flex-col items-center justify-center p-6 text-center transition-all duration-150"
-      style={{
-        minHeight: `${defaultHeight}px`,
-        aspectRatio: parsed?.aspect || undefined,
-        ...mediaCardSurface,
-      }}
-    >
-      {renderMediaArtworkHeader()}
-      <div className="relative z-10 flex flex-col items-center w-full">
+    const bannerContent = (
+      <div
+        className="w-full overflow-hidden flex flex-col text-left transition-all duration-150"
+        style={cardContainerStyle}
+      >
+        {/* 72px Top Banner */}
         <div
-          className="w-12 h-12 rounded-full flex items-center justify-center mb-3 shrink-0 shadow-md"
+          className="w-full relative overflow-hidden shrink-0"
           style={{
-            backgroundColor: palette.accent,
-            color: palette.accentText,
+            height: `${Math.round(72 * scale)}px`,
+            background: canUseWideArtworkBanner ? undefined : bannerGradient,
           }}
         >
-          {renderProviderGlyph(22)}
-        </div>
+          {canUseWideArtworkBanner && meta?.coverUrl && (
+            <>
+              <img
+                src={meta.coverUrl}
+                alt=""
+                aria-hidden="true"
+                onError={() => setCoverError(true)}
+                className="w-full h-full object-cover block"
+              />
+              <div className="absolute inset-0 bg-black/30 pointer-events-none" aria-hidden="true" />
+            </>
+          )}
 
-        {mediaTitle && (
-          <h4 className="text-[15px] font-semibold mb-1 max-w-[85%] truncate">
-            {mediaTitle}
-          </h4>
-        )}
-
-        <p
-          className="text-[13px] font-medium mb-4"
-          style={{ color: lookStyle === 'theme' ? undefined : palette.muted, opacity: lookStyle === 'theme' ? 0.85 : 1 }}
-        >
-          {mediaSubtitle}
-        </p>
-
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            aria-label={accessibleName}
-            onClick={() => {
-              onActivate(block.id);
-              onLinkClick?.(block);
-            }}
-            className="h-10 px-6 font-semibold text-[14px] inline-flex items-center justify-center gap-2 transition-transform duration-120 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer whitespace-nowrap shrink-0"
-            style={{
-              backgroundColor: palette.accent,
-              color: palette.accentText,
-              borderRadius: `${controlRadius}px`,
-            }}
-          >
-            <Play size={15} fill="currentColor" />
-            <span>{ctaPlayText}</span>
-          </button>
-
-          {externalFallbackUrl && (
-            <a
-              href={externalFallbackUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open ${block.title || providerLabel} in ${providerLabel}`}
-              title={`Open on ${providerLabel}`}
-              className="h-10 w-10 inline-flex items-center justify-center border border-current/25 opacity-80 hover:opacity-100 transition-opacity shrink-0"
-              style={{
-                borderRadius: `${controlRadius}px`,
-                color: mediaCardSurface.color || tokens.text,
-              }}
-            >
-              <ExternalLink size={15} />
-            </a>
+          {showPlatformLabel && (
+            <div className="absolute top-2.5 left-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-[8px] bg-black/40 text-white text-[12px] font-medium leading-none">
+              <ProviderGlyph provider={provider} size={14} />
+              <span>{providerDef.name}</span>
+            </div>
           )}
         </div>
 
-        <p
-          className="mt-3 text-[12px]"
-          style={{ color: lookStyle === 'theme' ? undefined : palette.muted, opacity: lookStyle === 'theme' ? 0.75 : 1 }}
+        <div
+          className="w-full flex flex-col"
+          style={{
+            padding: `${showPicture ? Math.round(8 * scale) : Math.round(14 * scale)}px ${Math.round(16 * scale)}px ${Math.round(16 * scale)}px`,
+          }}
         >
-          Content loads from {providerLabel} when you press play.
+          {showPicture && (
+            <div style={{ marginTop: `${Math.round(-36 * scale)}px`, marginBottom: `${Math.round(8 * scale)}px` }}>
+              {renderPicture(Math.round(56 * scale), resolvedSurfaceHex)}
+            </div>
+          )}
+
+          <div
+            dir="auto"
+            title={rawTitle}
+            className="font-semibold leading-[22px] line-clamp-2 break-words"
+            style={{ fontSize: `${Math.max(14, Math.round(16 * scale))}px`, color: textPrimary }}
+          >
+            {rawTitle}
+          </div>
+
+          {rawSubtitle && (
+            <div
+              dir="auto"
+              className="truncate leading-[20px] mt-1"
+              style={{
+                fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
+                color: textMuted,
+                fontFamily: provider === 'github' ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
+              }}
+            >
+              {rawSubtitle}
+            </div>
+          )}
+
+          {rawSummary && (
+            <p
+              dir="auto"
+              className="line-clamp-2 leading-[20px] mt-2 break-words"
+              style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px`, color: textMuted }}
+            >
+              {rawSummary}
+            </p>
+          )}
+
+          <div className="flex items-center justify-between gap-3 mt-3">
+            <div className="min-w-0 flex items-center gap-2">
+              {isSpotify ? (
+                <SpotifyBrandLogo surfaceHex={resolvedSurfaceHex} textColor={textPrimary} />
+              ) : statsLabel ? (
+                <span
+                  className="truncate leading-[18px]"
+                  style={{ fontSize: `${Math.max(11, Math.round(13 * scale))}px`, color: textMuted }}
+                >
+                  {statsLabel}
+                </span>
+              ) : (
+                <span />
+              )}
+            </div>
+
+            {renderCtaButton(false)}
+          </div>
+        </div>
+      </div>
+    );
+
+    return embedMode === 'placeholder' ? (
+      bannerContent
+    ) : (
+      <a
+        href={canonicalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onLinkClick?.(block)}
+        className="block w-full hover:scale-[1.01] transition-transform duration-150"
+        aria-label={`${rawTitle} — ${ctaText}`}
+      >
+        {bannerContent}
+      </a>
+    );
+  }
+
+  // ---------- LOOKS 1, 2, 4: MATCH PAGE, BRAND, GLASS (LK-4, LK-5, LK-7) ----------
+  const standardPictureSize = Math.round((isItemArtwork ? 64 : 48) * scale);
+
+  const cardInner = (
+    <div
+      className="w-full flex flex-col text-left transition-all duration-150 overflow-hidden"
+      style={{
+        ...cardContainerStyle,
+        padding: `${Math.round(16 * scale)}px`,
+        gap: `${Math.round(12 * scale)}px`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {renderPicture(standardPictureSize)}
+          <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+            <div
+              dir="auto"
+              title={rawTitle}
+              className="font-semibold leading-[22px] line-clamp-2 break-words"
+              style={{ fontSize: `${Math.max(14, Math.round(16 * scale))}px`, color: textPrimary }}
+            >
+              {rawTitle}
+            </div>
+            {rawSubtitle && (
+              <div
+                dir="auto"
+                className="truncate leading-[20px]"
+                style={{
+                  fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
+                  color: textMuted,
+                  fontFamily: provider === 'github' ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
+                }}
+              >
+                {rawSubtitle}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {showPlatformLabel && (
+          <span
+            className="shrink-0 mt-0.5"
+            style={{ color: glyphColor }}
+            aria-label={providerDef.name}
+            title={providerDef.name}
+          >
+            <ProviderGlyph provider={provider} size={Math.round(16 * scale)} />
+          </span>
+        )}
+      </div>
+
+      {rawSummary && (
+        <p
+          dir="auto"
+          className="line-clamp-2 leading-[20px] break-words"
+          style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px`, color: textMuted }}
+        >
+          {rawSummary}
         </p>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex items-center gap-2">
+          {isSpotify ? (
+            <SpotifyBrandLogo surfaceHex={resolvedSurfaceHex} textColor={textPrimary} />
+          ) : statsLabel ? (
+            <span
+              className="truncate leading-[18px]"
+              style={{ fontSize: `${Math.max(11, Math.round(13 * scale))}px`, color: textMuted }}
+            >
+              {statsLabel}
+            </span>
+          ) : (
+            <span />
+          )}
+        </div>
+
+        {renderCtaButton(false)}
       </div>
     </div>
+  );
+
+  if (embedMode === 'placeholder') {
+    return cardInner;
+  }
+
+  return (
+    <a
+      href={canonicalUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => onLinkClick?.(block)}
+      className="block w-full hover:scale-[1.01] transition-transform duration-150"
+      aria-label={`${rawTitle} — ${ctaText}`}
+    >
+      {cardInner}
+    </a>
   );
 };

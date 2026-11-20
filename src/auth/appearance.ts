@@ -1,9 +1,7 @@
-// Static data URI of the iveo mark SVG
-export const IVEO_LOGO_DATA_URI =
-  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Crect width="24" height="24" rx="7" fill="%230A0A0A"/%3E%3Ccircle cx="12" cy="7.25" r="1.75" fill="%23FFFFFF"/%3E%3Crect x="10.5" y="10.5" width="3" height="8" rx="1.5" fill="%23FFFFFF"/%3E%3C/svg%3E';
+import { SITE_LOGO_SRC } from '../components/ui/Logo';
 
-// Backward-compatible alias
-export const IVIO_LOGO_DATA_URI = IVEO_LOGO_DATA_URI;
+export const IVEO_LOGO_DATA_URI = SITE_LOGO_SRC;
+export const IVIO_LOGO_DATA_URI = SITE_LOGO_SRC;
 
 export const iveoAppearance = {
   variables: {
@@ -18,17 +16,17 @@ export const iveoAppearance = {
     colorBorder: '#E5E5E5',
     colorNeutral: '#0A0A0A',
     colorDanger: '#B3261E',
-    colorSuccess: '#0A0A0A',
-    colorWarning: '#666666',
+    colorSuccess: '#166534',
+    colorWarning: '#92400E',
     colorRing: '#0A0A0A',
     colorShadow: '#0A0A0A',
-    borderRadius: '0.625rem',
+    borderRadius: '0.75rem',
     fontFamily: 'inherit',
     fontFamilyButtons: 'inherit',
     fontSize: '0.9375rem',
   },
-  layout: {
-    logoImageUrl: IVEO_LOGO_DATA_URI,
+  options: {
+    logoImageUrl: SITE_LOGO_SRC,
     logoPlacement: 'inside' as const,
     logoLinkUrl: '/',
     socialButtonsPlacement: 'top' as const,
@@ -41,20 +39,35 @@ export const iveoAppearance = {
   elements: {
     card: {
       border: '1px solid #E5E5E5',
-      boxShadow: '0 1px 2px rgba(10, 10, 10, 0.04)',
-      borderRadius: '14px',
+      boxShadow: 'none',
+      borderRadius: '16px',
+    },
+    modalContent: {
+      borderRadius: '16px',
+      border: '1px solid #E5E5E5',
     },
     headerTitle: {
-      fontWeight: 500,
+      fontWeight: 600,
       letterSpacing: '-0.02em',
+      fontSize: '1.25rem',
     },
     formButtonPrimary: {
       textTransform: 'none',
       fontWeight: 500,
-      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+      minHeight: '44px',
+      borderRadius: '12px',
+      boxShadow: 'none',
+    },
+    formButtonReset: {
+      textTransform: 'none',
+      fontWeight: 500,
+      minHeight: '44px',
+      borderRadius: '12px',
     },
     socialButtonsBlockButton: {
       borderColor: '#D4D4D4',
+      minHeight: '44px',
+      borderRadius: '12px',
     },
     footerActionLink: {
       color: '#0A0A0A',
@@ -63,6 +76,14 @@ export const iveoAppearance = {
     },
     formFieldInput: {
       minHeight: '44px',
+      borderRadius: '12px',
+      borderColor: '#E5E5E5',
+      backgroundColor: '#FFFFFF',
+    },
+    badge: {
+      borderRadius: '9999px',
+      fontSize: '0.75rem',
+      fontWeight: 500,
     },
   },
 };

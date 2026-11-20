@@ -32,19 +32,13 @@
  *   3. https://m.soundcloud.com/artist/track (m. subdomain returns null)
  */
 
+import { detectProviderUrl, type DetectedProviderUrl } from './providers/index.ts';
+import type { EmbedProvider } from '../data/types.ts';
+
+export { detectProviderUrl, type DetectedProviderUrl };
+
 export interface ParsedEmbed {
-  provider:
-    | 'youtube'
-    | 'spotify'
-    | 'soundcloud'
-    | 'discord'
-    | 'github'
-    | 'linkedin'
-    | 'x'
-    | 'instagram'
-    | 'facebook'
-    | 'threads'
-    | 'pinterest';
+  provider: EmbedProvider;
   canonicalUrl: string;
   embedSrc: string;
   label: string;
@@ -52,6 +46,10 @@ export interface ParsedEmbed {
   aspect: string | null;
   identifier?: string | null;
   subtype?: string | null;
+}
+
+export function parseSmartLinkUrl(input: string): DetectedProviderUrl | null {
+  return detectProviderUrl(input);
 }
 
 const YOUTUBE_ID_REGEX = /^[A-Za-z0-9_-]{11}$/;

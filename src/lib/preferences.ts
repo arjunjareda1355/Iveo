@@ -157,6 +157,8 @@ export function parseBackgroundConfig(raw: unknown): BackgroundConfig | null {
   return out;
 }
 
+import type { CardLookStyle } from '../data/types.ts';
+
 export type AvatarShape = 'circle' | 'squircle' | 'rounded' | 'ring';
 export type HeaderAlign = 'center' | 'left';
 export type ButtonStyleEffect = 'solid' | 'soft' | 'offset' | 'glass' | 'gradient' | 'outline';
@@ -169,6 +171,7 @@ export interface LayoutSettings {
   buttonStyle?: ButtonStyleEffect;
   linkSpacing?: LinkSpacing;
   pageWidth?: PageWidth;
+  cardLook?: CardLookStyle;
 }
 
 export const DEFAULT_LAYOUT_SETTINGS: Required<LayoutSettings> = {
@@ -177,6 +180,7 @@ export const DEFAULT_LAYOUT_SETTINGS: Required<LayoutSettings> = {
   buttonStyle: 'solid',
   linkSpacing: 'normal',
   pageWidth: 'standard',
+  cardLook: 'match_page',
 };
 
 const VALID_AVATAR_SHAPES = new Set<AvatarShape>(['circle', 'squircle', 'rounded', 'ring']);
@@ -184,6 +188,32 @@ const VALID_HEADER_ALIGNS = new Set<HeaderAlign>(['center', 'left']);
 const VALID_BUTTON_STYLES = new Set<ButtonStyleEffect>(['solid', 'soft', 'offset', 'glass', 'gradient', 'outline']);
 const VALID_LINK_SPACINGS = new Set<LinkSpacing>(['compact', 'normal', 'airy']);
 const VALID_PAGE_WIDTHS = new Set<PageWidth>(['compact', 'standard', 'wide']);
+const VALID_CARD_LOOKS = new Set<CardLookStyle>(['match_page', 'brand', 'banner', 'glass', 'compact']);
+
+export function normalizeCardLookKey(raw: unknown, fallback: CardLookStyle = 'match_page'): CardLookStyle {
+  if (typeof raw !== 'string') return fallback;
+  const k = raw.toLowerCase().trim();
+  if (VALID_CARD_LOOKS.has(k as CardLookStyle)) return k as CardLookStyle;
+  switch (k) {
+    case 'signature':
+    case 'classic':
+    case 'corporate':
+    case 'default':
+      return 'brand';
+    case 'spotlight':
+    case 'cover':
+      return 'banner';
+    case 'theme':
+    case 'vibe':
+      return 'match_page';
+    case 'minimal':
+      return 'compact';
+    case 'frosted':
+      return 'glass';
+    default:
+      return fallback;
+  }
+}
 
 export function parseLayoutSettings(raw: unknown): LayoutSettings | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -208,8 +238,12 @@ export function parseLayoutSettings(raw: unknown): LayoutSettings | null {
     typeof r.pageWidth === 'string' && VALID_PAGE_WIDTHS.has(r.pageWidth as PageWidth)
       ? (r.pageWidth as PageWidth)
       : undefined;
+  const cardLook =
+    typeof r.cardLook === 'string'
+      ? normalizeCardLookKey(r.cardLook, 'match_page')
+      : undefined;
 
-  if (!avatarShape && !headerAlign && !buttonStyle && !linkSpacing && !pageWidth) {
+  if (!avatarShape && !headerAlign && !buttonStyle && !linkSpacing && !pageWidth && !cardLook) {
     return null;
   }
   return {
@@ -218,6 +252,7 @@ export function parseLayoutSettings(raw: unknown): LayoutSettings | null {
     buttonStyle: buttonStyle || 'solid',
     linkSpacing: linkSpacing || 'normal',
     pageWidth: pageWidth || 'standard',
+    cardLook: cardLook || 'match_page',
   };
 }
 

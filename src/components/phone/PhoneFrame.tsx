@@ -7,6 +7,7 @@ interface PhoneFrameProps {
   children: React.ReactNode;
   ariaLabel?: string;
   className?: string;
+  disableScroll?: boolean;
 }
 
 export const PhoneFrame: React.FC<PhoneFrameProps> = ({
@@ -15,6 +16,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
   children,
   ariaLabel,
   className,
+  disableScroll = false,
 }) => {
   const scale = width / 300;
   const height = Math.round(width * (618 / 300));
@@ -123,11 +125,15 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
           </div>
         </div>
 
-        {/* Screen Content (scrollable vertically in live dashboard/onboarding previews) */}
+        {/* Screen Content */}
         <div
           data-testid="phone-scroll-viewport"
-          className="relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(128,128,128,0.3)_transparent]"
-          style={{ WebkitOverflowScrolling: 'touch' }}
+          className={
+            disableScroll
+              ? 'relative w-full flex-1 min-h-0 overflow-hidden'
+              : 'relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(128,128,128,0.3)_transparent]'
+          }
+          style={disableScroll ? undefined : { WebkitOverflowScrolling: 'touch' }}
         >
           {children}
         </div>

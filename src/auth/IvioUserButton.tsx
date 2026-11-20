@@ -2,15 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   CreditCard,
-  ExternalLink,
   HelpCircle,
   LogOut,
-  ShieldCheck,
+  Sparkles,
   User,
 } from 'lucide-react';
 import { useIveoSession } from './useIvioSession';
 import { BottomSheet } from '../components/ui/BottomSheet';
-import { pageUrl } from '../lib/site';
 
 export const IveoUserButton: React.FC = () => {
   const session = useIveoSession();
@@ -71,16 +69,16 @@ export const IveoUserButton: React.FC = () => {
     return '';
   })();
 
-  const publicHref = session.username ? pageUrl(session.username) : 'https://iveo.site';
-
-  const goToSettingsSection = (hash: string) => {
+  const goToAccount = (hash?: string) => {
     setOpen(false);
-    navigate(`/dashboard/settings${preserveDemoSearch}${hash}`);
-    setTimeout(() => {
-      const id = hash.replace('#', '');
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
+    navigate(`/account${preserveDemoSearch}${hash || ''}`);
+    if (hash) {
+      setTimeout(() => {
+        const id = hash.replace('#', '');
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
   };
 
   const handleSignOut = async () => {
@@ -90,7 +88,7 @@ export const IveoUserButton: React.FC = () => {
 
   const menuContent = (
     <div className="flex flex-col">
-      {/* Non-clickable header row */}
+      {/* Profile header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-divider select-none">
         {session.imageUrl ? (
           <img
@@ -117,47 +115,33 @@ export const IveoUserButton: React.FC = () => {
         </div>
       </div>
 
-      {/* Menu links */}
+      {/* Menu items (AR-12 / CH-3) */}
       <div className="py-1.5 flex flex-col">
-        <a
-          href={publicHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setOpen(false)}
-          className="min-h-[44px] px-4 flex items-center gap-3 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors"
-        >
-          <ExternalLink size={18} strokeWidth={1.5} className="text-muted shrink-0" />
-          <span>View my page</span>
-        </a>
-
         <button
           type="button"
-          onClick={() => {
-            setOpen(false);
-            navigate(`/account${preserveDemoSearch}`);
-          }}
+          onClick={() => goToAccount()}
           className="min-h-[44px] px-4 flex items-center gap-3 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer"
         >
           <User size={18} strokeWidth={1.5} className="text-muted shrink-0" />
-          <span>Profile &amp; bio</span>
+          <span>Account</span>
         </button>
 
         <button
           type="button"
-          onClick={() => goToSettingsSection('#account')}
+          onClick={() => goToAccount('#plan')}
           className="min-h-[44px] px-4 flex items-center gap-3 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer"
         >
-          <ShieldCheck size={18} strokeWidth={1.5} className="text-muted shrink-0" />
-          <span>Account &amp; security</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => goToSettingsSection('#plan')}
-          className="min-h-[44px] px-4 flex items-center gap-3 text-[14px] font-medium text-ink hover:bg-surface-2 transition-colors text-left cursor-pointer"
-        >
-          <CreditCard size={18} strokeWidth={1.5} className="text-muted shrink-0" />
-          <span>Plan &amp; billing</span>
+          {session.isPro ? (
+            <>
+              <CreditCard size={18} strokeWidth={1.5} className="text-muted shrink-0" />
+              <span>Plan &amp; billing</span>
+            </>
+          ) : (
+            <>
+              <Sparkles size={18} strokeWidth={1.5} className="text-muted shrink-0" />
+              <span>Upgrade to Pro</span>
+            </>
+          )}
         </button>
 
         <a

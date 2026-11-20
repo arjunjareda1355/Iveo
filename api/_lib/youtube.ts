@@ -25,14 +25,10 @@ export interface ParsedYouTubeInput {
   canonicalUrl: string;
 }
 
-const DEFAULT_YOUTUBE_DATA_API_KEY = [
-  'AIza',
-  'SyC_OxUV0TyYs',
-  'OM5Q9JzemaWLv2TiFwLfKQ',
-].join('');
+import { getServerConfig } from './serverConfig.ts';
 
 export function getYouTubeApiKey(): string {
-  return process.env.YOUTUBE_API_KEY?.trim() || DEFAULT_YOUTUBE_DATA_API_KEY;
+  return getServerConfig().youtubeApiKey;
 }
 
 const cache = new Map<string, { data: YouTubeShowcaseData; expiresAt: number }>();
@@ -915,12 +911,8 @@ async function fetchYouTubeShowcaseViaDataApi(
   parsed: ParsedYouTubeInput
 ): Promise<YouTubeShowcaseData | null> {
   const primaryKey = getYouTubeApiKey();
-  const res = await fetchYouTubeShowcaseViaDataApiWithKey(parsed, primaryKey);
-  if (res) return res;
-  if (primaryKey !== DEFAULT_YOUTUBE_DATA_API_KEY) {
-    return fetchYouTubeShowcaseViaDataApiWithKey(parsed, DEFAULT_YOUTUBE_DATA_API_KEY);
-  }
-  return null;
+  if (!primaryKey) return null;
+  return fetchYouTubeShowcaseViaDataApiWithKey(parsed, primaryKey);
 }
 
 export async function fetchYouTubeShowcase(

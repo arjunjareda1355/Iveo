@@ -46,9 +46,9 @@ test('safeRedirectPath: rejects external URLs, schemes, backslashes and auth rou
 
 test('username-rules: enforces bounds and patterns', () => {
   assert.equal(validateUsername('ab').ok, false);
-  assert.equal(validateUsername('a'.repeat(25)).ok, false);
-  assert.equal(validateUsername('valid_123').ok, true);
-  assert.equal(validateUsername('with-hyphen').ok, false);
+  assert.equal(validateUsername('a'.repeat(31)).ok, false);
+  assert.equal(validateUsername('valid-123').ok, true);
+  assert.equal(validateUsername('with_underscore').ok, false);
   assert.equal(validateUsername('with.dot').ok, false);
   assert.equal(validateUsername('with space').ok, false);
 });
@@ -110,9 +110,9 @@ test('username-rules: rejects every reserved route name', () => {
 });
 
 test('username-rules: normalizes properly', () => {
-  assert.equal(normalizeUsername('Cool_User!123'), 'cool_user123');
+  assert.equal(normalizeUsername('Cool-User!123'), 'cool-user123');
   assert.equal(normalizeUsername(''), '');
-  assert.equal(normalizeUsername('A'.repeat(30)).length, USERNAME_MAX);
+  assert.equal(normalizeUsername('A'.repeat(35)).length, USERNAME_MAX);
 });
 
 test('preferences: parses defensively with defaults on unknown data', () => {

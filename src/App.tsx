@@ -77,6 +77,32 @@ function ProfileRouteHandler() {
   return <NotFound />;
 }
 
+// Redirects legacy vendor or nested /account/* paths to the canonical /account#<section>
+function AccountSubRouteRedirect() {
+  const { '*': sub = '' } = useParams();
+  const location = useLocation();
+  const seg = sub.split('/')[0]?.toLowerCase() || '';
+  const map: Record<string, string> = {
+    profile: '#profile',
+    security: '#security',
+    passkeys: '#security',
+    password: '#security',
+    sessions: '#security',
+    devices: '#security',
+    emails: '#security',
+    connections: '#connections',
+    platforms: '#connections',
+    plan: '#plan',
+    billing: '#plan',
+    subscription: '#plan',
+    data: '#data',
+    privacy: '#data',
+    danger: '#data',
+  };
+  const hash = map[seg] || '';
+  return <Navigate to={`/account${location.search}${hash}`} replace />;
+}
+
 export default function App() {
   const currentSubdomain = typeof window !== 'undefined'
     ? getSubdomainFromHostname(window.location.hostname)
@@ -176,7 +202,8 @@ export default function App() {
           />
 
           {/* 5. Account (Signed in) */}
-          <Route path="/account/*" element={<AccountPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/account/*" element={<AccountSubRouteRedirect />} />
 
           {/* 6. Public Creator Directory, Pricing & Legal Pages */}
           <Route path="/discover" element={<DiscoverPage />} />

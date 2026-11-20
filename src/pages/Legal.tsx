@@ -24,15 +24,19 @@ export const Legal: React.FC = () => {
     <div className="min-h-screen bg-bg text-ink flex flex-col">
       {/* Top Header */}
       <header className="w-full border-b border-border bg-surface sticky top-0 z-30">
-        <Container className="h-16 flex items-center justify-between">
-          <Logo tone="light" size="md" />
+        <Container className="h-16 flex items-center justify-between gap-3">
+          <Logo tone="light" size="md" compactMobile />
 
-          <div className="flex items-center gap-3">
+          <nav
+            aria-label="Legal documents"
+            className="inline-flex items-center gap-1 p-1 rounded-[12px] bg-surface-2 border border-border shrink-0"
+          >
             <Link
               to="/terms"
-              className={`text-[14px] font-medium px-3 py-1.5 rounded-lg transition-colors ${
+              aria-current={isTerms ? 'page' : undefined}
+              className={`min-h-[36px] inline-flex items-center text-[13px] sm:text-[14px] font-medium px-2.5 sm:px-3.5 py-1.5 rounded-[9px] whitespace-nowrap transition-colors ${
                 isTerms
-                  ? 'bg-surface-2 text-ink font-semibold'
+                  ? 'bg-ink text-white font-semibold'
                   : 'text-muted hover:text-ink'
               }`}
             >
@@ -40,15 +44,16 @@ export const Legal: React.FC = () => {
             </Link>
             <Link
               to="/privacy"
-              className={`text-[14px] font-medium px-3 py-1.5 rounded-lg transition-colors ${
+              aria-current={!isTerms ? 'page' : undefined}
+              className={`min-h-[36px] inline-flex items-center text-[13px] sm:text-[14px] font-medium px-2.5 sm:px-3.5 py-1.5 rounded-[9px] whitespace-nowrap transition-colors ${
                 !isTerms
-                  ? 'bg-surface-2 text-ink font-semibold'
+                  ? 'bg-ink text-white font-semibold'
                   : 'text-muted hover:text-ink'
               }`}
             >
               Privacy Policy
             </Link>
-          </div>
+          </nav>
         </Container>
       </header>
 

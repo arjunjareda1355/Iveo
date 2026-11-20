@@ -24,10 +24,21 @@ import {
   Share2,
   Github,
   Linkedin,
+  ArrowRight,
 } from 'lucide-react';
 import { BottomSheet } from '../ui/BottomSheet';
 import { ProBadge } from '../plan/ProBadge';
-import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph, PinterestGlyph } from '../page/EmbedBlock';
+import { Button } from '../ui/Button';
+import {
+  DiscordGlyph,
+  XMarkGlyph,
+  FacebookGlyph,
+  ThreadsGlyph,
+  PinterestGlyph,
+} from '../page/EmbedBlock';
+import { BlueskySocialIcon, LinktreeSocialIcon } from '../phone/SocialIcons';
+import { detectProviderUrl } from '../../lib/providers';
+import type { DetectedProviderUrl } from '../../lib/providers/types';
 
 export type FeatureType =
   | 'link'
@@ -44,6 +55,8 @@ export type FeatureType =
   | 'embed_facebook'
   | 'embed_threads'
   | 'embed_pinterest'
+  | 'embed_bluesky'
+  | 'embed_linktree'
   | 'vcard'
   | 'signup'
   | 'tip_jar'
@@ -64,6 +77,8 @@ interface AddBlockModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectFeature: (type: FeatureType) => void;
+  onSmartAddProvider?: (detected: DetectedProviderUrl) => void;
+  onSmartAddGenericLink?: (url: string) => void;
   isPro: boolean;
 }
 
@@ -71,7 +86,7 @@ interface FeatureOption {
   id: FeatureType;
   title: string;
   description: string;
-  category: 'links' | 'social_embeds' | 'commerce' | 'audience' | 'layout';
+  category: 'social' | 'players' | 'links' | 'commerce' | 'audience' | 'layout';
   icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
   iconBg: string;
   iconColor: string;
@@ -92,106 +107,115 @@ const FEATURES: FeatureOption[] = [
     id: 'social',
     title: 'Social icon',
     description: 'Add a profile icon to your header or footer social bar',
-    category: 'links',
+    category: 'social',
     icon: Share2,
     iconBg: 'bg-sky-50',
     iconColor: 'text-sky-600',
   },
   {
     id: 'embed_discord',
-    title: 'Discord embed',
-    description: 'Connect your Discord account or server invite card with custom looks',
-    category: 'social_embeds',
+    title: 'Discord card',
+    description: 'Showcase your Discord server invite or profile card',
+    category: 'social',
     icon: DiscordGlyph,
     iconBg: 'bg-indigo-50',
     iconColor: 'text-[#5865F2]',
   },
   {
     id: 'embed_github',
-    title: 'GitHub embed',
+    title: 'GitHub card',
     description: 'Connect your GitHub profile or showcase a repository card',
-    category: 'social_embeds',
+    category: 'social',
     icon: Github,
     iconBg: 'bg-stone-100',
     iconColor: 'text-[#24292F]',
   },
   {
     id: 'embed_linkedin',
-    title: 'LinkedIn embed',
-    description: 'Connect your LinkedIn profile or company card with custom looks',
-    category: 'social_embeds',
+    title: 'LinkedIn card',
+    description: 'Showcase your LinkedIn profile or company card',
+    category: 'social',
     icon: Linkedin,
     iconBg: 'bg-sky-50',
     iconColor: 'text-[#0A66C2]',
   },
   {
     id: 'embed_x',
-    title: 'X (Twitter) embed',
-    description: 'Connect your X account or feature a post card with custom looks',
-    category: 'social_embeds',
+    title: 'X card',
+    description: 'Showcase your X profile or feature a post card',
+    category: 'social',
     icon: XMarkGlyph,
     iconBg: 'bg-stone-100',
     iconColor: 'text-black',
   },
   {
     id: 'embed_instagram',
-    title: 'Instagram embed',
-    description: 'Connect Instagram via Meta OAuth or paste a profile, reel, or post',
-    category: 'social_embeds',
+    title: 'Instagram card',
+    description: 'Highlight an Instagram profile, reel, or post card',
+    category: 'social',
     icon: Instagram,
     iconBg: 'bg-pink-50',
     iconColor: 'text-[#E1306C]',
   },
   {
     id: 'embed_facebook',
-    title: 'Facebook embed',
-    description: 'Connect Facebook via Meta OAuth or showcase a page or group card',
-    category: 'social_embeds',
+    title: 'Facebook card',
+    description: 'Showcase a Facebook profile, page, or group card',
+    category: 'social',
     icon: FacebookGlyph,
     iconBg: 'bg-blue-50',
     iconColor: 'text-[#1877F2]',
   },
   {
     id: 'embed_threads',
-    title: 'Threads embed',
-    description: 'Connect your Threads profile or feature a post with custom looks',
-    category: 'social_embeds',
+    title: 'Threads card',
+    description: 'Feature your Threads profile or a post card',
+    category: 'social',
     icon: ThreadsGlyph,
     iconBg: 'bg-stone-100',
     iconColor: 'text-[#101010]',
   },
   {
+    id: 'embed_bluesky',
+    title: 'Bluesky card',
+    description: 'Showcase your Bluesky handle and profile card',
+    category: 'social',
+    icon: BlueskySocialIcon,
+    iconBg: 'bg-sky-50',
+    iconColor: 'text-[#0085FF]',
+  },
+  {
+    id: 'embed_linktree',
+    title: 'Linktree card',
+    description: 'Link to your Linktree page with a rich preview card',
+    category: 'social',
+    icon: LinktreeSocialIcon,
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-700',
+  },
+  {
     id: 'embed_pinterest',
-    title: 'Pinterest embed',
-    description: 'Connect Pinterest or feature a pin, board, or profile with custom looks',
-    category: 'social_embeds',
+    title: 'Pinterest pin or board',
+    description: 'Feature a Pinterest pin, board, or profile',
+    category: 'players',
     icon: PinterestGlyph,
     iconBg: 'bg-rose-50',
     iconColor: 'text-[#E60023]',
   },
   {
     id: 'youtube',
-    title: 'YouTube showcase',
-    description: 'Show your YouTube channel subscribers & latest videos',
-    category: 'links',
+    title: 'YouTube channel card',
+    description: 'Show your YouTube channel subscribers and latest videos',
+    category: 'social',
     icon: Youtube,
     iconBg: 'bg-red-50',
     iconColor: 'text-red-600',
   },
   {
-    id: 'instagram',
-    title: 'Instagram card',
-    description: 'Highlight your Instagram profile or latest reel',
-    category: 'links',
-    icon: Instagram,
-    iconBg: 'bg-rose-50',
-    iconColor: 'text-rose-600',
-  },
-  {
     id: 'embed_youtube',
-    title: 'YouTube embed',
-    description: 'Embed a playable YouTube video or Shorts player on your page',
-    category: 'links',
+    title: 'YouTube player',
+    description: 'Play a YouTube video, Short, or playlist on your page',
+    category: 'players',
     icon: Play,
     iconBg: 'bg-red-50',
     iconColor: 'text-red-600',
@@ -199,9 +223,9 @@ const FEATURES: FeatureOption[] = [
   },
   {
     id: 'embed_spotify',
-    title: 'Spotify embed',
-    description: 'Embed a Spotify track, album, or playlist player',
-    category: 'links',
+    title: 'Spotify player',
+    description: 'Share a Spotify track, album, playlist, or podcast player',
+    category: 'players',
     icon: Music,
     iconBg: 'bg-emerald-50',
     iconColor: 'text-emerald-600',
@@ -209,9 +233,9 @@ const FEATURES: FeatureOption[] = [
   },
   {
     id: 'embed_soundcloud',
-    title: 'SoundCloud embed',
-    description: 'Embed a SoundCloud track or set waveform player',
-    category: 'links',
+    title: 'SoundCloud player',
+    description: 'Share a playable SoundCloud track or set waveform',
+    category: 'players',
     icon: Headphones,
     iconBg: 'bg-orange-50',
     iconColor: 'text-orange-600',
@@ -339,8 +363,9 @@ const FEATURES: FeatureOption[] = [
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },
-  { id: 'social_embeds', label: 'Connected accounts' },
-  { id: 'links', label: 'Links & media' },
+  { id: 'social', label: 'Social' },
+  { id: 'players', label: 'Players' },
+  { id: 'links', label: 'Links' },
   { id: 'commerce', label: 'Support & shop' },
   { id: 'audience', label: 'Forms & utilities' },
   { id: 'layout', label: 'Layout' },
@@ -350,10 +375,45 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
   isOpen,
   onClose,
   onSelectFeature,
+  onSmartAddProvider,
+  onSmartAddGenericLink,
   isPro,
 }) => {
+  const [pasteUrl, setPasteUrl] = useState('');
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  const handleSmartSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = pasteUrl.trim();
+    if (!raw) {
+      setPasteError('Paste any link first.');
+      return;
+    }
+    const detected = detectProviderUrl(raw);
+    if (!detected) {
+      setPasteError('Enter a valid web link (for example https://example.com).');
+      return;
+    }
+    setPasteError(null);
+    setPasteUrl('');
+
+    if (detected.provider !== 'generic' && onSmartAddProvider) {
+      onClose();
+      onSmartAddProvider(detected);
+      return;
+    }
+
+    if (onSmartAddGenericLink) {
+      onClose();
+      onSmartAddGenericLink(detected.canonicalUrl);
+      return;
+    }
+
+    onClose();
+    onSelectFeature('link');
+  };
 
   const filteredFeatures = FEATURES.filter((feat) => {
     const q = searchQuery.toLowerCase().trim();
@@ -371,10 +431,42 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Add to your page"
-      subtitle="Choose a link, connected account embed, media player, support block, or form."
+      subtitle="Paste any link or pick a card, player, form, or section."
       maxWidthClass="sm:max-w-2xl"
     >
       <div className="flex flex-col">
+        {/* Smart Add: Paste a link (ED-1) */}
+        <form
+          onSubmit={handleSmartSubmit}
+          className="px-4 sm:px-5 pt-3 pb-3 border-b border-divider bg-surface-2/40 flex flex-col gap-1.5"
+        >
+          <label htmlFor="smart-paste-link" className="text-[13px] font-semibold text-ink">
+            Paste a link
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="smart-paste-link"
+              type="text"
+              value={pasteUrl}
+              onChange={(e) => {
+                setPasteUrl(e.target.value);
+                if (pasteError) setPasteError(null);
+              }}
+              placeholder="Paste any YouTube, Spotify, X, Instagram, Pinterest, or web link..."
+              className="flex-1 min-w-0 h-11 px-3.5 bg-surface border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
+            />
+            <Button type="submit" variant="primary" size="md" className="shrink-0 gap-1">
+              <span>Add</span>
+              <ArrowRight size={15} />
+            </Button>
+          </div>
+          {pasteError && (
+            <p className="text-[12px] text-[color:var(--error,#B3261E)] font-medium">
+              {pasteError}
+            </p>
+          )}
+        </form>
+
         {/* Search & Category Filter Bar */}
         <div className="px-4 sm:px-5 py-3 border-b border-divider bg-surface flex flex-col gap-2.5 sticky top-0 z-10">
           <div className="relative">
@@ -384,20 +476,20 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
             <input
               type="text"
-              placeholder="Search blocks (spotify, pinterest, instagram, discord, youtube)..."
+              placeholder="Search blocks (spotify, pinterest, bluesky, discord, youtube)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-11 pl-9 pr-3 bg-surface-2 border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 text-[12px]">
+          <div className="flex items-center gap-1.5 flex-wrap pb-0.5 text-[12px]">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`min-h-[36px] px-3 rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                className={`min-h-[34px] px-3 rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   activeCategory === cat.id
                     ? 'bg-ink text-surface'
                     : 'bg-surface-2 text-muted hover:text-ink'

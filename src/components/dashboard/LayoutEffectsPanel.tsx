@@ -85,6 +85,7 @@ export const LayoutEffectsPanel: React.FC<LayoutEffectsPanelProps> = ({
     buttonStyle: currentLayout?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle,
     linkSpacing: currentLayout?.linkSpacing || DEFAULT_LAYOUT_SETTINGS.linkSpacing,
     pageWidth: currentLayout?.pageWidth || DEFAULT_LAYOUT_SETTINGS.pageWidth,
+    cardLook: currentLayout?.cardLook || DEFAULT_LAYOUT_SETTINGS.cardLook,
   };
 
   const hasOverrides =

@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Plus,
-  Play,
-  Music,
-  Headphones,
   Link2,
   Heading,
   Minus,
@@ -21,8 +19,6 @@ import {
   HelpCircle,
   UserCheck,
   Search,
-  Instagram,
-  Youtube,
   Coffee,
   ShoppingBag,
   CalendarClock,
@@ -30,13 +26,11 @@ import {
   Ticket,
   MapPin,
   FileDown,
-  Globe,
-  Github,
-  Linkedin,
   GripVertical,
   ArrowUp,
   ArrowDown,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -52,18 +46,17 @@ import { LayoutControl } from '../links/LayoutControl';
 import { ScheduleSection } from '../links/ScheduleSection';
 import { ScheduleChip } from '../links/ScheduleChip';
 import { PasswordSection } from '../links/PasswordSection';
-import { EmbedComposer } from '../links/EmbedComposer';
-import { SocialEmbedComposer } from '../links/SocialEmbedComposer';
-import { EmbedLookSelector } from '../links/EmbedLookSelector';
-import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph, PinterestGlyph } from '../page/EmbedBlock';
-import { isSocialEmbedProvider } from '../../lib/embedLooks';
+import {
+  PlatformBlockEditor,
+  PlatformEditorSavePayload,
+} from '../links/PlatformBlockEditor';
+import { ProviderGlyph } from '../page/EmbedBlock';
+import { getProviderDefinition } from '../../lib/providers';
 import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
 import { FaqComposer } from '../links/FaqComposer';
 import { VCardComposer } from '../links/VCardComposer';
-import { InstagramComposer } from '../links/InstagramComposer';
 import { CoffeeComposer } from '../links/CoffeeComposer';
-import { YouTubeCardComposer } from '../links/YouTubeCardComposer';
 import { ProductCardComposer } from '../links/ProductCardComposer';
 import { BookingCardComposer } from '../links/BookingCardComposer';
 import { CountdownComposer } from '../links/CountdownComposer';
@@ -72,8 +65,15 @@ import { LocationCardComposer } from '../links/LocationCardComposer';
 import { DownloadCardComposer } from '../links/DownloadCardComposer';
 import { AddBlockModal, FeatureType } from './AddBlockModal';
 import { AnimationControl } from '../links/AnimationControl';
-import { Block, BlockKind, BlockLayout, EmbedMetaData, LinkAnimation } from '../../data/types';
+import {
+  Block,
+  BlockKind,
+  BlockLayout,
+  EmbedProvider,
+  LinkAnimation,
+} from '../../data/types';
 import { parseEmbedUrl } from '../../lib/embeds';
+import { isSocialEmbedProvider } from '../../lib/embedLooks';
 import { useClickCounts } from '../../data/hooks/useClickCounts';
 import { useProtectedLinkIds } from '../../data/hooks/useProtectedLinkIds';
 import { copy } from '../../content/copy';
@@ -85,19 +85,37 @@ import {
 } from '../../lib/favicons';
 import { useToast } from '../ui/Toast';
 
-type FilterCategory = 'all' | 'links' | 'support' | 'media' | 'forms' | 'headers';
+type FilterCategory = 'all' | 'links' | 'social' | 'players' | 'support' | 'forms' | 'headers';
 
 const SUPPORT_KINDS: BlockKind[] = ['tip_jar', 'coffee', 'product', 'promo'];
-const MEDIA_KINDS: BlockKind[] = ['embed', 'youtube', 'instagram', 'download'];
 const FORM_KINDS: BlockKind[] = ['signup', 'faq', 'booking', 'vcard', 'countdown', 'location'];
 const HEADER_KINDS: BlockKind[] = ['header', 'divider'];
 
-function getFilterGroup(kind: BlockKind): Exclude<FilterCategory, 'all'> {
-  if (kind === 'link') return 'links';
-  if (SUPPORT_KINDS.includes(kind)) return 'support';
-  if (MEDIA_KINDS.includes(kind)) return 'media';
-  if (FORM_KINDS.includes(kind)) return 'forms';
-  if (HEADER_KINDS.includes(kind)) return 'headers';
+function isPlatformBlockKind(kind: BlockKind): boolean {
+  return kind === 'embed' || kind === 'youtube' || kind === 'instagram';
+}
+
+function getPlatformProviderForBlock(block: Block): EmbedProvider {
+  if (block.kind === 'youtube') return 'youtube';
+  if (block.kind === 'instagram') return 'instagram';
+  return (block.embedMeta?.provider || block.embedProvider || 'generic') as EmbedProvider;
+}
+
+function getFilterGroup(block: Block): Exclude<FilterCategory, 'all'> {
+  if (block.kind === 'link' || block.kind === 'download') return 'links';
+  if (SUPPORT_KINDS.includes(block.kind)) return 'support';
+  if (FORM_KINDS.includes(block.kind)) return 'forms';
+  if (HEADER_KINDS.includes(block.kind)) return 'headers';
+  if (isPlatformBlockKind(block.kind)) {
+    const provider = getPlatformProviderForBlock(block);
+    const def = getProviderDefinition(provider);
+    const displayAs =
+      block.embedMeta?.displayAs ||
+      (block.kind === 'embed' && (provider === 'youtube' || provider === 'spotify' || provider === 'soundcloud')
+        ? def.defaultDisplayMode
+        : 'card');
+    return displayAs === 'player' ? 'players' : 'social';
+  }
   return 'links';
 }
 
@@ -113,33 +131,10 @@ function getBlockTypeChip(block: Block, hasBothSupportTypes: boolean): string | 
       return 'Product';
     case 'promo':
       return 'Promo';
-    case 'embed':
-      switch (block.embedProvider) {
-        case 'discord':
-          return 'Discord';
-        case 'github':
-          return 'GitHub';
-        case 'linkedin':
-          return 'LinkedIn';
-        case 'x':
-          return 'X';
-        case 'instagram':
-          return 'Instagram';
-        case 'facebook':
-          return 'Facebook';
-        case 'threads':
-          return 'Threads';
-        case 'pinterest':
-          return 'Pinterest';
-        case 'spotify':
-          return 'Spotify';
-        case 'soundcloud':
-          return 'SoundCloud';
-        case 'youtube':
-          return 'YouTube Embed';
-        default:
-          return 'Embed';
-      }
+    case 'embed': {
+      const provider = getPlatformProviderForBlock(block);
+      return getProviderDefinition(provider).name;
+    }
     case 'youtube':
       return 'YouTube';
     case 'instagram':
@@ -249,8 +244,6 @@ export const LinksTab: React.FC = () => {
     addSignupForm,
     addTipJar,
     addCoffee,
-    addInstagram,
-    addYouTube,
     addProduct,
     addBooking,
     addCountdown,
@@ -271,13 +264,19 @@ export const LinksTab: React.FC = () => {
     duplicateBlock,
   } = useBlocks();
 
-  const { isPro, username, displayName, primaryEmail, socials } = useIvioSession();
+  const { isPro, username, displayName, imageUrl, primaryEmail, socials } = useIvioSession();
   const { openUpgrade } = useUpgradeDialog();
   const { protectedIds } = useProtectedLinkIds();
 
-  // Add block modal + Social Card jump trigger
+  // Add block modal + Social Card jump trigger + Unified PlatformBlockEditor
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [socialAddTrigger, setSocialAddTrigger] = useState(0);
+  const [platformEditorState, setPlatformEditorState] = useState<{
+    isOpen: boolean;
+    provider?: EmbedProvider;
+    initialUrl?: string;
+    block?: Block | null;
+  }>({ isOpen: false });
 
   // Search & accurate category filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -287,29 +286,15 @@ export const LinksTab: React.FC = () => {
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const [dragOverBlockId, setDragOverBlockId] = useState<string | null>(null);
 
-  // Active composer
+  // Active composer (non-platform blocks)
   type ComposerType =
     | 'link'
-    | 'embed'
-    | 'embed_youtube'
-    | 'embed_spotify'
-    | 'embed_soundcloud'
-    | 'embed_discord'
-    | 'embed_github'
-    | 'embed_linkedin'
-    | 'embed_x'
-    | 'embed_instagram'
-    | 'embed_facebook'
-    | 'embed_threads'
-    | 'embed_pinterest'
     | 'signup'
     | 'header'
     | 'tip_jar'
     | 'faq'
     | 'vcard'
-    | 'instagram'
     | 'coffee'
-    | 'youtube'
     | 'product'
     | 'booking'
     | 'countdown'
@@ -331,14 +316,13 @@ export const LinksTab: React.FC = () => {
   const [newHeaderTitle, setNewHeaderTitle] = useState('');
   const [composerError, setComposerError] = useState<string | null>(null);
 
-  // Editing block id
+  // Editing block id (non-platform blocks)
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
   const [editLayout, setEditLayout] = useState<BlockLayout>('classic');
   const [editAnimation, setEditAnimation] = useState<LinkAnimation>('none');
   const [editBadge, setEditBadge] = useState<string>('');
-  const [editEmbedMeta, setEditEmbedMeta] = useState<EmbedMetaData | null>(null);
   const [editStartAt, setEditStartAt] = useState<string | null>(null);
   const [editEndAt, setEditEndAt] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
@@ -348,6 +332,7 @@ export const LinksTab: React.FC = () => {
 
   // Active overflow menu dropdown id
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [refreshingBlockId, setRefreshingBlockId] = useState<string | null>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
 
   // Show archived items
@@ -392,16 +377,17 @@ export const LinksTab: React.FC = () => {
 
   // Accurate filter chip counts
   const categoryCounts = useMemo(() => {
-    const counts = {
+    const counts: Record<FilterCategory, number> = {
       all: activeBlocks.length,
       links: 0,
+      social: 0,
+      players: 0,
       support: 0,
-      media: 0,
       forms: 0,
       headers: 0,
     };
     for (const b of activeBlocks) {
-      counts[getFilterGroup(b.kind)] += 1;
+      counts[getFilterGroup(b)] += 1;
     }
     return counts;
   }, [activeBlocks]);
@@ -427,7 +413,7 @@ export const LinksTab: React.FC = () => {
     }
 
     if (filterCategory === 'all') return true;
-    return getFilterGroup(b.kind) === filterCategory;
+    return getFilterGroup(b) === filterCategory;
   });
 
   // Auto-suggest platform name & enrich social links via API/tokens when URL changes
@@ -488,10 +474,6 @@ export const LinksTab: React.FC = () => {
   const handleOpenComposer = (type: ComposerType) => {
     setEditingBlockId(null);
     setActiveMenuId(null);
-    if (type === 'embed' && !isPro) {
-      openUpgrade('embeds');
-      return;
-    }
     if (type === 'signup' && !isPro) {
       openUpgrade('contact_forms');
       return;
@@ -551,7 +533,7 @@ export const LinksTab: React.FC = () => {
         return;
       }
 
-      await addLink(rawUrl ? resolvedTitle : resolvedTitle, rawUrl, {
+      await addLink(resolvedTitle, rawUrl, {
         thumbnailUrl: resolvedThumb,
       });
       handleCloseComposer();
@@ -580,16 +562,107 @@ export const LinksTab: React.FC = () => {
   const handleStartEdit = (block: Block) => {
     setActiveComposer(null);
     setActiveMenuId(null);
+
+    if (isPlatformBlockKind(block.kind)) {
+      setEditingBlockId(null);
+      setPlatformEditorState({
+        isOpen: true,
+        provider: getPlatformProviderForBlock(block),
+        block,
+      });
+      return;
+    }
+
     setEditingBlockId(block.id);
     setEditTitle(block.title);
     setEditUrl(block.url || '');
     setEditLayout(block.layout || 'classic');
     setEditAnimation(block.animation || 'none');
     setEditBadge(block.badge || '');
-    setEditEmbedMeta(block.embedMeta || null);
     setEditStartAt(block.startAt);
     setEditEndAt(block.endAt);
     setEditError(null);
+  };
+
+  const handleRefreshPlatformBlock = async (block: Block) => {
+    setActiveMenuId(null);
+    if (!block.url) return;
+    setRefreshingBlockId(block.id);
+    try {
+      const qs = new URLSearchParams({
+        url: block.url,
+        forceRefresh: '1',
+        blockId: block.id,
+      });
+      const res = await fetch(`/api/integrations/embed?${qs.toString()}`);
+      const data = await res.json().catch(() => null);
+      if (res.status === 429) {
+        showToast(data?.message || 'Wait a moment before refreshing this card again.');
+        return;
+      }
+      const resolved = data?.embed || data?.embedMeta;
+      if (res.ok && data?.ok && resolved) {
+        await updateBlock(block.id, {
+          embedMeta: {
+            ...(block.embedMeta || { provider: getPlatformProviderForBlock(block) }),
+            ...resolved,
+            lookStyle: block.embedMeta?.lookStyle,
+            displayAs: block.embedMeta?.displayAs,
+            playerSize: block.embedMeta?.playerSize,
+            ctaLabel: block.embedMeta?.ctaLabel,
+            override: block.embedMeta?.override,
+            needsAttention: false,
+            failureCount: 0,
+            fetchedAt: resolved.fetchedAt || new Date().toISOString(),
+          },
+        });
+        showToast('Card refreshed');
+      } else {
+        const nextCount = (block.embedMeta?.failureCount || 0) + 1;
+        await updateBlock(block.id, {
+          embedMeta: {
+            ...(block.embedMeta || { provider: getPlatformProviderForBlock(block) }),
+            failureCount: nextCount,
+            needsAttention: nextCount >= 3,
+          },
+        });
+        showToast("Couldn't refresh details right now.");
+      }
+    } catch {
+      const nextCount = (block.embedMeta?.failureCount || 0) + 1;
+      await updateBlock(block.id, {
+        embedMeta: {
+          ...(block.embedMeta || { provider: getPlatformProviderForBlock(block) }),
+          failureCount: nextCount,
+          needsAttention: nextCount >= 3,
+        },
+      }).catch(() => {});
+      showToast("Couldn't refresh details right now.");
+    } finally {
+      setRefreshingBlockId(null);
+    }
+  };
+
+  const handleSavePlatformEditor = async (payload: PlatformEditorSavePayload) => {
+    const editingTarget = platformEditorState.block;
+    if (editingTarget) {
+      await updateBlock(editingTarget.id, {
+        title: payload.title,
+        url: payload.url,
+        embedProvider: payload.provider,
+        embedMeta: payload.embedMeta,
+        ...(payload.youtubeData !== undefined ? { youtube: payload.youtubeData } : {}),
+        ...(payload.schedule
+          ? { startAt: payload.schedule.startAt, endAt: payload.schedule.endAt }
+          : {}),
+      });
+      setPlatformEditorState({ isOpen: false });
+      showToast('Saved');
+      return;
+    }
+
+    await addEmbed(payload.url, payload.title, payload.provider, payload.embedMeta);
+    setPlatformEditorState({ isOpen: false });
   };
 
   const handleSaveEdit = async (block: Block) => {
@@ -635,64 +708,6 @@ export const LinksTab: React.FC = () => {
       } catch (err: unknown) {
         if (err instanceof Error && err.message === 'pro_required') {
           openUpgrade('scheduling');
-        } else {
-          setEditError("Couldn't save changes.");
-        }
-      }
-    } else if (block.kind === 'embed') {
-      const parsed = parseEmbedUrl(editUrl.trim());
-      const isConnectedSpotifyProfile = Boolean(
-        (editEmbedMeta?.connectedViaOAuth || block.embedMeta?.connectedViaOAuth) &&
-          (editEmbedMeta?.provider === 'spotify' || block.embedProvider === 'spotify') &&
-          /^https?:\/\/open\.spotify\.com\/user\//i.test(editUrl.trim())
-      );
-
-      if (!parsed && !isConnectedSpotifyProfile) {
-        setEditError(
-          'Use a YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, X, Instagram, Facebook, Threads, or Pinterest link.'
-        );
-        return;
-      }
-
-      const nextUrl = parsed?.canonicalUrl || editUrl.trim();
-      const nextProvider = parsed?.provider || 'spotify';
-      const urlChanged = nextUrl !== (block.url || '');
-      let nextEmbedMeta: EmbedMetaData | null = editEmbedMeta || block.embedMeta || null;
-      if (urlChanged && parsed) {
-        try {
-          const res = await fetch(
-            `/api/integrations/embed?url=${encodeURIComponent(nextUrl)}`
-          );
-          const data = await res.json().catch(() => null);
-          const resolvedMeta = data?.embed || data?.embedMeta;
-          if (res.ok && data?.ok && resolvedMeta) {
-            nextEmbedMeta = {
-              ...resolvedMeta,
-              lookStyle: editEmbedMeta?.lookStyle || block.embedMeta?.lookStyle || 'signature',
-              showStats: editEmbedMeta?.showStats ?? block.embedMeta?.showStats ?? true,
-              showDescription: editEmbedMeta?.showDescription ?? block.embedMeta?.showDescription ?? true,
-              ctaLabel: editEmbedMeta?.ctaLabel ?? block.embedMeta?.ctaLabel ?? null,
-            };
-          }
-        } catch {
-          // Keep current look customization if lookup fails
-        }
-      }
-
-      try {
-        await updateBlock(block.id, {
-          title: editTitle.trim(),
-          url: nextUrl,
-          embedProvider: nextProvider,
-          embedMeta: nextEmbedMeta,
-          startAt: editStartAt,
-          endAt: editEndAt,
-        });
-        setEditingBlockId(null);
-        showToast('Saved');
-      } catch (err: unknown) {
-        if (err instanceof Error && err.message === 'pro_required') {
-          openUpgrade('embeds');
         } else {
           setEditError("Couldn't save changes.");
         }
@@ -755,22 +770,58 @@ export const LinksTab: React.FC = () => {
   const allFilterChips: { id: FilterCategory; label: string; count: number }[] = [
     { id: 'all', label: 'All', count: categoryCounts.all },
     { id: 'links', label: 'Links', count: categoryCounts.links },
+    { id: 'social', label: 'Social', count: categoryCounts.social },
+    { id: 'players', label: 'Players', count: categoryCounts.players },
     { id: 'support', label: 'Support', count: categoryCounts.support },
-    { id: 'media', label: 'Media', count: categoryCounts.media },
     { id: 'forms', label: 'Forms', count: categoryCounts.forms },
     { id: 'headers', label: 'Headers', count: categoryCounts.headers },
   ];
   const filterChips = allFilterChips.filter((c) => c.id === 'all' || c.count > 0);
+  const shownName = displayName || username || 'Your page';
+  const nameInitial = shownName.charAt(0).toUpperCase();
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 1. Your page URL strip */}
+      {/* 1. Compact Profile Summary Row (CH-2: read-only identity + Edit profile link to /account#profile) */}
+      <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-[14px] bg-surface border border-border">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={shownName}
+              className="w-9 h-9 rounded-full object-cover border border-border shrink-0"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-ink text-surface flex items-center justify-center text-[13px] font-semibold shrink-0">
+              {nameInitial}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-ink truncate leading-tight">
+              {shownName}
+            </p>
+            {username && (
+              <p className="text-[12px] font-mono text-muted truncate leading-tight mt-0.5">
+                @{username}
+              </p>
+            )}
+          </div>
+        </div>
+        <Link
+          to="/account#profile"
+          className="text-[13px] font-medium text-ink hover:underline underline-offset-2 shrink-0 px-2 py-1"
+        >
+          Edit profile
+        </Link>
+      </div>
+
+      {/* 2. Your page URL strip */}
       <PageUrlStrip username={username} />
 
-      {/* 2. Social Icons Card (collapsible, positioned above link blocks) */}
+      {/* 3. Social Icons Card (collapsible, positioned above link blocks) */}
       <SocialLinksCard externalAddTrigger={socialAddTrigger} />
 
-      {/* 3. Single Toolbar: "+ Add" + Search */}
+      {/* 4. Single Toolbar: "+ Add" + Search */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2.5">
           <Button
@@ -810,10 +861,10 @@ export const LinksTab: React.FC = () => {
           </div>
         </div>
 
-        {/* Accurate Filter Chips */}
+        {/* Accurate Wrapping Filter Chips (zero clipping at 320px/360px) */}
         {activeBlocks.length > 1 && (
-          <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 text-[12px]">
-            <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 py-0.5 text-[12px]">
+            <div className="flex flex-wrap items-center gap-1.5">
               {filterChips.map((chip) => {
                 const selected = filterCategory === chip.id;
                 return (
@@ -961,57 +1012,7 @@ export const LinksTab: React.FC = () => {
         </Card>
       )}
 
-      {(activeComposer === 'embed' ||
-        activeComposer === 'embed_youtube' ||
-        activeComposer === 'embed_spotify' ||
-        activeComposer === 'embed_soundcloud') && (
-        <EmbedComposer
-          initialProvider={
-            activeComposer === 'embed_youtube'
-              ? 'youtube'
-              : activeComposer === 'embed_spotify'
-                ? 'spotify'
-                : activeComposer === 'embed_soundcloud'
-                  ? 'soundcloud'
-                  : undefined
-          }
-          onAdd={async ({ url, caption, provider, embedMeta }) => {
-            await addEmbed(url, caption, provider, embedMeta);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
-
-      {(activeComposer === 'embed_discord' ||
-        activeComposer === 'embed_github' ||
-        activeComposer === 'embed_linkedin' ||
-        activeComposer === 'embed_x' ||
-        activeComposer === 'embed_instagram' ||
-        activeComposer === 'embed_facebook' ||
-        activeComposer === 'embed_threads' ||
-        activeComposer === 'embed_pinterest') && (
-        <SocialEmbedComposer
-          initialProvider={
-            activeComposer.replace('embed_', '') as
-              | 'discord'
-              | 'github'
-              | 'linkedin'
-              | 'x'
-              | 'instagram'
-              | 'facebook'
-              | 'threads'
-              | 'pinterest'
-          }
-          onAdd={async ({ url, caption, provider, embedMeta }) => {
-            await addEmbed(url, caption, provider, embedMeta);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
-
-      {activeComposer === 'signup' && (
+      {(activeComposer === 'signup') && (
         <SignupComposer
           ownerName={username || undefined}
           onSave={async (cfg) => {
@@ -1092,30 +1093,10 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
-      {activeComposer === 'instagram' && (
-        <InstagramComposer
-          onAdd={async ({ title, url, badge }) => {
-            await addInstagram(title, url, badge);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
-
       {activeComposer === 'coffee' && (
         <CoffeeComposer
           onAdd={async ({ title, url, badge, coffee }) => {
             await addCoffee(title, url, badge, coffee || null);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
-
-      {activeComposer === 'youtube' && (
-        <YouTubeCardComposer
-          onAdd={async ({ title, url, badge, youtube }) => {
-            await addYouTube(title, url, badge, youtube || null);
             handleCloseComposer();
           }}
           onCancel={handleCloseComposer}
@@ -1245,6 +1226,13 @@ export const LinksTab: React.FC = () => {
             const clickText = clicks === 1 ? '1 click' : `${clicks} clicks`;
             const typeChip = getBlockTypeChip(block, hasBothSupportTypes);
             const subtitle = getBlockSubtitle(block);
+            const isPlatformBlock = isPlatformBlockKind(block.kind);
+            const platformProvider = isPlatformBlock ? getPlatformProviderForBlock(block) : null;
+            const platformDef = platformProvider ? getProviderDefinition(platformProvider) : null;
+            const needsAttention = Boolean(
+              isPlatformBlock &&
+                (block.embedMeta?.needsAttention || (block.embedMeta?.failureCount ?? 0) >= 3)
+            );
 
             // Detect platform for Link blocks so ambiguous/identical titles get clear identity
             const detectedPlatform =
@@ -1255,7 +1243,7 @@ export const LinksTab: React.FC = () => {
               if (isTipJar) return block.tipJar?.buttonText || block.title || 'Tip Jar';
               if (isFaq) return block.title || 'FAQ';
               if (isVCard) return block.vcard?.fullName || block.title || 'Contact Card';
-              const raw = block.title || (isEmbed ? 'Embed' : 'Untitled');
+              const raw = block.title || (isEmbed ? platformDef?.name || 'Card' : 'Untitled');
               if (
                 isLink &&
                 detectedPlatform &&
@@ -1274,54 +1262,10 @@ export const LinksTab: React.FC = () => {
               socialDestinationsSet.has(blockNormalizedDest) &&
               (isLink || isInstagram || isYouTube);
 
-            const renderEmbedListIcon = () => {
-              switch (block.embedProvider) {
-                case 'youtube':
-                  return <Play size={20} strokeWidth={1.6} className="text-red-600" />;
-                case 'spotify':
-                  return <Music size={20} strokeWidth={1.6} className="text-emerald-600" />;
-                case 'soundcloud':
-                  return <Headphones size={20} strokeWidth={1.6} className="text-orange-600" />;
-                case 'discord':
-                  return (
-                    <span className="text-[#5865F2] flex items-center justify-center">
-                      <DiscordGlyph size={19} />
-                    </span>
-                  );
-                case 'github':
-                  return <Github size={20} strokeWidth={1.6} className="text-[#24292F]" />;
-                case 'linkedin':
-                  return <Linkedin size={20} strokeWidth={1.6} className="text-[#0A66C2]" />;
-                case 'x':
-                  return (
-                    <span className="text-ink flex items-center justify-center">
-                      <XMarkGlyph size={17} />
-                    </span>
-                  );
-                case 'instagram':
-                  return <Instagram size={20} strokeWidth={1.8} className="text-[#E1306C]" />;
-                case 'facebook':
-                  return (
-                    <span className="text-[#1877F2] flex items-center justify-center">
-                      <FacebookGlyph size={18} />
-                    </span>
-                  );
-                case 'threads':
-                  return (
-                    <span className="text-ink flex items-center justify-center">
-                      <ThreadsGlyph size={18} />
-                    </span>
-                  );
-                case 'pinterest':
-                  return (
-                    <span className="text-[#E60023] flex items-center justify-center">
-                      <PinterestGlyph size={18} />
-                    </span>
-                  );
-                default:
-                  return <Globe size={20} strokeWidth={1.5} />;
-              }
-            };
+            const platformIconColor =
+              platformDef?.brandColor === '#000000'
+                ? '#0A0A0A'
+                : platformDef?.brandColor || '#0A0A0A';
 
             return (
               <Card
@@ -1378,16 +1322,27 @@ export const LinksTab: React.FC = () => {
                             isDivider ? '' : 'cursor-pointer'
                           }`}
                         >
-                          {/* 40px icon tile */}
-                          <div className="w-10 h-10 rounded-[12px] bg-surface-2 border border-border flex items-center justify-center shrink-0 overflow-hidden text-ink">
+                          {/* 40px brand/icon tile */}
+                          <div
+                            className="w-10 h-10 rounded-[12px] bg-surface-2 border border-border flex items-center justify-center shrink-0 overflow-hidden text-ink"
+                            style={
+                              platformProvider
+                                ? {
+                                    backgroundColor: `${platformIconColor}14`,
+                                    color: platformIconColor,
+                                    borderColor: `${platformIconColor}2E`,
+                                  }
+                                : undefined
+                            }
+                          >
                             {isLink && block.thumbnailUrl ? (
                               <img
                                 src={block.thumbnailUrl}
                                 alt=""
                                 className="w-full h-full object-cover"
                               />
-                            ) : isEmbed ? (
-                              renderEmbedListIcon()
+                            ) : platformProvider ? (
+                              <ProviderGlyph provider={platformProvider} size={19} />
                             ) : isSignup ? (
                               <Mail size={20} className="text-muted" strokeWidth={1.5} />
                             ) : isTipJar ? (
@@ -1396,10 +1351,6 @@ export const LinksTab: React.FC = () => {
                               <HelpCircle size={20} className="text-sky-600" strokeWidth={1.5} />
                             ) : isVCard ? (
                               <UserCheck size={20} className="text-emerald-600" strokeWidth={1.5} />
-                            ) : isInstagram ? (
-                              <Instagram size={20} className="text-rose-500" strokeWidth={1.5} />
-                            ) : isYouTube ? (
-                              <Youtube size={20} className="text-red-600" strokeWidth={1.5} />
                             ) : isCoffee ? (
                               <Coffee size={20} className="text-amber-700" strokeWidth={1.5} />
                             ) : isProduct ? (
@@ -1439,6 +1390,16 @@ export const LinksTab: React.FC = () => {
                               {typeChip && (
                                 <span className="px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium bg-surface-2 text-muted border border-border shrink-0">
                                   {typeChip}
+                                </span>
+                              )}
+
+                              {needsAttention && (
+                                <span
+                                  title="Details failed to refresh. Open editor to update or override."
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 shrink-0"
+                                >
+                                  <AlertTriangle size={10} className="shrink-0" />
+                                  <span>Needs attention</span>
                                 </span>
                               )}
 
@@ -1510,6 +1471,23 @@ export const LinksTab: React.FC = () => {
                                 >
                                   <Pencil size={15} strokeWidth={1.5} className="text-muted" />
                                   <span>Edit</span>
+                                </button>
+                              )}
+
+                              {isPlatformBlock && block.url && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={refreshingBlockId === block.id}
+                                  onClick={() => void handleRefreshPlatformBlock(block)}
+                                  className="w-full min-h-[40px] px-3.5 text-left text-[13px] font-medium text-ink hover:bg-surface-2 flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                                >
+                                  <RefreshCw
+                                    size={15}
+                                    strokeWidth={1.5}
+                                    className={`text-muted ${refreshingBlockId === block.id ? 'animate-spin' : ''}`}
+                                  />
+                                  <span>Refresh</span>
                                 </button>
                               )}
 
@@ -1662,24 +1640,6 @@ export const LinksTab: React.FC = () => {
                     defaultFullName={displayName || username || ''}
                     defaultEmail={primaryEmail || ''}
                   />
-                ) : isInstagram ? (
-                  <InstagramComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      badge: block.badge || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, badge }) => {
-                      await updateBlock(block.id, {
-                        title,
-                        url,
-                        badge: badge || null,
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
                 ) : isCoffee ? (
                   <CoffeeComposer
                     initialValues={{
@@ -1695,26 +1655,6 @@ export const LinksTab: React.FC = () => {
                         url,
                         badge: badge || null,
                         coffee: coffee || null,
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
-                ) : isYouTube ? (
-                  <YouTubeCardComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      badge: block.badge || undefined,
-                      youtube: block.youtube || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, badge, youtube }) => {
-                      await updateBlock(block.id, {
-                        title,
-                        url,
-                        badge: badge || null,
-                        youtube: youtube || null,
                       });
                       setEditingBlockId(null);
                     }}
@@ -1804,32 +1744,11 @@ export const LinksTab: React.FC = () => {
                     }}
                     onCancel={() => setEditingBlockId(null)}
                   />
-                ) : isEmbed && isSocialEmbedProvider(block.embedProvider) ? (
-                  <SocialEmbedComposer
-                    initialProvider={block.embedProvider}
-                    isEditing
-                    initialValues={{
-                      url: block.url || '',
-                      caption: block.title || '',
-                      embedMeta: block.embedMeta || null,
-                    }}
-                    onAdd={async ({ url, caption, provider, embedMeta }) => {
-                      await updateBlock(block.id, {
-                        title: caption,
-                        url,
-                        embedProvider: provider,
-                        embedMeta: embedMeta || null,
-                      });
-                      setEditingBlockId(null);
-                      showToast('Saved');
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
                 ) : (
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
                       <h4 className="text-[16px] font-semibold text-ink">
-                        Edit {isEmbed ? 'embed' : isHeader ? 'header' : 'link'}
+                        Edit {isHeader ? 'header' : 'link'}
                       </h4>
                       <Button
                         variant="ghost"
@@ -1842,55 +1761,28 @@ export const LinksTab: React.FC = () => {
 
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[14px] font-medium text-ink">
-                        {isHeader ? 'Heading' : isEmbed ? 'Caption' : 'Title'}
+                        {isHeader ? 'Heading' : 'Title'}
                       </label>
                       <input
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        placeholder={isEmbed ? 'Optional' : ''}
                         className="h-11 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                       />
                     </div>
 
-                    {(isLink || isEmbed) && (
+                    {isLink && (
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[14px] font-medium text-ink">
-                          {isEmbed ? 'Embed link' : 'URL'}
+                          URL
                         </label>
                         <input
-                          type={isEmbed ? 'text' : 'url'}
+                          type="url"
                           value={editUrl}
                           onChange={(e) => setEditUrl(e.target.value)}
                           className="h-11 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                         />
                       </div>
-                    )}
-
-                    {isEmbed && (
-                      <EmbedLookSelector
-                        provider={
-                          parseEmbedUrl(editUrl)?.provider ||
-                          block.embedProvider ||
-                          'youtube'
-                        }
-                        subtype={parseEmbedUrl(editUrl)?.subtype}
-                        lookStyle={editEmbedMeta?.lookStyle || 'signature'}
-                        showStats={editEmbedMeta?.showStats !== false}
-                        showDescription={editEmbedMeta?.showDescription !== false}
-                        ctaLabel={editEmbedMeta?.ctaLabel || ''}
-                        onChange={(patch) => {
-                          const currentProvider =
-                            parseEmbedUrl(editUrl)?.provider ||
-                            block.embedProvider ||
-                            'youtube';
-                          setEditEmbedMeta((prev) => ({
-                            ...(prev || { provider: currentProvider }),
-                            provider: currentProvider,
-                            ...patch,
-                          }));
-                        }}
-                      />
                     )}
 
                     {isLink && (
@@ -1934,7 +1826,7 @@ export const LinksTab: React.FC = () => {
                       />
                     )}
 
-                    {(isLink || isEmbed) && (
+                    {isLink && (
                       <ScheduleSection
                         isPro={isPro}
                         startAt={editStartAt}
@@ -2082,6 +1974,29 @@ export const LinksTab: React.FC = () => {
       <AddBlockModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        onSmartAddProvider={(detected) => {
+          const isProPlayer =
+            detected.defaultDisplayAs === 'player' &&
+            (detected.provider === 'youtube' ||
+              detected.provider === 'spotify' ||
+              detected.provider === 'soundcloud');
+          if (isProPlayer && !isPro) {
+            openUpgrade('embeds');
+            return;
+          }
+          setEditingBlockId(null);
+          setActiveComposer(null);
+          setPlatformEditorState({
+            isOpen: true,
+            provider: detected.provider as EmbedProvider,
+            initialUrl: detected.canonicalUrl,
+            block: null,
+          });
+        }}
+        onSmartAddGenericLink={(canonicalUrl) => {
+          handleOpenComposer('link');
+          handleNewLinkUrlChange(canonicalUrl);
+        }}
         onSelectFeature={async (type: FeatureType) => {
           if (type === 'social') {
             setSocialAddTrigger((n) => n + 1);
@@ -2092,11 +2007,61 @@ export const LinksTab: React.FC = () => {
             }, 60);
           } else if (type === 'divider') {
             await addDivider();
+          } else if (
+            type === 'embed' ||
+            type.startsWith('embed_') ||
+            type === 'youtube' ||
+            type === 'instagram'
+          ) {
+            const mappedProvider: EmbedProvider =
+              type === 'youtube'
+                ? 'youtube'
+                : type === 'instagram'
+                  ? 'instagram'
+                  : type === 'embed'
+                    ? 'generic'
+                    : (type.replace('embed_', '') as EmbedProvider);
+            const isProPlayer =
+              (type === 'embed_youtube' ||
+                type === 'embed_spotify' ||
+                type === 'embed_soundcloud') &&
+              !isPro;
+            if (isProPlayer) {
+              openUpgrade('embeds');
+              return;
+            }
+            setEditingBlockId(null);
+            setActiveComposer(null);
+            setPlatformEditorState({
+              isOpen: true,
+              provider: mappedProvider,
+              block: null,
+            });
           } else {
             handleOpenComposer(type as ComposerType);
           }
         }}
         isPro={isPro}
+      />
+
+      {/* 9. Unified Platform Card & Player Editor */}
+      <PlatformBlockEditor
+        isOpen={platformEditorState.isOpen}
+        onClose={() => setPlatformEditorState({ isOpen: false })}
+        initialProvider={platformEditorState.provider}
+        initialUrl={platformEditorState.initialUrl}
+        block={platformEditorState.block}
+        isPro={isPro}
+        onSave={handleSavePlatformEditor}
+        onClearScheduleImmediate={
+          platformEditorState.block
+            ? async () => {
+                if (platformEditorState.block) {
+                  await clearSchedule(platformEditorState.block.id);
+                }
+              }
+            : undefined
+        }
       />
     </div>
   );

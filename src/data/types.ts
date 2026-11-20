@@ -56,12 +56,17 @@ export type EmbedProvider =
   | 'instagram'
   | 'facebook'
   | 'threads'
-  | 'pinterest';
+  | 'pinterest'
+  | 'linktree'
+  | 'bluesky'
+  | 'generic';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
-export type EmbedLookStyle = 'signature' | 'spotlight' | 'glass' | 'minimal' | 'theme';
+export type CardLookStyle = 'match_page' | 'brand' | 'banner' | 'glass' | 'compact';
+export type EmbedLookStyle = CardLookStyle | 'signature' | 'spotlight' | 'minimal' | 'theme';
 
 export interface EmbedMetaData {
   provider: EmbedProvider;
+  subtype?: string | null;
   title?: string | null;
   subtitle?: string | null;
   description?: string | null;
@@ -69,15 +74,33 @@ export interface EmbedMetaData {
   coverUrl?: string | null;
   badgeText?: string | null;
   statsLabel?: string | null;
+  stats?: Array<{ key: string; value: string }>;
   handle?: string | null;
   htmlSnippet?: string | null;
   accentColor?: string | null;
+  accentMode?: 'brand' | 'page' | 'custom';
+  corners?: 'page' | 'sharp' | 'rounded' | 'pill';
   lookStyle?: EmbedLookStyle | null;
+  showAvatar?: boolean;
   showStats?: boolean;
   showDescription?: boolean;
+  showPlatformLabel?: boolean;
   ctaLabel?: string | null;
+  buttonStyle?: 'filled' | 'outline' | 'text' | 'hidden';
+  displayAs?: 'card' | 'player';
+  playerSize?: 'compact' | 'standard' | 'large';
   connectedViaOAuth?: boolean;
+  needsAttention?: boolean;
+  failureCount?: number;
+  staleSnapshot?: boolean;
+  source?: 'api' | 'oembed' | 'opengraph' | 'manual';
   fetchedAt?: string | null;
+  override?: {
+    title?: string | null;
+    subtitle?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+  };
 }
 
 export type SignupCollectMode = 'email' | 'phone' | 'both';

@@ -77,13 +77,17 @@ import {
 } from '../../src/lib/plan.ts';
 import {
   buildSocialOAuthUrl,
+  checkBlockRefreshCooldown,
+  checkEmbedLookupRateLimit,
   exchangeSocialOAuthCode,
   fetchPinterestAccountFromToken,
   fetchSocialEmbedMetadata,
   fetchUniversalSocialLinkMetadata,
+  isPinterestOAuthEnabled,
   isValidSocialOAuthProvider,
   parseSocialOAuthState,
 } from './socialIntegrations.ts';
+import { redactSecrets } from './serverConfig.ts';
 
 /**
  * GET /api/db/readiness
@@ -1362,16 +1366,43 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
 }
 
 /**
- * GET /api/integrations/embed?url=...
- * Server-side metadata enrichment for social & media links via APIs, tokens, and OpenGraph
+ * GET /api/integrations/embed?url=...&forceRefresh=1&blockId=...
+ * Server-side metadata enrichment for social & media links via APIs and OpenGraph
  */
 export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) {
   const rawUrl = String(req.query.url || '').trim();
   if (!rawUrl) {
-    return res.status(400).json({ ok: false, error: 'missing_url', message: 'Paste a link URL to inspect.' });
+    return res.status(400).json({ ok: false, error: 'missing_url', message: 'Paste a link to inspect.' });
   }
+
+  const rateKey =
+    String(req.headers['x-user-id'] || req.ip || req.socket?.remoteAddress || 'anon').trim();
+  const rate = checkEmbedLookupRateLimit(rateKey, 20);
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({
+      ok: false,
+      error: 'rate_limited',
+      message: 'Too many lookups right now. Wait a moment and try again.',
+    });
+  }
+
+  const forceRefresh = req.query.forceRefresh === '1' || req.query.forceRefresh === 'true';
+  const blockId = String(req.query.blockId || '').trim();
+  if (forceRefresh && blockId) {
+    const cooldown = checkBlockRefreshCooldown(blockId);
+    if (!cooldown.allowed) {
+      if (cooldown.retryAfterSec) res.setHeader('Retry-After', String(cooldown.retryAfterSec));
+      return res.status(429).json({
+        ok: false,
+        error: 'refresh_cooldown',
+        message: `Wait ${cooldown.retryAfterSec || 60} seconds before refreshing this card again.`,
+      });
+    }
+  }
+
   try {
-    const result = await fetchSocialEmbedMetadata(rawUrl);
+    const result = await fetchSocialEmbedMetadata(rawUrl, { forceRefresh });
     if (result) {
       return res.status(200).json({
         ok: true,
@@ -1383,7 +1414,7 @@ export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) 
       });
     }
 
-    const universal = await fetchUniversalSocialLinkMetadata(rawUrl);
+    const universal = await fetchUniversalSocialLinkMetadata(rawUrl, { forceRefresh });
     if (universal) {
       return res.status(200).json({
         ok: true,
@@ -1392,25 +1423,39 @@ export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) 
         suggestedTitle: universal.suggestedTitle,
         embed: universal.embedMeta,
         embedMeta: universal.embedMeta,
+        isGenericLink: Boolean(universal.isGenericLink),
       });
     }
 
     return res.status(400).json({
       ok: false,
       error: 'unsupported_embed_url',
-      message:
-        'Paste a valid YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, X, Instagram, Facebook, Threads, or Pinterest URL.',
+      message: 'Paste a valid web link (for example https://example.com).',
     });
   } catch (err: any) {
-    return res.status(500).json({ ok: false, error: 'embed_lookup_failed', message: err?.message });
+    return res.status(500).json({
+      ok: false,
+      error: 'embed_lookup_failed',
+      message: redactSecrets(err?.message || 'Could not inspect link.'),
+    });
   }
 }
 
 /**
  * GET /api/integrations/pinterest/me
- * Imports configured Pinterest creator account & boards via Pinterest v5 Access Token
+ * Owner-only development helper for importing the owner's configured Pinterest token profile.
+ * Never serves the owner's token to other creators or public visitors.
  */
-export async function handlePinterestTokenProfile(_req: ExpressReq, res: ExpressRes) {
+export async function handlePinterestTokenProfile(req: ExpressReq, res: ExpressRes) {
+  const email = String(req.headers['x-user-email'] || '').toLowerCase().trim();
+  if (!email || !isPrivilegedEmailServer(email)) {
+    return res.status(403).json({
+      ok: false,
+      error: 'forbidden',
+      message: 'Pinterest app token import is restricted to the platform owner account.',
+    });
+  }
+
   try {
     const connection = await fetchPinterestAccountFromToken();
     return res.status(200).json({
@@ -1425,29 +1470,44 @@ export async function handlePinterestTokenProfile(_req: ExpressReq, res: Express
     return res.status(502).json({
       ok: false,
       error: 'pinterest_token_failed',
-      message: err?.message || 'Could not read Pinterest account from configured access token.',
+      message: redactSecrets(err?.message || 'Could not read Pinterest account from configured access token.'),
     });
   }
 }
 
 /**
  * GET /api/oauth/:provider/url?origin=...
- * Generates authorization URL for Discord, GitHub, LinkedIn, or X popup OAuth
+ * Generates authorization URL for creator page card connections (Discord, GitHub, LinkedIn, X, etc.)
  */
 export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
   const providerRaw = String(req.params.provider || '').toLowerCase().trim();
   if (!isValidSocialOAuthProvider(providerRaw)) {
     return res.status(400).json({ ok: false, error: 'unsupported_provider' });
   }
-  const clientOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
-  const origin = /^https?:\/\//i.test(clientOrigin) ? clientOrigin : getExpressRequestOrigin(req);
-  const built = buildSocialOAuthUrl(providerRaw, origin);
-  return res.status(200).json({
-    ok: true,
-    provider: providerRaw,
-    url: built.url,
-    redirectUri: built.redirectUri,
-  });
+  if (providerRaw === 'pinterest' && !isPinterestOAuthEnabled()) {
+    return res.status(503).json({
+      ok: false,
+      error: 'pinterest_oauth_disabled',
+      message: 'Pinterest account connection is not enabled yet. Paste a public Pinterest link instead.',
+    });
+  }
+  try {
+    const clientOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
+    const origin = /^https?:\/\//i.test(clientOrigin) ? clientOrigin : getExpressRequestOrigin(req);
+    const built = buildSocialOAuthUrl(providerRaw, origin);
+    return res.status(200).json({
+      ok: true,
+      provider: providerRaw,
+      url: built.url,
+      redirectUri: built.redirectUri,
+    });
+  } catch (err: any) {
+    return res.status(503).json({
+      ok: false,
+      error: 'oauth_not_configured',
+      message: redactSecrets(err?.message || `${providerRaw} connection is not configured.`),
+    });
+  }
 }
 
 /**
@@ -1464,10 +1524,10 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(`<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Social Account Connection</title></head>
+<head><meta charset="utf-8"><title>Account connection · iveo</title></head>
 <body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#111;">
   <div style="text-align:center;padding:24px;">
-    <p style="font-size:15px;font-weight:600;margin:0 0 8px;">${payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' ? 'Account connected to Iveo' : 'Could not connect account'}</p>
+    <p style="font-size:15px;font-weight:600;margin:0 0 8px;">${payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' ? 'Account connected to iveo' : 'Could not connect account'}</p>
     <p style="font-size:13px;color:#666;margin:0;">This window will close automatically.</p>
   </div>
   <script>
@@ -1492,7 +1552,7 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
   if (!isValidSocialOAuthProvider(providerRaw)) {
     return sendPopupHtml({
       type: 'IVEO_SOCIAL_OAUTH_ERROR',
-      error: 'Unsupported OAuth provider.',
+      error: 'Unsupported provider.',
     });
   }
 
@@ -1502,7 +1562,7 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
   if (oauthError || !code) {
     const fallbackOrigin = getExpressRequestOrigin(req);
     const { redirectUri } = parseSocialOAuthState(stateParam, fallbackOrigin, providerRaw);
-    const readableErr = oauthErrorDesc || oauthError || 'Authorization was cancelled.';
+    const readableErr = redactSecrets(oauthErrorDesc || oauthError || 'Authorization was cancelled.');
     return sendPopupHtml({
       type: 'IVEO_SOCIAL_OAUTH_ERROR',
       provider: providerRaw,
@@ -1531,7 +1591,7 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
     return sendPopupHtml({
       type: 'IVEO_SOCIAL_OAUTH_ERROR',
       provider: providerRaw,
-      error: err?.message || 'Failed to read profile details.',
+      error: redactSecrets(err?.message || 'Failed to read profile details.'),
     });
   }
 }

@@ -294,7 +294,12 @@ export function buildMainDomainHeadTags(requestOrigin?: string): string {
     '@type': 'Organization',
     name: 'Iveo',
     url: canonicalUrl,
-    logo: `${canonicalOrigin}/favicon.svg`,
+    logo: 'https://i.postimg.cc/d1cqB7Dm/iveo-logo-04-tile-white-shadow-4k.png',
+    sameAs: [
+      'https://www.instagram.com/iveo.site',
+      'https://youtube.com/@iveosite',
+      'https://x.com/@iveosite',
+    ],
     description: MAIN_SEO_DESCRIPTION,
   };
 

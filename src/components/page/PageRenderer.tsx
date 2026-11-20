@@ -42,6 +42,7 @@ import {
   resolveButtonControlRadius,
 } from '../../lib/preferences';
 import { BackgroundLayer } from './BackgroundLayer';
+import { SITE_LOGO_SRC, SITE_WORDMARK_SRC } from '../ui/Logo';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -110,6 +111,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     buttonStyle: profile?.layoutSettings?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle,
     linkSpacing: profile?.layoutSettings?.linkSpacing || DEFAULT_LAYOUT_SETTINGS.linkSpacing,
     pageWidth: profile?.layoutSettings?.pageWidth || DEFAULT_LAYOUT_SETTINGS.pageWidth,
+    cardLook: profile?.layoutSettings?.cardLook || DEFAULT_LAYOUT_SETTINGS.cardLook,
   };
 
   const avatarRadiusCss =
@@ -503,7 +505,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
-          // 3. Embed
+          // 3. Embed / Platform card or player
           if (block.kind === 'embed') {
             return (
               <EmbedBlock
@@ -518,6 +520,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 scale={scale}
                 onLinkClick={onLinkClick}
                 surfaceStyle={buttonSurfaceStyle}
+                pageCardLook={layout.cardLook}
+                background={profile?.background}
               />
             );
           }
@@ -1268,27 +1272,29 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         )}
 
         {/* Refined and small iveo mark at the bottom */}
-        {!hideFooterMark && (
-          <a
-            href="https://iveo.site"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 opacity-80 hover:opacity-100 transition-opacity duration-150 select-none group"
-            aria-label="iveo"
-          >
-            <img
-              src="https://i.postimg.cc/HkbTTdWH/File-Kit-1000252682-compress-image.jpg"
-              alt=""
-              className="h-3.5 w-auto rounded-[3px] object-contain transition-transform group-hover:scale-105"
-            />
-            <span
-              className="font-semibold tracking-[-0.03em] text-[11px]"
-              style={{ color: tokens.text }}
+        {!hideFooterMark && (() => {
+          const footerIsDark = !isLightHexColor(tokens.bg) || isDarkBackgroundConfig(profile?.background);
+          return (
+            <a
+              href="https://iveo.site"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 opacity-80 hover:opacity-100 transition-opacity duration-150 select-none group"
+              aria-label="iveo"
             >
-              iveo
-            </span>
-          </a>
-        )}
+              <img
+                src={SITE_LOGO_SRC}
+                alt=""
+                className="h-3.5 w-auto rounded-[3px] object-contain transition-transform group-hover:scale-105"
+              />
+              <img
+                src={SITE_WORDMARK_SRC}
+                alt="iveo"
+                className={`h-2.5 w-auto object-contain ${footerIsDark ? 'brightness-0 invert' : ''}`}
+              />
+            </a>
+          );
+        })()}
 
         {/* "Report this page" embedded Formspree trigger (always visible on public page) */}
         {isPublicPage && displayHandle && (

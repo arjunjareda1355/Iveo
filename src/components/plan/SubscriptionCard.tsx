@@ -175,7 +175,7 @@ export const SubscriptionCard: React.FC = () => {
               onClick={() => setIsDetailsOpen(true)}
               className="w-full sm:w-auto"
             >
-              Manage billing
+              Manage plan
             </Button>
           </div>
         </div>
