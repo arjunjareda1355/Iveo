@@ -29,6 +29,7 @@ export interface CreateBlockInput {
   url?: string | null;
   icon?: string | null;
   thumbnailPath?: string | null;
+  thumbnailUrl?: string | null;
   layout?: BlockLayout;
   embedProvider?: EmbedProvider | null;
   embedMeta?: EmbedMetaData | null;
@@ -319,7 +320,7 @@ export async function createBlock(
     url: input.url || null,
     icon: input.icon || null,
     thumbnailPath: input.thumbnailPath || null,
-    thumbnailUrl: storagePublicUrl(input.thumbnailPath),
+    thumbnailUrl: input.thumbnailUrl !== undefined ? input.thumbnailUrl : storagePublicUrl(input.thumbnailPath),
     layout: input.layout || 'classic',
     embedProvider: input.embedProvider || null,
     embedMeta: input.embedMeta || null,

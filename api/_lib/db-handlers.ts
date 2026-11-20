@@ -78,7 +78,9 @@ import {
 import {
   buildSocialOAuthUrl,
   exchangeSocialOAuthCode,
+  fetchPinterestAccountFromToken,
   fetchSocialEmbedMetadata,
+  fetchUniversalSocialLinkMetadata,
   isValidSocialOAuthProvider,
   parseSocialOAuthState,
 } from './socialIntegrations.ts';
@@ -1361,7 +1363,7 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
 
 /**
  * GET /api/integrations/embed?url=...
- * Server-side metadata enrichment for Discord, GitHub, LinkedIn, and X embeds
+ * Server-side metadata enrichment for social & media links via APIs, tokens, and OpenGraph
  */
 export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) {
   const rawUrl = String(req.query.url || '').trim();
@@ -1370,23 +1372,61 @@ export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) 
   }
   try {
     const result = await fetchSocialEmbedMetadata(rawUrl);
-    if (!result) {
-      return res.status(400).json({
-        ok: false,
-        error: 'unsupported_embed_url',
-        message: 'Paste a valid YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, or X URL.',
+    if (result) {
+      return res.status(200).json({
+        ok: true,
+        provider: result.parsed.provider,
+        canonicalUrl: result.parsed.canonicalUrl,
+        suggestedTitle: result.suggestedTitle,
+        embed: result.embedMeta,
+        embedMeta: result.embedMeta,
       });
     }
-    return res.status(200).json({
-      ok: true,
-      provider: result.parsed.provider,
-      canonicalUrl: result.parsed.canonicalUrl,
-      suggestedTitle: result.suggestedTitle,
-      embed: result.embedMeta,
-      embedMeta: result.embedMeta,
+
+    const universal = await fetchUniversalSocialLinkMetadata(rawUrl);
+    if (universal) {
+      return res.status(200).json({
+        ok: true,
+        provider: universal.provider,
+        canonicalUrl: universal.canonicalUrl,
+        suggestedTitle: universal.suggestedTitle,
+        embed: universal.embedMeta,
+        embedMeta: universal.embedMeta,
+      });
+    }
+
+    return res.status(400).json({
+      ok: false,
+      error: 'unsupported_embed_url',
+      message:
+        'Paste a valid YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, X, Instagram, Facebook, Threads, or Pinterest URL.',
     });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'embed_lookup_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/integrations/pinterest/me
+ * Imports configured Pinterest creator account & boards via Pinterest v5 Access Token
+ */
+export async function handlePinterestTokenProfile(_req: ExpressReq, res: ExpressRes) {
+  try {
+    const connection = await fetchPinterestAccountFromToken();
+    return res.status(200).json({
+      ok: true,
+      provider: connection.provider,
+      url: connection.url,
+      title: connection.title,
+      embed: connection.embedMeta,
+      embedMeta: connection.embedMeta,
+    });
+  } catch (err: any) {
+    return res.status(502).json({
+      ok: false,
+      error: 'pinterest_token_failed',
+      message: err?.message || 'Could not read Pinterest account from configured access token.',
+    });
   }
 }
 

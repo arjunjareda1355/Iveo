@@ -17,6 +17,7 @@ describe('embedLooks helpers', () => {
     'instagram',
     'facebook',
     'threads',
+    'pinterest',
     'youtube',
     'spotify',
     'soundcloud',
@@ -52,6 +53,7 @@ describe('embedLooks helpers', () => {
     assert.equal(isSocialEmbedProvider('instagram'), true);
     assert.equal(isSocialEmbedProvider('facebook'), true);
     assert.equal(isSocialEmbedProvider('threads'), true);
+    assert.equal(isSocialEmbedProvider('pinterest'), true);
     assert.equal(isSocialEmbedProvider('youtube'), false);
     assert.equal(isSocialEmbedProvider('spotify'), false);
     assert.equal(isSocialEmbedProvider('soundcloud'), false);
@@ -72,6 +74,9 @@ describe('embedLooks helpers', () => {
     assert.equal(getDefaultEmbedCtaLabel('facebook', 'profile'), 'View on Facebook');
     assert.equal(getDefaultEmbedCtaLabel('threads', 'post'), 'View Thread');
     assert.equal(getDefaultEmbedCtaLabel('threads', 'profile'), 'Follow');
+    assert.equal(getDefaultEmbedCtaLabel('pinterest', 'pin'), 'View Pin');
+    assert.equal(getDefaultEmbedCtaLabel('pinterest', 'board'), 'View Board');
+    assert.equal(getDefaultEmbedCtaLabel('pinterest', 'profile'), 'Follow');
     assert.equal(getDefaultEmbedCtaLabel('youtube'), 'Play');
   });
 });

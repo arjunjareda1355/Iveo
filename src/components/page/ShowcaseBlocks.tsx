@@ -191,9 +191,11 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
             </span>
           )}
         </div>
-        <span className="text-[11px] opacity-75 truncate">
-          {block.badge || effectiveHandle || 'Subscribe for new videos'}
-        </span>
+        {(block.badge || effectiveHandle) && (
+          <span className="text-[11px] opacity-75 truncate">
+            {block.badge || effectiveHandle}
+          </span>
+        )}
       </div>
     </div>
   );

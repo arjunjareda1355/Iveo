@@ -14,17 +14,27 @@ test('razorpay: PRICING_CONFIG defines valid pricing structures', () => {
 });
 
 test('razorpay: verifyPaymentSignature correctly validates authentic HMAC signatures', () => {
+  const prevSecret = process.env.RAZORPAY_KEY_SECRET;
   const orderId = 'order_test123';
   const paymentId = 'pay_test456';
-  const secret = 'Veqs5nBUkzIGLOOdFGQW0908';
+  const secret = 'unit_test_hmac_secret_only';
+  process.env.RAZORPAY_KEY_SECRET = secret;
 
-  const validSignature = crypto
-    .createHmac('sha256', secret)
-    .update(`${orderId}|${paymentId}`)
-    .digest('hex');
+  try {
+    const validSignature = crypto
+      .createHmac('sha256', secret)
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
 
-  const isValid = verifyPaymentSignature(orderId, paymentId, validSignature);
-  assert.equal(isValid, true, 'Valid signature must return true');
+    const isValid = verifyPaymentSignature(orderId, paymentId, validSignature);
+    assert.equal(isValid, true, 'Valid signature must return true');
+  } finally {
+    if (prevSecret === undefined) {
+      delete process.env.RAZORPAY_KEY_SECRET;
+    } else {
+      process.env.RAZORPAY_KEY_SECRET = prevSecret;
+    }
+  }
 });
 
 test('razorpay: verifyPaymentSignature rejects forged or tampered signatures', () => {

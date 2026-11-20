@@ -253,31 +253,28 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
 
-              {/* Iveo Social Media Accounts in Mobile Menu */}
-              <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
-                <span className="text-[13px] text-muted font-medium">Follow iveo</span>
-                <div className="flex items-center gap-2">
-                  <a
-                    href="https://youtube.com/@iveosite"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="iveo on YouTube"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-2 hover:bg-surface border border-border text-[13px] font-medium text-ink transition-colors"
-                  >
-                    <Youtube size={15} strokeWidth={1.75} className="text-[#FF0000]" />
-                    <span>YouTube</span>
-                  </a>
-                  <a
-                    href="https://www.instagram.com/iveo.site"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="iveo on Instagram"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-2 hover:bg-surface border border-border text-[13px] font-medium text-ink transition-colors"
-                  >
-                    <Instagram size={15} strokeWidth={1.75} className="text-[#E4405F]" />
-                    <span>Instagram</span>
-                  </a>
-                </div>
+              {/* Iveo Social Media Accounts in Mobile Menu (icons only) */}
+              <div className="mt-6 pt-4 border-t border-border flex items-center justify-center gap-3">
+                <a
+                  href="https://youtube.com/@iveosite"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="iveo on YouTube"
+                  title="iveo on YouTube (@iveosite)"
+                  className="w-10 h-10 rounded-full bg-surface-2 hover:bg-surface border border-border flex items-center justify-center text-[#FF0000] transition-colors"
+                >
+                  <Youtube size={18} strokeWidth={1.75} />
+                </a>
+                <a
+                  href="https://www.instagram.com/iveo.site"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="iveo on Instagram"
+                  title="iveo on Instagram (@iveo.site)"
+                  className="w-10 h-10 rounded-full bg-surface-2 hover:bg-surface border border-border flex items-center justify-center text-[#E4405F] transition-colors"
+                >
+                  <Instagram size={18} strokeWidth={1.75} />
+                </a>
               </div>
             </div>
           </div>

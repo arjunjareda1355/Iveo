@@ -1,8 +1,6 @@
 // Clerk Keys:
 // Production key for custom domain (iveo.site):
 export const CLERK_PROD_KEY = 'pk_live_Y2xlcmsuaXZlby5zaXRlJA';
-export const CLERK_PROD_SECRET_KEY =
-  'sk_live_0lmzm5S9RUzdp8UH3lcWZydsFkQuuFtzhjmjLfDU23';
 
 // Development key for preview and local dev (*.run.app, localhost):
 export const CLERK_DEV_KEY =

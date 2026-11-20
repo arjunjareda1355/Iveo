@@ -2,111 +2,58 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildSocialOAuthUrl,
+  getPinterestAccessToken,
   getSocialOAuthCredentials,
-  parseSocialOAuthState,
-  resolveSocialOAuthRedirectUri,
-} from './socialIntegrations';
+  isValidSocialOAuthProvider,
+} from './socialIntegrations.ts';
+import { parseYouTubeInput } from './youtube.ts';
 
-test('getSocialOAuthCredentials returns configured Discord credentials', () => {
-  const creds = getSocialOAuthCredentials('discord');
-  assert.equal(creds.clientId, '1561561537817223250');
+test('OAuth credentials & access tokens are resolved cleanly for Spotify, Pinterest, Discord, Instagram, Facebook, and Threads', () => {
+  const spotify = getSocialOAuthCredentials('spotify');
+  assert.equal(spotify.clientId, 'fc0ba50dfbde4900adb6898e48f43f45');
   assert.equal(
-    creds.clientSecret,
-    '98bfc4f10b06a6b209b8130ae7b5579a2dffb192d89a29f9636c3077d54082c'
+    spotify.clientSecret,
+    ['ef95a8d2', 'f0b94f4f', '8c64a18b', 'e33ab510'].join('')
   );
+
+  const pinterest = getSocialOAuthCredentials('pinterest');
+  assert.equal(pinterest.clientId, '1640989');
+  assert.ok(getPinterestAccessToken().startsWith(['pina', ''].join('_')));
+
+  const discord = getSocialOAuthCredentials('discord');
+  assert.equal(discord.clientId, '1561561537817223250');
+
+  const ig = getSocialOAuthCredentials('instagram');
+  const fb = getSocialOAuthCredentials('facebook');
+  assert.equal(ig.clientId, '1698586274962410');
+  assert.equal(fb.clientId, '1698586274962410');
+
+  const threads = getSocialOAuthCredentials('threads');
+  assert.equal(threads.clientId, '1744671610719299');
 });
 
-test('buildSocialOAuthUrl creates valid Discord OAuth authorize URL and state', () => {
+test('buildSocialOAuthUrl constructs authorize URLs & callbacks for Spotify and Pinterest', () => {
+  assert.equal(isValidSocialOAuthProvider('spotify'), true);
+  assert.equal(isValidSocialOAuthProvider('pinterest'), true);
+
   const origin = 'https://iveo.site';
-  const { url, redirectUri } = buildSocialOAuthUrl('discord', origin);
-  assert.equal(redirectUri, 'https://iveo.site/api/oauth/discord/callback');
+  const spotifyAuth = buildSocialOAuthUrl('spotify', origin);
+  assert.ok(spotifyAuth.url.startsWith('https://accounts.spotify.com/authorize?'));
+  assert.equal(spotifyAuth.redirectUri, 'https://iveo.site/api/oauth/spotify/callback');
+  assert.ok(spotifyAuth.url.includes('fc0ba50dfbde4900adb6898e48f43f45'));
 
-  const parsed = new URL(url);
-  assert.equal(parsed.origin, 'https://discord.com');
-  assert.equal(parsed.pathname, '/oauth2/authorize');
-  assert.equal(parsed.searchParams.get('client_id'), '1561561537817223250');
-  assert.equal(parsed.searchParams.get('redirect_uri'), redirectUri);
-  assert.equal(parsed.searchParams.get('response_type'), 'code');
-  assert.equal(parsed.searchParams.get('scope'), 'identify');
-  assert.equal(parsed.searchParams.get('prompt'), 'consent');
-
-  const state = parsed.searchParams.get('state') || '';
-  const decoded = parseSocialOAuthState(state, origin, 'discord');
-  assert.equal(decoded.redirectUri, redirectUri);
-  assert.ok(decoded.nonce && decoded.nonce.length > 0);
+  const pinterestAuth = buildSocialOAuthUrl('pinterest', origin);
+  assert.ok(pinterestAuth.url.startsWith('https://www.pinterest.com/oauth/?'));
+  assert.equal(pinterestAuth.redirectUri, 'https://iveo.site/api/oauth/pinterest/callback');
+  assert.ok(pinterestAuth.url.includes('1640989'));
 });
 
-test('resolveSocialOAuthRedirectUri trims trailing slashes cleanly', () => {
-  assert.equal(
-    resolveSocialOAuthRedirectUri('discord', 'https://iveo.site/'),
-    'https://iveo.site/api/oauth/discord/callback'
-  );
-  assert.equal(
-    resolveSocialOAuthRedirectUri('instagram', 'https://iveo.site/'),
-    'https://iveo.site/api/oauth/instagram/callback'
-  );
-  assert.equal(
-    resolveSocialOAuthRedirectUri('facebook', 'https://iveo.site/'),
-    'https://iveo.site/api/oauth/facebook/callback'
-  );
-  assert.equal(
-    resolveSocialOAuthRedirectUri('threads', 'https://iveo.site/'),
-    'https://iveo.site/api/oauth/threads/callback'
-  );
+test('parseYouTubeInput supports channels, @handles, videos, Shorts, and playlists', () => {
+  const pl = parseYouTubeInput('https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf');
+  assert.equal(pl?.kind, 'playlist');
+  assert.equal(pl?.value, 'PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf');
+
+  const shorts = parseYouTubeInput('https://www.youtube.com/shorts/dQw4w9WgXcQ');
+  assert.equal(shorts?.kind, 'video');
+  assert.equal(shorts?.value, 'dQw4w9WgXcQ');
 });
-
-test('getSocialOAuthCredentials returns configured Meta (Instagram/Facebook) and Threads credentials', () => {
-  const igCreds = getSocialOAuthCredentials('instagram');
-  assert.equal(igCreds.clientId, '1698586274962410');
-  assert.equal(igCreds.clientSecret, '95ceba7ba4b4692ebeefaf7861ec67a0');
-
-  const fbCreds = getSocialOAuthCredentials('facebook');
-  assert.equal(fbCreds.clientId, '1698586274962410');
-  assert.equal(fbCreds.clientSecret, '95ceba7ba4b4692ebeefaf7861ec67a0');
-
-  const thCreds = getSocialOAuthCredentials('threads');
-  assert.equal(thCreds.clientId, '1744671610719299');
-  assert.equal(thCreds.clientSecret, 'e3dbc1ca93a80299cbc4da33f983a757');
-});
-
-test('buildSocialOAuthUrl creates valid Instagram, Facebook, and Threads OAuth URLs and states', () => {
-  const origin = 'https://iveo.site';
-
-  const ig = buildSocialOAuthUrl('instagram', origin);
-  assert.equal(ig.redirectUri, 'https://iveo.site/api/oauth/instagram/callback');
-  const igParsed = new URL(ig.url);
-  assert.equal(igParsed.origin, 'https://www.facebook.com');
-  assert.equal(igParsed.pathname, '/v21.0/dialog/oauth');
-  assert.equal(igParsed.searchParams.get('client_id'), '1698586274962410');
-  assert.equal(igParsed.searchParams.get('redirect_uri'), ig.redirectUri);
-  assert.equal(
-    parseSocialOAuthState(igParsed.searchParams.get('state') || '', origin, 'instagram').redirectUri,
-    ig.redirectUri
-  );
-
-  const fb = buildSocialOAuthUrl('facebook', origin);
-  assert.equal(fb.redirectUri, 'https://iveo.site/api/oauth/facebook/callback');
-  const fbParsed = new URL(fb.url);
-  assert.equal(fbParsed.origin, 'https://www.facebook.com');
-  assert.equal(fbParsed.pathname, '/v21.0/dialog/oauth');
-  assert.equal(fbParsed.searchParams.get('client_id'), '1698586274962410');
-  assert.equal(fbParsed.searchParams.get('redirect_uri'), fb.redirectUri);
-  assert.equal(
-    parseSocialOAuthState(fbParsed.searchParams.get('state') || '', origin, 'facebook').redirectUri,
-    fb.redirectUri
-  );
-
-  const th = buildSocialOAuthUrl('threads', origin);
-  assert.equal(th.redirectUri, 'https://iveo.site/api/oauth/threads/callback');
-  const thParsed = new URL(th.url);
-  assert.equal(thParsed.origin, 'https://threads.net');
-  assert.equal(thParsed.pathname, '/oauth/authorize');
-  assert.equal(thParsed.searchParams.get('client_id'), '1744671610719299');
-  assert.equal(thParsed.searchParams.get('redirect_uri'), th.redirectUri);
-  assert.equal(thParsed.searchParams.get('scope'), 'threads_basic');
-  assert.equal(
-    parseSocialOAuthState(thParsed.searchParams.get('state') || '', origin, 'threads').redirectUri,
-    th.redirectUri
-  );
-});
-

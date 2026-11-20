@@ -430,6 +430,48 @@ const PROVIDER_LOOKS: Record<EmbedProvider, EmbedLookOption[]> = {
       swatchText: '#18181B',
     },
   ],
+  pinterest: [
+    {
+      id: 'signature',
+      label: 'Pinterest Pinboard',
+      description: 'Crisp editorial card with signature Pinterest crimson pin CTA',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#E60023',
+      swatchText: '#111111',
+    },
+    {
+      id: 'spotlight',
+      label: 'Visual Moodboard',
+      description: 'Featured pin or board artwork banner with save badge',
+      swatchBg: '#FFF5F6',
+      swatchAccent: '#E60023',
+      swatchText: '#111111',
+    },
+    {
+      id: 'glass',
+      label: 'Frosted Board',
+      description: 'Translucent glass pin card blending into your page backdrop',
+      swatchBg: 'rgba(230, 0, 35, 0.12)',
+      swatchAccent: '#E60023',
+      swatchText: '#0A0A0A',
+    },
+    {
+      id: 'minimal',
+      label: 'Compact Pin Bar',
+      description: 'Clean single-row board or pin link with crimson badge',
+      swatchBg: '#FFFFFF',
+      swatchAccent: '#E60023',
+      swatchText: '#111111',
+    },
+    {
+      id: 'theme',
+      label: 'Match Page Vibe',
+      description: 'Follows your selected Vibe colors & button borders',
+      swatchBg: '#F4F4F5',
+      swatchAccent: '#18181B',
+      swatchText: '#18181B',
+    },
+  ],
 };
 
 export function getEmbedLookOptions(provider: EmbedProvider): EmbedLookOption[] {
@@ -480,6 +522,8 @@ export function getDefaultEmbedCtaLabel(
       return subtype === 'group' ? 'Join Group' : 'View on Facebook';
     case 'threads':
       return subtype === 'post' ? 'View Thread' : 'Follow';
+    case 'pinterest':
+      return subtype === 'pin' ? 'View Pin' : subtype === 'board' ? 'View Board' : 'Follow';
     case 'youtube':
       return 'Play';
     case 'spotify':
@@ -493,7 +537,7 @@ export function getDefaultEmbedCtaLabel(
 
 export function isSocialEmbedProvider(
   provider: EmbedProvider | string | null | undefined
-): provider is 'discord' | 'github' | 'linkedin' | 'x' | 'instagram' | 'facebook' | 'threads' {
+): provider is 'discord' | 'github' | 'linkedin' | 'x' | 'instagram' | 'facebook' | 'threads' | 'pinterest' {
   return (
     provider === 'discord' ||
     provider === 'github' ||
@@ -501,6 +545,7 @@ export function isSocialEmbedProvider(
     provider === 'x' ||
     provider === 'instagram' ||
     provider === 'facebook' ||
-    provider === 'threads'
+    provider === 'threads' ||
+    provider === 'pinterest'
   );
 }

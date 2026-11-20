@@ -55,7 +55,7 @@ import { PasswordSection } from '../links/PasswordSection';
 import { EmbedComposer } from '../links/EmbedComposer';
 import { SocialEmbedComposer } from '../links/SocialEmbedComposer';
 import { EmbedLookSelector } from '../links/EmbedLookSelector';
-import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph } from '../page/EmbedBlock';
+import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph, PinterestGlyph } from '../page/EmbedBlock';
 import { isSocialEmbedProvider } from '../../lib/embedLooks';
 import { SignupComposer } from '../links/SignupComposer';
 import { TipJarComposer } from '../links/TipJarComposer';
@@ -129,6 +129,8 @@ function getBlockTypeChip(block: Block, hasBothSupportTypes: boolean): string | 
           return 'Facebook';
         case 'threads':
           return 'Threads';
+        case 'pinterest':
+          return 'Pinterest';
         case 'spotify':
           return 'Spotify';
         case 'soundcloud':
@@ -299,6 +301,7 @@ export const LinksTab: React.FC = () => {
     | 'embed_instagram'
     | 'embed_facebook'
     | 'embed_threads'
+    | 'embed_pinterest'
     | 'signup'
     | 'header'
     | 'tip_jar'
@@ -319,6 +322,12 @@ export const LinksTab: React.FC = () => {
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkTitleManuallyEdited, setNewLinkTitleManuallyEdited] = useState(false);
   const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkEnrichMeta, setNewLinkEnrichMeta] = useState<{
+    title?: string | null;
+    subtitle?: string | null;
+    thumbnailUrl?: string | null;
+  } | null>(null);
+  const [isAddingLink, setIsAddingLink] = useState(false);
   const [newHeaderTitle, setNewHeaderTitle] = useState('');
   const [composerError, setComposerError] = useState<string | null>(null);
 
@@ -421,9 +430,10 @@ export const LinksTab: React.FC = () => {
     return getFilterGroup(b.kind) === filterCategory;
   });
 
-  // Auto-suggest platform name in Quick Link composer when URL changes
+  // Auto-suggest platform name & enrich social links via API/tokens when URL changes
   const handleNewLinkUrlChange = (val: string) => {
     setNewLinkUrl(val);
+    setNewLinkEnrichMeta(null);
     if (!newLinkTitleManuallyEdited) {
       const detected = detectPlatformFromUrl(val);
       if (detected) {
@@ -431,6 +441,48 @@ export const LinksTab: React.FC = () => {
       }
     }
   };
+
+  useEffect(() => {
+    if (activeComposer !== 'link') return;
+    const raw = newLinkUrl.trim();
+    if (!raw) {
+      setNewLinkEnrichMeta(null);
+      return;
+    }
+    const detected = detectPlatformFromUrl(raw);
+    const parsedEmbed = parseEmbedUrl(raw);
+    if (!detected && !parsedEmbed) {
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/integrations/embed?url=${encodeURIComponent(parsedEmbed?.canonicalUrl || raw)}`,
+          { signal: AbortSignal.timeout(3000) }
+        );
+        const data = await res.json().catch(() => null);
+        const resolved = data?.embed || data?.embedMeta;
+        if (!cancelled && res.ok && data?.ok && resolved) {
+          const artwork = resolved.avatarUrl || resolved.coverUrl || null;
+          setNewLinkEnrichMeta({
+            title: resolved.title || null,
+            subtitle: resolved.subtitle || null,
+            thumbnailUrl: artwork,
+          });
+          if (!newLinkTitleManuallyEdited && resolved.title) {
+            setNewLinkTitle(String(resolved.title).slice(0, 80));
+          }
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    }, 320);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [activeComposer, newLinkUrl, newLinkTitleManuallyEdited]);
 
   // Composer opening handlers
   const handleOpenComposer = (type: ComposerType) => {
@@ -453,28 +505,60 @@ export const LinksTab: React.FC = () => {
     setNewLinkTitle('');
     setNewLinkTitleManuallyEdited(false);
     setNewLinkUrl('');
+    setNewLinkEnrichMeta(null);
     setNewHeaderTitle('');
     setComposerError(null);
   };
 
   const handleCreateLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLinkUrl.trim()) {
+    const rawUrl = newLinkUrl.trim();
+    if (!rawUrl) {
       setComposerError('URL is required.');
       return;
     }
-    const detected = detectPlatformFromUrl(newLinkUrl.trim());
-    const finalTitle = newLinkTitle.trim() || detected?.name || '';
-    if (!finalTitle) {
-      setComposerError('Title is required.');
-      return;
-    }
+    const detected = detectPlatformFromUrl(rawUrl);
+    const parsedSocial = parseEmbedUrl(rawUrl);
+    let resolvedTitle = newLinkTitle.trim() || newLinkEnrichMeta?.title || detected?.name || '';
+    let resolvedThumb: string | null = newLinkEnrichMeta?.thumbnailUrl || null;
 
+    setIsAddingLink(true);
     try {
-      await addLink(finalTitle, newLinkUrl.trim());
+      if ((detected || parsedSocial) && (!resolvedThumb || !newLinkEnrichMeta)) {
+        try {
+          const res = await fetch(
+            `/api/integrations/embed?url=${encodeURIComponent(parsedSocial?.canonicalUrl || rawUrl)}`,
+            { signal: AbortSignal.timeout(2500) }
+          );
+          const data = await res.json().catch(() => null);
+          const meta = data?.embed || data?.embedMeta;
+          if (res.ok && data?.ok && meta) {
+            if (!resolvedThumb) {
+              resolvedThumb = meta.avatarUrl || meta.coverUrl || null;
+            }
+            if (!newLinkTitleManuallyEdited && meta.title) {
+              resolvedTitle = String(meta.title).slice(0, 80);
+            }
+          }
+        } catch {
+          // Non-blocking fallback
+        }
+      }
+
+      if (!resolvedTitle) {
+        setComposerError('Title is required.');
+        setIsAddingLink(false);
+        return;
+      }
+
+      await addLink(rawUrl ? resolvedTitle : resolvedTitle, rawUrl, {
+        thumbnailUrl: resolvedThumb,
+      });
       handleCloseComposer();
     } catch {
       setComposerError("Couldn't add link. Try again.");
+    } finally {
+      setIsAddingLink(false);
     }
   };
 
@@ -557,17 +641,27 @@ export const LinksTab: React.FC = () => {
       }
     } else if (block.kind === 'embed') {
       const parsed = parseEmbedUrl(editUrl.trim());
-      if (!parsed) {
-        setEditError('Use a YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, or X link.');
+      const isConnectedSpotifyProfile = Boolean(
+        (editEmbedMeta?.connectedViaOAuth || block.embedMeta?.connectedViaOAuth) &&
+          (editEmbedMeta?.provider === 'spotify' || block.embedProvider === 'spotify') &&
+          /^https?:\/\/open\.spotify\.com\/user\//i.test(editUrl.trim())
+      );
+
+      if (!parsed && !isConnectedSpotifyProfile) {
+        setEditError(
+          'Use a YouTube, Spotify, SoundCloud, Discord, GitHub, LinkedIn, X, Instagram, Facebook, Threads, or Pinterest link.'
+        );
         return;
       }
 
-      const urlChanged = parsed.canonicalUrl !== (block.url || '');
+      const nextUrl = parsed?.canonicalUrl || editUrl.trim();
+      const nextProvider = parsed?.provider || 'spotify';
+      const urlChanged = nextUrl !== (block.url || '');
       let nextEmbedMeta: EmbedMetaData | null = editEmbedMeta || block.embedMeta || null;
-      if (urlChanged) {
+      if (urlChanged && parsed) {
         try {
           const res = await fetch(
-            `/api/integrations/embed?url=${encodeURIComponent(parsed.canonicalUrl)}`
+            `/api/integrations/embed?url=${encodeURIComponent(nextUrl)}`
           );
           const data = await res.json().catch(() => null);
           const resolvedMeta = data?.embed || data?.embedMeta;
@@ -588,8 +682,8 @@ export const LinksTab: React.FC = () => {
       try {
         await updateBlock(block.id, {
           title: editTitle.trim(),
-          url: parsed.canonicalUrl,
-          embedProvider: parsed.provider,
+          url: nextUrl,
+          embedProvider: nextProvider,
           embedMeta: nextEmbedMeta,
           startAt: editStartAt,
           endAt: editEndAt,
@@ -828,6 +922,27 @@ export const LinksTab: React.FC = () => {
               </div>
             </div>
 
+            {newLinkEnrichMeta?.thumbnailUrl && (
+              <div className="flex items-center gap-2.5 p-2 rounded-[10px] bg-surface-2/70 border border-border text-[12px]">
+                <img
+                  src={newLinkEnrichMeta.thumbnailUrl}
+                  alt={newLinkEnrichMeta.title || 'Preview'}
+                  referrerPolicy="no-referrer"
+                  className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-ink truncate">
+                    {newLinkEnrichMeta.title || 'Social link detected'}
+                  </div>
+                  {newLinkEnrichMeta.subtitle && (
+                    <div className="text-[11px] text-muted truncate">
+                      {newLinkEnrichMeta.subtitle}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {composerError && (
               <p className="text-[13px] text-[color:var(--error,#B3261E)] font-medium" role="alert">
                 {composerError}
@@ -835,8 +950,8 @@ export const LinksTab: React.FC = () => {
             )}
 
             <div className="flex items-center gap-2">
-              <Button type="submit" variant="primary" size="md">
-                Add to page
+              <Button type="submit" variant="primary" size="md" disabled={isAddingLink}>
+                {isAddingLink ? 'Adding...' : 'Add to page'}
               </Button>
               <Button type="button" variant="ghost" size="md" onClick={handleCloseComposer}>
                 Cancel
@@ -874,7 +989,8 @@ export const LinksTab: React.FC = () => {
         activeComposer === 'embed_x' ||
         activeComposer === 'embed_instagram' ||
         activeComposer === 'embed_facebook' ||
-        activeComposer === 'embed_threads') && (
+        activeComposer === 'embed_threads' ||
+        activeComposer === 'embed_pinterest') && (
         <SocialEmbedComposer
           initialProvider={
             activeComposer.replace('embed_', '') as
@@ -885,6 +1001,7 @@ export const LinksTab: React.FC = () => {
               | 'instagram'
               | 'facebook'
               | 'threads'
+              | 'pinterest'
           }
           onAdd={async ({ url, caption, provider, embedMeta }) => {
             await addEmbed(url, caption, provider, embedMeta);
@@ -1193,6 +1310,12 @@ export const LinksTab: React.FC = () => {
                   return (
                     <span className="text-ink flex items-center justify-center">
                       <ThreadsGlyph size={18} />
+                    </span>
+                  );
+                case 'pinterest':
+                  return (
+                    <span className="text-[#E60023] flex items-center justify-center">
+                      <PinterestGlyph size={18} />
                     </span>
                   );
                 default:

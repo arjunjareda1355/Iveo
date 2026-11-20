@@ -46,8 +46,19 @@ export const EmbedLookSelector: React.FC<EmbedLookSelectorProps> = ({
             Card look &amp; style
           </span>
         </div>
-        <span className="text-[11px] font-medium text-muted capitalize">
-          {provider === 'x' ? 'X' : provider} preset
+        <span className="text-[11px] font-medium text-muted">
+          {provider === 'x'
+            ? 'X'
+            : provider === 'github'
+              ? 'GitHub'
+              : provider === 'linkedin'
+                ? 'LinkedIn'
+                : provider === 'youtube'
+                  ? 'YouTube'
+                  : provider === 'soundcloud'
+                    ? 'SoundCloud'
+                    : provider.charAt(0).toUpperCase() + provider.slice(1)}{' '}
+          preset
         </span>
       </div>
 

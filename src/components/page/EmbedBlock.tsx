@@ -61,6 +61,12 @@ export const ThreadsGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
   </svg>
 );
 
+export const PinterestGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12Z" />
+  </svg>
+);
+
 function buildAutoplayEmbedUrl(embedSrc: string, provider: string): string {
   if (provider === 'youtube') {
     let next = embedSrc.includes('?') ? `${embedSrc}&autoplay=1` : `${embedSrc}?autoplay=1`;
@@ -117,6 +123,7 @@ function getProviderPalette(
       instagram: '#E1306C',
       facebook: '#1877F2',
       threads: '#101010',
+      pinterest: '#E60023',
       youtube: '#FF0000',
       spotify: '#1DB954',
       soundcloud: '#FF5500',
@@ -143,6 +150,7 @@ function getProviderPalette(
       instagram: '#E1306C',
       facebook: '#1877F2',
       threads: '#101010',
+      pinterest: '#E60023',
       youtube: '#FF0000',
       spotify: '#1DB954',
       soundcloud: '#FF5500',
@@ -329,6 +337,30 @@ function getProviderPalette(
             badgeText: '#E5E5E5',
             bannerGradient: '#101010',
           };
+    case 'pinterest':
+      return look === 'spotlight'
+        ? {
+            bg: '#FFF8F8',
+            text: '#111827',
+            muted: '#6B7280',
+            border: '#FECDD3',
+            accent: '#E60023',
+            accentText: '#FFFFFF',
+            badgeBg: '#FFE4E6',
+            badgeText: '#BE123C',
+            bannerGradient: 'linear-gradient(135deg, #E60023 0%, #9F1239 100%)',
+          }
+        : {
+            bg: '#FFFFFF',
+            text: '#111827',
+            muted: '#6B7280',
+            border: '#F3E5E7',
+            accent: '#E60023',
+            accentText: '#FFFFFF',
+            badgeBg: '#FFF1F2',
+            badgeText: '#BE123C',
+            bannerGradient: '#E60023',
+          };
     case 'youtube':
       return {
         bg: '#0F0F0F',
@@ -397,10 +429,15 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   const provider = parsed?.provider || block.embedProvider || 'youtube';
   const meta = block.embedMeta;
   const [avatarError, setAvatarError] = useState(false);
+  const [coverError, setCoverError] = useState(false);
 
   useEffect(() => {
     setAvatarError(false);
   }, [meta?.avatarUrl]);
+
+  useEffect(() => {
+    setCoverError(false);
+  }, [meta?.coverUrl]);
 
   const isSocialCardProvider =
     provider === 'discord' ||
@@ -409,7 +446,8 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
     provider === 'x' ||
     provider === 'instagram' ||
     provider === 'facebook' ||
-    provider === 'threads';
+    provider === 'threads' ||
+    provider === 'pinterest';
 
   const lookStyle = normalizeEmbedLookStyle(meta?.lookStyle, 'signature');
   const showDescription = meta?.showDescription !== false;
@@ -434,7 +472,9 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
                     ? 'Facebook'
                     : provider === 'threads'
                       ? 'Threads'
-                      : 'X';
+                      : provider === 'pinterest'
+                        ? 'Pinterest'
+                        : 'X';
 
   const renderProviderGlyph = (iconSize: number) => {
     switch (provider) {
@@ -458,6 +498,8 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         return <FacebookGlyph size={Math.max(13, iconSize - 1)} />;
       case 'threads':
         return <ThreadsGlyph size={Math.max(13, iconSize - 1)} />;
+      case 'pinterest':
+        return <PinterestGlyph size={Math.max(13, iconSize - 1)} />;
       default:
         return <Globe size={iconSize} strokeWidth={1.7} />;
     }
@@ -739,6 +781,26 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
             )}
           </div>
 
+          {meta?.coverUrl && !coverError && (
+            <div
+              className="w-full overflow-hidden border border-current/10 bg-black/5"
+              style={{
+                borderRadius: `${Math.max(8, cardRadius - 4)}px`,
+                maxHeight: `${Math.round(132 * scale)}px`,
+              }}
+            >
+              <img
+                src={meta.coverUrl}
+                alt={cardTitle}
+                referrerPolicy="no-referrer"
+                loading="lazy"
+                onError={() => setCoverError(true)}
+                className="w-full h-full object-cover"
+                style={{ maxHeight: `${Math.round(132 * scale)}px` }}
+              />
+            </div>
+          )}
+
           {cardDesc && (
             <p
               className={`line-clamp-2 leading-snug ${
@@ -899,17 +961,31 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div
-            className="rounded-full flex items-center justify-center shrink-0"
-            style={{
-              width: `${Math.round(34 * scale)}px`,
-              height: `${Math.round(34 * scale)}px`,
-              backgroundColor: palette.accent,
-              color: palette.accentText,
-            }}
-          >
-            {renderProviderGlyph(Math.round(16 * scale))}
-          </div>
+          {(meta?.coverUrl || meta?.avatarUrl) && !avatarError ? (
+            <img
+              src={meta?.coverUrl || meta?.avatarUrl || ''}
+              alt={mediaTitle}
+              referrerPolicy="no-referrer"
+              onError={() => setAvatarError(true)}
+              className="rounded-[8px] object-cover border border-black/10 shrink-0"
+              style={{
+                width: `${Math.round(36 * scale)}px`,
+                height: `${Math.round(36 * scale)}px`,
+              }}
+            />
+          ) : (
+            <div
+              className="rounded-full flex items-center justify-center shrink-0"
+              style={{
+                width: `${Math.round(34 * scale)}px`,
+                height: `${Math.round(34 * scale)}px`,
+                backgroundColor: palette.accent,
+                color: palette.accentText,
+              }}
+            >
+              {renderProviderGlyph(Math.round(16 * scale))}
+            </div>
+          )}
           <div className="min-w-0">
             <div
               className="font-semibold truncate leading-tight"
@@ -978,11 +1054,12 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
   // Rich Media Facade (placeholder OR live before user presses play)
   const renderMediaArtworkHeader = () => {
-    if (lookStyle === 'spotlight' && meta?.avatarUrl && !avatarError) {
+    const artwork = meta?.coverUrl || meta?.avatarUrl;
+    if (lookStyle === 'spotlight' && artwork && !avatarError) {
       return (
         <div
           className="absolute inset-0 bg-cover bg-center opacity-30 pointer-events-none"
-          style={{ backgroundImage: `url(${meta.avatarUrl})` }}
+          style={{ backgroundImage: `url(${artwork})` }}
           aria-hidden="true"
         />
       );

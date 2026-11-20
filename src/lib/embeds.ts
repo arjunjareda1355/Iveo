@@ -43,7 +43,8 @@ export interface ParsedEmbed {
     | 'x'
     | 'instagram'
     | 'facebook'
-    | 'threads';
+    | 'threads'
+    | 'pinterest';
   canonicalUrl: string;
   embedSrc: string;
   label: string;
@@ -526,6 +527,75 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
           subtype: 'profile',
         };
       }
+    }
+    return null;
+  }
+
+  // 11. Pinterest pin, board, or profile (pinterest.* and pin.it)
+  const isPinterestHost =
+    host === 'pin.it' ||
+    host === 'www.pin.it' ||
+    /^(?:[a-z0-9-]+\.)?pinterest\.(?:com|co\.uk|ca|de|fr|jp|com\.au|in|es|it|at|ch|nl|se|dk|no|nz|ie|pt|ph|cl|co|mx|ar|pe|com\.mx|co\.kr|ru|pl)$/i.test(
+      host
+    );
+  if (isPinterestHost) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (host.endsWith('pin.it') && segments[0] && SAFE_SEGMENT_REGEX.test(segments[0])) {
+      const canonicalUrl = `https://pin.it/${segments[0]}`;
+      return {
+        provider: 'pinterest',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Pinterest pin',
+        height: null,
+        aspect: null,
+        identifier: segments[0],
+        subtype: 'pin',
+      };
+    }
+    if (segments[0]?.toLowerCase() === 'pin' && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const pinId = segments[1];
+      const canonicalUrl = `https://www.pinterest.com/pin/${pinId}/`;
+      return {
+        provider: 'pinterest',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Pinterest pin',
+        height: null,
+        aspect: null,
+        identifier: pinId,
+        subtype: 'pin',
+      };
+    }
+    const ignored = new Set(['ideas', 'today', 'explore', 'search', 'settings', 'business', 'login', '_']);
+    if (segments.length >= 2 && !ignored.has(segments[0].toLowerCase()) && SAFE_SEGMENT_REGEX.test(segments[0]) && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const user = segments[0].replace(/^@+/, '');
+      const board = segments[1];
+      const canonicalUrl = `https://www.pinterest.com/${user}/${board}/`;
+      return {
+        provider: 'pinterest',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Pinterest board',
+        height: null,
+        aspect: null,
+        identifier: `${user}/${board}`,
+        subtype: 'board',
+      };
+    }
+    if (segments.length === 1 && !ignored.has(segments[0].toLowerCase()) && SAFE_SEGMENT_REGEX.test(segments[0])) {
+      const user = segments[0].replace(/^@+/, '');
+      const canonicalUrl = `https://www.pinterest.com/${user}/`;
+      return {
+        provider: 'pinterest',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Pinterest profile',
+        height: null,
+        aspect: null,
+        identifier: user,
+        subtype: 'profile',
+      };
     }
     return null;
   }

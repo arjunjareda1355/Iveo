@@ -5,7 +5,7 @@ import { Card } from '../ui/Card';
 import { parseEmbedUrl, ParsedEmbed } from '../../lib/embeds';
 import { EmbedLookStyle, EmbedMetaData, EmbedProvider } from '../../data/types';
 import { EmbedLookSelector } from './EmbedLookSelector';
-import { EmbedBlock, DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph } from '../page/EmbedBlock';
+import { EmbedBlock, DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph, PinterestGlyph } from '../page/EmbedBlock';
 import { VIBES } from '../../lib/vibes';
 import { normalizeEmbedLookStyle } from '../../lib/embedLooks';
 
@@ -16,7 +16,8 @@ export type SocialEmbedProvider =
   | 'x'
   | 'instagram'
   | 'facebook'
-  | 'threads';
+  | 'threads'
+  | 'pinterest';
 
 interface SocialEmbedComposerProps {
   initialProvider: SocialEmbedProvider;
@@ -102,6 +103,14 @@ const PROVIDER_META: Record<
     accentBg: 'bg-[#101010] hover:bg-neutral-800',
     accentText: 'text-white',
   },
+  pinterest: {
+    name: 'Pinterest',
+    oauthLabel: 'Connect Pinterest',
+    placeholder: 'https://www.pinterest.com/username/ or /pin/... or /board/...',
+    hint: 'Connect Pinterest via OAuth, import via API token, or paste any pin, board, or profile URL.',
+    accentBg: 'bg-[#E60023] hover:bg-[#AD081B]',
+    accentText: 'text-white',
+  },
 };
 
 export const SocialEmbedComposer: React.FC<SocialEmbedComposerProps> = ({
@@ -181,6 +190,7 @@ export const SocialEmbedComposer: React.FC<SocialEmbedComposerProps> = ({
           subtitle: em.subtitle || null,
           description: em.description || null,
           avatarUrl: em.avatarUrl || null,
+          coverUrl: em.coverUrl || null,
           statsLabel: em.statsLabel || null,
           badgeText: em.badgeText || em.badge || null,
           handle: em.handle || null,
@@ -322,6 +332,39 @@ export const SocialEmbedComposer: React.FC<SocialEmbedComposerProps> = ({
     }
   };
 
+  const handleImportPinterestToken = async () => {
+    setError(null);
+    setIsConnecting(true);
+    try {
+      const res = await fetch('/api/integrations/pinterest/me');
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok || !data?.embed) {
+        setError(data?.message || 'Could not load Pinterest account via token.');
+        return;
+      }
+      const em = data.embed as EmbedMetaData & { url?: string };
+      if (em.url) {
+        setUrlInput(em.url);
+        const p = parseEmbedUrl(em.url);
+        setParsed(p);
+        if (p) lastFetchedUrlRef.current = p.canonicalUrl;
+      }
+      setEmbedMeta({
+        ...em,
+        provider: 'pinterest',
+        connectedViaOAuth: true,
+        fetchedAt: em.fetchedAt || new Date().toISOString(),
+      });
+      if (!captionInput.trim() && em.title) {
+        setCaptionInput(em.title.slice(0, 60));
+      }
+    } catch {
+      setError('Failed to import Pinterest account details.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const raw = urlInput.trim();
@@ -383,6 +426,8 @@ export const SocialEmbedComposer: React.FC<SocialEmbedComposerProps> = ({
         return <FacebookGlyph size={size - 1} />;
       case 'threads':
         return <ThreadsGlyph size={size - 1} />;
+      case 'pinterest':
+        return <PinterestGlyph size={size - 1} />;
     }
   };
 
@@ -460,6 +505,18 @@ export const SocialEmbedComposer: React.FC<SocialEmbedComposerProps> = ({
             </span>
             {!isConnecting && <ExternalLink size={12} className="opacity-80" />}
           </button>
+
+          {initialProvider === 'pinterest' && (
+            <button
+              type="button"
+              onClick={handleImportPinterestToken}
+              disabled={isConnecting || isSubmitting}
+              className="inline-flex items-center justify-center gap-1.5 h-10 px-3.5 rounded-[10px] border border-border bg-surface hover:bg-surface-2 text-[13px] font-medium text-ink transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Sparkles size={13} />
+              <span>Import Pinterest account</span>
+            </button>
+          )}
 
           {embedMeta?.connectedViaOAuth && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-semibold">

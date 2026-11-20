@@ -23,6 +23,7 @@ import {
   handleYouTubeOAuthUrl,
   handleYouTubeOAuthCallback,
   handleSocialEmbedLookup,
+  handlePinterestTokenProfile,
   handleSocialOAuthUrl,
   handleSocialOAuthCallback,
   handleGetSubscription,
@@ -92,6 +93,8 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleYouTubeShowcase(req, res);
     case 'embed':
       return handleSocialEmbedLookup(req, res);
+    case 'pinterest-me':
+      return handlePinterestTokenProfile(req, res);
     case 'oauth-youtube-url':
       return handleYouTubeOAuthUrl(req, res);
     case 'oauth-youtube-callback':

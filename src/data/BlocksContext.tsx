@@ -37,7 +37,7 @@ import {
 interface BlocksContextValue {
   blocks: Block[];
   isLoading: boolean;
-  addLink: (title: string, url: string) => Promise<void>;
+  addLink: (title: string, url: string, options?: { thumbnailUrl?: string | null }) => Promise<void>;
   addEmbed: (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
@@ -130,13 +130,14 @@ export const BlocksProvider: React.FC<{
     fetchBlocks();
   }, [fetchBlocks]);
 
-  const addLink = async (title: string, url: string) => {
+  const addLink = async (title: string, url: string, options?: { thumbnailUrl?: string | null }) => {
     const prev = [...blocks];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'link',
         title,
         url,
+        thumbnailUrl: options?.thumbnailUrl ?? null,
         layout: 'classic',
         position: blocks.length,
       }, authCtx);

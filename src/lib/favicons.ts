@@ -169,6 +169,12 @@ export function detectPlatformFromUrl(
   if (host === 'threads.net' || host === 'threads.com') {
     return { id: 'threads', name: 'Threads', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
   }
+  if (host === 'facebook.com' || host === 'fb.com' || host === 'fb.me') {
+    return { id: 'facebook', name: 'Facebook', handle: firstSeg || null };
+  }
+  if (host === 'pin.it' || host === 'pinterest.com' || host.endsWith('.pinterest.com')) {
+    return { id: 'pinterest', name: 'Pinterest', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
+  }
   if (host === 'twitch.tv') {
     return { id: 'twitch', name: 'Twitch', handle: firstSeg || null };
   }

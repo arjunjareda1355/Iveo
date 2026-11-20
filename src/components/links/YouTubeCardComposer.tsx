@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Youtube, RefreshCw, CheckCircle2, Play, ExternalLink, Sparkles } from 'lucide-react';
+import { Youtube, RefreshCw, CheckCircle2, Link2, Film, ExternalLink } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Toggle } from '../ui/Toggle';
 import { normalizeYouTubeUrl } from '../../lib/urls';
 import { YouTubeData } from '../../data/types';
+import { YouTubeShowcaseCard } from '../page/ShowcaseBlocks';
+import { VIBES } from '../../lib/vibes';
+
+type ShowcaseSourceMode = 'channel' | 'video' | 'google';
 
 interface YouTubeCardComposerProps {
   onAdd: (data: {
@@ -23,6 +28,20 @@ interface YouTubeCardComposerProps {
   isEditing?: boolean;
 }
 
+function detectInitialMode(url?: string, connected?: boolean): ShowcaseSourceMode {
+  if (connected && !url) return 'google';
+  const lower = (url || '').toLowerCase();
+  if (
+    lower.includes('watch?v=') ||
+    lower.includes('youtu.be/') ||
+    lower.includes('/shorts/') ||
+    lower.includes('/playlist?')
+  ) {
+    return 'video';
+  }
+  return 'channel';
+}
+
 export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   onAdd,
   onCancel,
@@ -30,11 +49,12 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   initialValues,
   isEditing = false,
 }) => {
-  const [url, setUrl] = useState(initialValues?.url || '');
-  const [title, setTitle] = useState(initialValues?.title || 'YouTube Channel');
-  const [caption, setCaption] = useState(
-    initialValues?.badge || 'Subscribe for weekly videos & tutorials'
+  const [sourceMode, setSourceMode] = useState<ShowcaseSourceMode>(() =>
+    detectInitialMode(initialValues?.url, initialValues?.youtube?.connectedViaOAuth)
   );
+  const [url, setUrl] = useState(initialValues?.url || '');
+  const [title, setTitle] = useState(initialValues?.title || '');
+  const [caption, setCaption] = useState(initialValues?.badge || '');
   const [buttonLabel, setButtonLabel] = useState(
     initialValues?.youtube?.buttonLabel || 'Subscribe'
   );
@@ -46,13 +66,12 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const lastFetchedUrlRef = useRef<string>(
     initialValues?.youtube ? normalizeYouTubeUrl(initialValues.url || '') || '' : ''
   );
-  const lastAutoTitleRef = useRef<string>(initialValues?.title || 'YouTube Channel');
-  const lastAutoCaptionRef = useRef<string>(
-    initialValues?.badge || 'Subscribe for weekly videos & tutorials'
-  );
+  const lastAutoTitleRef = useRef<string>(initialValues?.title || '');
+  const lastAutoCaptionRef = useRef<string>(initialValues?.badge || '');
 
   const mapServerChannelToYouTubeData = (
     ch: any,
@@ -90,20 +109,25 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
         const mapped = mapServerChannelToYouTubeData(ch, { forceLatestToggle: true });
         setYtData(mapped);
         setShowLatestVideo(true);
-        const resolvedUrl = ch.channelUrl ? normalizeYouTubeUrl(ch.channelUrl) || ch.channelUrl : '';
+        const resolvedUrl = ch.channelUrl
+          ? normalizeYouTubeUrl(ch.channelUrl) || ch.channelUrl
+          : '';
         if (resolvedUrl) {
           setUrl(resolvedUrl);
           lastFetchedUrlRef.current = resolvedUrl;
         }
-        if (ch.channelTitle) setTitle(ch.channelTitle);
-        if (ch.subscriberCountText) {
-          setCaption(`${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ''}`);
-        } else if (ch.handle) {
-          setCaption(`${ch.handle} · Subscribe on YouTube`);
+        if (ch.channelTitle) {
+          setTitle(ch.channelTitle);
+          lastAutoTitleRef.current = ch.channelTitle;
         }
-        setStatusMessage(
-          `Connected via Google: ${ch.channelTitle || ch.handle || 'YouTube Channel'}`
-        );
+        const nextCaption = ch.subscriberCountText
+          ? `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ''}`
+          : ch.handle || '';
+        if (nextCaption) {
+          setCaption(nextCaption);
+          lastAutoCaptionRef.current = nextCaption;
+        }
+        setStatusMessage(`Connected ${ch.channelTitle || ch.handle || 'YouTube channel'}`);
         setError(null);
         setIsConnectingGoogle(false);
       } else if (payload.type === 'IVEO_YOUTUBE_OAUTH_ERROR') {
@@ -112,10 +136,7 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
       }
     };
 
-    const handleMessage = (event: MessageEvent) => {
-      applyOAuthPayload(event.data);
-    };
-
+    const handleMessage = (event: MessageEvent) => applyOAuthPayload(event.data);
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'iveo_yt_oauth_result' && event.newValue) {
         try {
@@ -165,12 +186,11 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
         'width=540,height=680,menubar=no,toolbar=no,status=no'
       );
       if (!popup) {
-        setError('Please allow popups in your browser to connect your Google YouTube channel.');
+        setError('Allow popups in your browser to connect your Google YouTube channel.');
         setIsConnectingGoogle(false);
         return;
       }
 
-      // Reset spinner if user closes popup manually without completing auth
       const checkClosed = setInterval(() => {
         if (popup.closed) {
           clearInterval(checkClosed);
@@ -186,7 +206,11 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
   const handleFetchChannel = async () => {
     const clean = url.trim();
     if (!clean) {
-      setError('Enter a YouTube @handle, channel URL, or video link first.');
+      setError(
+        sourceMode === 'video'
+          ? 'Paste a YouTube video, Shorts, or playlist URL.'
+          : 'Enter a YouTube @handle or channel URL.'
+      );
       return;
     }
 
@@ -201,7 +225,7 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
       );
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.channel) {
-        setError(data?.message || 'Could not find channel details for this YouTube link.');
+        setError(data?.message || 'Could not find YouTube details for that link.');
         return;
       }
 
@@ -213,27 +237,22 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
       lastFetchedUrlRef.current = nextUrl;
       setYtData(mapped);
       if (ch.channelUrl) setUrl(nextUrl);
-      if (ch.channelTitle && (!title || title === 'YouTube Channel' || title === lastAutoTitleRef.current)) {
+
+      if (ch.channelTitle && (!title.trim() || title === lastAutoTitleRef.current)) {
         setTitle(ch.channelTitle);
         lastAutoTitleRef.current = ch.channelTitle;
       }
       const fetchedCaption = ch.subscriberCountText
-        ? `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ' · Official Channel'}`
-        : ch.handle
-          ? `${ch.handle} · Subscribe on YouTube`
-          : null;
-      if (
-        fetchedCaption &&
-        (!caption ||
-          caption === 'Subscribe for weekly videos & tutorials' ||
-          caption === lastAutoCaptionRef.current)
-      ) {
+        ? `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ''}`
+        : ch.handle || '';
+      if (fetchedCaption && (!caption.trim() || caption === lastAutoCaptionRef.current)) {
         setCaption(fetchedCaption);
         lastAutoCaptionRef.current = fetchedCaption;
       }
+
       setStatusMessage(
         ch.latestVideos?.length
-          ? `Synced ${ch.channelTitle || 'channel'} + ${ch.latestVideos.length} latest upload${ch.latestVideos.length === 1 ? '' : 's'}`
+          ? `Synced ${ch.channelTitle || 'showcase'} · ${ch.latestVideos.length} video${ch.latestVideos.length === 1 ? '' : 's'}`
           : `Synced ${ch.channelTitle || 'YouTube channel'}`
       );
     } catch {
@@ -249,7 +268,7 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
 
     let normalizedUrl = normalizeYouTubeUrl(url);
     if (!normalizedUrl) {
-      setError('Please enter your YouTube @handle, channel, or video link.');
+      setError('Connect Google or paste a YouTube channel, video, or playlist URL.');
       return;
     }
 
@@ -257,7 +276,6 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
     let finalTitle = title.trim();
     let finalCaption = caption.trim();
 
-    // Auto-sync YouTube metadata on submit if the user hasn't clicked "Fetch Channel" for this URL yet
     if (!finalYt || lastFetchedUrlRef.current !== normalizedUrl) {
       setIsFetching(true);
       try {
@@ -274,27 +292,22 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
             setUrl(normalizedUrl);
           }
           lastFetchedUrlRef.current = normalizedUrl;
-          if (
-            ch.channelTitle &&
-            (!finalTitle || finalTitle === 'YouTube Channel' || finalTitle === lastAutoTitleRef.current)
-          ) {
+          if (ch.channelTitle && (!finalTitle || finalTitle === lastAutoTitleRef.current)) {
             finalTitle = ch.channelTitle;
             lastAutoTitleRef.current = ch.channelTitle;
             setTitle(ch.channelTitle);
           }
-          if (
-            ch.subscriberCountText &&
-            (!finalCaption ||
-              finalCaption === 'Subscribe for weekly videos & tutorials' ||
-              finalCaption === lastAutoCaptionRef.current)
-          ) {
-            finalCaption = `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ' · Official Channel'}`;
-            lastAutoCaptionRef.current = finalCaption;
-            setCaption(finalCaption);
+          const fetchedCaption = ch.subscriberCountText
+            ? `${ch.subscriberCountText}${ch.handle ? ` · ${ch.handle}` : ''}`
+            : ch.handle || '';
+          if (fetchedCaption && (!finalCaption || finalCaption === lastAutoCaptionRef.current)) {
+            finalCaption = fetchedCaption;
+            lastAutoCaptionRef.current = fetchedCaption;
+            setCaption(fetchedCaption);
           }
         }
       } catch {
-        // Proceed gracefully with manual values if offline
+        // Proceed cleanly with manual values
       } finally {
         setIsFetching(false);
       }
@@ -309,7 +322,7 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
 
     try {
       await onAdd({
-        title: finalTitle || 'YouTube Channel',
+        title: finalTitle || finalYt?.channelTitle || 'YouTube Channel',
         url: normalizedUrl,
         badge: finalCaption || undefined,
         youtube: nextYoutube,
@@ -319,100 +332,206 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
     }
   };
 
+  const vibe = VIBES[0];
+  const previewBlock = {
+    id: 'preview-youtube-showcase',
+    kind: 'youtube' as const,
+    title: title.trim() || ytData?.channelTitle || 'YouTube Channel',
+    url: normalizeYouTubeUrl(url) || 'https://youtube.com',
+    icon: null,
+    thumbnailPath: null,
+    thumbnailUrl: null,
+    badge: caption.trim() || null,
+    layout: 'classic' as const,
+    youtube: {
+      ...(ytData || {}),
+      channelTitle: title.trim() || ytData?.channelTitle || 'YouTube Channel',
+      showLatestVideo,
+      buttonLabel: buttonLabel.trim() || 'Subscribe',
+    },
+  };
+
   return (
-    <Card className="p-4 sm:p-5 border-ink/20 shadow-sm flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-red-600/10 text-red-600 flex items-center justify-center shrink-0">
-            <Youtube size={18} strokeWidth={2.2} />
+    <Card className="p-4 sm:p-5 border-ink/20 shadow-[0_2px_8px_rgba(10,10,10,0.06)]">
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        className="flex flex-col gap-3.5"
+      >
+        {/* Minimal Calm Header */}
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-divider">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-[10px] bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+              <Youtube size={17} strokeWidth={2} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-[15px] font-semibold text-ink leading-tight truncate">
+                {isEditing ? 'Edit YouTube showcase' : 'YouTube showcase'}
+              </h3>
+              <p className="text-[12px] text-muted truncate">
+                Feature a channel, video or playlist, or connect via Google.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-[15px] font-semibold text-ink leading-tight">
-              {isEditing ? 'Edit YouTube Showcase' : 'Add YouTube Showcase'}
-            </h3>
-            <p className="text-[12px] text-muted">
-              Connect via Google or paste a channel link to show subscriber stats &amp; latest videos
-            </p>
-          </div>
+
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+          >
+            ✕
+          </button>
         </div>
 
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={handleConnectGoogle}
-          disabled={isConnectingGoogle}
-          className="gap-1.5 border-red-200 hover:border-red-400 text-red-700 bg-red-50/70"
-        >
-          <Youtube size={14} />
-          <span>{isConnectingGoogle ? 'Connecting...' : 'Connect Google Account'}</span>
-        </Button>
-      </div>
-
-      {error && (
-        <div className="text-[12px] text-red-600 bg-red-50 dark:bg-red-950/30 p-2.5 rounded-lg border border-red-200 dark:border-red-800">
-          {error}
-        </div>
-      )}
-
-      {statusMessage && (
-        <div className="flex items-center gap-1.5 text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
-          <CheckCircle2 size={14} className="shrink-0" />
-          <span>{statusMessage}</span>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+        {/* Multiple Ways to Add a Showcase */}
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="yt-url" className="text-[13px] font-medium text-ink">
-            Channel @Handle, URL, or Video Link
-          </label>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <input
-              id="yt-url"
-              type="text"
-              value={url}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                if (error) setError(null);
-              }}
-              placeholder="@channelname or youtube.com/@channel"
-              className="flex-1 min-w-0 h-10 px-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
-              autoFocus
-            />
+          <span className="text-[12px] font-medium text-muted">Add via</span>
+          <div
+            role="tablist"
+            aria-label="YouTube showcase source"
+            className="grid grid-cols-3 gap-1 p-1 rounded-[12px] bg-surface-2 border border-border"
+          >
+            {[
+              { id: 'channel' as const, label: 'Channel / @', icon: Link2 },
+              { id: 'video' as const, label: 'Video / Playlist', icon: Film },
+              { id: 'google' as const, label: 'Connect Google', icon: Youtube },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const active = sourceMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    setSourceMode(tab.id);
+                    setError(null);
+                  }}
+                  className={`min-h-[36px] px-2 rounded-[9px] text-[12px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer truncate ${
+                    active
+                      ? 'bg-surface text-ink shadow-xs border border-border'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  <Icon size={13} className="shrink-0" />
+                  <span className="truncate">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Mode-specific Source Input */}
+        {sourceMode === 'google' ? (
+          <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-[12px] bg-surface-2/60 border border-border">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-ink">
+                {ytData?.connectedViaOAuth ? 'Google channel connected' : 'Sign in with Google'}
+              </p>
+              <p className="text-[12px] text-muted truncate">
+                {ytData?.channelTitle
+                  ? `${ytData.channelTitle}${ytData.handle ? ` · ${ytData.handle}` : ''}`
+                  : 'Sync your YouTube channel, subscribers & uploads automatically.'}
+              </p>
+            </div>
             <Button
               type="button"
               variant="secondary"
-              size="md"
-              onClick={handleFetchChannel}
-              disabled={isFetching || !url.trim()}
-              className="shrink-0 w-full sm:w-auto"
+              size="sm"
+              onClick={handleConnectGoogle}
+              disabled={isConnectingGoogle}
+              className="gap-1.5 shrink-0"
             >
-              <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-              <span>{isFetching ? 'Syncing...' : 'Fetch Channel'}</span>
+              <Youtube size={14} className="text-red-600" />
+              <span>
+                {isConnectingGoogle
+                  ? 'Connecting...'
+                  : ytData?.connectedViaOAuth
+                    ? 'Reconnect Google'
+                    : 'Connect Google'}
+              </span>
+              {!isConnectingGoogle && <ExternalLink size={12} />}
             </Button>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        ) : (
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="yt-title" className="text-[13px] font-medium text-ink">
-              Channel or Video Title
+            <label htmlFor="yt-url" className="text-[13px] font-medium text-ink">
+              {sourceMode === 'video'
+                ? 'YouTube video, Shorts, or playlist URL'
+                : 'Channel @handle, URL, or ID'}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="yt-url"
+                type="text"
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  if (error) setError(null);
+                }}
+                placeholder={
+                  sourceMode === 'video'
+                    ? 'https://www.youtube.com/watch?v=... or playlist?list=...'
+                    : '@channel or youtube.com/@channel'
+                }
+                className="flex-1 min-w-0 h-10 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
+                autoFocus={!isEditing}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                onClick={handleFetchChannel}
+                disabled={isFetching || !url.trim()}
+                className="shrink-0"
+              >
+                <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+                <span>{isFetching ? 'Syncing...' : 'Sync'}</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-[12px] text-[color:var(--error,#B3261E)]" role="alert">
+            {error}
+          </p>
+        )}
+
+        {statusMessage && (
+          <div className="flex items-center gap-1.5 text-[12px] text-emerald-700" role="status">
+            <CheckCircle2 size={14} className="shrink-0" />
+            <span>{statusMessage}</span>
+          </div>
+        )}
+
+        {/* Minimal Customize Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <label htmlFor="yt-title" className="text-[12px] font-medium text-muted">
+              Display title
             </label>
             <input
               id="yt-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Maya Ellis Art"
+              placeholder="Channel or showcase title"
               maxLength={60}
-              className="h-10 px-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+              className="h-9 px-3 bg-surface border border-border rounded-[10px] text-[13px] text-ink placeholder:text-muted/60 focus-visible:outline-2 focus-visible:outline-ink"
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="yt-cta" className="text-[13px] font-medium text-ink">
-              Button Label
+          <div className="flex flex-col gap-1">
+            <label htmlFor="yt-cta" className="text-[12px] font-medium text-muted">
+              Button label
             </label>
             <input
               id="yt-cta"
@@ -421,120 +540,70 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
               onChange={(e) => setButtonLabel(e.target.value)}
               placeholder="Subscribe"
               maxLength={24}
-              className="h-10 px-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+              className="h-9 px-3 bg-surface border border-border rounded-[10px] text-[13px] text-ink placeholder:text-muted/60 focus-visible:outline-2 focus-visible:outline-ink"
             />
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="yt-caption" className="text-[13px] font-medium text-ink">
-            Subtitle / Tagline
+        <div className="flex flex-col gap-1">
+          <label htmlFor="yt-caption" className="text-[12px] font-medium text-muted">
+            Subtitle
           </label>
           <input
             id="yt-caption"
             type="text"
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
-            placeholder="e.g. 50k subscribers · New videos every Friday"
+            placeholder="Optional (e.g. subscribers or @handle)"
             maxLength={70}
-            className="h-10 px-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+            className="h-9 px-3 bg-surface border border-border rounded-[10px] text-[13px] text-ink placeholder:text-muted/60 focus-visible:outline-2 focus-visible:outline-ink"
           />
         </div>
 
         {ytData?.latestVideos && ytData.latestVideos.length > 0 && (
-          <label className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border bg-surface-2/60 cursor-pointer">
+          <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-[10px] border border-border bg-surface-2/50">
             <span className="text-[13px] font-medium text-ink">
-              Show latest uploads inside showcase card ({ytData.latestVideos.length} found)
+              Show latest uploads ({ytData.latestVideos.length})
             </span>
-            <input
-              type="checkbox"
+            <Toggle
               checked={showLatestVideo}
-              onChange={(e) => setShowLatestVideo(e.target.checked)}
-              className="w-4 h-4 accent-red-600 cursor-pointer"
+              onChange={() => setShowLatestVideo((prev) => !prev)}
+              ariaLabel="Show latest uploads inside showcase card"
             />
-          </label>
+          </div>
         )}
 
-        {/* Live Showcase Preview */}
-        <div className="pt-1">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[12px] font-medium text-muted">Live Showcase Preview</span>
-            {ytData?.connectedViaOAuth && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                <Sparkles size={10} />
-                Google Connected
-              </span>
-            )}
-          </div>
-          <div className="w-full p-3.5 rounded-xl border border-red-600/20 bg-red-600/5 flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3 min-w-0">
-                {ytData?.avatarUrl ? (
-                  <img
-                    src={ytData.avatarUrl}
-                    alt={title || 'YouTube'}
-                    className="w-10 h-10 rounded-full object-cover border border-red-500/30 shrink-0"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <Youtube size={20} strokeWidth={2.2} />
-                  </div>
-                )}
-                <div className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-[14px] text-ink truncate leading-tight">
-                      {title || 'YouTube Channel'}
-                    </span>
-                    {ytData?.subscriberText && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-600/15 text-red-700 shrink-0">
-                        {ytData.subscriberText}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[12px] text-muted truncate">
-                    {caption || 'Subscribe for updates'}
-                  </span>
-                </div>
-              </div>
-
-              <span className="px-3.5 py-1.5 rounded-full text-[12px] font-semibold bg-red-600 text-white shrink-0 inline-flex items-center gap-1">
-                <span>{buttonLabel || 'Subscribe'}</span>
-                <ExternalLink size={11} />
-              </span>
-            </div>
-
-            {showLatestVideo && ytData?.latestVideos && ytData.latestVideos.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-red-600/15">
-                {ytData.latestVideos.slice(0, 3).map((vid) => (
-                  <div
-                    key={vid.id}
-                    className="rounded-lg overflow-hidden border border-border bg-surface flex flex-col"
-                  >
-                    <div className="relative aspect-video bg-black/10">
-                      {vid.thumbnailUrl && (
-                        <img
-                          src={vid.thumbnailUrl}
-                          alt={vid.title}
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <div className="w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center">
-                          <Play size={11} className="ml-0.5 fill-white" />
-                        </div>
-                      </div>
-                    </div>
-                    <span className="p-1.5 text-[11px] font-medium text-ink line-clamp-1">
-                      {vid.title}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Shared Public Renderer Preview */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-medium text-muted">Preview on page</span>
+          <div className="p-2.5 rounded-[12px] border border-border bg-surface-2/40">
+            <YouTubeShowcaseCard
+              block={previewBlock}
+              tokens={vibe.tokens}
+              effectiveRadius={16}
+              fontFamily={vibe.fontFamily}
+              scale={0.94}
+              isPublicPage={false}
+              surfaceStyle={{
+                backgroundColor: vibe.tokens.buttonBg,
+                color: vibe.tokens.buttonText,
+                border: vibe.tokens.buttonBorder
+                  ? `1px solid ${vibe.tokens.buttonBorder}`
+                  : '1px solid rgba(10,10,10,0.08)',
+              }}
+            />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+        <div className="flex items-center gap-2 pt-1">
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            disabled={isSubmitting || isFetching || !url.trim()}
+          >
+            {isSubmitting ? 'Saving...' : isEditing ? 'Save changes' : 'Add showcase'}
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -543,14 +612,6 @@ export const YouTubeCardComposer: React.FC<YouTubeCardComposerProps> = ({
             disabled={isSubmitting}
           >
             Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            disabled={isSubmitting || !url.trim()}
-          >
-            {isSubmitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Add YouTube Showcase'}
           </Button>
         </div>
       </form>

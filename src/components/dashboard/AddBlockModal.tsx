@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { BottomSheet } from '../ui/BottomSheet';
 import { ProBadge } from '../plan/ProBadge';
-import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph } from '../page/EmbedBlock';
+import { DiscordGlyph, XMarkGlyph, FacebookGlyph, ThreadsGlyph, PinterestGlyph } from '../page/EmbedBlock';
 
 export type FeatureType =
   | 'link'
@@ -43,6 +43,7 @@ export type FeatureType =
   | 'embed_instagram'
   | 'embed_facebook'
   | 'embed_threads'
+  | 'embed_pinterest'
   | 'vcard'
   | 'signup'
   | 'tip_jar'
@@ -158,6 +159,15 @@ const FEATURES: FeatureOption[] = [
     icon: ThreadsGlyph,
     iconBg: 'bg-stone-100',
     iconColor: 'text-[#101010]',
+  },
+  {
+    id: 'embed_pinterest',
+    title: 'Pinterest embed',
+    description: 'Connect Pinterest or feature a pin, board, or profile with custom looks',
+    category: 'social_embeds',
+    icon: PinterestGlyph,
+    iconBg: 'bg-rose-50',
+    iconColor: 'text-[#E60023]',
   },
   {
     id: 'youtube',
@@ -374,7 +384,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
             <input
               type="text"
-              placeholder="Search blocks (instagram, facebook, threads, discord, github, youtube)..."
+              placeholder="Search blocks (spotify, pinterest, instagram, discord, youtube)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-11 pl-9 pr-3 bg-surface-2 border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"

@@ -32,6 +32,8 @@ export const SUPPORTED_SOCIAL_PLATFORMS: SocialPlatformConfig[] = [
   { id: 'telegram', name: 'Telegram', placeholder: 'https://t.me/username' },
   { id: 'discord', name: 'Discord', placeholder: 'https://discord.gg/invite' },
   { id: 'threads', name: 'Threads', placeholder: 'https://threads.net/@username' },
+  { id: 'facebook', name: 'Facebook', placeholder: 'https://facebook.com/username' },
+  { id: 'pinterest', name: 'Pinterest', placeholder: 'https://pinterest.com/username' },
   { id: 'github', name: 'GitHub', placeholder: 'https://github.com/username' },
   { id: 'linkedin', name: 'LinkedIn', placeholder: 'https://linkedin.com/in/username' },
   { id: 'spotify', name: 'Spotify', placeholder: 'https://open.spotify.com/artist/...' },
@@ -155,6 +157,18 @@ export const TwitchIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'curr
   <Tv size={size} color={color} strokeWidth={1.5} className={className} />
 );
 
+export const FacebookSocialIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'currentColor', className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} className={className} aria-hidden="true">
+    <path d="M22.675 0H1.325C.593 0 0 .593 0 1.325v21.351C0 23.407.593 24 1.325 24H12.82v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116c.73 0 1.323-.593 1.323-1.325V1.325C24 .593 23.407 0 22.675 0z" />
+  </svg>
+);
+
+export const PinterestSocialIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'currentColor', className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} className={className} aria-hidden="true">
+    <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.367 18.62 0 12.017 0z" />
+  </svg>
+);
+
 export const SocialIcon: React.FC<SocialIconProps & { platform: string }> = ({
   platform,
   size = 18,
@@ -179,6 +193,10 @@ export const SocialIcon: React.FC<SocialIconProps & { platform: string }> = ({
       return <TelegramIcon size={size} color={color} className={className} />;
     case 'discord':
       return <DiscordIcon size={size} color={color} className={className} />;
+    case 'facebook':
+      return <FacebookSocialIcon size={size} color={color} className={className} />;
+    case 'pinterest':
+      return <PinterestSocialIcon size={size} color={color} className={className} />;
     case 'github':
       return <GithubIcon size={size} color={color} className={className} />;
     case 'linkedin':

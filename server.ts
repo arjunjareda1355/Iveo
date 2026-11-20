@@ -297,6 +297,7 @@ async function startServer() {
   app.get('/api/integrations/buymeacoffee', dbHandlers.handleBuyMeACoffee);
   app.get('/api/integrations/youtube', dbHandlers.handleYouTubeShowcase);
   app.get('/api/integrations/embed', dbHandlers.handleSocialEmbedLookup);
+  app.get('/api/integrations/pinterest/me', dbHandlers.handlePinterestTokenProfile);
   app.get('/api/oauth/youtube/url', dbHandlers.handleYouTubeOAuthUrl);
   app.get(['/api/oauth/youtube/callback', '/api/oauth/youtube/callback/'], dbHandlers.handleYouTubeOAuthCallback);
   app.get('/api/oauth/:provider/url', dbHandlers.handleSocialOAuthUrl);

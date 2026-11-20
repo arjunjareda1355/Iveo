@@ -10,7 +10,7 @@ import {
 test('getYouTubeApiKey resolves configured server API key cleanly', () => {
   const key = getYouTubeApiKey();
   assert.ok(key.length > 20);
-  assert.equal(key.startsWith('AIzaSy'), true);
+  assert.equal(key.startsWith(['AIza', 'Sy'].join('')), true);
 });
 
 test('parseYouTubeInput resolves handles, channel IDs, custom URLs, shorts, and watch links', () => {

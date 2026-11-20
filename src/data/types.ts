@@ -55,7 +55,8 @@ export type EmbedProvider =
   | 'x'
   | 'instagram'
   | 'facebook'
-  | 'threads';
+  | 'threads'
+  | 'pinterest';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
 export type EmbedLookStyle = 'signature' | 'spotlight' | 'glass' | 'minimal' | 'theme';
 
@@ -65,6 +66,7 @@ export interface EmbedMetaData {
   subtitle?: string | null;
   description?: string | null;
   avatarUrl?: string | null;
+  coverUrl?: string | null;
   badgeText?: string | null;
   statsLabel?: string | null;
   handle?: string | null;

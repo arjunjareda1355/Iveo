@@ -143,6 +143,25 @@ test('embeds: parses Discord, GitHub, LinkedIn, and X links correctly', () => {
   const threadsPost = parseEmbedUrl('https://threads.com/@zuck/post/C8xyz987');
   assert.equal(threadsPost?.provider, 'threads');
   assert.equal(threadsPost?.subtype, 'post');
+
+  const pinUrl = parseEmbedUrl('https://www.pinterest.com/pin/123456789/');
+  assert.equal(pinUrl?.provider, 'pinterest');
+  assert.equal(pinUrl?.subtype, 'pin');
+  assert.equal(pinUrl?.identifier, '123456789');
+
+  const boardUrl = parseEmbedUrl('https://www.pinterest.com/creator/moodboard/');
+  assert.equal(boardUrl?.provider, 'pinterest');
+  assert.equal(boardUrl?.subtype, 'board');
+  assert.equal(boardUrl?.identifier, 'creator/moodboard');
+
+  const pinProfile = parseEmbedUrl('https://in.pinterest.com/designstudio');
+  assert.equal(pinProfile?.provider, 'pinterest');
+  assert.equal(pinProfile?.subtype, 'profile');
+  assert.equal(pinProfile?.identifier, 'designstudio');
+
+  const pinShort = parseEmbedUrl('https://pin.it/abc123XYZ');
+  assert.equal(pinShort?.provider, 'pinterest');
+  assert.equal(pinShort?.subtype, 'pin');
 });
 
 // 4. Scheduling & Time

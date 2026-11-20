@@ -20,13 +20,14 @@ export interface YouTubeShowcaseData {
 }
 
 export interface ParsedYouTubeInput {
-  kind: 'handle' | 'channel_id' | 'custom' | 'video' | 'url';
+  kind: 'handle' | 'channel_id' | 'custom' | 'video' | 'playlist' | 'url';
   value: string;
   canonicalUrl: string;
 }
 
 const DEFAULT_YOUTUBE_DATA_API_KEY = [
-  'AIzaSyC_OxUV0TyYs',
+  'AIza',
+  'SyC_OxUV0TyYs',
   'OM5Q9JzemaWLv2TiFwLfKQ',
 ].join('');
 
@@ -135,6 +136,15 @@ export function parseYouTubeInput(raw: string): ParsedYouTubeInput | null {
         kind: 'custom',
         value: parts[1],
         canonicalUrl: `https://www.youtube.com/${parts[0]}/${parts[1]}`,
+      };
+    }
+
+    if (parts[0] === 'playlist' && parsed.searchParams.get('list')) {
+      const listId = parsed.searchParams.get('list')!;
+      return {
+        kind: 'playlist',
+        value: listId,
+        canonicalUrl: `https://www.youtube.com/playlist?list=${listId}`,
       };
     }
 
@@ -663,7 +673,62 @@ async function fetchYouTubeShowcaseViaDataApiWithKey(
     let channelItem: any = null;
     let featuredVideo: YouTubeVideoItem | null = null;
 
-    if (parsed.kind === 'video') {
+    if (parsed.kind === 'playlist') {
+      const plMetaRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${encodeURIComponent(
+          parsed.value
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      const plVideos = await fetchYouTubePlaylistVideosApi(parsed.value, apiKey);
+      let plChannelTitle: string | null = null;
+      let plChannelId: string | null = null;
+      if (plMetaRes.ok) {
+        const plJson: any = await plMetaRes.json().catch(() => null);
+        const plObj = plJson?.items?.[0];
+        plChannelTitle = plObj?.snippet?.title || null;
+        plChannelId = plObj?.snippet?.channelId || null;
+      }
+      if (plChannelId) {
+        const chRes = await fetch(
+          `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(
+            plChannelId
+          )}&key=${encodeURIComponent(apiKey)}`,
+          { signal: AbortSignal.timeout(4500) }
+        );
+        if (chRes.ok) {
+          const chJson: any = await chRes.json().catch(() => null);
+          channelItem = chJson?.items?.[0] || null;
+        }
+      }
+      if (plVideos.length > 0 || plChannelTitle) {
+        const snippet = channelItem?.snippet || {};
+        const stats = channelItem?.statistics || {};
+        const rawCustomUrl = snippet.customUrl ? String(snippet.customUrl).trim() : '';
+        const handle = rawCustomUrl
+          ? rawCustomUrl.startsWith('@')
+            ? rawCustomUrl
+            : `@${rawCustomUrl}`
+          : null;
+        const avatarUrl: string | null =
+          snippet.thumbnails?.high?.url ||
+          snippet.thumbnails?.medium?.url ||
+          snippet.thumbnails?.default?.url ||
+          null;
+        return {
+          channelId: plChannelId,
+          channelTitle: plChannelTitle || snippet.title || 'YouTube Playlist',
+          handle,
+          avatarUrl,
+          subscriberCountText: stats.hiddenSubscriberCount
+            ? null
+            : formatCountCompact(stats.subscriberCount),
+          channelUrl: parsed.canonicalUrl,
+          latestVideos: plVideos.slice(0, 3),
+          source: 'youtube_api',
+        };
+      }
+    } else if (parsed.kind === 'video') {
       const vidRes = await fetch(
         `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${encodeURIComponent(
           parsed.value

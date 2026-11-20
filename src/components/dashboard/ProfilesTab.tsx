@@ -5,6 +5,7 @@ import {
   Linkedin,
   Instagram,
   Youtube,
+  Music,
   Plus,
   Pencil,
   Trash2,
@@ -23,11 +24,13 @@ import {
   XMarkGlyph,
   FacebookGlyph,
   ThreadsGlyph,
+  PinterestGlyph,
 } from '../page/EmbedBlock';
 import {
   SocialEmbedComposer,
   SocialEmbedProvider,
 } from '../links/SocialEmbedComposer';
+import { EmbedComposer } from '../links/EmbedComposer';
 import { YouTubeCardComposer } from '../links/YouTubeCardComposer';
 import {
   getLookLabelForProvider,
@@ -35,7 +38,7 @@ import {
   normalizeEmbedLookStyle,
 } from '../../lib/embedLooks';
 
-type PlatformKey = SocialEmbedProvider | 'youtube';
+type PlatformKey = SocialEmbedProvider | 'youtube' | 'spotify';
 
 interface PlatformCatalogItem {
   id: PlatformKey;
@@ -112,10 +115,28 @@ const PLATFORM_CATALOG: PlatformCatalogItem[] = [
     icon: ThreadsGlyph,
   },
   {
+    id: 'pinterest',
+    name: 'Pinterest',
+    description: 'Connect Pinterest or feature a pin, board, or profile card.',
+    authNote: 'OAuth, token, or link',
+    badgeBg: 'bg-rose-50',
+    badgeText: 'text-[#E60023]',
+    icon: PinterestGlyph,
+  },
+  {
+    id: 'spotify',
+    name: 'Spotify',
+    description: 'Connect Spotify via OAuth or embed a track, album, or playlist.',
+    authNote: 'Spotify OAuth or link',
+    badgeBg: 'bg-emerald-50',
+    badgeText: 'text-[#1DB954]',
+    icon: Music,
+  },
+  {
     id: 'youtube',
     name: 'YouTube',
     description: 'Highlight your YouTube channel, subscriber count, and latest video.',
-    authNote: 'Channel link',
+    authNote: 'Channel link or Google',
     badgeBg: 'bg-red-50',
     badgeText: 'text-red-600',
     icon: Youtube,
@@ -138,6 +159,10 @@ function renderPlatformIcon(platform: PlatformKey, size = 18) {
       return <FacebookGlyph size={size - 1} />;
     case 'threads':
       return <ThreadsGlyph size={size - 1} />;
+    case 'pinterest':
+      return <PinterestGlyph size={size - 1} />;
+    case 'spotify':
+      return <Music size={size} />;
     case 'youtube':
       return <Youtube size={size} />;
   }
@@ -162,7 +187,12 @@ export const ProfilesTab: React.FC = () => {
   const connectedBlocks = useMemo(() => {
     return blocks.filter((b) => {
       if (b.isArchived) return false;
-      if (b.kind === 'embed' && isSocialEmbedProvider(b.embedProvider)) return true;
+      if (
+        b.kind === 'embed' &&
+        (isSocialEmbedProvider(b.embedProvider) || b.embedProvider === 'spotify')
+      ) {
+        return true;
+      }
       if (b.kind === 'youtube' || b.kind === 'instagram') return true;
       return false;
     });
@@ -185,7 +215,10 @@ export const ProfilesTab: React.FC = () => {
   ).length;
 
   const getBlockPlatformKey = (block: Block): PlatformKey => {
-    if (block.kind === 'embed' && isSocialEmbedProvider(block.embedProvider)) {
+    if (
+      block.kind === 'embed' &&
+      (isSocialEmbedProvider(block.embedProvider) || block.embedProvider === 'spotify')
+    ) {
       return block.embedProvider;
     }
     if (block.kind === 'youtube') return 'youtube';
@@ -200,18 +233,30 @@ export const ProfilesTab: React.FC = () => {
           Connected accounts
         </h1>
         <p className="text-[14px] text-muted leading-relaxed">
-          Connect Discord, GitHub, LinkedIn, X, Instagram, Facebook, Threads, or YouTube and pick a custom look for each card.
+          Connect Discord, GitHub, LinkedIn, X, Instagram, Facebook, Threads, Pinterest, Spotify, or YouTube and pick a custom look for each card.
         </p>
       </div>
 
       {/* Active Composer */}
-      {composingPlatform && composingPlatform !== 'youtube' && (
+      {composingPlatform && composingPlatform !== 'youtube' && composingPlatform !== 'spotify' && (
         <SocialEmbedComposer
           initialProvider={composingPlatform}
           onAdd={async ({ url, caption, provider, embedMeta }) => {
             await addEmbed(url, caption, provider, embedMeta);
             setComposingPlatform(null);
             showToast('Connected account added to your page');
+          }}
+          onCancel={() => setComposingPlatform(null)}
+        />
+      )}
+
+      {composingPlatform === 'spotify' && (
+        <EmbedComposer
+          initialProvider="spotify"
+          onAdd={async ({ url, caption, provider, embedMeta }) => {
+            await addEmbed(url, caption, provider, embedMeta);
+            setComposingPlatform(null);
+            showToast('Spotify card added to your page');
           }}
           onCancel={() => setComposingPlatform(null)}
         />
@@ -263,6 +308,32 @@ export const ProfilesTab: React.FC = () => {
                   <SocialEmbedComposer
                     key={block.id}
                     initialProvider={block.embedProvider}
+                    isEditing
+                    initialValues={{
+                      url: block.url || '',
+                      caption: block.title || '',
+                      embedMeta: block.embedMeta || null,
+                    }}
+                    onAdd={async ({ url, caption, provider, embedMeta }) => {
+                      await updateBlock(block.id, {
+                        title: caption,
+                        url,
+                        embedProvider: provider,
+                        embedMeta: embedMeta || null,
+                      });
+                      setEditingBlockId(null);
+                      showToast('Saved');
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
+                );
+              }
+
+              if (isEditing && block.kind === 'embed' && block.embedProvider === 'spotify') {
+                return (
+                  <EmbedComposer
+                    key={block.id}
+                    initialProvider="spotify"
                     isEditing
                     initialValues={{
                       url: block.url || '',
