@@ -55,6 +55,13 @@ const SOCIAL_BASE_URLS: Record<string, string> = {
   telegram: 'https://t.me/',
   patreon: 'https://patreon.com/',
   substack: 'https://substack.com/@',
+  discord: 'https://discord.gg/',
+  facebook: 'https://facebook.com/',
+  pinterest: 'https://pinterest.com/',
+  linktree: 'https://linktr.ee/',
+  bluesky: 'https://bsky.app/profile/',
+  snapchat: 'https://snapchat.com/add/',
+  spotify: 'https://open.spotify.com/artist/',
 };
 
 const SOCIAL_ALLOWED_DOMAINS: Record<string, string[]> = {
@@ -76,6 +83,8 @@ const SOCIAL_ALLOWED_DOMAINS: Record<string, string[]> = {
   facebook: ['facebook.com', 'fb.com', 'fb.me'],
   snapchat: ['snapchat.com', 't.snapchat.com'],
   pinterest: ['pinterest.com', 'pin.it'],
+  linktree: ['linktr.ee', 'linktree.com'],
+  bluesky: ['bsky.app'],
 };
 
 function matchesAllowedDomain(hostname: string, allowed: string[]): boolean {
@@ -114,6 +123,20 @@ export function validateAndFormatSocialInput(
     }
   }
 
+  if (platform === 'bluesky') {
+    if (/^did:(plc|web):[a-zA-Z0-9._-]+$/i.test(clean)) {
+      return { ok: true, url: `https://bsky.app/profile/${clean}` };
+    }
+    if (!/^https?:\/\//i.test(clean) && !clean.includes('/')) {
+      const handle = clean.replace(/^@+/, '').trim().toLowerCase();
+      if (!handle || /\s/.test(handle)) {
+        return { ok: false, error: 'Handle cannot contain spaces.' };
+      }
+      const normalizedHandle = handle.includes('.') ? handle : `${handle}.bsky.social`;
+      return { ok: true, url: `https://bsky.app/profile/${normalizedHandle}` };
+    }
+  }
+
   const allowed = SOCIAL_ALLOWED_DOMAINS[platform];
   const looksLikeUrlOrDomain =
     !clean.startsWith('@') && (/^https?:\/\//i.test(clean) || clean.includes('.'));
@@ -124,13 +147,13 @@ export function validateAndFormatSocialInput(
     try {
       parsed = new URL(normalizedCandidate);
     } catch {
-      return { ok: false, error: 'Enter a valid URL or @handle.' };
+      return { ok: false, error: 'Enter a valid URL, @username, or username.' };
     }
     if (allowed && !matchesAllowedDomain(parsed.hostname, allowed)) {
       const expected = allowed[0];
       return {
         ok: false,
-        error: `This looks like ${parsed.hostname}, not ${expected}. Use a ${expected} link or @handle.`,
+        error: `This looks like ${parsed.hostname}, not ${expected}. Use a ${expected} link or username.`,
       };
     }
     return { ok: true, url: normalizedCandidate };
@@ -140,7 +163,7 @@ export function validateAndFormatSocialInput(
   if (base) {
     const handle = clean.replace(/^@+/, '').trim();
     if (!handle || /\s/.test(handle)) {
-      return { ok: false, error: 'Handle cannot contain spaces.' };
+      return { ok: false, error: 'Username cannot contain spaces.' };
     }
     return { ok: true, url: `${base}${handle}` };
   }

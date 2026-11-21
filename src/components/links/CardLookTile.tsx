@@ -185,6 +185,74 @@ export const CardLookTileGrid: React.FC<CardLookTileGridProps> = ({
       );
     }
 
+    if (id === 'profile_card') {
+      return (
+        <div
+          className="w-full h-full rounded-[8px] p-2 flex flex-col items-center justify-between border"
+          style={{
+            backgroundColor: safeSurface,
+            borderColor: `${cleanBrand}44`,
+          }}
+        >
+          <span
+            className="w-5 h-5 rounded-full border-2 shrink-0"
+            style={{
+              backgroundColor: `${cleanBrand}22`,
+              borderColor: cleanBrand,
+            }}
+          />
+          <div className="flex flex-col items-center gap-1 w-full">
+            <span className="w-11 h-1.5 rounded-full" style={{ backgroundColor: strongBar }} />
+            <span className="w-7 h-1 rounded-full" style={{ backgroundColor: mutedBar }} />
+          </div>
+          <span
+            className="w-12 h-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: cleanBrand }}
+          />
+        </div>
+      );
+    }
+
+    if (id === 'with_posts') {
+      return (
+        <div
+          className="w-full h-full rounded-[8px] p-1.5 flex flex-col justify-between gap-1 border"
+          style={{
+            backgroundColor: safeSurface,
+            borderColor: pageBorder || '#E5E7EB',
+          }}
+        >
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
+              <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cleanBrand }} />
+              <span className="w-9 h-1.5 rounded-full" style={{ backgroundColor: strongBar }} />
+            </div>
+            <span className="w-5 h-2 rounded-[3px]" style={{ backgroundColor: cleanBrand }} />
+          </div>
+          <div className="grid grid-cols-2 gap-1 flex-1 min-h-0">
+            <div
+              className="rounded-[4px] p-1 flex flex-col justify-end border"
+              style={{
+                backgroundColor: `${cleanBrand}14`,
+                borderColor: `${cleanBrand}30`,
+              }}
+            >
+              <span className="w-full h-1 rounded-full" style={{ backgroundColor: mutedBar }} />
+            </div>
+            <div
+              className="rounded-[4px] p-1 flex flex-col justify-end border"
+              style={{
+                backgroundColor: `${cleanBrand}14`,
+                borderColor: `${cleanBrand}30`,
+              }}
+            >
+              <span className="w-full h-1 rounded-full" style={{ backgroundColor: mutedBar }} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // compact
     return (
       <div

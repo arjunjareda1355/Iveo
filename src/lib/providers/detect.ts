@@ -66,11 +66,76 @@ function makeResult(
   };
 }
 
+function detectHandleForProvider(
+  trimmed: string,
+  preferredProvider: ProviderId | string | null | undefined
+): DetectedProviderUrl | null {
+  if (!preferredProvider || preferredProvider === 'generic') return null;
+  if (!trimmed || /\s/.test(trimmed) || /^https?:/i.test(trimmed)) return null;
+
+  // Bluesky accepts DIDs, custom domains (alice.com), @handle, or bare handle
+  if (preferredProvider === 'bluesky') {
+    if (/^did:(plc|web):[a-zA-Z0-9._-]+$/i.test(trimmed)) {
+      return makeResult('bluesky', 'profile', `https://bsky.app/profile/${trimmed}`, trimmed);
+    }
+    if (!trimmed.includes('/') && !trimmed.includes(':')) {
+      const clean = trimmed.replace(/^@+/, '').trim().toLowerCase();
+      if (!clean || !/^[a-z0-9._-]+$/i.test(clean)) return null;
+      const fullHandle = clean.includes('.') ? clean : `${clean}.bsky.social`;
+      return makeResult('bluesky', 'profile', `https://bsky.app/profile/${fullHandle}`, fullHandle);
+    }
+    return null;
+  }
+
+  // If input already contains a slash or dot or scheme, let standard URL/domain parsing handle it
+  if (trimmed.includes('/') || trimmed.includes('.') || trimmed.includes(':')) {
+    return null;
+  }
+
+  const handle = trimmed.replace(/^@+/, '').trim();
+  if (!handle || !/^[A-Za-z0-9._-]{1,64}$/.test(handle)) return null;
+
+  switch (preferredProvider) {
+    case 'youtube':
+      if (/^UC[a-zA-Z0-9_-]{20,26}$/.test(handle)) {
+        return makeResult('youtube', 'channel', `https://www.youtube.com/channel/${handle}`, handle);
+      }
+      return makeResult('youtube', 'channel', `https://www.youtube.com/@${handle}`, `@${handle}`);
+    case 'instagram':
+      return makeResult('instagram', 'profile', `https://www.instagram.com/${handle}/`, handle);
+    case 'x':
+      return makeResult('x', 'profile', `https://x.com/${handle}`, handle);
+    case 'threads':
+      return makeResult('threads', 'profile', `https://www.threads.net/@${handle}`, handle);
+    case 'github':
+      return makeResult('github', 'profile', `https://github.com/${handle}`, handle);
+    case 'linkedin':
+      return makeResult('linkedin', 'profile', `https://www.linkedin.com/in/${handle}`, handle);
+    case 'facebook':
+      return makeResult('facebook', 'profile', `https://www.facebook.com/${handle}`, handle);
+    case 'pinterest':
+      return makeResult('pinterest', 'profile', `https://www.pinterest.com/${handle}/`, handle);
+    case 'linktree':
+      return makeResult('linktree', 'profile', `https://linktr.ee/${handle}`, handle);
+    case 'discord':
+      if (/^\d{15,22}$/.test(handle)) {
+        return makeResult('discord', 'user', `https://discord.com/users/${handle}`, handle);
+      }
+      return makeResult('discord', 'invite', `https://discord.gg/${handle}`, handle);
+    default:
+      return null;
+  }
+}
+
 /**
  * Pure URL detector mapping any pasted URL (including www., m., mobile., short links,
- * spotify: URIs, intl-* paths, and bare domains) into a typed provider + subtype + clean canonicalUrl.
+ * spotify: URIs, intl-* paths, bare domains, and optional provider handles) into a typed
+ * provider + subtype + clean canonicalUrl.
  */
-export function detectProviderUrl(rawUrl: string): DetectedProviderUrl | null {
+export function detectProviderUrl(
+  rawUrl: string,
+  preferredProvider?: ProviderId | string | null
+): DetectedProviderUrl | null {
   const trimmed = (rawUrl || '').trim();
   if (!trimmed) return null;
 
@@ -90,6 +155,10 @@ export function detectProviderUrl(rawUrl: string): DetectedProviderUrl | null {
       height: subtype === 'track' || subtype === 'episode' ? 152 : 352,
     });
   }
+
+  // 1b. Optional @username / bare username support when scoped to a provider
+  const handleMatch = detectHandleForProvider(trimmed, preferredProvider);
+  if (handleMatch) return handleMatch;
 
   // Reject explicit non-http(s) schemes (e.g. mailto:, tel:, ftp:) before cleanUrlTracking prepends https://
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^https?:/i.test(trimmed)) {

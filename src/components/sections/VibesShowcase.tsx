@@ -78,7 +78,6 @@ export const VibesShowcase: React.FC = () => {
               currentVibe={selectedVibe}
               width={320}
               buttonRadiusOverride={BUTTON_RADIUS_MAP[buttonShape]}
-              disableScroll
             />
 
             {/* Control Strip */}
@@ -180,7 +179,6 @@ export const VibesShowcase: React.FC = () => {
                 currentVibe={selectedVibe}
                 width={320}
                 buttonRadiusOverride={BUTTON_RADIUS_MAP[buttonShape]}
-                disableScroll
               />
 
               {/* Control Strip */}

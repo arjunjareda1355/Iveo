@@ -200,16 +200,20 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   const hasCustomBlocks = blocks !== undefined;
   const displayBlocks: PageBlock[] = hasCustomBlocks
     ? blocks
-    : persona.links.map((linkTitle, idx) => ({
-        id: `persona-${idx}`,
-        kind: 'link',
-        title: linkTitle,
-        url: 'https://iveo.site',
-        layout: 'classic',
-        isActive: true,
-        isArchived: false,
-        position: idx,
-      }));
+    : persona.links.map((item, idx) => {
+        const title = typeof item === 'string' ? item : item.title;
+        const url = typeof item === 'string' ? 'https://iveo.site' : item.url;
+        return {
+          id: `persona-${idx}`,
+          kind: 'link',
+          title,
+          url,
+          layout: 'classic',
+          isActive: true,
+          isArchived: false,
+          position: idx,
+        };
+      });
 
   let imageCounter = 0;
 
@@ -508,82 +512,156 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
               );
             }
 
-            // Placeholder card for preview mockups (matches live SignupFormBlock surfaceStyle 1:1)
+            // Placeholder card for preview mockups (matches live SignupFormBlock surfaceStyle & style 1:1)
             const cfg = block.signup;
             const collectMode = cfg?.collect || 'email';
+            const formStyle = cfg?.style || 'classic';
             const buttonText = cfg?.button || 'Subscribe';
             const desc = cfg?.description;
             const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
             const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
             const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
             const numBars = collectMode === 'both' ? 2 : 1;
+            const isMinimal = formStyle === 'minimal';
+            const isCompact = formStyle === 'compact';
+            const isSpotlight = formStyle === 'spotlight';
+
+            const previewContainerStyle: React.CSSProperties = isMinimal
+              ? {
+                  backgroundColor: 'transparent',
+                  border: `1.5px solid ${tokens.buttonBorder || buttonPalette.inputBorder}`,
+                  borderRadius: `${cardRadius}px`,
+                  padding: `${Math.round(14 * scale)}px`,
+                  color: tokens.text,
+                  fontFamily: buttonFontFamily,
+                }
+              : isSpotlight
+                ? {
+                    ...buttonSurfaceStyle,
+                    borderRadius: `${cardRadius}px`,
+                    padding: `${Math.round(16 * scale)}px`,
+                    boxShadow: '0 10px 26px -8px rgba(0,0,0,0.22)',
+                    color: buttonPalette.fg,
+                    fontFamily: buttonFontFamily,
+                  }
+                : {
+                    ...buttonSurfaceStyle,
+                    borderRadius: `${cardRadius}px`,
+                    padding: `${Math.round((isCompact ? 11 : 14) * scale)}px`,
+                    color: buttonPalette.fg,
+                    fontFamily: buttonFontFamily,
+                  };
+
+            const fgColor = isMinimal ? tokens.text : buttonPalette.fg;
+            const mutedColor = isMinimal ? tokens.muted : buttonPalette.muted;
+            const btnBg = isMinimal ? (tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg) : buttonPalette.btnBg;
+            const btnText = isMinimal ? (tokens.buttonBg === 'transparent' ? tokens.bg : tokens.buttonText) : buttonPalette.btnText;
 
             return (
               <div
                 key={block.id}
-                className="w-full overflow-hidden flex flex-col items-center text-center select-none"
-                style={{
-                  ...buttonSurfaceStyle,
-                  borderRadius: `${cardRadius}px`,
-                  padding: `${Math.round(14 * scale)}px`,
-                  color: buttonPalette.fg,
-                  fontFamily: buttonFontFamily,
-                }}
+                className={`w-full overflow-hidden flex flex-col select-none ${
+                  isCompact || isMinimal ? 'items-start text-left' : 'items-center text-center'
+                }`}
+                style={previewContainerStyle}
               >
-                <div
-                  className="flex items-center justify-center opacity-80"
-                  style={{ marginBottom: `${Math.round(6 * scale)}px` }}
-                >
-                  <Mail size={Math.round(20 * scale)} strokeWidth={1.5} />
-                </div>
+                {isSpotlight ? (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 mb-1.5 rounded-full font-semibold uppercase tracking-wider"
+                    style={{
+                      fontSize: `${Math.max(8, Math.round(9 * scale))}px`,
+                      backgroundColor: `${buttonPalette.btnBg}1F`,
+                      color: fgColor,
+                      border: `1px solid ${buttonPalette.inputBorder}`,
+                    }}
+                  >
+                    Stay updated
+                  </span>
+                ) : !isCompact && !isMinimal ? (
+                  <div
+                    className="flex items-center justify-center opacity-80"
+                    style={{ marginBottom: `${Math.round(6 * scale)}px` }}
+                  >
+                    <Mail size={Math.round(20 * scale)} strokeWidth={1.5} />
+                  </div>
+                ) : null}
+
                 <h3
-                  className="font-semibold leading-tight"
+                  className="font-semibold leading-tight w-full"
                   style={{
-                    fontSize: `${Math.max(13, Math.round(15 * scale))}px`,
-                    color: buttonPalette.fg,
+                    fontSize: `${Math.max(12, Math.round((isSpotlight ? 16 : isCompact ? 14 : 15) * scale))}px`,
+                    color: fgColor,
                   }}
                 >
-                  {block.title}
+                  {cfg?.heading || block.title}
                 </h3>
                 {desc && (
                   <p
-                    className="mt-1"
+                    className="mt-1 w-full"
                     style={{
-                      fontSize: `${Math.max(11, Math.round(13 * scale))}px`,
-                      color: buttonPalette.muted,
+                      fontSize: `${Math.max(10, Math.round(12 * scale))}px`,
+                      color: mutedColor,
                     }}
                   >
                     {desc}
                   </p>
                 )}
-                {/* Input-shaped bar(s) */}
-                <div className="w-full flex flex-col gap-2 my-2.5" aria-hidden="true">
-                  {Array.from({ length: numBars }).map((_, barIdx) => (
+
+                {isCompact && collectMode !== 'both' ? (
+                  <div className="w-full flex items-center gap-1.5 mt-2.5" aria-hidden="true">
                     <div
-                      key={barIdx}
-                      className="w-full"
+                      className="flex-1 min-w-0"
                       style={{
-                        height: `${Math.round(38 * scale)}px`,
+                        height: `${Math.round(34 * scale)}px`,
                         borderRadius: `${innerRadius}px`,
                         backgroundColor: buttonPalette.inputBg,
                         border: `1px solid ${buttonPalette.inputBorder}`,
                       }}
                     />
-                  ))}
-                </div>
-                {/* Button-shaped bar */}
-                <div
-                  className="w-full flex items-center justify-center font-medium truncate"
-                  style={{
-                    height: `${Math.round(38 * scale)}px`,
-                    backgroundColor: buttonPalette.btnBg,
-                    color: buttonPalette.btnText,
-                    borderRadius: `${controlRadius}px`,
-                    fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
-                  }}
-                >
-                  {buttonText}
-                </div>
+                    <div
+                      className="px-3 flex items-center justify-center font-medium shrink-0 truncate"
+                      style={{
+                        height: `${Math.round(34 * scale)}px`,
+                        backgroundColor: btnBg,
+                        color: btnText,
+                        borderRadius: `${controlRadius}px`,
+                        fontSize: `${Math.max(11, Math.round(12 * scale))}px`,
+                      }}
+                    >
+                      {buttonText}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-full flex flex-col gap-2 my-2.5" aria-hidden="true">
+                      {Array.from({ length: numBars }).map((_, barIdx) => (
+                        <div
+                          key={barIdx}
+                          className="w-full"
+                          style={{
+                            height: `${Math.round(36 * scale)}px`,
+                            borderRadius: isMinimal ? '0px' : `${innerRadius}px`,
+                            backgroundColor: isMinimal ? 'transparent' : buttonPalette.inputBg,
+                            border: isMinimal ? 'none' : `1px solid ${buttonPalette.inputBorder}`,
+                            borderBottom: isMinimal ? `1.5px solid ${buttonPalette.inputBorder}` : `1px solid ${buttonPalette.inputBorder}`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div
+                      className="w-full flex items-center justify-center font-medium truncate"
+                      style={{
+                        height: `${Math.round((isSpotlight ? 40 : 36) * scale)}px`,
+                        backgroundColor: btnBg,
+                        color: btnText,
+                        borderRadius: `${controlRadius}px`,
+                        fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+                      }}
+                    >
+                      {buttonText}
+                    </div>
+                  </>
+                )}
               </div>
             );
           }
@@ -1203,27 +1281,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       )}
 
       {/* Footer Area */}
-      {/* Footer Area - Refined, minimal iveo branding & subtle create page link */}
+      {/* Footer Area - iveo branding (as-is) + formatted Create your page button + Report / Terms / Privacy line */}
       <div
         className="w-full flex flex-col items-center justify-center shrink-0 pb-8 mt-auto"
         style={{
           paddingTop: `${Math.round(28 * scale)}px`,
-          gap: `${Math.round(8 * scale)}px`,
+          gap: `${Math.round(10 * scale)}px`,
         }}
       >
-        {/* Subtle, minimal "Create your page" action */}
-        {isPublicPage && (
-          <a
-            href="https://iveo.site/signup"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-normal transition-all duration-150 opacity-80 hover:opacity-100 hover:underline underline-offset-4 select-none"
-            style={{ color: tokens.muted }}
-          >
-            <span>Create your page</span>
-          </a>
-        )}
-
         {/* Refined and small iveo mark at the bottom */}
         {!hideFooterMark && (() => {
           const footerIsDark = !isLightHexColor(tokens.bg) || isDarkBackgroundConfig(profile?.background);
@@ -1249,16 +1314,72 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           );
         })()}
 
-        {/* "Report this page" embedded Formspree trigger (always visible on public page) */}
-        {isPublicPage && displayHandle && (
-          <button
-            type="button"
-            onClick={() => setIsReportModalOpen(true)}
-            className="text-[10px] opacity-75 hover:opacity-100 underline underline-offset-2 transition-opacity cursor-pointer"
+        {/* Formatted "Create your page" button on its own line */}
+        {isPublicPage && (
+          <a
+            href="https://iveo.site/signup"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center px-4 py-1.5 text-[11.5px] font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] select-none"
+            style={{
+              color: tokens.text,
+              backgroundColor: themeContract.isDarkPage
+                ? 'rgba(255,255,255,0.08)'
+                : 'rgba(10,10,10,0.05)',
+              border: `1px solid ${
+                tokens.buttonBorder && tokens.buttonBorder !== 'transparent'
+                  ? tokens.buttonBorder
+                  : themeContract.isDarkPage
+                    ? 'rgba(255,255,255,0.2)'
+                    : 'rgba(10,10,10,0.16)'
+              }`,
+              borderRadius: effectiveRadius <= 0 ? '4px' : '9999px',
+              fontFamily: buttonFontFamily,
+            }}
+          >
+            Create your page
+          </a>
+        )}
+
+        {/* Second utility line: Report (hidden for owner profiles) · Terms · Privacy */}
+        {isPublicPage && (
+          <div
+            className="inline-flex items-center justify-center flex-wrap gap-1.5 text-[11px] select-none"
             style={{ color: tokens.muted }}
           >
-            Report this page
-          </button>
+            {displayHandle && !profile?.isOwnerProfile && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="px-1.5 py-0.5 rounded opacity-75 hover:opacity-100 hover:underline underline-offset-2 transition-opacity cursor-pointer"
+                  style={{ color: tokens.muted }}
+                >
+                  Report
+                </button>
+                <span aria-hidden="true" className="opacity-45">·</span>
+              </>
+            )}
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-1.5 py-0.5 rounded opacity-75 hover:opacity-100 hover:underline underline-offset-2 transition-opacity"
+              style={{ color: tokens.muted }}
+            >
+              Terms
+            </a>
+            <span aria-hidden="true" className="opacity-45">·</span>
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-1.5 py-0.5 rounded opacity-75 hover:opacity-100 hover:underline underline-offset-2 transition-opacity"
+              style={{ color: tokens.muted }}
+            >
+              Privacy
+            </a>
+          </div>
         )}
       </div>
       </div>
@@ -1298,12 +1419,13 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       />
 
       {/* Embedded Formspree Report Modal */}
-      {isPublicPage && displayHandle && (
+      {isPublicPage && displayHandle && !profile?.isOwnerProfile && (
         <ReportPageModal
           isOpen={isReportModalOpen}
           onClose={() => setIsReportModalOpen(false)}
           username={displayHandle}
           displayName={displayName}
+          vibe={effectiveVibe}
         />
       )}
     </div>

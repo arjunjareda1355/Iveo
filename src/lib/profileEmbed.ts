@@ -1,4 +1,4 @@
-export type ProfileEmbedStyle = 'card' | 'minimal' | 'full' | 'badge';
+export type ProfileEmbedStyle = 'card' | 'minimal' | 'full' | 'badge' | 'spotlight' | 'showcase';
 export type ProfileEmbedTheme = 'auto' | 'light' | 'dark' | 'glass';
 
 export interface ProfileEmbedStyleOption {
@@ -18,8 +18,22 @@ export const PROFILE_EMBED_STYLES: readonly ProfileEmbedStyleOption[] = [
     maxWidth: '420px',
   },
   {
+    id: 'spotlight',
+    label: 'Spotlight',
+    description: 'Elevated hero header, verified badge & featured links',
+    defaultHeight: 460,
+    maxWidth: '440px',
+  },
+  {
+    id: 'showcase',
+    label: 'Showcase',
+    description: 'Framed creator bento with bio & 2-column link tiles',
+    defaultHeight: 500,
+    maxWidth: '460px',
+  },
+  {
     id: 'minimal',
-    label: 'Minimal Header',
+    label: 'Minimal',
     description: 'Sleek horizontal banner with bio & visit button',
     defaultHeight: 176,
     maxWidth: '480px',
@@ -33,7 +47,7 @@ export const PROFILE_EMBED_STYLES: readonly ProfileEmbedStyleOption[] = [
   },
   {
     id: 'badge',
-    label: 'Creator Pill',
+    label: 'Pill',
     description: 'Compact inline badge for footers & sidebars',
     defaultHeight: 82,
     maxWidth: '340px',
@@ -49,7 +63,14 @@ export const PROFILE_EMBED_THEMES: readonly { id: ProfileEmbedTheme; label: stri
 
 export function normalizeEmbedStyle(raw: string | null | undefined): ProfileEmbedStyle {
   const clean = (raw || '').toLowerCase().trim();
-  if (clean === 'minimal' || clean === 'full' || clean === 'badge' || clean === 'card') {
+  if (
+    clean === 'minimal' ||
+    clean === 'full' ||
+    clean === 'badge' ||
+    clean === 'card' ||
+    clean === 'spotlight' ||
+    clean === 'showcase'
+  ) {
     return clean;
   }
   return 'card';

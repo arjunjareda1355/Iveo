@@ -9,7 +9,7 @@ export interface CardLookOption {
 }
 
 /**
- * LK-1: Five unified card looks shared across every provider and Appearance > Cards.
+ * LK-1: Unified card looks shared across every provider and Appearance > Cards.
  */
 export const CARD_LOOK_OPTIONS: readonly CardLookOption[] = [
   {
@@ -36,6 +36,16 @@ export const CARD_LOOK_OPTIONS: readonly CardLookOption[] = [
     id: 'compact',
     label: 'Compact',
     description: 'One slim row: picture, name and button.',
+  },
+  {
+    id: 'profile_card',
+    label: 'Profile Card',
+    description: 'Centered spotlight card with larger avatar & bold CTA pill.',
+  },
+  {
+    id: 'with_posts',
+    label: 'With Posts',
+    description: 'Profile header paired with latest activity & highlights strip.',
   },
 ] as const;
 

@@ -327,6 +327,235 @@ export const EmbedProfilePage: React.FC = () => {
     );
   }
 
+  // 3b. Spotlight Hero Embed style ('spotlight')
+  if (style === 'spotlight') {
+    return (
+      <div className="w-full p-2 bg-transparent">
+        <div
+          className="w-full max-w-[440px] mx-auto rounded-2xl border overflow-hidden shadow-sm flex flex-col"
+          style={{
+            backgroundColor: palette.surfaceBg,
+            color: palette.text,
+            borderColor: palette.border,
+            backdropFilter: (palette as any).backdrop,
+          }}
+        >
+          <div
+            className="h-20 w-full relative shrink-0"
+            style={{
+              background: `linear-gradient(135deg, ${palette.buttonBg} 0%, ${palette.text}55 100%)`,
+            }}
+          />
+          <div className="px-5 pb-5 -mt-9 flex flex-col items-center text-center relative z-10">
+            {prof.avatarUrl && !avatarFailed ? (
+              <img
+                src={prof.avatarUrl}
+                alt={displayName}
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarFailed(true)}
+                className="w-[72px] h-[72px] rounded-full object-cover border-[3px] shadow-sm mb-2.5"
+                style={{ borderColor: palette.surfaceBg }}
+              />
+            ) : (
+              <div
+                className="w-[72px] h-[72px] rounded-full flex items-center justify-center font-bold text-[22px] border-[3px] shadow-sm mb-2.5"
+                style={{
+                  backgroundColor: palette.buttonBg,
+                  color: palette.buttonText,
+                  borderColor: palette.surfaceBg,
+                }}
+              >
+                {initials}
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-[18px] font-semibold leading-tight">{displayName}</h1>
+              {isVerified && <VerifiedTick size={15} onDark={palette.isDark} />}
+            </div>
+            <span className="text-[12px] font-mono mt-0.5" style={{ color: palette.muted }}>
+              @{clean}
+            </span>
+            {prof.bio && (
+              <p className="text-[12.5px] mt-2 line-clamp-2 max-w-[36ch]" style={{ color: palette.muted }}>
+                {prof.bio}
+              </p>
+            )}
+
+            {activeSocials.length > 0 && (
+              <div className="flex items-center justify-center gap-1.5 flex-wrap mt-3">
+                {activeSocials.slice(0, 6).map(([platform, url]) => (
+                  <a
+                    key={platform}
+                    href={formatExternalUrl(url)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={platform}
+                    className="w-8 h-8 rounded-full border flex items-center justify-center transition-transform hover:scale-105"
+                    style={{ borderColor: palette.border, color: palette.text }}
+                  >
+                    <SocialIcon platform={platform} size={14} />
+                  </a>
+                ))}
+              </div>
+            )}
+
+            <div className="w-full flex flex-col gap-2 mt-4">
+              {linkBlocks.slice(0, 3).map((b) => (
+                <a
+                  key={b.id}
+                  href={formatExternalUrl(b.url!)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full h-10 px-4 rounded-full flex items-center justify-between gap-2 text-[13px] font-semibold transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                  style={{ backgroundColor: palette.buttonBg, color: palette.buttonText }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <LinkFaviconOrFallback url={b.url} size={14} />
+                    <span className="truncate">{b.title || b.url}</span>
+                  </div>
+                  <ArrowUpRight size={14} className="shrink-0 opacity-80" />
+                </a>
+              ))}
+            </div>
+
+            <a
+              href={canonicalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 pt-2.5 w-full border-t text-center text-[11px] font-mono opacity-80 hover:opacity-100 transition-opacity flex items-center justify-center gap-1"
+              style={{ borderColor: palette.border, color: palette.muted }}
+            >
+              <span>iveo.site/@{clean}</span>
+              <ExternalLink size={10} />
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3c. Showcase Bento Embed style ('showcase')
+  if (style === 'showcase') {
+    return (
+      <div className="w-full p-2 bg-transparent">
+        <div
+          className="w-full max-w-[460px] mx-auto rounded-2xl border p-5 shadow-sm flex flex-col gap-4"
+          style={{
+            backgroundColor: palette.surfaceBg,
+            color: palette.text,
+            borderColor: palette.border,
+            backdropFilter: (palette as any).backdrop,
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {prof.avatarUrl && !avatarFailed ? (
+                <img
+                  src={prof.avatarUrl}
+                  alt={displayName}
+                  referrerPolicy="no-referrer"
+                  onError={() => setAvatarFailed(true)}
+                  className="w-14 h-14 rounded-2xl object-cover shrink-0 border border-current/15"
+                />
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-[18px] shrink-0"
+                  style={{ backgroundColor: palette.buttonBg, color: palette.buttonText }}
+                >
+                  {initials}
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <h1 className="text-[16px] font-semibold truncate">{displayName}</h1>
+                  {isVerified && <VerifiedTick size={14} onDark={palette.isDark} />}
+                </div>
+                <span className="text-[12px] font-mono block truncate" style={{ color: palette.muted }}>
+                  @{clean}
+                </span>
+              </div>
+            </div>
+
+            <a
+              href={canonicalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: palette.buttonBg, color: palette.buttonText }}
+            >
+              <span>Follow</span>
+              <ArrowUpRight size={12} />
+            </a>
+          </div>
+
+          {prof.bio && (
+            <p className="text-[12.5px] leading-relaxed line-clamp-2" style={{ color: palette.muted }}>
+              {prof.bio}
+            </p>
+          )}
+
+          {linkBlocks.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {linkBlocks.slice(0, 4).map((b) => (
+                <a
+                  key={b.id}
+                  href={formatExternalUrl(b.url!)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl border p-3 flex flex-col justify-between gap-2 min-h-[72px] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                  style={{
+                    borderColor: palette.border,
+                    backgroundColor: palette.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(10,10,10,0.03)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <LinkFaviconOrFallback url={b.url} size={15} />
+                    <ArrowUpRight size={13} style={{ color: palette.muted }} className="shrink-0" />
+                  </div>
+                  <span className="text-[12.5px] font-medium line-clamp-1">
+                    {b.title || b.url}
+                  </span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          <div
+            className="pt-2.5 border-t flex items-center justify-between gap-2"
+            style={{ borderColor: palette.border }}
+          >
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {activeSocials.slice(0, 5).map(([platform, url]) => (
+                <a
+                  key={platform}
+                  href={formatExternalUrl(url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={platform}
+                  className="w-7 h-7 rounded-full border flex items-center justify-center transition-transform hover:scale-105"
+                  style={{ borderColor: palette.border, color: palette.text }}
+                >
+                  <SocialIcon platform={platform} size={13} />
+                </a>
+              ))}
+            </div>
+            <a
+              href={canonicalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-mono opacity-80 hover:opacity-100 inline-flex items-center gap-1"
+              style={{ color: palette.muted }}
+            >
+              <span>iveo.site/@{clean}</span>
+              <ExternalLink size={10} />
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // 4. Default Profile Card style ('card')
   return (
     <div className="w-full p-2 bg-transparent">

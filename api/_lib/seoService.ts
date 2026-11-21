@@ -488,6 +488,7 @@ export async function buildProfileSeoPayload(
       plan: page.plan || (page.isPro ? 'pro' : 'free'),
       isPro: Boolean(page.isPro),
       isVerified: Boolean(page.isVerified ?? page.isPro),
+      isOwnerProfile: Boolean(page.isOwnerProfile),
       buttonShape: page.buttonShape || null,
       socials: page.socials || {},
       socialsPosition: page.socialsPosition || 'top',

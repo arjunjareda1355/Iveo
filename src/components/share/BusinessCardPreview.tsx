@@ -129,7 +129,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
       : [];
 
   const padX = 36;
-  const padY = 28;
+  const padY = 24;
   const frontRoleLine = [resolved.role, resolved.companyOrLocation].filter(Boolean).join(' · ');
 
   const renderTemplateDecor = (app: ReturnType<typeof resolveFrontCardAppearance>) => (
@@ -265,14 +265,14 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                   paddingLeft: frontApp.template === 'executive' ? '6px' : '0px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   {resolved.showAvatar !== false &&
                     (avatarUrl && !avatarFailed ? (
                       <div
                         style={{
-                          width: '54px',
-                          height: '54px',
-                          borderRadius: '14px',
+                          width: '66px',
+                          height: '66px',
+                          borderRadius: '16px',
                           overflow: 'hidden',
                           flexShrink: 0,
                           border: `1.5px solid ${frontApp.borderColor}`,
@@ -296,14 +296,14 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                     ) : (
                       <div
                         style={{
-                          width: '54px',
-                          height: '54px',
-                          borderRadius: '14px',
+                          width: '66px',
+                          height: '66px',
+                          borderRadius: '16px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontWeight: 800,
-                          fontSize: '21px',
+                          fontSize: '25px',
                           flexShrink: 0,
                           backgroundColor: frontApp.isLight ? '#0A0A0A' : '#FFFFFF',
                           color: frontApp.isLight ? '#FFFFFF' : '#0A0A0A',
@@ -362,13 +362,13 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                   gap: '6px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
                   <h4
                     style={{
-                      fontSize: '28px',
+                      fontSize: '34px',
                       fontWeight: 700,
-                      lineHeight: '1.12',
-                      letterSpacing: '-0.02em',
+                      lineHeight: '1.1',
+                      letterSpacing: '-0.025em',
                       margin: 0,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -378,7 +378,7 @@ export const BusinessCardPreview: React.FC<BusinessCardPreviewProps> = ({
                   >
                     {displayName || cleanUsername}
                   </h4>
-                  {isPro && <VerifiedTick size={17} onDark={!frontApp.isLight} />}
+                  {isPro && <VerifiedTick size={20} onDark={!frontApp.isLight} />}
                 </div>
 
                 {(frontRoleLine || resolved.showHandle !== false) && (

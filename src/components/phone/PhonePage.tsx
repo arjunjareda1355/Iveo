@@ -18,7 +18,8 @@ export interface PhoneProfile {
   initials?: string;
   isPro?: boolean;
   isVerified?: boolean;
-  links?: readonly string[];
+  isOwnerProfile?: boolean;
+  links?: readonly (string | { readonly title: string; readonly url?: string })[];
   socials?: Record<string, string>;
   socialsPosition?: 'top' | 'bottom' | 'both';
   whatsappNumber?: string | null;

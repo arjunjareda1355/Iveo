@@ -37,19 +37,19 @@ describe('embedLooks & unified 5-look design system', () => {
     'bluesky',
   ];
 
-  it('exposes the 5 canonical card looks consistently across providers', () => {
-    assert.equal(CARD_LOOK_OPTIONS.length, 5);
+  it('exposes the 7 canonical card looks consistently across providers', () => {
+    assert.equal(CARD_LOOK_OPTIONS.length, 7);
     assert.deepEqual(
       CARD_LOOK_OPTIONS.map((o) => o.id),
-      ['match_page', 'brand', 'banner', 'glass', 'compact']
+      ['match_page', 'brand', 'banner', 'glass', 'compact', 'profile_card', 'with_posts']
     );
 
     for (const provider of providers) {
       const options = getEmbedLookOptions(provider);
-      assert.equal(options.length, 5);
+      assert.equal(options.length, 7);
       assert.deepEqual(
         options.map((o) => o.id),
-        ['match_page', 'brand', 'banner', 'glass', 'compact']
+        ['match_page', 'brand', 'banner', 'glass', 'compact', 'profile_card', 'with_posts']
       );
       assert.equal(getLookLabelForProvider(provider, 'brand'), 'Brand');
     }
@@ -122,11 +122,11 @@ describe('embedLooks & unified 5-look design system', () => {
     assert.equal(getDefaultEmbedCtaLabel('soundcloud', 'track'), 'Listen on SoundCloud');
   });
 
-  it('enforces WCAG AA contrast across all 12 vibes x 5 looks x 13 platform providers', () => {
+  it('enforces WCAG AA contrast across all 12 vibes x 7 looks x 13 platform providers', () => {
     const platformDefs = listPlatformProviders();
     const looks: CardLookStyle[] = CARD_LOOK_OPTIONS.map((o) => o.id);
     assert.equal(VIBES.length, 12);
-    assert.equal(looks.length, 5);
+    assert.equal(looks.length, 7);
     assert.equal(platformDefs.length, 13);
 
     for (const vibe of VIBES) {

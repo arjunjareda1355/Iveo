@@ -44,6 +44,13 @@
     { "source": "/api/link-password", "destination": "/api/data?action=link-password" },
     { "source": "/api/account/delete", "destination": "/api/data?action=account-delete" },
     { "source": "/api/db/readiness", "destination": "/api/data?action=readiness" },
+    { "source": "/robots.txt", "destination": "/api/data?action=robots" },
+    { "source": "/llms.txt", "destination": "/api/data?action=llms" },
+    { "source": "/sitemap.xml", "destination": "/api/data?action=sitemap" },
+    { "source": "/sitemap-pages.xml", "destination": "/api/data?action=sitemap-pages" },
+    { "source": "/sitemap-profiles.xml", "destination": "/api/data?action=sitemap-profiles" },
+    { "source": "/sitemap-profiles-:page([0-9]+).xml", "destination": "/api/data?action=sitemap-profiles&page=:page" },
+    { "source": "/sitemap-:page([0-9]+).xml", "destination": "/api/data?action=sitemap-page&page=:page" },
     { "source": "/@:username([A-Za-z0-9-]{3,30})", "destination": "/api/page?u=@:username" },
     { "source": "/:username([A-Za-z0-9-]{3,30})", "destination": "/api/page?u=:username" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }

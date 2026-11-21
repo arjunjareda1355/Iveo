@@ -210,7 +210,7 @@ export async function resolveSeoHeadForSegment(
   let pageData: PublicPageServerData | null = null;
   let failed = false;
 
-  if ((segmentKind === 'username' || segmentKind === 'reserved') && !cleanFull.includes('/')) {
+  if (hasAtPrefix && (segmentKind === 'username' || segmentKind === 'reserved') && !cleanFull.includes('/')) {
     const cleanUser = normalizeUsername(firstSegment);
     if (cleanUser) {
       try {
@@ -232,19 +232,6 @@ export async function resolveSeoHeadForSegment(
             redirectLocation: `/@${encodeURIComponent(redirectTarget.replace(/^@+/, ''))}`,
           };
         }
-      }
-
-      // Legacy path /username -> permanently 301 redirect to /@username when profile exists
-      if (!hasAtPrefix && pageData) {
-        return {
-          tags: '',
-          ssrBodyHtml: '',
-          cacheControl: 'public, max-age=300',
-          failed: false,
-          foundProfile: true,
-          httpStatus: 301,
-          redirectLocation: `/@${encodeURIComponent(pageData.username.replace(/^@+/, ''))}`,
-        };
       }
     }
   }

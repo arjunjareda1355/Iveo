@@ -395,16 +395,16 @@ function drawFrontCardFace(
 
   const padX = 36 + (app.template === 'executive' ? 6 : 0);
   const padRight = 36;
-  const padY = 28;
+  const padY = 24;
 
   // Top Header Row: Rounded-square Logo / Avatar + optional badge + top-right 'iveo'
   let topBadgeX = padX;
   if (cfg.showAvatar !== false) {
-    const logoSize = 54;
+    const logoSize = 66;
     if (includeAvatarImage && avatarImg) {
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(padX, padY, logoSize, logoSize, 14);
+      ctx.roundRect(padX, padY, logoSize, logoSize, 16);
       ctx.clip();
       const sc = Math.max(logoSize / avatarImg.width, logoSize / avatarImg.height);
       const dw = avatarImg.width * sc;
@@ -415,21 +415,21 @@ function drawFrontCardFace(
       ctx.strokeStyle = app.borderColor;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(padX, padY, logoSize, logoSize, 14);
+      ctx.roundRect(padX, padY, logoSize, logoSize, 16);
       ctx.stroke();
     } else {
       ctx.fillStyle = app.isLight ? '#0A0A0A' : '#FFFFFF';
       ctx.beginPath();
-      ctx.roundRect(padX, padY, logoSize, logoSize, 14);
+      ctx.roundRect(padX, padY, logoSize, logoSize, 16);
       ctx.fill();
 
       ctx.fillStyle = app.isLight ? '#FFFFFF' : '#0A0A0A';
-      ctx.font = `800 21px ${fontPrimary}`;
+      ctx.font = `800 25px ${fontPrimary}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(initials, padX + logoSize / 2, padY + logoSize / 2 + 1);
     }
-    topBadgeX = padX + logoSize + 12;
+    topBadgeX = padX + logoSize + 14;
   }
 
   if (cfg.badgeText) {
@@ -437,7 +437,7 @@ function drawFrontCardFace(
     const badgeLabel = cfg.badgeText.toUpperCase();
     const bw = Math.min(ctx.measureText(badgeLabel).width + 20, 240);
     const bh = 21;
-    const by = padY + 16;
+    const by = padY + 22;
     ctx.save();
     ctx.fillStyle = `${app.accentColor}22`;
     ctx.beginPath();
@@ -462,14 +462,14 @@ function drawFrontCardFace(
 
   // Center/Lower Identity Block
   const maxContentW = W - padX - padRight;
-  let curY = 114;
+  let curY = 108;
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = app.textColor;
-  ctx.font = `700 28px ${fontPrimary}`;
-  const tickGap = 8;
-  const tickSize = 17;
+  ctx.font = `700 34px ${fontPrimary}`;
+  const tickGap = 9;
+  const tickSize = 20;
   const maxNameW = data.isPro ? maxContentW - tickGap - tickSize : maxContentW;
   let fittedName = data.displayName || cleanUsername;
   while (fittedName.length > 3 && ctx.measureText(fittedName).width > maxNameW) {
@@ -478,9 +478,9 @@ function drawFrontCardFace(
   ctx.fillText(fittedName, padX, curY);
   if (data.isPro) {
     const nw = ctx.measureText(fittedName).width;
-    drawVerifiedTickCanvas(ctx, verifiedImg, padX + nw + tickGap, curY + 6, tickSize, !app.isLight);
+    drawVerifiedTickCanvas(ctx, verifiedImg, padX + nw + tickGap, curY + 7, tickSize, !app.isLight);
   }
-  curY += 36;
+  curY += 42;
 
   // Subtitle: Role · Location · @username
   const subParts: { text: string; color: string; font: string; pin?: boolean }[] = [];

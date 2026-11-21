@@ -39,6 +39,15 @@ import {
   handleBlueskyFeed,
   handleBlueskyPost,
 } from './_lib/db-handlers.ts';
+import { getCanonicalSiteOrigin } from './_lib/env.ts';
+import {
+  buildLlmsTxt,
+  buildRobotsTxt,
+  generatePagesSitemapXml,
+  generateProfilesSitemapXml,
+  generateSitemapPageXml,
+  generateSitemapXml,
+} from './_lib/seoService.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,6 +149,75 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleDeleteAccount(req, res);
     case 'readiness':
       return handleDbReadiness(req, res);
+    case 'robots': {
+      const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'iveo.site');
+      const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'https');
+      const origin = host.includes('localhost') || host.startsWith('127.') ? `${proto}://${host}` : getCanonicalSiteOrigin();
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+      return res.status(200).send(buildRobotsTxt(origin));
+    }
+    case 'llms': {
+      const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'iveo.site');
+      const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'https');
+      const origin = host.includes('localhost') || host.startsWith('127.') ? `${proto}://${host}` : getCanonicalSiteOrigin();
+      const txt = await buildLlmsTxt(origin).catch(() => '# Iveo\n');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+      return res.status(200).send(txt);
+    }
+    case 'sitemap': {
+      const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'iveo.site');
+      const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'https');
+      const origin = host.includes('localhost') || host.startsWith('127.') ? `${proto}://${host}` : getCanonicalSiteOrigin();
+      const { xml } = await generateSitemapXml(origin);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    }
+    case 'sitemap-pages': {
+      const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'iveo.site');
+      const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'https');
+      const origin = host.includes('localhost') || host.startsWith('127.') ? `${proto}://${host}` : getCanonicalSiteOrigin();
+      const { xml } = await generatePagesSitemapXml(origin);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    }
+    case 'sitemap-profiles': {
+      const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'iveo.site');
+      const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'https');
+      const origin = host.includes('localhost') || host.startsWith('127.') ? `${proto}://${host}` : getCanonicalSiteOrigin();
+      const pageRaw = req.query?.page || req.params?.page || '1';
+      const pageNum = parseInt(String(pageRaw), 10);
+      if (!Number.isFinite(pageNum) || pageNum < 1) {
+        return res.status(404).send('Not found');
+      }
+      const { xml, found } = await generateProfilesSitemapXml(origin, pageNum);
+      if (!found) {
+        return res.status(404).send('Profiles sitemap page not found');
+      }
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    }
+    case 'sitemap-page': {
+      const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || 'iveo.site');
+      const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'https');
+      const origin = host.includes('localhost') || host.startsWith('127.') ? `${proto}://${host}` : getCanonicalSiteOrigin();
+      const pageRaw = req.query?.page || req.params?.page || '1';
+      const pageNum = parseInt(String(pageRaw), 10);
+      if (!Number.isFinite(pageNum) || pageNum < 1) {
+        return res.status(404).send('Not found');
+      }
+      const { xml, found } = await generateSitemapPageXml(origin, pageNum);
+      if (!found) {
+        return res.status(404).send('Sitemap page not found');
+      }
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
+      return res.status(200).send(xml);
+    }
     default:
       if (typeof res.status === 'function') {
         return res.status(404).json({ error: 'not_found', message: `Unknown data route: ${action}` });

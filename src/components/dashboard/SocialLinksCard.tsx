@@ -290,7 +290,7 @@ export const SocialLinksCard: React.FC<SocialLinksCardProps> = ({
 
                 <div className="sm:col-span-2 flex flex-col gap-1">
                   <label htmlFor="platform-url" className="text-[12px] font-medium text-muted">
-                    Profile link or handle
+                    Link, @username, or username
                   </label>
                   <div className="relative flex items-center">
                     <span className="absolute left-3 text-muted">

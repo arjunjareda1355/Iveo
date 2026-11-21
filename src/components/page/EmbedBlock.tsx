@@ -1070,6 +1070,267 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
     );
   }
 
+  // ---------- LOOK 6: PROFILE CARD ----------
+  if (look === 'profile_card') {
+    const spotlightPicSize = Math.round((isItemArtwork ? 68 : 64) * scale);
+    const spotlightRing = ensureUiAccentContrast(rawChosenAccent, resolvedSurfaceHex, textPrimary, 2.4, pageBgHex);
+
+    const profileCardContent = (
+      <div
+        className="w-full overflow-hidden flex flex-col items-center text-center transition-all duration-150"
+        style={{
+          ...cardContainerStyle,
+          borderColor: brandTintedBorder,
+          padding: `${Math.round(18 * scale)}px ${Math.round(16 * scale)}px`,
+          gap: `${Math.round(10 * scale)}px`,
+        }}
+      >
+        {showPlatformLabel && (
+          <div
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+            style={{
+              backgroundColor: hexWithAlpha(guardedAccent, 0.12),
+              color: guardedAccent,
+            }}
+          >
+            <ProviderGlyph provider={provider} size={12} />
+            <span>{providerDef.name}</span>
+          </div>
+        )}
+
+        {showPicture && (
+          <div className="mt-0.5">
+            {renderPicture(spotlightPicSize, spotlightRing)}
+          </div>
+        )}
+
+        <div className="min-w-0 w-full flex flex-col items-center gap-0.5">
+          <div
+            dir="auto"
+            title={rawTitle}
+            className="font-semibold leading-[22px] line-clamp-2 break-words"
+            style={{ fontSize: `${Math.max(15, Math.round(17 * scale))}px`, color: textPrimary }}
+          >
+            {rawTitle}
+          </div>
+          {rawSubtitle && (
+            <div
+              dir="auto"
+              className="truncate max-w-full leading-[18px]"
+              style={{
+                fontSize: `${Math.max(12, Math.round(13.5 * scale))}px`,
+                color: textMuted,
+              }}
+            >
+              {rawSubtitle}
+            </div>
+          )}
+        </div>
+
+        {rawSummary && (
+          <p
+            dir="auto"
+            className="line-clamp-2 leading-[19px] max-w-[34ch] break-words"
+            style={{ fontSize: `${Math.max(12, Math.round(13 * scale))}px`, color: textMuted }}
+          >
+            {rawSummary}
+          </p>
+        )}
+
+        {statsLabel && (
+          <span
+            className="px-2.5 py-0.5 rounded-full text-[11.5px] font-medium"
+            style={{
+              backgroundColor: hexWithAlpha(textPrimary, 0.06),
+              color: textMuted,
+            }}
+          >
+            {statsLabel}
+          </span>
+        )}
+
+        <div className="pt-1 flex items-center justify-center w-full">
+          {renderCtaButton(false)}
+        </div>
+      </div>
+    );
+
+    return embedMode === 'placeholder' ? (
+      profileCardContent
+    ) : (
+      <a
+        href={canonicalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onLinkClick?.(block)}
+        className="block w-full hover:scale-[1.01] transition-transform duration-150"
+        aria-label={`${rawTitle} — ${ctaText}`}
+      >
+        {profileCardContent}
+      </a>
+    );
+  }
+
+  // ---------- LOOK 7: WITH POSTS / LATEST HIGHLIGHTS ----------
+  if (look === 'with_posts') {
+    const headerPicSize = Math.round((isItemArtwork ? 54 : 46) * scale);
+    const innerCardBg = hexWithAlpha(textPrimary, 0.045);
+    const innerCardBorder = hexWithAlpha(textPrimary, 0.11);
+    const statsItems =
+      kindDef.capabilities.stats && meta?.showStats !== false && meta?.stats && meta.stats.length > 0
+        ? meta.stats.slice(0, 2)
+        : null;
+
+    const withPostsContent = (
+      <div
+        className="w-full overflow-hidden flex flex-col text-left transition-all duration-150"
+        style={{
+          ...cardContainerStyle,
+          borderColor: brandTintedBorder,
+          padding: `${Math.round(15 * scale)}px`,
+          gap: `${Math.round(12 * scale)}px`,
+        }}
+      >
+        {/* Top Profile Row */}
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {renderPicture(headerPicSize)}
+            <div className="min-w-0 flex-1 flex flex-col">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  dir="auto"
+                  title={rawTitle}
+                  className="font-semibold truncate leading-[20px]"
+                  style={{ fontSize: `${Math.max(14, Math.round(15.5 * scale))}px`, color: textPrimary }}
+                >
+                  {rawTitle}
+                </span>
+                {showPlatformLabel && (
+                  <span className="shrink-0" style={{ color: glyphColor }} aria-label={providerDef.name}>
+                    <ProviderGlyph provider={provider} size={Math.round(14 * scale)} />
+                  </span>
+                )}
+              </div>
+              {rawSubtitle && (
+                <span
+                  dir="auto"
+                  className="truncate leading-[18px]"
+                  style={{ fontSize: `${Math.max(11.5, Math.round(13 * scale))}px`, color: textMuted }}
+                >
+                  {rawSubtitle}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {renderCtaButton(true)}
+        </div>
+
+        {/* Bottom Posts / Activity Highlights Strip */}
+        <div
+          className="flex flex-col gap-2 pt-2.5 border-t"
+          style={{ borderColor: innerCardBorder }}
+        >
+          {rawSummary && (
+            <div
+              className="rounded-[10px] px-3 py-2 border"
+              style={{
+                backgroundColor: innerCardBg,
+                borderColor: innerCardBorder,
+              }}
+            >
+              <p
+                dir="auto"
+                className="line-clamp-2 leading-[18px] break-words"
+                style={{ fontSize: `${Math.max(11.5, Math.round(13 * scale))}px`, color: textPrimary }}
+              >
+                {rawSummary}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            {statsItems ? (
+              statsItems.map((st, idx) => (
+                <div
+                  key={`${st.key}-${idx}`}
+                  className="rounded-[10px] px-2.5 py-2 border flex flex-col justify-center"
+                  style={{
+                    backgroundColor: innerCardBg,
+                    borderColor: innerCardBorder,
+                  }}
+                >
+                  <span
+                    className="font-bold leading-tight truncate"
+                    style={{ fontSize: `${Math.max(13, Math.round(14 * scale))}px`, color: textPrimary }}
+                  >
+                    {st.value}
+                  </span>
+                  <span
+                    className="truncate uppercase tracking-wider"
+                    style={{ fontSize: `${Math.max(9.5, Math.round(10.5 * scale))}px`, color: textMuted }}
+                  >
+                    {st.key}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <>
+                <div
+                  className="rounded-[10px] px-2.5 py-2 border flex items-center gap-2 min-w-0"
+                  style={{
+                    backgroundColor: innerCardBg,
+                    borderColor: innerCardBorder,
+                  }}
+                >
+                  <span style={{ color: glyphColor }} className="shrink-0">
+                    <ProviderGlyph provider={provider} size={13} />
+                  </span>
+                  <span
+                    className="truncate font-medium"
+                    style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px`, color: textPrimary }}
+                  >
+                    {statsLabel || `${providerDef.name} feed`}
+                  </span>
+                </div>
+                <div
+                  className="rounded-[10px] px-2.5 py-2 border flex items-center justify-between gap-1.5 min-w-0"
+                  style={{
+                    backgroundColor: innerCardBg,
+                    borderColor: innerCardBorder,
+                  }}
+                >
+                  <span
+                    className="truncate font-medium"
+                    style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px`, color: textPrimary }}
+                  >
+                    Latest posts
+                  </span>
+                  <ExternalLink size={11} style={{ color: textMuted }} className="shrink-0" />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+
+    return embedMode === 'placeholder' ? (
+      withPostsContent
+    ) : (
+      <a
+        href={canonicalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onLinkClick?.(block)}
+        className="block w-full hover:scale-[1.01] transition-transform duration-150"
+        aria-label={`${rawTitle} — ${ctaText}`}
+      >
+        {withPostsContent}
+      </a>
+    );
+  }
+
   // ---------- LOOKS 1, 2, 4: MATCH PAGE, BRAND, GLASS (LK-4, LK-5, LK-7) ----------
   const standardPictureSize = Math.round((isItemArtwork ? 64 : 48) * scale);
 

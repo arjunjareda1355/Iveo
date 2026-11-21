@@ -18,6 +18,7 @@ export interface PublicPageServerData {
   plan?: 'free' | 'pro';
   isPro?: boolean;
   isVerified?: boolean;
+  isOwnerProfile?: boolean;
   status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
   updatedAt?: string | null;
   customSeoTitle?: string | null;
@@ -72,7 +73,8 @@ export async function loadPublicPage(
       if (status === 'deleted' || status === 'suspended') {
         return null;
       }
-      const isPro = Boolean(dbProf.plan === 'pro' || isPrivilegedEmailServer(dbProf.primaryEmail));
+      const isOwnerProfile = isPrivilegedEmailServer(dbProf.primaryEmail);
+      const isPro = Boolean(dbProf.plan === 'pro' || isOwnerProfile);
       return {
         username: dbProf.username.toLowerCase(),
         displayName: dbProf.displayName || `@${dbProf.username}`,
@@ -88,6 +90,7 @@ export async function loadPublicPage(
         plan: isPro ? 'pro' : 'free',
         isPro,
         isVerified: isPro,
+        isOwnerProfile,
         status,
         updatedAt: dbProf.updatedAt || null,
         customSeoTitle: dbProf.customSeoTitle || null,
@@ -120,7 +123,8 @@ export async function loadPublicPage(
       if (status === 'deleted' || status === 'suspended') {
         return null;
       }
-      const isPro = Boolean(fbProf.plan === 'pro' || isPrivilegedEmailServer(fbProf.primaryEmail));
+      const isOwnerProfile = isPrivilegedEmailServer(fbProf.primaryEmail);
+      const isPro = Boolean(fbProf.plan === 'pro' || isOwnerProfile);
       return {
         username: fbProf.username.toLowerCase(),
         displayName: fbProf.displayName || `@${fbProf.username}`,
@@ -136,6 +140,7 @@ export async function loadPublicPage(
         plan: isPro ? 'pro' : 'free',
         isPro,
         isVerified: isPro,
+        isOwnerProfile,
         status,
         updatedAt: fbProf.updatedAt || null,
         customSeoTitle: fbProf.customSeoTitle || null,

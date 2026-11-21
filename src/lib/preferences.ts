@@ -188,7 +188,15 @@ const VALID_HEADER_ALIGNS = new Set<HeaderAlign>(['center', 'left']);
 const VALID_BUTTON_STYLES = new Set<ButtonStyleEffect>(['solid', 'soft', 'offset', 'glass', 'gradient', 'outline']);
 const VALID_LINK_SPACINGS = new Set<LinkSpacing>(['compact', 'normal', 'airy']);
 const VALID_PAGE_WIDTHS = new Set<PageWidth>(['compact', 'standard', 'wide']);
-const VALID_CARD_LOOKS = new Set<CardLookStyle>(['match_page', 'brand', 'banner', 'glass', 'compact']);
+const VALID_CARD_LOOKS = new Set<CardLookStyle>([
+  'match_page',
+  'brand',
+  'banner',
+  'glass',
+  'compact',
+  'profile_card',
+  'with_posts',
+]);
 
 export function normalizeCardLookKey(raw: unknown, fallback: CardLookStyle = 'match_page'): CardLookStyle {
   if (typeof raw !== 'string') return fallback;
@@ -210,6 +218,13 @@ export function normalizeCardLookKey(raw: unknown, fallback: CardLookStyle = 'ma
       return 'compact';
     case 'frosted':
       return 'glass';
+    case 'profile':
+    case 'profile-card':
+      return 'profile_card';
+    case 'posts':
+    case 'with-posts':
+    case 'latest_posts':
+      return 'with_posts';
     default:
       return fallback;
   }

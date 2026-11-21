@@ -54,8 +54,17 @@ import {
   parseYouTubeInput,
   extractSubscriberCountFromHtml,
 } from '../api/_lib/youtube';
-import { normalizeYouTubeUrl } from '../src/lib/urls';
-import { parseEmbedUrl } from '../src/lib/embeds';
+import {
+  normalizeYouTubeUrl,
+  validateAndFormatSocialInput,
+} from '../src/lib/urls';
+import {
+  parseEmbedUrl,
+  detectProviderUrl,
+} from '../src/lib/embeds';
+import { normalizeCardLookKey } from '../src/lib/preferences';
+import { normalizeEmbedStyle, PROFILE_EMBED_STYLES } from '../src/lib/profileEmbed';
+import { VIBES } from '../src/lib/vibes';
 
 test('Main domain SEO metadata contains brand title, canonical, and JSON-LD', () => {
   assert.equal(MAIN_SEO_TITLE, 'Iveo – One Link for Everything You Create');
@@ -454,6 +463,65 @@ test('YouTube subscriber scraper, URL normalizer, and embed parser handle edge f
 
   const vEmbed = parseEmbedUrl('https://www.youtube.com/v/dQw4w9WgXcQ');
   assert.equal(vEmbed?.canonicalUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+});
+
+test('Social URL & provider detector support full URL, @username, and bare username consistently', () => {
+  // Social icons validator
+  assert.deepEqual(validateAndFormatSocialInput('instagram', 'https://instagram.com/arjun'), {
+    ok: true,
+    url: 'https://instagram.com/arjun',
+  });
+  assert.deepEqual(validateAndFormatSocialInput('instagram', '@arjun'), {
+    ok: true,
+    url: 'https://instagram.com/arjun',
+  });
+  assert.deepEqual(validateAndFormatSocialInput('instagram', 'arjun'), {
+    ok: true,
+    url: 'https://instagram.com/arjun',
+  });
+  assert.deepEqual(validateAndFormatSocialInput('linktree', 'creator'), {
+    ok: true,
+    url: 'https://linktr.ee/creator',
+  });
+  assert.deepEqual(validateAndFormatSocialInput('bluesky', '@alice'), {
+    ok: true,
+    url: 'https://bsky.app/profile/alice.bsky.social',
+  });
+  assert.deepEqual(validateAndFormatSocialInput('bluesky', 'alice.com'), {
+    ok: true,
+    url: 'https://bsky.app/profile/alice.com',
+  });
+
+  // Platform embed detector with preferredProvider
+  assert.equal(detectProviderUrl('@arjun', 'instagram')?.canonicalUrl, 'https://www.instagram.com/arjun/');
+  assert.equal(detectProviderUrl('arjun', 'x')?.canonicalUrl, 'https://x.com/arjun');
+  assert.equal(detectProviderUrl('mychannel', 'youtube')?.canonicalUrl, 'https://www.youtube.com/@mychannel');
+  assert.equal(detectProviderUrl('creator', 'linktree')?.canonicalUrl, 'https://linktr.ee/creator');
+  assert.equal(detectProviderUrl('alice', 'bluesky')?.canonicalUrl, 'https://bsky.app/profile/alice.bsky.social');
+  assert.equal(detectProviderUrl('alice.com', 'bluesky')?.canonicalUrl, 'https://bsky.app/profile/alice.com');
+
+  // Cross-provider URLs preserve actual provider so mismatch hint still fires
+  assert.equal(detectProviderUrl('https://youtube.com/@foo', 'instagram')?.provider, 'youtube');
+  // Without preferredProvider, bare words remain invalid
+  assert.equal(detectProviderUrl('arjun'), null);
+});
+
+test('New card look presets, profile embed styles, and distinct VIBES preview links resolve cleanly', () => {
+  assert.equal(normalizeCardLookKey('profile_card'), 'profile_card');
+  assert.equal(normalizeCardLookKey('with_posts'), 'with_posts');
+  assert.equal(normalizeCardLookKey('profile'), 'profile_card');
+  assert.equal(normalizeCardLookKey('posts'), 'with_posts');
+
+  assert.equal(normalizeEmbedStyle('spotlight'), 'spotlight');
+  assert.equal(normalizeEmbedStyle('showcase'), 'showcase');
+  assert.ok(PROFILE_EMBED_STYLES.some((s) => s.id === 'spotlight'));
+  assert.ok(PROFILE_EMBED_STYLES.some((s) => s.id === 'showcase'));
+
+  for (const vibe of VIBES) {
+    assert.ok(vibe.preview.links.length >= 4);
+    const hosts = new Set(vibe.preview.links.map((item) => new URL(item.url).hostname));
+    assert.ok(hosts.size >= 4, `Expected ${vibe.id} preview links to have varied domains`);
+  }
 });
 
 after(async () => {

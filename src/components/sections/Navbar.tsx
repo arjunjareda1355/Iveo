@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, Instagram, Youtube } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Logo } from '../ui/Logo';
 import { Button } from '../ui/Button';
 import { Container } from '../ui/Container';
@@ -91,42 +91,6 @@ export const Navbar: React.FC = () => {
 
         {/* Right: Desktop Actions */}
         <div className="hidden lg:flex items-center shrink-0">
-          {/* Iveo Social Media Accounts CTA */}
-          <div className="flex items-center gap-1 mr-3 pr-3 border-r border-border">
-            <a
-              href="https://youtube.com/@iveosite"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="iveo on YouTube"
-              title="iveo on YouTube (@iveosite)"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-[#FF0000] hover:bg-surface-2 transition-all duration-120 cursor-pointer"
-            >
-              <Youtube size={17} strokeWidth={1.75} />
-            </a>
-            <a
-              href="https://www.instagram.com/iveo.site"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="iveo on Instagram"
-              title="iveo on Instagram (@iveo.site)"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-[#E4405F] hover:bg-surface-2 transition-all duration-120 cursor-pointer"
-            >
-              <Instagram size={17} strokeWidth={1.75} />
-            </a>
-            <a
-              href="https://x.com/@iveosite"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="iveo on X"
-              title="iveo on X (@iveosite)"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-surface-2 transition-all duration-120 cursor-pointer"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </a>
-          </div>
-
           {!isLoaded ? (
             // Reserved width placeholder while Clerk loads to avoid any layout shift
             <div className="w-[44px] h-10" aria-hidden="true" />
@@ -257,42 +221,6 @@ export const Navbar: React.FC = () => {
                     </Button>
                   </>
                 )}
-              </div>
-
-              {/* Iveo Social Media Accounts in Mobile Menu (left-aligned, icons only) */}
-              <div className="mt-6 pt-4 border-t border-border flex items-center justify-start gap-3">
-                <a
-                  href="https://youtube.com/@iveosite"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="iveo on YouTube"
-                  title="iveo on YouTube (@iveosite)"
-                  className="w-11 h-11 rounded-full bg-surface-2 hover:bg-surface border border-border flex items-center justify-center text-[#FF0000] transition-colors"
-                >
-                  <Youtube size={18} strokeWidth={1.75} />
-                </a>
-                <a
-                  href="https://www.instagram.com/iveo.site"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="iveo on Instagram"
-                  title="iveo on Instagram (@iveo.site)"
-                  className="w-11 h-11 rounded-full bg-surface-2 hover:bg-surface border border-border flex items-center justify-center text-[#E4405F] transition-colors"
-                >
-                  <Instagram size={18} strokeWidth={1.75} />
-                </a>
-                <a
-                  href="https://x.com/@iveosite"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="iveo on X"
-                  title="iveo on X (@iveosite)"
-                  className="w-11 h-11 rounded-full bg-surface-2 hover:bg-surface border border-border flex items-center justify-center text-ink transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                </a>
               </div>
             </div>
           </div>

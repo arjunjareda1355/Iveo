@@ -140,30 +140,30 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
         </p>
       </div>
 
-      {/* 4 Embed Styles Grid */}
-      <div className="grid grid-cols-2 gap-2">
-        {PROFILE_EMBED_STYLES.map((opt) => {
-          const selected = embedStyle === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setEmbedStyle(opt.id)}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                selected
-                  ? 'border-ink bg-surface ring-1 ring-ink/20'
-                  : 'border-border bg-surface-2/60 hover:bg-surface-2'
-              }`}
-            >
-              <div className="text-[13px] font-medium text-ink leading-tight">
+      {/* Compact Style Selector Pills */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Embed style">
+          {PROFILE_EMBED_STYLES.map((opt) => {
+            const selected = embedStyle === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setEmbedStyle(opt.id)}
+                className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-all cursor-pointer ${
+                  selected
+                    ? 'bg-ink text-surface border-ink shadow-xs'
+                    : 'bg-surface border-border text-muted hover:text-ink hover:border-border-strong'
+                }`}
+              >
                 {opt.label}
-              </div>
-              <div className="text-[12px] text-muted mt-0.5 leading-snug line-clamp-2">
-                {opt.description}
-              </div>
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[12px] text-muted leading-snug">{styleMeta.description}</p>
       </div>
 
       {/* Theme Selector */}
@@ -279,6 +279,125 @@ export const ProfileEmbedSection: React.FC<ProfileEmbedSectionProps> = ({
                 {bio}
               </p>
             )}
+          </div>
+        ) : embedStyle === 'spotlight' ? (
+          <div
+            className="w-full max-w-[310px] rounded-2xl border overflow-hidden flex flex-col"
+            style={{
+              backgroundColor: previewPalette.bg,
+              color: previewPalette.text,
+              borderColor: previewPalette.border,
+            }}
+          >
+            <div
+              className="h-12 w-full relative shrink-0"
+              style={{
+                background: `linear-gradient(135deg, ${previewPalette.btnBg} 0%, ${previewPalette.text}44 100%)`,
+                opacity: 0.9,
+              }}
+            />
+            <div className="px-4 pb-4 -mt-6 flex flex-col items-center text-center gap-1.5 relative z-10">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={titleName}
+                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-full object-cover border-2"
+                  style={{ borderColor: previewPalette.bg }}
+                />
+              ) : (
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-[15px] border-2"
+                  style={{
+                    backgroundColor: previewPalette.btnBg,
+                    color: previewPalette.btnText,
+                    borderColor: previewPalette.bg,
+                  }}
+                >
+                  {titleName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <span className="text-[14px] font-semibold">{titleName}</span>
+                {isPro && <VerifiedTick size={13} onDark={previewPalette.isDark} />}
+              </div>
+              <span className="text-[11px] font-mono -mt-1" style={{ color: previewPalette.muted }}>
+                @{cleanUsername}
+              </span>
+              {bio && (
+                <p className="text-[11px] line-clamp-2" style={{ color: previewPalette.muted }}>
+                  {bio}
+                </p>
+              )}
+              <div className="w-full grid grid-cols-2 gap-1.5 mt-1.5">
+                <div
+                  className="h-8 rounded-full flex items-center justify-center text-[11px] font-semibold col-span-2"
+                  style={{ backgroundColor: previewPalette.btnBg, color: previewPalette.btnText }}
+                >
+                  Open full page
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : embedStyle === 'showcase' ? (
+          <div
+            className="w-full max-w-[320px] rounded-2xl border p-3.5 flex flex-col gap-2.5"
+            style={{
+              backgroundColor: previewPalette.bg,
+              color: previewPalette.text,
+              borderColor: previewPalette.border,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={titleName}
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-xl object-cover shrink-0"
+                  />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[13px] shrink-0"
+                    style={{ backgroundColor: previewPalette.btnBg, color: previewPalette.btnText }}
+                  >
+                    {titleName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[13px] font-semibold truncate">{titleName}</span>
+                    {isPro && <VerifiedTick size={12} onDark={previewPalette.isDark} />}
+                  </div>
+                  <span className="text-[10.5px] font-mono block truncate" style={{ color: previewPalette.muted }}>
+                    iveo.site/@{cleanUsername}
+                  </span>
+                </div>
+              </div>
+              <span
+                className="px-2.5 py-1 rounded-lg text-[10.5px] font-semibold shrink-0"
+                style={{ backgroundColor: previewPalette.btnBg, color: previewPalette.btnText }}
+              >
+                Visit
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <div
+                className="h-11 rounded-xl border px-2.5 flex items-center justify-between text-[11px] font-medium"
+                style={{ borderColor: previewPalette.border }}
+              >
+                <span className="truncate">Top link</span>
+                <ArrowUpRight size={11} style={{ color: previewPalette.muted }} />
+              </div>
+              <div
+                className="h-11 rounded-xl border px-2.5 flex items-center justify-between text-[11px] font-medium"
+                style={{ borderColor: previewPalette.border }}
+              >
+                <span className="truncate">Portfolio</span>
+                <ArrowUpRight size={11} style={{ color: previewPalette.muted }} />
+              </div>
+            </div>
           </div>
         ) : (
           <div

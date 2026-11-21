@@ -62,7 +62,14 @@ export type EmbedProvider =
   | 'bluesky'
   | 'generic';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
-export type CardLookStyle = 'match_page' | 'brand' | 'banner' | 'glass' | 'compact';
+export type CardLookStyle =
+  | 'match_page'
+  | 'brand'
+  | 'banner'
+  | 'glass'
+  | 'compact'
+  | 'profile_card'
+  | 'with_posts';
 export type EmbedLookStyle = CardLookStyle | 'signature' | 'spotlight' | 'minimal' | 'theme';
 
 export interface EmbedMetaData {
@@ -105,6 +112,7 @@ export interface EmbedMetaData {
 }
 
 export type SignupCollectMode = 'email' | 'phone' | 'both';
+export type SignupBlockStyle = 'classic' | 'compact' | 'minimal' | 'spotlight';
 
 export interface SignupConfig {
   collect: SignupCollectMode;
@@ -112,6 +120,7 @@ export interface SignupConfig {
   consent: string;
   description: string | null;
   heading?: string;
+  style?: SignupBlockStyle;
 }
 
 export interface TipJarConfig {
@@ -426,6 +435,7 @@ export interface PublicProfileData {
   plan?: 'free' | 'pro';
   isPro?: boolean;
   isVerified?: boolean;
+  isOwnerProfile?: boolean;
   buttonShape: ButtonShape | null;
   socials: Record<string, string>;
   socialsPosition?: 'top' | 'bottom' | 'both';

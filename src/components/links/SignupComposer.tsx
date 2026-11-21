@@ -2,8 +2,19 @@ import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { SegmentedControl } from '../ui/SegmentedControl';
-import { SignupConfig, SignupCollectMode } from '../../data/types';
+import { SignupConfig, SignupCollectMode, SignupBlockStyle } from '../../data/types';
 import { copy } from '../../content/copy';
+
+const SIGNUP_STYLE_OPTIONS: ReadonlyArray<{
+  id: SignupBlockStyle;
+  label: string;
+  hint: string;
+}> = [
+  { id: 'classic', label: 'Classic', hint: 'Centered card with full inputs' },
+  { id: 'compact', label: 'Compact', hint: 'Inline bar for tight pages' },
+  { id: 'minimal', label: 'Minimal', hint: 'Clean editorial hairline style' },
+  { id: 'spotlight', label: 'Spotlight', hint: 'Featured banner & pill badge' },
+];
 
 interface SignupComposerProps {
   initialValues?: Partial<SignupConfig>;
@@ -39,6 +50,9 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
   );
   const [consent, setConsent] = useState(
     initialValues?.consent || defaultConsentSentence
+  );
+  const [style, setStyle] = useState<SignupBlockStyle>(
+    initialValues?.style || 'classic'
   );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,6 +104,7 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
         collect,
         button: buttonLabel.trim(),
         consent: consent.trim(),
+        style,
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'pro_required') {
@@ -189,6 +204,36 @@ export const SignupComposer: React.FC<SignupComposerProps> = ({
             onChange={(val) => setCollect(val)}
             className="w-full"
           />
+        </div>
+
+        {/* Form Style */}
+        <div>
+          <label className="block text-[13px] font-medium text-ink mb-1.5">
+            Form style
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {SIGNUP_STYLE_OPTIONS.map((opt) => {
+              const active = style === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setStyle(opt.id)}
+                  aria-pressed={active}
+                  className={`flex flex-col items-start text-left px-3 py-2 rounded-[10px] border transition-all cursor-pointer ${
+                    active
+                      ? 'bg-ink text-white border-ink shadow-xs'
+                      : 'bg-surface hover:bg-surface-2 text-ink border-border'
+                  }`}
+                >
+                  <span className="text-[12px] font-semibold leading-tight">{opt.label}</span>
+                  <span className={`text-[10px] mt-0.5 leading-snug ${active ? 'text-white/75' : 'text-muted'}`}>
+                    {opt.hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Button label */}

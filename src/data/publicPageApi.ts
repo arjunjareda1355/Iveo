@@ -2,7 +2,7 @@ import { PublicPageData, PublicBlock, SignupConfig } from './types';
 import { storagePublicUrl } from './storageApi';
 import type { VibeId } from '../lib/vibes';
 import { isAllowedAvatarUrl } from '../lib/avatar';
-import { resolveEffectivePlan } from '../lib/plan';
+import { isOwnerEmail, resolveEffectivePlan } from '../lib/plan';
 import { apiFetch } from '../lib/apiFetch';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
@@ -105,6 +105,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             plan: data.profile.isPro || data.profile.plan === 'pro' ? 'pro' : 'free',
             isPro: Boolean(data.profile.isVerified ?? data.profile.isPro ?? data.profile.plan === 'pro'),
             isVerified: Boolean(data.profile.isVerified ?? data.profile.isPro ?? data.profile.plan === 'pro'),
+            isOwnerProfile: Boolean(data.profile.isOwnerProfile),
             buttonShape: data.profile.buttonShape || null,
             socials: data.profile.socials || {},
             socialsPosition: data.profile.socialsPosition || 'top',
@@ -254,6 +255,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           plan: resolvedPlan.plan,
           isPro: resolvedPlan.isPro,
           isVerified: resolvedPlan.isPro,
+          isOwnerProfile: isOwnerEmail(fbData.primaryEmail),
           buttonShape: fbData.buttonShape || null,
           socials: fbData.socials || {},
           socialsPosition: fbData.socialsPosition || 'top',
@@ -306,6 +308,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
             isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
             isVerified: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
+            isOwnerProfile: Boolean(parsed.isOwnerProfile),
             buttonShape: parsed.buttonShape || null,
             socials: parsed.socials || {},
             socialsPosition: parsed.socialsPosition || 'top',
@@ -388,6 +391,8 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
                   button: s.button,
                   consent: s.consent,
                   description: typeof s.description === 'string' ? s.description : null,
+                  heading: typeof s.heading === 'string' ? s.heading : undefined,
+                  style: ['classic', 'compact', 'minimal', 'spotlight'].includes(s.style) ? s.style : 'classic',
                 };
               }
             }

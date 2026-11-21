@@ -598,5 +598,44 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
     return null;
   }
 
+  // 12. Linktree
+  if (['linktr.ee', 'www.linktr.ee', 'linktree.com', 'www.linktree.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const slug = (segments[0] || '').replace(/^@+/, '');
+    if (slug && SAFE_SEGMENT_REGEX.test(slug)) {
+      const canonicalUrl = `https://linktr.ee/${slug}`;
+      return {
+        provider: 'linktree',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Linktree page',
+        height: null,
+        aspect: null,
+        identifier: slug,
+        subtype: 'profile',
+      };
+    }
+    return null;
+  }
+
+  // 13. Bluesky profile
+  if (['bsky.app', 'www.bsky.app'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments[0] === 'profile' && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const canonicalUrl = `https://bsky.app/profile/${segments[1]}`;
+      return {
+        provider: 'bluesky',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Bluesky profile',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: 'profile',
+      };
+    }
+    return null;
+  }
+
   return null;
 }

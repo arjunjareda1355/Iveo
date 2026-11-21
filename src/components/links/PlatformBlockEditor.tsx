@@ -290,7 +290,10 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   }, [isOpen, isDirty, confirmDiscard, onClose]);
 
   const providerDef = getProviderDefinition(provider);
-  const detectedCurrent = useMemo(() => detectProviderUrl(urlInput.trim()), [urlInput]);
+  const detectedCurrent = useMemo(
+    () => detectProviderUrl(urlInput.trim(), provider),
+    [urlInput, provider]
+  );
   const activeSubtype = meta.subtype || detectedCurrent?.subtype || providerDef.defaultKind;
   const kindDef = getProviderKindDefinition(provider, activeSubtype);
 
@@ -340,6 +343,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         : kindDef.capabilities.player
           ? providerDef.defaultDisplayMode
           : 'card';
+  const isSocialProfileFlow =
+    provider !== 'generic' && kindDef.contentKind === 'profile' && displayAs === 'card';
 
   // Listen for account connection popup events (ZERO "OAuth" copy shown to creator)
   useEffect(() => {
@@ -458,10 +463,10 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       return;
     }
 
-    const detected = detectProviderUrl(clean);
+    const detected = detectProviderUrl(clean, provider);
     if (!detected) {
       setMismatchHint(null);
-      setUrlError(`This doesn't look like a ${providerDef.name} link`);
+      setUrlError(`This doesn't look like a ${providerDef.name} link or username`);
       return;
     }
 
@@ -854,7 +859,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
             color: effectiveTokens.muted,
           }}
         >
-          Paste a link to see your card
+          Paste a link or @username to see your card
         </div>
       )}
     </div>
@@ -956,7 +961,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
               <section className="flex flex-col gap-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <label htmlFor="platform-link-input" className="text-[14px] font-semibold text-ink">
-                    Link
+                    {kindDef.contentKind === 'profile' ? 'Profile link or username' : 'Link'}
                   </label>
                   <div className="flex items-center gap-2">
                     {detectedCurrent && (
@@ -983,13 +988,17 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                   <input
                     id="platform-link-input"
                     ref={linkInputRef}
-                    type="url"
+                    type="text"
                     value={urlInput}
                     onChange={(e) => {
                       setUrlInput(e.target.value);
                       setIsDirty(true);
                     }}
-                    placeholder={kindDef.placeholder}
+                    placeholder={
+                      kindDef.contentKind === 'profile'
+                        ? `@username, username, or ${kindDef.placeholder}`
+                        : kindDef.placeholder
+                    }
                     className="w-full h-11 min-h-[44px] px-3.5 pr-10 bg-surface border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
                   />
                   {isLookingUp && (
@@ -1093,7 +1102,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                 </section>
               )}
 
-              {/* 3. Content */}
+              {/* 3. Content (collapsed out of main add-flow for social profiles so only Look customizations lead) */}
+              {(isEditing || !isSocialProfileFlow) && (
               <section className="flex flex-col gap-3.5 pt-4 border-t border-divider">
                 <h3 className="text-[14px] font-semibold text-ink">Content</h3>
 
@@ -1167,6 +1177,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                   </>
                 )}
               </section>
+              )}
 
               {/* 4. Look (when Card) OR Size (when Player) */}
               {displayAs === 'card' ? (
@@ -1234,7 +1245,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                 )
               )}
 
-              {/* 5. More options (single collapsed accordion, auto-expands on lookup fail) */}
+              {/* 5. More options (single collapsed accordion, auto-expands on lookup fail for non-profile add flows) */}
+              {(isEditing || !isSocialProfileFlow) && (
               <section className="pt-4 border-t border-divider">
                 <button
                   type="button"
@@ -1472,6 +1484,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                   </div>
                 )}
               </section>
+              )}
             </div>
 
             {/* DESKTOP STICKY RIGHT PREVIEW COLUMN (lg+) */}

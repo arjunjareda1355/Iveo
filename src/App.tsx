@@ -7,7 +7,6 @@ import {
 } from './auth/guards';
 import { AccountDeletionProvider } from './components/account/AccountDeletionProvider';
 import { getSubdomainFromHostname } from './lib/site';
-import { PRIVATE_ROUTES, PUBLIC_INFO_ROUTES, normalizeUsername, validateUsername } from './lib/username-rules';
 import { useLoader } from './components/ui/LoaderProvider';
 
 // Lazy-load every route except the landing page
@@ -48,10 +47,9 @@ function RouteLoaderFallback() {
   return null;
 }
 
-// Handles canonical /@username routes and redirects legacy /username -> /@username
+// Handles canonical /@username routes strictly; bare /xyz paths fall through to NotFound
 function ProfileRouteHandler() {
   const { username } = useParams<{ username: string }>();
-  const location = useLocation();
   const raw = (username || '').trim();
   const lower = raw.toLowerCase();
 
@@ -63,16 +61,6 @@ function ProfileRouteHandler() {
     const clean = raw.slice(1);
     if (!clean) return <NotFound />;
     return <PublicProfilePlaceholder usernameOverride={clean} />;
-  }
-
-  const clean = normalizeUsername(raw);
-  if (
-    clean &&
-    !PRIVATE_ROUTES.has(clean) &&
-    !PUBLIC_INFO_ROUTES.has(clean) &&
-    validateUsername(clean, { allowReserved: true }).ok
-  ) {
-    return <Navigate to={`/@${clean}${location.search}${location.hash}`} replace />;
   }
 
   return <NotFound />;

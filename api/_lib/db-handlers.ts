@@ -405,6 +405,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         isPro,
         planSource: resolvedPlan.planSource,
         isVerified: isPro,
+        isOwnerProfile: isPrivilegedEmailServer(profile.primaryEmail),
         buttonShape: profile.buttonShape ?? null,
         socials: profile.socials || {},
         socialsPosition: profile.socialsPosition || 'top',
