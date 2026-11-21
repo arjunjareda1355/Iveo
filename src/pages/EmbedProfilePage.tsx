@@ -14,6 +14,7 @@ import { SocialIcon } from '../components/phone/SocialIcons';
 import { PageRenderer } from '../components/page/PageRenderer';
 import { BackgroundLayer } from '../components/page/BackgroundLayer';
 import { LinkFaviconOrFallback } from '../components/ui/LinkFaviconOrFallback';
+import { Loader } from '../components/ui/Loader';
 
 function resolveEmbedPalette(theme: ProfileEmbedTheme, vibeTokens: { bg: string; text: string; muted: string; buttonBg: string; buttonText: string; buttonBorder?: string | null }) {
   if (theme === 'light') {
@@ -106,8 +107,8 @@ export const EmbedProfilePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="w-full min-h-[76px] flex items-center justify-center p-4 bg-transparent">
-        <div className="w-5 h-5 rounded-full border-2 border-ink/40 border-t-ink animate-spin" />
+      <div className="w-full min-h-[76px] flex items-center justify-center p-4 bg-transparent text-ink/70" aria-busy="true">
+        <Loader size="sm" />
       </div>
     );
   }

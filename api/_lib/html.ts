@@ -70,6 +70,9 @@ export function injectHead(template: string, tags: string): string {
     .replace(/<meta[^>]*\bname=["']twitter:[^"']*["'][^>]*>/gi, '')
     .replace(/<meta[^>]*\bproperty=["']profile:[^"']*["'][^>]*>/gi, '')
     .replace(/<link[^>]*\brel=["']canonical["'][^>]*>/gi, '')
+    .replace(/<link[^>]*\bid=["']iveo-ssr-fonts["'][^>]*>/gi, '')
+    .replace(/<style[^>]*\bid=["']iveo-ssr-theme["'][^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*\bid=["']iveo-ssr-bootstrap["'][^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<script[^>]*\btype=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
 
   const newHead = `${headContent.trimEnd()}\n    ${tags}\n  `;

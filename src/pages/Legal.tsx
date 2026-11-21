@@ -135,7 +135,7 @@ export const Legal: React.FC = () => {
                     1. Minimal Data Collection
                   </h2>
                   <p>
-                    We collect only the information required to authenticate you and deliver your page: your email address, username, chosen profile image, and the links you choose to publish.
+                    We collect only the information required to authenticate you and deliver your page: your email address, username, chosen profile image, and the links you choose to publish. Bluesky profile cards and post feeds fetch only publicly available data through Bluesky’s public API without requiring creator or visitor Bluesky login credentials.
                   </p>
                 </section>
 

@@ -36,15 +36,12 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
         <Button
           variant="secondary"
           size="md"
-          disabled={total === 0 || isExporting}
+          disabled={total === 0}
+          loading={isExporting}
           onClick={onExportCsv}
           className="shrink-0"
         >
-          {isExporting ? (
-            <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin mr-1.5" />
-          ) : (
-            <Download size={16} className="mr-1.5" />
-          )}
+          <Download size={16} className="mr-1.5" />
           <span>{copy.contacts.downloadCsv}</span>
         </Button>
 

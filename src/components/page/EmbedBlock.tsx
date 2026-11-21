@@ -520,11 +520,26 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
     const facadeInner = (
       <div
-        className="w-full overflow-hidden border transition-all duration-150 flex flex-col justify-between text-left"
+        className="w-full overflow-hidden transition-all duration-150 flex flex-col justify-between text-left"
         style={{
           backgroundColor: vibeSurfaceCss,
+          ...(look === 'match_page' && surfaceStyle?.backgroundImage
+            ? { backgroundImage: surfaceStyle.backgroundImage }
+            : {}),
           color: facadeText,
-          borderColor: tokens.buttonBorder || hexWithAlpha(facadeText, 0.16),
+          border:
+            look === 'match_page' && surfaceStyle?.border
+              ? surfaceStyle.border
+              : `1px solid ${tokens.buttonBorder || hexWithAlpha(facadeText, 0.16)}`,
+          ...(look === 'match_page' && surfaceStyle?.boxShadow
+            ? { boxShadow: surfaceStyle.boxShadow }
+            : {}),
+          ...(look === 'match_page' && surfaceStyle?.backdropFilter
+            ? {
+                backdropFilter: surfaceStyle.backdropFilter,
+                WebkitBackdropFilter: surfaceStyle.WebkitBackdropFilter || surfaceStyle.backdropFilter,
+              }
+            : {}),
           borderRadius: `${cardRadius}px`,
           fontFamily: fontFamily || vibe.fontFamily,
           minHeight: `${Math.round((playerSize === 'compact' ? 88 : 168) * scale)}px`,
@@ -694,18 +709,37 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
   const cardContainerStyle: React.CSSProperties = {
     backgroundColor: resolvedCardBg,
+    ...(look === 'match_page' && surfaceStyle?.backgroundImage
+      ? { backgroundImage: surfaceStyle.backgroundImage }
+      : {}),
     color: textPrimary,
-    border: `1px solid ${
-      look === 'brand'
-        ? brandTintedBorder
-        : look === 'glass' && glassCfg
-          ? glassCfg.borderColor
-          : defaultBorderHex
-    }`,
+    border:
+      look === 'match_page' && surfaceStyle?.border
+        ? surfaceStyle.border
+        : `1px solid ${
+            look === 'brand'
+              ? brandTintedBorder
+              : look === 'glass' && glassCfg
+                ? glassCfg.borderColor
+                : defaultBorderHex
+          }`,
+    ...(look === 'match_page' && surfaceStyle?.boxShadow
+      ? { boxShadow: surfaceStyle.boxShadow }
+      : {}),
     borderRadius: `${cardRadius}px`,
     fontFamily: fontFamily || vibe.fontFamily,
-    backdropFilter: look === 'glass' ? 'blur(16px)' : undefined,
-    WebkitBackdropFilter: look === 'glass' ? 'blur(16px)' : undefined,
+    backdropFilter:
+      look === 'glass'
+        ? 'blur(16px)'
+        : look === 'match_page' && surfaceStyle?.backdropFilter
+          ? surfaceStyle.backdropFilter
+          : undefined,
+    WebkitBackdropFilter:
+      look === 'glass'
+        ? 'blur(16px)'
+        : look === 'match_page' && surfaceStyle?.WebkitBackdropFilter
+          ? surfaceStyle.WebkitBackdropFilter
+          : undefined,
     minHeight: `${Math.round(64 * scale)}px`,
   };
 

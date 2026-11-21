@@ -331,6 +331,8 @@ import { isPrivilegedEmailServer, validateUsernameServer } from './usernames.ts'
 export interface UserRecord {
   profile: any | null;
   blocks: any[];
+  blocksInitialized?: boolean;
+  deletedBlockIds?: string[];
   contacts: any[];
   passwords: Record<string, string>;
   analytics: any[];
@@ -479,12 +481,15 @@ function readUserRecord(username: string): UserRecord {
   ensureMigratedToPerUserStore();
   const clean = username.replace(/^@+/, '').toLowerCase().trim();
   if (!clean) {
-    return { profile: null, blocks: [], contacts: [], passwords: {}, analytics: [] };
+    return { profile: null, blocks: [], blocksInitialized: false, deletedBlockIds: [], contacts: [], passwords: {}, analytics: [] };
   }
   const raw = readJsonFile<Partial<UserRecord>>(getUserFilePath(clean), {});
+  const blocks = Array.isArray(raw.blocks) ? raw.blocks : [];
   return {
     profile: raw.profile ?? null,
-    blocks: Array.isArray(raw.blocks) ? raw.blocks : [],
+    blocks,
+    blocksInitialized: typeof raw.blocksInitialized === 'boolean' ? raw.blocksInitialized : blocks.length > 0,
+    deletedBlockIds: Array.isArray(raw.deletedBlockIds) ? raw.deletedBlockIds.map(String) : [],
     contacts: Array.isArray(raw.contacts) ? raw.contacts : [],
     passwords: raw.passwords && typeof raw.passwords === 'object' ? raw.passwords : {},
     analytics: Array.isArray(raw.analytics) ? raw.analytics : [],
@@ -1358,6 +1363,7 @@ export async function dbSaveBlocks(
           promo: b.promo || null,
           location: b.location || null,
           download: b.download || null,
+          bluesky: b.bluesky || null,
         };
         insReq.input('signupJson', sql.NVarChar(sql.MAX), JSON.stringify(extraPayload));
         insReq.input('isProtected', sql.Bit, b.isProtected ? 1 : 0);
@@ -1381,6 +1387,23 @@ export async function dbSaveBlocks(
       }
 
       await transaction.commit();
+      await withUserLock(clean, () => {
+        const record = readUserRecord(clean);
+        const nextIds = new Set(blocks.map((b) => String(b?.id || '')));
+        const deleted = new Set((record.deletedBlockIds || []).filter((id) => !nextIds.has(id)));
+        for (const prev of record.blocks) {
+          const prevId = String(prev?.id || '');
+          if (prevId && !nextIds.has(prevId)) deleted.add(prevId);
+        }
+        record.blocksInitialized = true;
+        record.deletedBlockIds = Array.from(deleted).slice(-500);
+        record.blocks = blocks.map((b) => ({
+          ...b,
+          isActive: b.isActive !== false,
+          isArchived: Boolean(b.isArchived),
+        }));
+        writeUserRecord(clean, record);
+      });
       return { ok: true };
     } catch {
       // Fall through to server store fallback
@@ -1390,6 +1413,14 @@ export async function dbSaveBlocks(
   return withUserLock(clean, () => {
     const record = readUserRecord(clean);
     const pwKeys = new Set(Object.keys(record.passwords || {}));
+    const nextIds = new Set(blocks.map((b) => String(b?.id || '')));
+    const deleted = new Set((record.deletedBlockIds || []).filter((id) => !nextIds.has(id)));
+    for (const prev of record.blocks) {
+      const prevId = String(prev?.id || '');
+      if (prevId && !nextIds.has(prevId)) deleted.add(prevId);
+    }
+    record.blocksInitialized = true;
+    record.deletedBlockIds = Array.from(deleted).slice(-500);
     record.blocks = blocks.map((b) => ({
       ...b,
       isProtected: b.isProtected !== undefined ? Boolean(b.isProtected) : pwKeys.has(String(b.id)),
@@ -1399,6 +1430,19 @@ export async function dbSaveBlocks(
     writeUserRecord(clean, record);
     return { ok: true };
   });
+}
+
+export async function dbGetBlockSyncMeta(username: string): Promise<{
+  blocksInitialized: boolean;
+  deletedBlockIds: Set<string>;
+}> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return { blocksInitialized: false, deletedBlockIds: new Set() };
+  const record = readUserRecord(clean);
+  return {
+    blocksInitialized: Boolean(record.blocksInitialized || (record.deletedBlockIds && record.deletedBlockIds.length > 0)),
+    deletedBlockIds: new Set((record.deletedBlockIds || []).map(String)),
+  };
 }
 
 export async function dbGetBlocks(username: string): Promise<any[]> {
@@ -1428,6 +1472,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
         let promo = null;
         let location = null;
         let download = null;
+        let bluesky = null;
 
         try {
           if (r.signup_config_json) {
@@ -1446,7 +1491,8 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
                 'countdown' in parsed ||
                 'promo' in parsed ||
                 'location' in parsed ||
-                'download' in parsed
+                'download' in parsed ||
+                'bluesky' in parsed
               ) {
                 embedMeta = parsed.embedMeta || null;
                 signup = parsed.signup || null;
@@ -1463,6 +1509,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
                 promo = parsed.promo || null;
                 location = parsed.location || null;
                 download = parsed.download || null;
+                bluesky = parsed.bluesky || null;
               } else {
                 signup = parsed;
               }
@@ -1496,6 +1543,7 @@ export async function dbGetBlocks(username: string): Promise<any[]> {
           promo,
           location,
           download,
+          bluesky,
           isProtected: Boolean(r.is_protected),
           startAt: r.start_at,
           endAt: r.end_at,

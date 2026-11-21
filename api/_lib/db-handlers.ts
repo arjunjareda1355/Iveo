@@ -10,6 +10,7 @@ import {
   dbGetProfile,
   dbSaveBlocks,
   dbGetBlocks,
+  dbGetBlockSyncMeta,
   dbSaveContact,
   dbGetContacts,
   dbDeleteContact,
@@ -85,9 +86,98 @@ import {
   fetchUniversalSocialLinkMetadata,
   isPinterestOAuthEnabled,
   isValidSocialOAuthProvider,
+  extractProviderFromOAuthState,
   parseSocialOAuthState,
 } from './socialIntegrations.ts';
 import { redactSecrets } from './serverConfig.ts';
+import {
+  BlueskyProxyError,
+  checkBlueskyRateLimit,
+  getBlueskyFeed,
+  getBlueskyProfile,
+  getBlueskySinglePost,
+} from './bluesky.ts';
+
+function getBlueskyClientIp(req: ExpressReq): string {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || String(req.ip || req.socket?.remoteAddress || 'anon');
+}
+
+export async function handleBlueskyProfile(req: ExpressReq, res: ExpressRes) {
+  const rate = checkBlueskyRateLimit(getBlueskyClientIp(req));
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({ error: 'rate_limited', message: 'Bluesky is slow right now, try again' });
+  }
+  const actor = typeof req.query.actor === 'string' ? req.query.actor.trim() : '';
+  if (!actor) {
+    return res.status(400).json({ error: 'missing_actor', message: 'Enter a Bluesky handle or profile link.' });
+  }
+  try {
+    const profile = await getBlueskyProfile(actor);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=900, stale-while-revalidate=86400');
+    return res.status(200).json({ ok: true, profile });
+  } catch (err: any) {
+    const status = err instanceof BlueskyProxyError ? err.status : 502;
+    return res.status(status).json({
+      ok: false,
+      error: err?.code || 'bluesky_error',
+      message: err?.message || 'Bluesky is slow right now, try again',
+    });
+  }
+}
+
+export async function handleBlueskyFeed(req: ExpressReq, res: ExpressRes) {
+  const rate = checkBlueskyRateLimit(getBlueskyClientIp(req));
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({ error: 'rate_limited', message: 'Bluesky is slow right now, try again' });
+  }
+  const actor = typeof req.query.actor === 'string' ? req.query.actor.trim() : '';
+  if (!actor) {
+    return res.status(400).json({ error: 'missing_actor', message: 'Enter a Bluesky handle or profile link.' });
+  }
+  const limit = Number(req.query.limit || 3);
+  const filter = typeof req.query.filter === 'string' ? req.query.filter.trim() : 'posts_no_replies';
+  const includeReposts = req.query.reposts === '1' || req.query.reposts === 'true';
+
+  try {
+    const feed = await getBlueskyFeed({ actor, limit, filter, includeReposts });
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400');
+    return res.status(200).json({ ok: true, ...feed });
+  } catch (err: any) {
+    const status = err instanceof BlueskyProxyError ? err.status : 502;
+    return res.status(status).json({
+      ok: false,
+      error: err?.code || 'bluesky_error',
+      message: err?.message || 'Bluesky is slow right now, try again',
+    });
+  }
+}
+
+export async function handleBlueskyPost(req: ExpressReq, res: ExpressRes) {
+  const rate = checkBlueskyRateLimit(getBlueskyClientIp(req));
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({ error: 'rate_limited', message: 'Bluesky is slow right now, try again' });
+  }
+  const uri = typeof req.query.uri === 'string' ? req.query.uri.trim() : '';
+  if (!uri) {
+    return res.status(400).json({ error: 'missing_uri', message: 'Paste a bsky.app post link or at:// URI.' });
+  }
+  try {
+    const data = await getBlueskySinglePost(uri);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=600, stale-while-revalidate=86400');
+    return res.status(200).json({ ok: true, ...data });
+  } catch (err: any) {
+    const status = err instanceof BlueskyProxyError ? err.status : 502;
+    return res.status(status).json({
+      ok: false,
+      error: err?.code || 'bluesky_error',
+      message: err?.message || 'Bluesky is slow right now, try again',
+    });
+  }
+}
 
 /**
  * GET /api/db/readiness
@@ -220,13 +310,31 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     }
 
     let allBlocks = dbBlocksInitial;
-    if (cameFromFirebase || !allBlocks || allBlocks.length === 0) {
+    const syncMeta = await dbGetBlockSyncMeta(clean).catch(() => ({
+      blocksInitialized: false,
+      deletedBlockIds: new Set<string>(),
+    }));
+    const shouldTryFirebaseBlocks =
+      !syncMeta.blocksInitialized && (cameFromFirebase || !allBlocks || allBlocks.length === 0);
+    if (shouldTryFirebaseBlocks && !fbProf?.blocksInitialized) {
       const fbBlocks = await withTimeout(firebaseGetBlocks(clean, profile.userId), [] as any[]);
-      if (fbBlocks && fbBlocks.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
-        allBlocks = fbBlocks;
+      const filteredFb = (fbBlocks || []).filter(
+        (b) => !syncMeta.deletedBlockIds.has(String(b?.id || ''))
+      );
+      if (filteredFb.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
+        allBlocks = filteredFb;
         if (!dbBlocksInitial || dbBlocksInitial.length === 0) {
-          dbSaveBlocks(clean, fbBlocks, profile.userId, profile.primaryEmail).catch(() => {});
+          dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
         }
+      }
+    } else if (shouldTryFirebaseBlocks && fbProf?.blocksInitialized && (!allBlocks || allBlocks.length === 0)) {
+      const fbBlocks = await withTimeout(firebaseGetBlocks(clean, profile.userId), [] as any[]);
+      const filteredFb = (fbBlocks || []).filter(
+        (b) => !syncMeta.deletedBlockIds.has(String(b?.id || ''))
+      );
+      if (filteredFb.length > 0) {
+        allBlocks = filteredFb;
+        dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
       }
     }
     const protectedIdsSet = new Set(await dbGetProtectedLinkIds(clean).catch(() => []));
@@ -269,6 +377,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         promo: b.promo || null,
         location: b.location || null,
         download: b.download || null,
+        bluesky: b.bluesky || null,
       }));
 
     const resolvedPlan = resolveEffectivePlan({
@@ -484,10 +593,17 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
     };
 
     let blocks = await dbGetBlocks(profile.username);
-    if (cameFromFirebase || !blocks || blocks.length === 0) {
+    const syncMeta = await dbGetBlockSyncMeta(profile.username).catch(() => ({
+      blocksInitialized: false,
+      deletedBlockIds: new Set<string>(),
+    }));
+    if (!syncMeta.blocksInitialized && (cameFromFirebase || !blocks || blocks.length === 0)) {
       const fbBlocks = await withTimeout(firebaseGetBlocks(profile.username, profile.userId), [] as any[]);
-      if (fbBlocks && fbBlocks.length > 0 && (!blocks || blocks.length === 0 || cameFromFirebase)) {
-        blocks = fbBlocks;
+      const filteredFb = (fbBlocks || []).filter(
+        (b) => !syncMeta.deletedBlockIds.has(String(b?.id || ''))
+      );
+      if (filteredFb.length > 0 && (!blocks || blocks.length === 0 || cameFromFirebase)) {
+        blocks = filteredFb;
       }
     }
 
@@ -841,11 +957,18 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
 
   try {
     let blocks = await dbGetBlocks(username);
-    if (!blocks || blocks.length === 0) {
+    const syncMeta = await dbGetBlockSyncMeta(username).catch(() => ({
+      blocksInitialized: false,
+      deletedBlockIds: new Set<string>(),
+    }));
+    if (!syncMeta.blocksInitialized && (!blocks || blocks.length === 0)) {
       const fbBlocks = await withTimeout(firebaseGetBlocks(username), [] as any[]);
-      if (fbBlocks && fbBlocks.length > 0) {
-        blocks = fbBlocks;
-        dbSaveBlocks(username, fbBlocks).catch(() => {});
+      const filteredFb = (fbBlocks || []).filter(
+        (b) => !syncMeta.deletedBlockIds.has(String(b?.id || ''))
+      );
+      if (filteredFb.length > 0) {
+        blocks = filteredFb;
+        dbSaveBlocks(username, filteredFb).catch(() => {});
       }
     }
     const protectedSet = new Set(await dbGetProtectedLinkIds(username).catch(() => []));
@@ -1514,10 +1637,11 @@ export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
  * GET /api/oauth/:provider/callback (and trailing slash)
  */
 export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes) {
-  const providerRaw = String(req.params.provider || '').toLowerCase().trim();
+  const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
+  const providerParam = String(req.params.provider || '').toLowerCase().trim();
+  const providerRaw = providerParam || extractProviderFromOAuthState(stateParam) || '';
   const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
   const oauthError = typeof req.query.error === 'string' ? req.query.error.trim() : '';
-  const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
 
   const sendPopupHtml = (payload: Record<string, any>) => {
     const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');

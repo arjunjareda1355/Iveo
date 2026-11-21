@@ -429,8 +429,85 @@ export async function buildProfileSeoPayload(
     profilePageJsonLd.dateModified = page.updatedAt;
   }
 
+  const { buildProfileSsrHeadTags } = await import('../../src/lib/blockTheme.ts');
+  const ssrThemeTags = buildProfileSsrHeadTags({
+    vibeId: page.vibeId,
+    buttonShape: page.buttonShape || null,
+    buttonColors: page.buttonColors || null,
+    background: page.background || null,
+    layoutSettings: page.layoutSettings || null,
+    fontSettings: page.fontSettings || null,
+  });
+
+  const now = new Date();
+  const bootstrapLinks = (blocks || [])
+    .filter((b: any) => {
+      if (!b || b.isActive === false || b.isArchived) return false;
+      if (b.startAt && new Date(b.startAt) > now) return false;
+      if (b.endAt && new Date(b.endAt) <= now) return false;
+      return true;
+    })
+    .map((b: any) => ({
+      id: b.id,
+      kind: b.kind,
+      title: b.title || '',
+      url: b.isProtected ? null : (b.url || null),
+      icon: b.icon || null,
+      thumbnailPath: b.thumbnailPath || null,
+      thumbnailUrl: b.thumbnailUrl || null,
+      layout: b.layout || 'classic',
+      embedProvider: b.embedProvider || null,
+      embedMeta: b.embedMeta || null,
+      isProtected: Boolean(b.isProtected),
+      signup: b.signup || null,
+      tipJar: b.tipJar || null,
+      coffee: b.coffee || null,
+      faq: b.faq || null,
+      vcard: b.vcard || null,
+      animation: b.animation || null,
+      badge: b.badge || null,
+      youtube: b.youtube || null,
+      product: b.product || null,
+      booking: b.booking || null,
+      countdown: b.countdown || null,
+      promo: b.promo || null,
+      location: b.location || null,
+      download: b.download || null,
+      bluesky: b.bluesky || null,
+    }));
+
+  const ssrBootstrapPayload = {
+    profile: {
+      username: page.username,
+      displayName: page.displayName || `@${page.username}`,
+      bio: page.bio || '',
+      avatarUrl: page.avatarUrl || null,
+      avatarType: page.avatarType,
+      avatarId: page.avatarId || null,
+      vibeId: page.vibeId || 'clean',
+      plan: page.plan || (page.isPro ? 'pro' : 'free'),
+      isPro: Boolean(page.isPro),
+      isVerified: Boolean(page.isVerified ?? page.isPro),
+      buttonShape: page.buttonShape || null,
+      socials: page.socials || {},
+      socialsPosition: page.socialsPosition || 'top',
+      hideFromSearch: Boolean(page.hideFromSearch),
+      hideFooter: Boolean(page.hideFooter && page.isPro),
+      background: page.background || null,
+      whatsappNumber: page.whatsappNumber || null,
+      customSeoTitle: page.customSeoTitle || null,
+      customSeoDescription: page.customSeoDescription || null,
+      fontSettings: page.fontSettings || null,
+      buttonColors: page.buttonColors || null,
+      layoutSettings: page.layoutSettings || null,
+      businessCard: page.businessCard || null,
+    },
+    links: bootstrapLinks,
+  };
+
   const verifications = buildVerificationMetaTags();
-  const headTags = `<title>${escapeHtml(pageTitle)}</title>
+  const headTags = `${ssrThemeTags}
+    <title>${escapeHtml(pageTitle)}</title>
     <meta name="description" content="${escapeHtml(pageDescription)}" />
     <meta name="robots" content="${escapeHtml(decision.robotsDirective)}" />
     ${verifications}
@@ -449,7 +526,8 @@ export async function buildProfileSeoPayload(
     <meta name="twitter:title" content="${escapeHtml(pageTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(pageDescription)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />
-    <script type="application/ld+json">${safeJsonLd(profilePageJsonLd)}</script>`;
+    <script type="application/ld+json">${safeJsonLd(profilePageJsonLd)}</script>
+    <script id="iveo-ssr-bootstrap" type="application/json">${safeJsonLd(ssrBootstrapPayload)}</script>`;
 
   const resolvedAvatar = page.avatarUrl
     ? (page.avatarUrl.startsWith('/') ? `${requestOrigin}${page.avatarUrl}` : page.avatarUrl)
@@ -471,9 +549,9 @@ export async function buildProfileSeoPayload(
     })
     .join('');
 
-  const ssrBodyHtml = `<main id="iveo-ssr-profile" data-username="${escapeHtml(page.username)}" style="max-width:640px;margin:48px auto;padding:24px;font-family:system-ui,sans-serif;color:#0A0A0A;">
+  const ssrBodyHtml = `<main id="iveo-ssr-profile" class="iveo-ssr-only" data-username="${escapeHtml(page.username)}">
     <header>
-      ${resolvedAvatar ? `<img src="${escapeHtml(resolvedAvatar)}" alt="${escapeHtml(name)} profile photo" width="96" height="96" style="border-radius:9999px;object-fit:cover;" />` : ''}
+      ${resolvedAvatar ? `<img src="${escapeHtml(resolvedAvatar)}" alt="${escapeHtml(name)} profile photo" width="96" height="96" />` : ''}
       <h1>${escapeHtml(name)}</h1>
       <p>@${escapeHtml(page.username)}</p>
       ${page.bio ? `<p>${escapeHtml(page.bio)}</p>` : ''}

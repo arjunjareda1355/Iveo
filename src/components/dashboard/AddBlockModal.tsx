@@ -56,6 +56,7 @@ export type FeatureType =
   | 'embed_threads'
   | 'embed_pinterest'
   | 'embed_bluesky'
+  | 'bluesky'
   | 'embed_linktree'
   | 'vcard'
   | 'signup'
@@ -176,9 +177,9 @@ const FEATURES: FeatureOption[] = [
     iconColor: 'text-[#101010]',
   },
   {
-    id: 'embed_bluesky',
-    title: 'Bluesky card',
-    description: 'Showcase your Bluesky handle and profile card',
+    id: 'bluesky',
+    title: 'Bluesky',
+    description: 'Show your Bluesky profile card, latest posts feed, or a single post',
     category: 'social',
     icon: BlueskySocialIcon,
     iconBg: 'bg-sky-50',

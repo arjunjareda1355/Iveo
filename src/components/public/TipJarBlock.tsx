@@ -6,6 +6,7 @@ import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
 } from '../../lib/preferences';
+import { getBlockContrastPalette } from '../../lib/blockTheme';
 
 interface TipJarBlockProps {
   config: TipJarConfig;
@@ -36,14 +37,15 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
   const innerRadius = resolveCardBorderRadius(buttonRadius, scale, 'inner');
   const controlRadius = resolveButtonControlRadius(buttonRadius, scale);
 
+  const palette = getBlockContrastPalette(surfaceStyle, tokens);
   const baseSurface: React.CSSProperties = surfaceStyle || {
     backgroundColor: tokens.buttonBg,
     borderColor: tokens.buttonBorder,
     borderWidth: tokens.buttonBorderWidth || 1,
     borderStyle: 'solid',
-    color: tokens.buttonText || tokens.text,
+    color: palette.fg,
   };
-  const fg = String(baseSurface.color || tokens.buttonText || tokens.text);
+  const fg = palette.fg;
 
   const paymentHref = (() => {
     let url = config.paymentUrl || 'https://paypal.me';
@@ -102,9 +104,9 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
               onClick={() => setSelectedAmount(amt)}
               className="px-3 py-1.5 text-xs font-semibold transition-all duration-150 cursor-pointer"
               style={{
-                backgroundColor: isSelected ? fg : 'transparent',
-                color: isSelected ? tokens.bg : fg,
-                border: `1px solid ${isSelected ? fg : tokens.buttonBorder || `${fg}40`}`,
+                backgroundColor: isSelected ? palette.btnBg : 'transparent',
+                color: isSelected ? palette.btnText : fg,
+                border: `1px solid ${isSelected ? palette.btnBg : palette.subtleBorder}`,
                 borderRadius: `${controlRadius}px`,
               }}
             >
@@ -118,9 +120,9 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
           onClick={() => setSelectedAmount('custom')}
           className="px-3 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer"
           style={{
-            backgroundColor: selectedAmount === 'custom' ? fg : 'transparent',
-            color: selectedAmount === 'custom' ? tokens.bg : fg,
-            border: `1px solid ${selectedAmount === 'custom' ? fg : tokens.buttonBorder || `${fg}40`}`,
+            backgroundColor: selectedAmount === 'custom' ? palette.btnBg : 'transparent',
+            color: selectedAmount === 'custom' ? palette.btnText : fg,
+            border: `1px solid ${selectedAmount === 'custom' ? palette.btnBg : palette.subtleBorder}`,
             borderRadius: `${controlRadius}px`,
           }}
         >
@@ -138,8 +140,13 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
             placeholder="Amount"
             value={customVal}
             onChange={(e) => setCustomVal(e.target.value)}
-            className="w-full px-2.5 py-1 text-sm border border-current/30 bg-transparent focus:outline-none focus:border-current"
-            style={{ borderRadius: `${innerRadius}px` }}
+            className="w-full px-2.5 py-1 text-sm focus:outline-none"
+            style={{
+              borderRadius: `${innerRadius}px`,
+              backgroundColor: palette.inputBg,
+              border: `1px solid ${palette.inputBorder}`,
+              color: fg,
+            }}
           />
         </div>
       )}
@@ -154,8 +161,8 @@ export const TipJarBlock: React.FC<TipJarBlockProps> = ({
         className="w-full font-medium py-2 px-4 flex items-center justify-center gap-2 transition-transform duration-150 active:scale-[0.98] cursor-pointer"
         style={{
           borderRadius: `${controlRadius}px`,
-          backgroundColor: fg,
-          color: tokens.bg,
+          backgroundColor: palette.btnBg,
+          color: palette.btnText,
           fontSize: `${Math.round(13 * scale)}px`,
         }}
       >

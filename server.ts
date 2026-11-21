@@ -307,6 +307,14 @@ async function startServer() {
   app.get(['/api/oauth/youtube/callback', '/api/oauth/youtube/callback/'], dbHandlers.handleYouTubeOAuthCallback);
   app.get('/api/oauth/:provider/url', dbHandlers.handleSocialOAuthUrl);
   app.get(['/api/oauth/:provider/callback', '/api/oauth/:provider/callback/'], dbHandlers.handleSocialOAuthCallback);
+  app.get(['/callback', '/callback/'], (req, res) => {
+    // Spotify and root OAuth callbacks infer provider from signed state payload (defaulting to spotify)
+    req.params.provider = req.params.provider || '';
+    return dbHandlers.handleSocialOAuthCallback(req, res);
+  });
+  app.get('/api/bluesky/profile', dbHandlers.handleBlueskyProfile);
+  app.get('/api/bluesky/feed', dbHandlers.handleBlueskyFeed);
+  app.get('/api/bluesky/post', dbHandlers.handleBlueskyPost);
   app.get('/api/subscription', dbHandlers.handleGetSubscription);
   app.post('/api/subscription/cancel', dbHandlers.handleCancelSubscription);
   app.post('/api/subscription/reactivate', dbHandlers.handleReactivateSubscription);

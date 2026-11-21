@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/cn';
+import { Loader } from './Loader';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'destructive' | 'ghost' | 'inverse';
@@ -45,7 +46,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
     const isInverse = variant === 'inverse';
 
     const baseStyles =
-      'group inline-flex items-center justify-center font-medium font-sans select-none whitespace-nowrap shrink-0 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-offset-2';
+      'group relative inline-flex items-center justify-center font-medium font-sans select-none whitespace-nowrap shrink-0 transition-colors duration-120 focus-visible:outline-2 focus-visible:outline-offset-2';
 
     const sizeStyles =
       size === 'sm'
@@ -97,43 +98,36 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
       className
     );
 
-    const renderSpinner = () => (
-      <svg
-        className="w-4 h-4 animate-spin motion-reduce:animate-none shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <circle
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          className="opacity-25"
-        />
-        <path
-          d="M12 2a10 10 0 0 1 10 10"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-
-    const renderIcon = () => {
-      if (loading) {
-        return renderSpinner();
-      }
+    const renderIconRight = () => {
       if (!iconRight) return null;
-
       return (
         <span className="shrink-0 inline-flex items-center transition-transform duration-120 ease-out group-hover:translate-x-[2px] motion-reduce:group-hover:translate-x-0">
           {iconRight}
         </span>
       );
     };
+
+    const renderContent = () => (
+      <>
+        <span
+          className={cn(
+            'inline-flex items-center justify-center gap-[inherit]',
+            loading && 'opacity-0'
+          )}
+        >
+          {children}
+          {renderIconRight()}
+        </span>
+        {loading && (
+          <span
+            className="absolute inset-0 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <Loader size="xs" label="Loading" />
+          </span>
+        )}
+      </>
+    );
 
     if (Component === Link && to) {
       return (
@@ -146,8 +140,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
           aria-disabled={disabled}
           {...(props as any)}
         >
-          {children}
-          {renderIcon()}
+          {renderContent()}
         </Link>
       );
     }
@@ -163,8 +156,7 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
           aria-disabled={disabled}
           {...(props as any)}
         >
-          {children}
-          {renderIcon()}
+          {renderContent()}
         </a>
       );
     }
@@ -173,11 +165,11 @@ export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, Bu
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         disabled={disabled || loading}
+        aria-busy={loading || undefined}
         className={combinedClassName}
         {...props}
       >
-        {children}
-        {renderIcon()}
+        {renderContent()}
       </button>
     );
   }

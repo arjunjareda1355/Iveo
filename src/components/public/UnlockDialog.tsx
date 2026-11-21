@@ -5,6 +5,7 @@ import { copy } from '../../content/copy';
 import { unlockLink } from '../../data/publicApi';
 import { isSafeHref } from '../../lib/urls';
 import { Eye, EyeOff, X, Lock, Check } from 'lucide-react';
+import { Loader } from '../ui/Loader';
 
 interface UnlockDialogProps {
   isOpen: boolean;
@@ -289,7 +290,8 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting || !password.trim()}
-                  className="flex-1 h-11 px-4 font-medium transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-sm text-sm"
+                  aria-busy={isSubmitting || undefined}
+                  className="relative flex-1 h-11 px-4 font-medium transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-sm text-sm"
                   style={{
                     backgroundColor: tokens.buttonBg,
                     color: tokens.buttonText,
@@ -299,10 +301,13 @@ export const UnlockDialog: React.FC<UnlockDialogProps> = ({
                       : 'none',
                   }}
                 >
-                  {isSubmitting ? (
-                    <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                  ) : (
-                    copy.password.visitor.unlockButton
+                  <span className={isSubmitting ? 'opacity-0' : undefined}>
+                    {copy.password.visitor.unlockButton}
+                  </span>
+                  {isSubmitting && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <Loader size="xs" />
+                    </span>
                   )}
                 </button>
               </div>

@@ -31,6 +31,7 @@ export interface ServerConfig {
   razorpayKeyId: string;
   razorpayKeySecret: string;
   razorpayWebhookSecret: string;
+  spotifyRedirectUri: string;
   oauth: Record<SocialOAuthProvider, ProviderCredentials>;
 }
 
@@ -65,6 +66,7 @@ export function getServerConfig(): ServerConfig {
     razorpayKeyId: trim(env.RAZORPAY_KEY_ID) || trim(env.VITE_RAZORPAY_KEY_ID),
     razorpayKeySecret: trim(env.RAZORPAY_KEY_SECRET),
     razorpayWebhookSecret: trim(env.RAZORPAY_WEBHOOK_SECRET) || trim(env.RAZORPAY_KEY_SECRET),
+    spotifyRedirectUri: trim(env.SPOTIFY_REDIRECT_URI),
     oauth: {
       discord: {
         clientId: trim(env.DISCORD_CLIENT_ID),

@@ -8,6 +8,7 @@ import {
 import { AccountDeletionProvider } from './components/account/AccountDeletionProvider';
 import { getSubdomainFromHostname } from './lib/site';
 import { PRIVATE_ROUTES, PUBLIC_INFO_ROUTES, normalizeUsername, validateUsername } from './lib/username-rules';
+import { useLoader } from './components/ui/LoaderProvider';
 
 // Lazy-load every route except the landing page
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -37,14 +38,14 @@ function ScrollToTop() {
   return null;
 }
 
-// 2px ink progress line fallback during route lazy loading
-function LoadingBar() {
-  return (
-    <div
-      className="fixed top-0 left-0 right-0 h-[2px] bg-ink z-[100] animate-pulse"
-      aria-hidden="true"
-    />
-  );
+// Route transition loader wired to single root LoaderProvider (300ms delay avoids flash on fast chunks)
+function RouteLoaderFallback() {
+  const { showLoader } = useLoader();
+  useEffect(() => {
+    const release = showLoader({ size: 'md', blocking: false });
+    return () => release();
+  }, [showLoader]);
+  return null;
 }
 
 // Handles canonical /@username routes and redirects legacy /username -> /@username
@@ -113,7 +114,7 @@ export default function App() {
     return (
       <AccountDeletionProvider>
         <ScrollToTop />
-        <Suspense fallback={<LoadingBar />}>
+        <Suspense fallback={<RouteLoaderFallback />}>
           <Routes>
             <Route path="/" element={<PublicProfilePlaceholder usernameOverride={currentSubdomain} />} />
             <Route path="/:username" element={<PublicProfilePlaceholder usernameOverride={currentSubdomain} />} />
@@ -127,7 +128,7 @@ export default function App() {
   return (
     <AccountDeletionProvider>
       <ScrollToTop />
-      <Suspense fallback={<LoadingBar />}>
+      <Suspense fallback={<RouteLoaderFallback />}>
         <Routes>
           {/* 1. Public Landing */}
           <Route path="/" element={<Landing />} />

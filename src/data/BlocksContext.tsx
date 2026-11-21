@@ -16,6 +16,7 @@ import {
   PromoConfig,
   LocationConfig,
   DownloadConfig,
+  BlueskyConfig,
 } from './types';
 import {
   listMyBlocks,
@@ -50,6 +51,7 @@ interface BlocksContextValue {
   addPromo: (title: string, url: string | null, promo: PromoConfig) => Promise<void>;
   addLocation: (title: string, url: string, location: LocationConfig) => Promise<void>;
   addDownload: (title: string, url: string, download: DownloadConfig) => Promise<void>;
+  addBluesky: (title: string, url: string, bluesky: BlueskyConfig) => Promise<void>;
   addFaq: (items: FaqItem[], title?: string) => Promise<void>;
   addVCard: (config: VCardConfig, title?: string) => Promise<void>;
   addHeader: (title: string) => Promise<void>;
@@ -483,6 +485,26 @@ export const BlocksProvider: React.FC<{
     }
   };
 
+  const addBluesky = async (title: string, url: string, bluesky: BlueskyConfig) => {
+    const prev = [...blocks];
+    try {
+      const newBlock = await createBlock(token, userId, {
+        kind: 'bluesky',
+        title,
+        url,
+        bluesky,
+        position: blocks.length,
+      }, authCtx);
+      setBlocks((b) => [newBlock, ...b]);
+      syncBlockTargets(newBlock).catch(() => {});
+      showToast('Bluesky block added');
+    } catch (err: unknown) {
+      setBlocks(prev);
+      showToast("Couldn't add Bluesky block. Try again.");
+      throw err;
+    }
+  };
+
   const updateBlockFields = async (id: string, patch: Partial<Block>) => {
     const prev = [...blocksRef.current];
     const next = prev.map((item) => (item.id === id ? { ...item, ...patch } : item));
@@ -550,11 +572,13 @@ export const BlocksProvider: React.FC<{
     try {
       await apiDeleteBlock(token, userId, id, authCtx);
       if (!isDemoMode) {
-        deleteBlockFromFirebase(userId, id).catch(() => {});
-        if (ownerUserId && ownerUserId !== userId) {
-          deleteBlockFromFirebase(ownerUserId, id).catch(() => {});
-        }
-        syncAllTargets(next).catch(() => {});
+        await Promise.all([
+          deleteBlockFromFirebase(userId, id).catch(() => {}),
+          ownerUserId && ownerUserId !== userId
+            ? deleteBlockFromFirebase(ownerUserId, id).catch(() => {})
+            : Promise.resolve(),
+          syncAllTargets(next).catch(() => {}),
+        ]);
       }
       showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
     } catch {
@@ -661,6 +685,7 @@ export const BlocksProvider: React.FC<{
           promo: block.promo ?? undefined,
           location: block.location ?? undefined,
           download: block.download ?? undefined,
+          bluesky: block.bluesky ?? undefined,
           animation: block.animation ?? undefined,
           badge: block.badge ?? undefined,
           position: prev.length,
@@ -698,6 +723,7 @@ export const BlocksProvider: React.FC<{
         addPromo,
         addLocation,
         addDownload,
+        addBluesky,
         addFaq,
         addVCard,
         addHeader,

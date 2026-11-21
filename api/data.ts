@@ -35,6 +35,9 @@ import {
   handleSeoAdminValidate,
   handleSeoAdminInspect,
   handleSeoAdminModerateBackground,
+  handleBlueskyProfile,
+  handleBlueskyFeed,
+  handleBlueskyPost,
 } from './_lib/db-handlers.ts';
 
 export const dynamic = 'force-dynamic';
@@ -103,6 +106,12 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleSocialOAuthUrl(req, res);
     case 'oauth-social-callback':
       return handleSocialOAuthCallback(req, res);
+    case 'bluesky-profile':
+      return handleBlueskyProfile(req, res);
+    case 'bluesky-feed':
+      return handleBlueskyFeed(req, res);
+    case 'bluesky-post':
+      return handleBlueskyPost(req, res);
     case 'subscription':
       return handleGetSubscription(req, res);
     case 'subscription-cancel':

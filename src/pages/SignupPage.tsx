@@ -8,45 +8,44 @@ import { normalizeUsername, validateUsername } from '../lib/username-rules';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
 
-export const SignupPage: React.FC = () => {
-  usePageMeta({ robots: 'noindex, nofollow' });
-  const [searchParams] = useSearchParams();
-  const [claim, setClaim] = useState<string | null>(null);
-
-  useEffect(() => {
-    const rawParam = searchParams.get('u');
-    let effectiveClaim: string | null = null;
-
-    if (rawParam) {
-      const normalized = normalizeUsername(rawParam);
-      if (validateUsername(normalized).ok) {
-        effectiveClaim = normalized;
-        try {
-          sessionStorage.setItem('iveo.claim', normalized);
-          sessionStorage.setItem('ivio.claim', normalized);
-        } catch {
-          // ignore storage error
-        }
-      }
-    }
-
-    if (!effectiveClaim) {
+function resolveInitialClaim(searchParams: URLSearchParams): string | null {
+  const rawParam = searchParams.get('u');
+  if (rawParam) {
+    const normalized = normalizeUsername(rawParam);
+    if (validateUsername(normalized).ok) {
       try {
-        const stored =
-          sessionStorage.getItem('iveo.claim') ||
-          sessionStorage.getItem('ivio.claim');
-        if (stored) {
-          const normalized = normalizeUsername(stored);
-          if (validateUsername(normalized).ok) {
-            effectiveClaim = normalized;
-          }
-        }
+        sessionStorage.setItem('iveo.claim', normalized);
+        sessionStorage.setItem('ivio.claim', normalized);
       } catch {
         // ignore storage error
       }
+      return normalized;
     }
+  }
 
-    setClaim(effectiveClaim);
+  try {
+    const stored =
+      sessionStorage.getItem('iveo.claim') ||
+      sessionStorage.getItem('ivio.claim');
+    if (stored) {
+      const normalized = normalizeUsername(stored);
+      if (validateUsername(normalized).ok) {
+        return normalized;
+      }
+    }
+  } catch {
+    // ignore storage error
+  }
+  return null;
+}
+
+export const SignupPage: React.FC = () => {
+  usePageMeta({ robots: 'noindex, nofollow' });
+  const [searchParams] = useSearchParams();
+  const [claim, setClaim] = useState<string | null>(() => resolveInitialClaim(searchParams));
+
+  useEffect(() => {
+    setClaim(resolveInitialClaim(searchParams));
   }, [searchParams]);
 
   const contextElement = claim ? (

@@ -195,18 +195,12 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
           <Button
             variant="primary"
             size="md"
-            disabled={!isMatch || isDeleting}
+            disabled={!isMatch}
+            loading={isDeleting}
             onClick={handleDelete}
             className="order-1 sm:order-2 bg-[color:var(--error,#B3261E)] hover:bg-red-700 text-white disabled:opacity-40"
           >
-            {isDeleting ? (
-              <span className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                <span>Deleting...</span>
-              </span>
-            ) : (
-              <span>Delete permanently</span>
-            )}
+            Delete permanently
           </Button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
 } from '../../lib/preferences';
+import { getBlockContrastPalette } from '../../lib/blockTheme';
 
 interface VCardBlockProps {
   config: VCardConfig;
@@ -31,31 +32,19 @@ export const VCardBlock: React.FC<VCardBlockProps> = ({
   const barRadius = resolveCardBorderRadius(buttonRadius, scale, 'bar');
   const controlRadius = resolveButtonControlRadius(buttonRadius, scale);
 
+  const palette = getBlockContrastPalette(surfaceStyle, tokens);
   const baseSurface: React.CSSProperties = surfaceStyle || {
     backgroundColor: tokens.buttonBg,
-    color: tokens.buttonText,
+    color: palette.fg,
     border: tokens.buttonBorder
       ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
       : '1px solid rgba(0,0,0,0.06)',
     boxShadow: tokens.buttonShadow || '0 1px 3px rgba(0,0,0,0.04)',
   };
 
-  const fg = String(baseSurface.color || tokens.buttonText || tokens.text);
-  const isLightFg =
-    fg.toUpperCase() === '#FFFFFF' ||
-    fg.toUpperCase() === '#FAFAFA' ||
-    fg.toUpperCase() === '#F8FAFC' ||
-    fg.toUpperCase() === '#F5F5F5';
-  const ctaBg = downloaded ? '#10B981' : fg;
-  const ctaText = downloaded
-    ? '#FFFFFF'
-    : typeof baseSurface.backgroundColor === 'string' &&
-        baseSurface.backgroundColor.startsWith('#') &&
-        baseSurface.backgroundColor !== 'transparent'
-      ? baseSurface.backgroundColor
-      : isLightFg
-        ? '#0A0A0A'
-        : '#FFFFFF';
+  const fg = palette.fg;
+  const ctaBg = downloaded ? '#10B981' : palette.btnBg;
+  const ctaText = downloaded ? '#FFFFFF' : palette.btnText;
 
   const handleDownloadVCard = (e: React.MouseEvent) => {
     e.preventDefault();

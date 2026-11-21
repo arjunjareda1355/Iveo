@@ -161,3 +161,68 @@ section[id], [id] {
     scroll-behavior: auto !important;
   }
 }
+
+/* Clerk social login buttons: keep provider icons only without visible app names */
+.cl-socialButtonsBlockButtonText,
+.cl-socialButtonsBlockButtonText__google,
+.cl-socialButtonsBlockButtonText__discord,
+.cl-socialButtonsBlockButtonText__twitter,
+.cl-socialButtonsBlockButtonText__x,
+.cl-socialButtonsBlockButtonText__apple,
+.cl-socialButtonsBlockButtonText__github,
+.cl-socialButtonsProviderIcon + span {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Visually hidden SSR crawlable content inside #root until React mounts */
+.iveo-ssr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Custom iveo outline "i" loader (exact geometry/timing preserved) */
+.iveo-loader {
+  height: auto;
+  overflow: visible;
+  color: currentColor;
+  display: block;
+}
+.iveo-loader .s {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 9;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: iveo-trace 2.2s ease-in-out infinite;
+}
+.iveo-loader .d {
+  animation-delay: .15s;
+}
+@keyframes iveo-trace {
+  0%   { stroke-dashoffset: 1; }
+  55%  { stroke-dashoffset: 0; }
+  80%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iveo-loader .s {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}

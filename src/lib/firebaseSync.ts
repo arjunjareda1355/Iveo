@@ -62,6 +62,7 @@ export async function syncBlockToFirebase(userId: string, block: Block): Promise
     if (block.promo) cleanBlock.promo = block.promo;
     if (block.location) cleanBlock.location = block.location;
     if (block.download) cleanBlock.download = block.download;
+    if (block.bluesky) cleanBlock.bluesky = block.bluesky;
 
     await setDoc(doc(db, 'users', userId, 'blocks', block.id), cleanBlock, { merge: true });
   } catch (err) {

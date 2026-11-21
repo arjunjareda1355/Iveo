@@ -8,9 +8,14 @@ export interface PublicPageServerData {
   username: string;
   bio: string | null;
   avatarUrl: string | null;
+  avatarType?: 'default' | 'uploaded';
+  avatarId?: string | null;
   vibeId: string;
+  buttonShape?: 'square' | 'rounded' | 'pill' | null;
   hideFromSearch: boolean;
+  hideFooter?: boolean;
   isPublished?: boolean;
+  plan?: 'free' | 'pro';
   isPro?: boolean;
   isVerified?: boolean;
   status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
@@ -18,6 +23,13 @@ export interface PublicPageServerData {
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
   socials?: Record<string, string>;
+  socialsPosition?: 'top' | 'bottom' | 'both';
+  whatsappNumber?: string | null;
+  background?: any;
+  fontSettings?: any;
+  buttonColors?: any;
+  layoutSettings?: any;
+  businessCard?: any;
 }
 
 export function isAllowedAvatarHost(url: string | null | undefined): boolean {
@@ -66,9 +78,14 @@ export async function loadPublicPage(
         displayName: dbProf.displayName || `@${dbProf.username}`,
         bio: dbProf.bio || null,
         avatarUrl: isAllowedAvatarHost(dbProf.avatarUrl) ? dbProf.avatarUrl : null,
+        avatarType: dbProf.avatarType,
+        avatarId: dbProf.avatarId || null,
         vibeId: dbProf.vibeId || 'clean',
+        buttonShape: dbProf.buttonShape || null,
         hideFromSearch: Boolean(dbProf.hideFromSearch),
+        hideFooter: Boolean(dbProf.hideFooter && isPro),
         isPublished: dbProf.isPublished !== false,
+        plan: isPro ? 'pro' : 'free',
         isPro,
         isVerified: isPro,
         status,
@@ -76,6 +93,13 @@ export async function loadPublicPage(
         customSeoTitle: dbProf.customSeoTitle || null,
         customSeoDescription: dbProf.customSeoDescription || null,
         socials: (dbProf.socials && typeof dbProf.socials === 'object') ? dbProf.socials : {},
+        socialsPosition: dbProf.socialsPosition || 'top',
+        whatsappNumber: dbProf.whatsappNumber || null,
+        background: dbProf.background || null,
+        fontSettings: dbProf.fontSettings || null,
+        buttonColors: dbProf.buttonColors || null,
+        layoutSettings: dbProf.layoutSettings || null,
+        businessCard: dbProf.businessCard || null,
       };
     }
   } catch {}
@@ -102,9 +126,14 @@ export async function loadPublicPage(
         displayName: fbProf.displayName || `@${fbProf.username}`,
         bio: fbProf.bio || null,
         avatarUrl: isAllowedAvatarHost(fbProf.avatarUrl) ? fbProf.avatarUrl : null,
+        avatarType: fbProf.avatarType,
+        avatarId: fbProf.avatarId || null,
         vibeId: fbProf.vibeId || 'clean',
+        buttonShape: fbProf.buttonShape || null,
         hideFromSearch: Boolean(fbProf.hideFromSearch),
+        hideFooter: Boolean(fbProf.hideFooter && isPro),
         isPublished: fbProf.isPublished !== false,
+        plan: isPro ? 'pro' : 'free',
         isPro,
         isVerified: isPro,
         status,
@@ -112,6 +141,13 @@ export async function loadPublicPage(
         customSeoTitle: fbProf.customSeoTitle || null,
         customSeoDescription: fbProf.customSeoDescription || null,
         socials: (fbProf.socials && typeof fbProf.socials === 'object') ? fbProf.socials : {},
+        socialsPosition: fbProf.socialsPosition || 'top',
+        whatsappNumber: fbProf.whatsappNumber || null,
+        background: fbProf.background || null,
+        fontSettings: fbProf.fontSettings || null,
+        buttonColors: fbProf.buttonColors || null,
+        layoutSettings: fbProf.layoutSettings || null,
+        businessCard: fbProf.businessCard || null,
       };
     }
   } catch {}

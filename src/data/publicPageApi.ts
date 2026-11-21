@@ -3,6 +3,7 @@ import { storagePublicUrl } from './storageApi';
 import type { VibeId } from '../lib/vibes';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 import { resolveEffectivePlan } from '../lib/plan';
+import { apiFetch } from '../lib/apiFetch';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -43,6 +44,7 @@ function mapFbBlocks(rawBlocks: any[]): PublicBlock[] {
       promo: b.promo || null,
       location: b.location || null,
       download: b.download || null,
+      bluesky: b.bluesky || null,
     }));
 }
 
@@ -55,8 +57,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
   // 1. Unified server endpoint (Azure SQL Database / Server store / Firebase Server)
   try {
     const ts = Date.now();
-    let res = await fetch(`/api/public-page?u=${encodeURIComponent(clean)}&_t=${ts}`, {
+    let res = await apiFetch(`/api/public-page?u=${encodeURIComponent(clean)}&_t=${ts}`, {
       cache: 'no-cache',
+      silent: true,
       headers: { 'Cache-Control': 'no-cache' },
     });
 
@@ -144,6 +147,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             promo: b.promo || null,
             location: b.location || null,
             download: b.download || null,
+            bluesky: b.bluesky || null,
           })),
         };
 

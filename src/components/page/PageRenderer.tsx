@@ -43,6 +43,11 @@ import {
 } from '../../lib/preferences';
 import { BackgroundLayer } from './BackgroundLayer';
 import { SITE_LOGO_SRC, SITE_WORDMARK_SRC } from '../ui/Logo';
+import {
+  resolveBlockThemeContract,
+  getBlockContrastPalette,
+} from '../../lib/blockTheme';
+import { BlueskyBlock } from './BlueskyBlock';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -58,7 +63,7 @@ export interface PageRendererProps {
   onSocialClick?: (platform: string, url: string) => void;
   onWhatsAppClick?: (phone: string) => void;
   onUnlock?: (block: PageBlock) => void;
-  renderSignupForm?: (block: PageBlock) => React.ReactNode;
+  renderSignupForm?: (block: PageBlock, surfaceStyle?: React.CSSProperties) => React.ReactNode;
   protectedIds?: ReadonlySet<string>;
 }
 
@@ -80,35 +85,31 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   protectedIds,
 }) => {
   const { persona } = vibe;
-  const tokens = resolveEffectiveTokens(
-    vibe.tokens,
-    profile?.buttonColors,
-    profile?.background
-  );
+  const themeContract = resolveBlockThemeContract({
+    vibeId: vibe.id,
+    vibeTokens: vibe.tokens,
+    vibeFontFamily: vibe.fontFamily,
+    buttonColors: profile?.buttonColors,
+    background: profile?.background,
+    layoutSettings: profile?.layoutSettings,
+    fontSettings: profile?.fontSettings,
+    buttonRadiusOverride,
+    scale,
+  });
+  const tokens = themeContract.tokens;
   const effectiveVibe: Vibe = { ...vibe, tokens };
   const isVerified = Boolean(profile?.isVerified ?? profile?.isPro);
-  const onDarkTick = !isLightHexColor(tokens.bg) || isDarkBackgroundConfig(profile?.background);
+  const onDarkTick = themeContract.isDarkPage;
 
-  const nameFontFamily = getFontCssFamily(
-    profile?.fontSettings?.nameFont,
-    vibe.fontFamily
-  );
-  const bioFontFamily = getFontCssFamily(
-    profile?.fontSettings?.bioFont,
-    vibe.fontFamily
-  );
-  const buttonFontFamily = getFontCssFamily(
-    profile?.fontSettings?.buttonFont,
-    vibe.fontFamily
-  );
-
-  const effectiveRadius =
-    buttonRadiusOverride !== undefined ? buttonRadiusOverride : tokens.buttonRadius;
+  const nameFontFamily = themeContract.nameFontFamily;
+  const bioFontFamily = themeContract.bioFontFamily;
+  const buttonFontFamily = themeContract.buttonFontFamily;
+  const effectiveRadius = themeContract.radii.effective;
 
   const layout = {
     avatarShape: profile?.layoutSettings?.avatarShape || DEFAULT_LAYOUT_SETTINGS.avatarShape,
     headerAlign: profile?.layoutSettings?.headerAlign || DEFAULT_LAYOUT_SETTINGS.headerAlign,
-    buttonStyle: profile?.layoutSettings?.buttonStyle || DEFAULT_LAYOUT_SETTINGS.buttonStyle,
+    buttonStyle: themeContract.buttonStyle,
     linkSpacing: profile?.layoutSettings?.linkSpacing || DEFAULT_LAYOUT_SETTINGS.linkSpacing,
     pageWidth: profile?.layoutSettings?.pageWidth || DEFAULT_LAYOUT_SETTINGS.pageWidth,
     cardLook: profile?.layoutSettings?.cardLook || DEFAULT_LAYOUT_SETTINGS.cardLook,
@@ -140,60 +141,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         ? 'max-w-[660px]'
         : 'max-w-[540px]';
 
-  const getButtonSurfaceStyle = (overrideGlow?: string): React.CSSProperties => {
-    const baseBorder = tokens.buttonBorder
-      ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
-      : '1px solid rgba(0,0,0,0.08)';
-    switch (layout.buttonStyle) {
-      case 'outline':
-        return {
-          backgroundColor: 'transparent',
-          color: tokens.text,
-          border: `1.5px solid ${tokens.buttonBorder || tokens.text}`,
-          boxShadow: overrideGlow || 'none',
-        };
-      case 'soft':
-        return {
-          backgroundColor: `${tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg}20`,
-          color: tokens.text,
-          border: `1px solid ${tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg}33`,
-          boxShadow: overrideGlow || 'none',
-        };
-      case 'offset':
-        return {
-          backgroundColor: tokens.buttonBg,
-          color: tokens.buttonText,
-          border: `1.5px solid ${tokens.buttonBorder || tokens.text}`,
-          boxShadow: overrideGlow || `${Math.max(2, Math.round(3 * scale))}px ${Math.max(2, Math.round(3 * scale))}px 0px ${tokens.text}`,
-        };
-      case 'glass':
-        return {
-          backgroundColor: 'rgba(255, 255, 255, 0.16)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          color: tokens.text,
-          border: `1px solid ${tokens.text}28`,
-          boxShadow: overrideGlow || '0 4px 16px rgba(0, 0, 0, 0.08)',
-        };
-      case 'gradient':
-        return {
-          background: `linear-gradient(135deg, ${tokens.buttonBg === 'transparent' ? '#0A0A0A' : tokens.buttonBg} 0%, ${tokens.buttonBorder || '#6366F1'} 100%)`,
-          color: tokens.buttonText,
-          border: tokens.buttonBorder ? baseBorder : 'none',
-          boxShadow: overrideGlow || tokens.buttonShadow || '0 4px 14px rgba(0,0,0,0.12)',
-        };
-      case 'solid':
-      default:
-        return {
-          backgroundColor: tokens.buttonBg,
-          color: tokens.buttonText,
-          border: tokens.buttonBorder ? baseBorder : 'none',
-          boxShadow: overrideGlow || tokens.buttonShadow || 'none',
-        };
-    }
-  };
-
-  const buttonSurfaceStyle = getButtonSurfaceStyle();
+  const buttonSurfaceStyle = themeContract.surfaceStyle;
+  const buttonPalette = getBlockContrastPalette(buttonSurfaceStyle, tokens);
+  const getButtonSurfaceStyle = (overrideGlow?: string): React.CSSProperties =>
+    overrideGlow
+      ? { ...buttonSurfaceStyle, boxShadow: overrideGlow }
+      : buttonSurfaceStyle;
   const socialBorderRadiusCss =
     effectiveRadius >= 999
       ? '9999px'
@@ -272,6 +225,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     color: tokens.text,
     fontFamily: vibe.fontFamily,
     padding: `${Math.round(32 * scale)}px ${Math.round(20 * scale)}px ${Math.round(24 * scale)}px`,
+    ...(themeContract.cssVars as React.CSSProperties),
   };
 
   return (
@@ -526,17 +480,35 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
+          // 3b. Bluesky Block (Profile, Feed, Single Post, Compact Button)
+          if (block.kind === 'bluesky') {
+            return (
+              <div key={block.id} className="w-full">
+                <BlueskyBlock
+                  block={block}
+                  tokens={tokens}
+                  effectiveRadius={effectiveRadius}
+                  fontFamily={buttonFontFamily}
+                  scale={scale}
+                  isPublicPage={isPublicPage}
+                  onLinkClick={onLinkClick}
+                  surfaceStyle={buttonSurfaceStyle}
+                />
+              </div>
+            );
+          }
+
           // 4. Signup form
           if (block.kind === 'signup') {
             if (renderSignupForm && isPublicPage) {
               return (
                 <div key={block.id} className="w-full">
-                  {renderSignupForm(block)}
+                  {renderSignupForm(block, buttonSurfaceStyle)}
                 </div>
               );
             }
 
-            // Placeholder card for preview mockups
+            // Placeholder card for preview mockups (matches live SignupFormBlock surfaceStyle 1:1)
             const cfg = block.signup;
             const collectMode = cfg?.collect || 'email';
             const buttonText = cfg?.button || 'Subscribe';
@@ -551,10 +523,10 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 key={block.id}
                 className="w-full overflow-hidden flex flex-col items-center text-center select-none"
                 style={{
-                  border: `1px solid ${tokens.buttonBorder || tokens.text}26`,
+                  ...buttonSurfaceStyle,
                   borderRadius: `${cardRadius}px`,
                   padding: `${Math.round(14 * scale)}px`,
-                  color: tokens.text,
+                  color: buttonPalette.fg,
                   fontFamily: buttonFontFamily,
                 }}
               >
@@ -568,15 +540,18 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   className="font-semibold leading-tight"
                   style={{
                     fontSize: `${Math.max(13, Math.round(15 * scale))}px`,
-                    color: tokens.text,
+                    color: buttonPalette.fg,
                   }}
                 >
                   {block.title}
                 </h3>
                 {desc && (
                   <p
-                    className="mt-1 opacity-80"
-                    style={{ fontSize: `${Math.max(11, Math.round(13 * scale))}px` }}
+                    className="mt-1"
+                    style={{
+                      fontSize: `${Math.max(11, Math.round(13 * scale))}px`,
+                      color: buttonPalette.muted,
+                    }}
                   >
                     {desc}
                   </p>
@@ -590,7 +565,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                       style={{
                         height: `${Math.round(38 * scale)}px`,
                         borderRadius: `${innerRadius}px`,
-                        border: `1px solid ${tokens.text}4D`,
+                        backgroundColor: buttonPalette.inputBg,
+                        border: `1px solid ${buttonPalette.inputBorder}`,
                       }}
                     />
                   ))}
@@ -600,7 +576,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   className="w-full flex items-center justify-center font-medium truncate"
                   style={{
                     height: `${Math.round(38 * scale)}px`,
-                    ...buttonSurfaceStyle,
+                    backgroundColor: buttonPalette.btnBg,
+                    color: buttonPalette.btnText,
                     borderRadius: `${controlRadius}px`,
                     fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
                   }}
@@ -670,21 +647,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
             const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
             const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
-            const coffeeFg = String(buttonSurfaceStyle.color || tokens.buttonText || tokens.text);
-            const isLightFg =
-              coffeeFg.toUpperCase() === '#FFFFFF' ||
-              coffeeFg.toUpperCase() === '#FAFAFA' ||
-              coffeeFg.toUpperCase() === '#F8FAFC' ||
-              coffeeFg.toUpperCase() === '#F5F5F5';
-            const ctaBg = coffeeFg;
-            const ctaColor =
-              typeof buttonSurfaceStyle.backgroundColor === 'string' &&
-              buttonSurfaceStyle.backgroundColor.startsWith('#') &&
-              buttonSurfaceStyle.backgroundColor !== 'transparent'
-                ? buttonSurfaceStyle.backgroundColor
-                : isLightFg
-                  ? '#0A0A0A'
-                  : '#FFFFFF';
+            const coffeeFg = buttonPalette.fg;
+            const ctaBg = buttonPalette.btnBg;
+            const ctaColor = buttonPalette.btnText;
 
             return (
               <div
@@ -820,21 +785,9 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             const barRadius = resolveCardBorderRadius(effectiveRadius, scale, 'bar');
             const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
             const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
-            const igFg = String(buttonSurfaceStyle.color || tokens.buttonText || tokens.text);
-            const isLightFg =
-              igFg.toUpperCase() === '#FFFFFF' ||
-              igFg.toUpperCase() === '#FAFAFA' ||
-              igFg.toUpperCase() === '#F8FAFC' ||
-              igFg.toUpperCase() === '#F5F5F5';
-            const ctaBg = igFg;
-            const ctaColor =
-              typeof buttonSurfaceStyle.backgroundColor === 'string' &&
-              buttonSurfaceStyle.backgroundColor.startsWith('#') &&
-              buttonSurfaceStyle.backgroundColor !== 'transparent'
-                ? buttonSurfaceStyle.backgroundColor
-                : isLightFg
-                  ? '#0A0A0A'
-                  : '#FFFFFF';
+            const igFg = buttonPalette.fg;
+            const ctaBg = buttonPalette.btnBg;
+            const ctaColor = buttonPalette.btnText;
             const igHorizPad = effectiveRadius >= 999 ? Math.round(16 * scale) : Math.round(12 * scale);
 
             return (
@@ -1099,8 +1052,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 <span
                   className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm pointer-events-none z-10"
                   style={{
-                    backgroundColor: tokens.text,
-                    color: tokens.bg,
+                    backgroundColor: buttonPalette.btnBg,
+                    color: buttonPalette.btnText,
                     border: `1px solid ${tokens.buttonBorder || 'transparent'}`,
                   }}
                 >

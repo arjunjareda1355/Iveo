@@ -9,7 +9,7 @@ export const SSOCallbackPage: React.FC = () => {
         <AuthenticateWithRedirectCallback
           signInFallbackRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/onboarding"
-          continueSignUpUrl="/onboarding"
+          continueSignUpUrl="/signup/continue"
         />
         <AuthSkeletonCard />
       </div>

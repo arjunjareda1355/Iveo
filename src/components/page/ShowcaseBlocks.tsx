@@ -19,6 +19,7 @@ import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
 } from '../../lib/preferences';
+import { getBlockContrastPalette } from '../../lib/blockTheme';
 
 interface SharedBlockRenderProps {
   block: PageBlock;
@@ -32,23 +33,13 @@ interface SharedBlockRenderProps {
 }
 
 function resolveCardPalette(surfaceStyle: React.CSSProperties, tokens: VibeTokens) {
-  const fg = String(surfaceStyle.color || tokens.buttonText || tokens.text || '#0A0A0A');
-  const upper = fg.toUpperCase();
-  const isLightFg =
-    upper === '#FFFFFF' ||
-    upper === '#FAFAFA' ||
-    upper === '#F8FAFC' ||
-    upper === '#F5F5F5';
-  const pillBg = fg;
-  const pillText =
-    typeof surfaceStyle.backgroundColor === 'string' &&
-    surfaceStyle.backgroundColor.startsWith('#') &&
-    surfaceStyle.backgroundColor !== 'transparent'
-      ? surfaceStyle.backgroundColor
-      : isLightFg
-        ? '#0A0A0A'
-        : '#FFFFFF';
-  return { fg, pillBg, pillText };
+  const palette = getBlockContrastPalette(surfaceStyle, tokens);
+  return {
+    fg: palette.fg,
+    pillBg: palette.btnBg,
+    pillText: palette.btnText,
+    isDarkSurface: palette.isDarkSurface,
+  };
 }
 
 export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
@@ -128,13 +119,7 @@ export const YouTubeShowcaseCard: React.FC<SharedBlockRenderProps> = ({
     (storedYt?.showLatestVideo ?? true) && Array.isArray(rawVideos)
       ? rawVideos.slice(0, 3)
       : [];
-  const { fg } = resolveCardPalette(surfaceStyle, tokens);
-  const upperFg = fg.toUpperCase();
-  const isLightFg =
-    upperFg === '#FFFFFF' ||
-    upperFg === '#FAFAFA' ||
-    upperFg === '#F8FAFC' ||
-    upperFg === '#F5F5F5';
+  const { fg, isDarkSurface: isLightFg } = resolveCardPalette(surfaceStyle, tokens);
   const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
   const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
   const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);

@@ -8,6 +8,8 @@ import {
   resolveCardBorderRadius,
   resolveButtonControlRadius,
 } from '../../lib/preferences';
+import { getBlockContrastPalette } from '../../lib/blockTheme';
+import { Loader } from '../ui/Loader';
 
 interface SignupFormBlockProps {
   block: PageBlock;
@@ -16,6 +18,7 @@ interface SignupFormBlockProps {
   username: string;
   buttonRadiusOverride?: number;
   buttonFontFamily?: string;
+  surfaceStyle?: React.CSSProperties;
 }
 
 export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
@@ -25,6 +28,7 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
   username,
   buttonRadiusOverride,
   buttonFontFamily,
+  surfaceStyle,
 }) => {
   const cfg = block.signup;
   const collect = cfg?.collect || 'email';
@@ -47,6 +51,14 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const tokens = vibe.tokens;
+  const palette = getBlockContrastPalette(surfaceStyle, tokens);
+  const resolvedSurface: React.CSSProperties = surfaceStyle || {
+    backgroundColor: tokens.buttonBg,
+    borderColor: tokens.buttonBorder,
+    borderWidth: tokens.buttonBorderWidth || 1,
+    borderStyle: 'solid',
+    color: palette.fg,
+  };
   const effectiveRadius =
     buttonRadiusOverride !== undefined
       ? buttonRadiusOverride
@@ -124,12 +136,9 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
     <div
       className="w-full select-none transition-all p-5 sm:p-6"
       style={{
-        border: tokens.buttonBorder
-          ? `1px solid ${tokens.buttonBorder}`
-          : '1px solid rgba(0,0,0,0.1)',
+        ...resolvedSurface,
         borderRadius: `${cardRadius}px`,
-        backgroundColor: tokens.buttonBg ? `${tokens.buttonBg}0d` : 'transparent',
-        color: tokens.text,
+        color: palette.fg,
         fontFamily: buttonFontFamily || vibe.fontFamily,
       }}
     >
@@ -138,13 +147,13 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center mb-2.5"
             style={{
-              backgroundColor: tokens.buttonBg,
-              color: tokens.buttonText,
+              backgroundColor: palette.btnBg,
+              color: palette.btnText,
             }}
           >
             <Check className="w-5 h-5 stroke-[2.5]" />
           </div>
-          <p className="font-medium text-sm" style={{ color: tokens.text }}>
+          <p className="font-medium text-sm" style={{ color: palette.fg }}>
             {copy.signup.visitor.success}
           </p>
         </div>
@@ -153,14 +162,14 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
           <div className="text-center mb-1">
             <h3
               className="text-base font-semibold tracking-tight"
-              style={{ color: tokens.text }}
+              style={{ color: palette.fg }}
             >
               {heading}
             </h3>
             {description && (
               <p
-                className="text-xs opacity-75 mt-1 max-w-sm mx-auto"
-                style={{ color: tokens.text }}
+                className="text-xs mt-1 max-w-sm mx-auto"
+                style={{ color: palette.muted }}
               >
                 {description}
               </p>
@@ -195,8 +204,8 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
             <div>
               <label
                 htmlFor={`email-${block.id}`}
-                className="block text-xs font-medium mb-1 opacity-80"
-                style={{ color: tokens.text }}
+                className="block text-xs font-medium mb-1"
+                style={{ color: palette.muted }}
               >
                 {copy.signup.visitor.emailLabel}
               </label>
@@ -212,13 +221,12 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
                 disabled={isSubmitting}
                 autoComplete="email"
                 placeholder={copy.signup.visitor.emailPlaceholder}
-                className="w-full h-10 px-3 text-sm bg-transparent focus:outline-none transition-colors"
+                className="w-full h-10 px-3 text-sm focus:outline-none transition-colors"
                 style={{
-                  color: tokens.text,
+                  color: palette.fg,
+                  backgroundColor: palette.inputBg,
                   borderRadius: `${innerRadius}px`,
-                  border: tokens.buttonBorder
-                    ? `1px solid ${tokens.buttonBorder}`
-                    : '1px solid rgba(0,0,0,0.2)',
+                  border: `1px solid ${palette.inputBorder}`,
                 }}
               />
             </div>
@@ -229,8 +237,8 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
             <div>
               <label
                 htmlFor={`phone-${block.id}`}
-                className="block text-xs font-medium mb-1 opacity-80"
-                style={{ color: tokens.text }}
+                className="block text-xs font-medium mb-1"
+                style={{ color: palette.muted }}
               >
                 {copy.signup.visitor.phoneLabel}
               </label>
@@ -246,13 +254,12 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
                 disabled={isSubmitting}
                 autoComplete="tel"
                 placeholder={copy.signup.visitor.phonePlaceholder}
-                className="w-full h-10 px-3 text-sm bg-transparent focus:outline-none transition-colors"
+                className="w-full h-10 px-3 text-sm focus:outline-none transition-colors"
                 style={{
-                  color: tokens.text,
+                  color: palette.fg,
+                  backgroundColor: palette.inputBg,
                   borderRadius: `${innerRadius}px`,
-                  border: tokens.buttonBorder
-                    ? `1px solid ${tokens.buttonBorder}`
-                    : '1px solid rgba(0,0,0,0.2)',
+                  border: `1px solid ${palette.inputBorder}`,
                 }}
               />
             </div>
@@ -272,7 +279,7 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
                 disabled={isSubmitting}
                 className="mt-0.5 w-4 h-4 rounded border-gray-300 text-ink focus:ring-ink"
               />
-              <span className="opacity-80 leading-snug" style={{ color: tokens.text }}>
+              <span className="leading-snug" style={{ color: palette.muted }}>
                 {consentSentence}
               </span>
             </label>
@@ -288,20 +295,21 @@ export const SignupFormBlock: React.FC<SignupFormBlockProps> = ({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full h-10 px-4 mt-1 font-medium text-sm transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-sm"
+            aria-busy={isSubmitting || undefined}
+            className="relative w-full h-10 px-4 mt-1 font-medium text-sm transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-sm"
             style={{
-              backgroundColor: tokens.buttonBg,
-              color: tokens.buttonText,
+              backgroundColor: palette.btnBg,
+              color: palette.btnText,
               borderRadius: `${controlRadius}px`,
-              border: tokens.buttonBorder
-                ? `1px solid ${tokens.buttonBorder}`
-                : 'none',
             }}
           >
-            {isSubmitting ? (
-              <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-            ) : (
-              buttonLabel
+            <span className={isSubmitting ? 'opacity-0' : undefined}>
+              {buttonLabel}
+            </span>
+            {isSubmitting && (
+              <span className="absolute inset-0 flex items-center justify-center">
+                <Loader size="xs" />
+              </span>
             )}
           </button>
 

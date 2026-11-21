@@ -17,8 +17,10 @@ import {
   PromoConfig,
   LocationConfig,
   DownloadConfig,
+  BlueskyConfig,
 } from './types';
 import { storagePublicUrl } from './storageApi';
+import { apiFetch } from '../lib/apiFetch';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -45,6 +47,7 @@ export interface CreateBlockInput {
   promo?: PromoConfig | null;
   location?: LocationConfig | null;
   download?: DownloadConfig | null;
+  bluesky?: BlueskyConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -74,6 +77,7 @@ export interface UpdateBlockInput {
   promo?: PromoConfig | null;
   location?: LocationConfig | null;
   download?: DownloadConfig | null;
+  bluesky?: BlueskyConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;
@@ -153,14 +157,48 @@ export async function syncBlocksToServer(
 const blockSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const blockSyncChains = new Map<string, Promise<void>>();
 
+function persistLocalStorageBlocks(userId: string, blocks: Block[]): void {
+  const cleanId = (userId || 'owner').trim().toLowerCase();
+  try {
+    const serialized = JSON.stringify(blocks);
+    localStorage.setItem(`iveo_blocks_${userId}`, serialized);
+    if (cleanId !== userId) {
+      localStorage.setItem(`iveo_blocks_${cleanId}`, serialized);
+    }
+    localStorage.removeItem(`ivio_blocks_${userId}`);
+    if (cleanId !== userId) {
+      localStorage.removeItem(`ivio_blocks_${cleanId}`);
+    }
+  } catch {}
+}
+
+export async function flushSaveLocalBlocks(
+  userId: string,
+  blocks: Block[],
+  auth?: BlockAuthContext
+): Promise<void> {
+  persistLocalStorageBlocks(userId, blocks);
+  if (auth?.isDemo) return;
+  const key = (userId || 'owner').trim().toLowerCase();
+  const prevTimer = blockSyncTimers.get(key);
+  if (prevTimer) {
+    clearTimeout(prevTimer);
+    blockSyncTimers.delete(key);
+  }
+  const prevChain = blockSyncChains.get(key) || Promise.resolve();
+  const nextChain = prevChain
+    .catch(() => {})
+    .then(() => syncBlocksToServer(userId, blocks, auth));
+  blockSyncChains.set(key, nextChain.catch(() => {}));
+  await nextChain;
+}
+
 export async function saveLocalBlocks(
   userId: string,
   blocks: Block[],
   auth?: BlockAuthContext
 ): Promise<void> {
-  try {
-    localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocks));
-  } catch {}
+  persistLocalStorageBlocks(userId, blocks);
   if (auth?.isDemo) return;
   const key = (userId || 'owner').trim().toLowerCase();
   const prevTimer = blockSyncTimers.get(key);
@@ -224,8 +262,9 @@ export async function listMyBlocks(
 
   // 1. Query server database first (Azure SQL / Server store / Firebase fallback)
   try {
-    const res = await fetch(`/api/blocks?username=${encodeURIComponent(cleanId)}&_t=${Date.now()}`, {
+    const res = await apiFetch(`/api/blocks?username=${encodeURIComponent(cleanId)}&_t=${Date.now()}`, {
       cache: 'no-cache',
+      silent: true,
       headers: {
         ...(auth?.ownerUserId ? { 'x-user-id': auth.ownerUserId } : {}),
         ...(auth?.primaryEmail ? { 'x-user-email': auth.primaryEmail } : {}),
@@ -336,6 +375,7 @@ export async function createBlock(
     promo: input.promo || null,
     location: input.location || null,
     download: input.download || null,
+    bluesky: input.bluesky || null,
     animation: input.animation || null,
     badge: input.badge || null,
     startAt: input.startAt || null,
@@ -425,7 +465,11 @@ export async function updateBlock(
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
     const updated = list.map((b) => (b.id === blockId ? { ...b, ...input } : b));
-    await saveLocalBlocks(userId, updated, auth);
+    if (input.isArchived !== undefined) {
+      await flushSaveLocalBlocks(userId, updated, auth);
+    } else {
+      await saveLocalBlocks(userId, updated, auth);
+    }
     return;
   }
 
@@ -484,7 +528,7 @@ export async function deleteBlock(
 ): Promise<void> {
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
-    await saveLocalBlocks(
+    await flushSaveLocalBlocks(
       userId,
       list.filter((b) => b.id !== blockId),
       auth

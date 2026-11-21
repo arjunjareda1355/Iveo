@@ -30,13 +30,29 @@ export const iveoAppearance = {
     logoPlacement: 'inside' as const,
     logoLinkUrl: '/',
     socialButtonsPlacement: 'top' as const,
-    socialButtonsVariant: 'blockButton' as const,
+    socialButtonsVariant: 'iconButton' as const,
     termsPageUrl: '/terms',
     privacyPageUrl: '/privacy',
     helpPageUrl: 'mailto:help@iveo.site',
     showOptionalFields: false,
   },
   elements: {
+    logoBox: {
+      height: '44px',
+      maxHeight: '44px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: '4px',
+    },
+    logoImage: {
+      height: '44px',
+      width: '44px',
+      maxHeight: '44px',
+      maxWidth: '44px',
+      objectFit: 'contain',
+      borderRadius: '10px',
+    },
     card: {
       border: '1px solid #E5E5E5',
       boxShadow: 'none',
@@ -65,6 +81,11 @@ export const iveoAppearance = {
       borderRadius: '12px',
     },
     socialButtonsBlockButton: {
+      borderColor: '#D4D4D4',
+      minHeight: '44px',
+      borderRadius: '12px',
+    },
+    socialButtonsIconButton: {
       borderColor: '#D4D4D4',
       minHeight: '44px',
       borderRadius: '12px',

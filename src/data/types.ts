@@ -42,7 +42,8 @@ export type BlockKind =
   | 'countdown'
   | 'promo'
   | 'location'
-  | 'download';
+  | 'download'
+  | 'bluesky';
 
 export type BlockLayout = 'classic' | 'featured';
 export type EmbedProvider =
@@ -243,6 +244,37 @@ export interface DownloadConfig {
   buttonLabel?: string | null;
 }
 
+export type BlueskyBlockVariant = 'profile' | 'posts' | 'post' | 'button';
+
+export interface BlueskyBlockOptions {
+  limit?: number;
+  layout?: 'list' | 'carousel';
+  showReplies?: boolean;
+  showReposts?: boolean;
+  showCounts?: boolean;
+  mediaOnly?: boolean;
+  compact?: boolean;
+  showBanner?: boolean;
+  showStats?: boolean;
+  showBio?: boolean;
+  buttonLabel?: string | null;
+  includeFollowerBadge?: boolean;
+}
+
+export interface BlueskyConfig {
+  type?: 'bluesky_profile' | 'bluesky_posts' | 'bluesky_post' | 'bluesky_button';
+  variant: BlueskyBlockVariant;
+  handle: string;
+  did?: string | null;
+  postUri?: string | null;
+  verified?: boolean;
+  verificationCode?: string | null;
+  options: BlueskyBlockOptions;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  followersCount?: number | null;
+}
+
 export interface Block {
   id: string;
   kind: BlockKind;
@@ -266,6 +298,7 @@ export interface Block {
   promo?: PromoConfig | null;
   location?: LocationConfig | null;
   download?: DownloadConfig | null;
+  bluesky?: BlueskyConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   isProtected?: boolean;
@@ -300,6 +333,7 @@ export interface PublicBlock {
   promo?: PromoConfig | null;
   location?: LocationConfig | null;
   download?: DownloadConfig | null;
+  bluesky?: BlueskyConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
 }
@@ -328,6 +362,7 @@ export interface PageBlock {
   promo?: PromoConfig | null;
   location?: LocationConfig | null;
   download?: DownloadConfig | null;
+  bluesky?: BlueskyConfig | null;
   animation?: LinkAnimation | null;
   badge?: string | null;
   startAt?: string | null;

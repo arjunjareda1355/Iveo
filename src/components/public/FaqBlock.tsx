@@ -3,6 +3,7 @@ import { ChevronDown, HelpCircle } from 'lucide-react';
 import { FaqConfig } from '../../data/types';
 import { VibeTokens } from '../../lib/vibes';
 import { resolveCardBorderRadius } from '../../lib/preferences';
+import { getBlockContrastPalette } from '../../lib/blockTheme';
 
 interface FaqBlockProps {
   title?: string;
@@ -27,12 +28,13 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
   const items = config.items || [];
   const cardRadius = resolveCardBorderRadius(buttonRadius, scale, 'card');
 
+  const palette = getBlockContrastPalette(surfaceStyle, tokens);
   const baseSurface: React.CSSProperties = surfaceStyle || {
     backgroundColor: tokens.buttonBg,
     borderColor: tokens.buttonBorder,
     borderWidth: tokens.buttonBorderWidth || 1,
     borderStyle: 'solid',
-    color: tokens.buttonText || tokens.text,
+    color: palette.fg,
   };
 
   const toggleItem = (id: string) => {
@@ -94,8 +96,12 @@ export const FaqBlock: React.FC<FaqBlockProps> = ({
 
             {isOpen && (
               <div
-                className="px-3.5 pb-3.5 pt-1 opacity-80 leading-relaxed border-t border-current/10"
-                style={{ fontSize: `${Math.round(12 * scale)}px` }}
+                className="px-3.5 pb-3.5 pt-2 leading-relaxed border-t"
+                style={{
+                  fontSize: `${Math.round(12 * scale)}px`,
+                  color: palette.muted,
+                  borderColor: palette.subtleBorder,
+                }}
               >
                 {item.answer}
               </div>

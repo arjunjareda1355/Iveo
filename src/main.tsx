@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ClerkRoot } from './auth/ClerkRoot';
 import { ToastProvider } from './components/ui/Toast';
+import { LoaderProvider } from './components/ui/LoaderProvider';
 import { UpgradeDialogProvider } from './components/plan/UpgradeDialogProvider';
 import { ErrorBoundaryPage } from './pages/ErrorBoundaryPage';
 import App from './App';
@@ -13,11 +14,13 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ErrorBoundaryPage>
         <ClerkRoot>
-          <ToastProvider>
-            <UpgradeDialogProvider>
-              <App />
-            </UpgradeDialogProvider>
-          </ToastProvider>
+          <LoaderProvider>
+            <ToastProvider>
+              <UpgradeDialogProvider>
+                <App />
+              </UpgradeDialogProvider>
+            </ToastProvider>
+          </LoaderProvider>
         </ClerkRoot>
       </ErrorBoundaryPage>
     </BrowserRouter>

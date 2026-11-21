@@ -401,6 +401,7 @@ export async function firebaseSaveBlocks(
         promo: b.promo || null,
         location: b.location || null,
         download: b.download || null,
+        bluesky: b.bluesky || null,
         startAt: b.startAt || null,
         endAt: b.endAt || null,
         position: b.position ?? index,
@@ -435,6 +436,12 @@ export async function firebaseSaveBlocks(
         }
       });
     }
+
+    batch.set(
+      doc(serverDb, 'users', clean),
+      { blocksInitialized: true, updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
 
     await batch.commit();
   } catch (err) {

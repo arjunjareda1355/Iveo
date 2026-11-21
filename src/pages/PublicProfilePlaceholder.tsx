@@ -23,6 +23,7 @@ import { resolveEffectiveTokens } from '../lib/colors';
 import { computeBackgroundLayers } from '../lib/backgrounds';
 import { BackgroundLayer } from '../components/page/BackgroundLayer';
 import { isAllowedAvatarUrl } from '../lib/avatar';
+import { Loader } from '../components/ui/Loader';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -63,6 +64,29 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
 }) => {
   const [pageData, setPageData] = useState<PublicPageData | null>(() => {
     if (typeof window === 'undefined' || !clean) return null;
+
+    // 1. Read SSR-injected bootstrap payload first so cold visits hydrate identically with zero FOUC
+    try {
+      const ssrEl = document.getElementById('iveo-ssr-bootstrap');
+      if (ssrEl && ssrEl.textContent) {
+        const ssrParsed = JSON.parse(ssrEl.textContent);
+        if (ssrParsed?.profile?.username?.toLowerCase() === clean) {
+          return {
+            profile: {
+              ...ssrParsed.profile,
+              avatarUrl: isAllowedAvatarUrl(ssrParsed.profile.avatarUrl)
+                ? ssrParsed.profile.avatarUrl
+                : null,
+            },
+            links: Array.isArray(ssrParsed.links) ? ssrParsed.links : [],
+          };
+        }
+      }
+    } catch {
+      // Fall back cleanly to local cache
+    }
+
+    // 2. Fallback: local browser cache (e.g. instant preview / returning visitor)
     try {
       const cached = localStorage.getItem(`iveo_profile_${clean}`);
       if (!cached) return null;
@@ -110,7 +134,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
   const session = useIveoSession();
   const viewTrackedRef = useRef(false);
   const ownerExclusionDoneRef = useRef(false);
-  const lastFetchedAtRef = useRef<number>(0);
+  const lastFetchedAtRef = useRef<number>(pageData ? Date.now() : 0);
 
   const loadData = useCallback(async () => {
     lastFetchedAtRef.current = Date.now();
@@ -422,8 +446,8 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
 
   if (isLoading) {
     return (
-      <div className="min-h-[100dvh] bg-bg flex items-center justify-center p-6">
-        <div className="w-8 h-8 rounded-full border-2 border-ink border-t-transparent animate-spin" />
+      <div className="min-h-[100dvh] bg-bg flex items-center justify-center p-6 text-ink/70" aria-busy="true">
+        <Loader size="lg" />
       </div>
     );
   }
@@ -572,7 +596,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
                     }
                   }}
                   onUnlock={(block) => setUnlockBlock(block)}
-                  renderSignupForm={(block) => (
+                  renderSignupForm={(block, surfaceStyle) => (
                     <SignupFormBlock
                       block={block}
                       vibe={effectiveVibe}
@@ -580,6 +604,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
                       username={clean}
                       buttonRadiusOverride={buttonRadiusOverride}
                       buttonFontFamily={buttonFontFamily}
+                      surfaceStyle={surfaceStyle}
                     />
                   )}
                 />

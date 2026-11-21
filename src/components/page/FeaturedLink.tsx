@@ -5,6 +5,7 @@ import { Vibe } from '../../lib/vibes';
 import { formatExternalUrl } from '../../lib/urls';
 import { storagePublicUrl } from '../../data/storageApi';
 import { resolveCardBorderRadius } from '../../lib/preferences';
+import { getBlockContrastPalette } from '../../lib/blockTheme';
 
 interface FeaturedLinkProps {
   block: PageBlock;
@@ -37,9 +38,10 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
   const [imageError, setImageError] = useState(false);
   const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
 
+  const palette = getBlockContrastPalette(surfaceStyle, tokens);
   const baseStyle: React.CSSProperties = surfaceStyle || {
     backgroundColor: tokens.buttonBg,
-    color: tokens.buttonText,
+    color: palette.fg,
     border: tokens.buttonBorder
       ? `${tokens.buttonBorderWidth || '1px'} solid ${tokens.buttonBorder}`
       : 'none',
@@ -77,8 +79,8 @@ export const FeaturedLink: React.FC<FeaturedLinkProps> = ({
               <div
                 className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm pointer-events-none z-10"
                 style={{
-                  backgroundColor: tokens.text,
-                  color: tokens.bg,
+                  backgroundColor: palette.btnBg,
+                  color: palette.btnText,
                 }}
               >
                 {block.badge}

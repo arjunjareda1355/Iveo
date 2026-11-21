@@ -20,6 +20,7 @@ import { ContactsEmptyState } from '../components/contacts/ContactsEmptyState';
 import { DeleteContactDialog } from '../components/contacts/DeleteContactDialog';
 import { DeleteAllDialog } from '../components/contacts/DeleteAllDialog';
 import { ProLockNotice } from '../components/plan/ProLockNotice';
+import { Loader } from '../components/ui/Loader';
 
 export const ContactsTab: React.FC = () => {
   const { isPro, username } = useIvioSession();
@@ -156,8 +157,8 @@ export const ContactsTab: React.FC = () => {
 
       {/* Content Area */}
       {isLoading ? (
-        <div className="py-16 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border-2 border-ink border-t-transparent animate-spin" />
+        <div className="min-h-[200px] py-16 flex items-center justify-center text-ink/70" aria-busy="true">
+          <Loader size="md" />
         </div>
       ) : rows.length === 0 ? (
         search ? (

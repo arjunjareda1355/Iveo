@@ -106,7 +106,7 @@ test('Profile SEO payload produces dynamic title, description, canonical, Profil
     vibeId: 'clean',
     buttonShape: 'rounded' as const,
     buttonRadius: 12,
-    plan: 'pro',
+    plan: 'pro' as const,
     hideFooter: true,
     hideFromSearch: false,
     isPublished: true,
@@ -247,6 +247,7 @@ test('LayoutSettings parser enforces valid defaults and enums', () => {
     buttonStyle: 'glass',
     linkSpacing: 'airy',
     pageWidth: 'wide',
+    cardLook: 'match_page',
   });
 
   const partial = parseLayoutSettings({ buttonStyle: 'offset', avatarShape: 'invalid' });
@@ -256,6 +257,7 @@ test('LayoutSettings parser enforces valid defaults and enums', () => {
     buttonStyle: 'offset',
     linkSpacing: 'normal',
     pageWidth: 'standard',
+    cardLook: 'match_page',
   });
 });
 

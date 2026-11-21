@@ -63,7 +63,10 @@ import { CountdownComposer } from '../links/CountdownComposer';
 import { PromoCodeComposer } from '../links/PromoCodeComposer';
 import { LocationCardComposer } from '../links/LocationCardComposer';
 import { DownloadCardComposer } from '../links/DownloadCardComposer';
+import { BlueskyComposer } from '../links/BlueskyComposer';
 import { AddBlockModal, FeatureType } from './AddBlockModal';
+import { BlueskySocialIcon } from '../phone/SocialIcons';
+import { Loader } from '../ui/Loader';
 import { AnimationControl } from '../links/AnimationControl';
 import {
   Block,
@@ -103,6 +106,7 @@ function getPlatformProviderForBlock(block: Block): EmbedProvider {
 
 function getFilterGroup(block: Block): Exclude<FilterCategory, 'all'> {
   if (block.kind === 'link' || block.kind === 'download') return 'links';
+  if (block.kind === 'bluesky') return 'social';
   if (SUPPORT_KINDS.includes(block.kind)) return 'support';
   if (FORM_KINDS.includes(block.kind)) return 'forms';
   if (HEADER_KINDS.includes(block.kind)) return 'headers';
@@ -123,6 +127,13 @@ function getBlockTypeChip(block: Block, hasBothSupportTypes: boolean): string | 
   switch (block.kind) {
     case 'link':
       return null;
+    case 'bluesky': {
+      const variant = block.bluesky?.variant || 'profile';
+      if (variant === 'posts') return 'Bluesky · Posts';
+      if (variant === 'post') return 'Bluesky · Post';
+      if (variant === 'button') return 'Bluesky · Link';
+      return 'Bluesky';
+    }
     case 'tip_jar':
       return hasBothSupportTypes ? 'Support · Tips' : 'Support';
     case 'coffee':
@@ -224,6 +235,8 @@ function getBlockSubtitle(block: Block): string {
       return block.location?.address || cleanDisplayDestination(block.url);
     case 'download':
       return [block.download?.fileFormat, block.download?.fileSize].filter(Boolean).join(' · ');
+    case 'bluesky':
+      return block.bluesky?.handle ? `@${block.bluesky.handle}` : cleanDisplayDestination(block.url);
     case 'header':
       return 'Section heading';
     case 'divider':
@@ -250,6 +263,7 @@ export const LinksTab: React.FC = () => {
     addPromo,
     addLocation,
     addDownload,
+    addBluesky,
     addFaq,
     addVCard,
     addHeader,
@@ -300,8 +314,10 @@ export const LinksTab: React.FC = () => {
     | 'countdown'
     | 'promo'
     | 'location'
-    | 'download';
+    | 'download'
+    | 'bluesky';
   const [activeComposer, setActiveComposer] = useState<ComposerType | null>(null);
+  const [blueskyPrefillUrl, setBlueskyPrefillUrl] = useState<string | null>(null);
 
   // Quick inputs for link/header composers
   const [newLinkTitle, setNewLinkTitle] = useState('');
@@ -484,6 +500,7 @@ export const LinksTab: React.FC = () => {
 
   const handleCloseComposer = () => {
     setActiveComposer(null);
+    setBlueskyPrefillUrl(null);
     setNewLinkTitle('');
     setNewLinkTitleManuallyEdited(false);
     setNewLinkUrl('');
@@ -1001,8 +1018,8 @@ export const LinksTab: React.FC = () => {
             )}
 
             <div className="flex items-center gap-2">
-              <Button type="submit" variant="primary" size="md" disabled={isAddingLink}>
-                {isAddingLink ? 'Adding...' : 'Add to page'}
+              <Button type="submit" variant="primary" size="md" loading={isAddingLink}>
+                Add to page
               </Button>
               <Button type="button" variant="ghost" size="md" onClick={handleCloseComposer}>
                 Cancel
@@ -1163,15 +1180,25 @@ export const LinksTab: React.FC = () => {
         />
       )}
 
+      {activeComposer === 'bluesky' && (
+        <BlueskyComposer
+          initialUrl={blueskyPrefillUrl}
+          onSave={async ({ title, url, bluesky }) => {
+            await addBluesky(title, url, bluesky);
+            handleCloseComposer();
+          }}
+          onCancel={handleCloseComposer}
+        />
+      )}
+
       {/* 4. Block List */}
       {isLoading ? (
-        <div className="flex flex-col gap-3" aria-label="Loading blocks">
-          {[1, 2, 3].map((n) => (
-            <div
-              key={n}
-              className="h-[72px] rounded-[16px] bg-surface border border-border animate-pulse"
-            />
-          ))}
+        <div
+          className="min-h-[240px] flex items-center justify-center text-ink/70"
+          aria-busy="true"
+          aria-label="Loading blocks"
+        >
+          <Loader size="md" />
         </div>
       ) : activeBlocks.length === 0 ? (
         !activeComposer ? (
@@ -1215,6 +1242,7 @@ export const LinksTab: React.FC = () => {
             const isPromo = block.kind === 'promo';
             const isLocation = block.kind === 'location';
             const isDownload = block.kind === 'download';
+            const isBluesky = block.kind === 'bluesky';
             const isLink = block.kind === 'link';
             const isProtected =
               isLink && (protectedIds.has(block.id) || block.isProtected === true);
@@ -1365,6 +1393,8 @@ export const LinksTab: React.FC = () => {
                               <MapPin size={20} className="text-sky-600" strokeWidth={1.5} />
                             ) : isDownload ? (
                               <FileDown size={20} className="text-violet-600" strokeWidth={1.5} />
+                            ) : isBluesky ? (
+                              <BlueskySocialIcon size={20} className="text-[#0085FF]" />
                             ) : isHeader ? (
                               <Heading size={20} className="text-muted" strokeWidth={1.5} />
                             ) : isDivider ? (
@@ -1744,6 +1774,18 @@ export const LinksTab: React.FC = () => {
                     }}
                     onCancel={() => setEditingBlockId(null)}
                   />
+                ) : isBluesky ? (
+                  <BlueskyComposer
+                    initialValues={block.bluesky || undefined}
+                    initialTitle={block.title || undefined}
+                    initialUrl={block.url}
+                    isEditing
+                    onSave={async ({ title, url, bluesky }) => {
+                      await updateBlock(block.id, { title, url, bluesky });
+                      setEditingBlockId(null);
+                    }}
+                    onCancel={() => setEditingBlockId(null)}
+                  />
                 ) : (
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
@@ -1975,6 +2017,11 @@ export const LinksTab: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSmartAddProvider={(detected) => {
+          if (detected.provider === 'bluesky') {
+            setBlueskyPrefillUrl(detected.canonicalUrl);
+            handleOpenComposer('bluesky');
+            return;
+          }
           const isProPlayer =
             detected.defaultDisplayAs === 'player' &&
             (detected.provider === 'youtube' ||
@@ -2007,6 +2054,9 @@ export const LinksTab: React.FC = () => {
             }, 60);
           } else if (type === 'divider') {
             await addDivider();
+          } else if (type === 'bluesky' || type === 'embed_bluesky') {
+            setBlueskyPrefillUrl(null);
+            handleOpenComposer('bluesky');
           } else if (
             type === 'embed' ||
             type.startsWith('embed_') ||

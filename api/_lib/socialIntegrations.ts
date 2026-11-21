@@ -319,13 +319,30 @@ export function resolveSocialOAuthRedirectUri(
   provider: SocialOAuthProvider,
   requestOrigin?: string
 ): string {
+  const cfg = getServerConfig();
   const cleanOrigin =
     requestOrigin && /^https?:\/\//i.test(requestOrigin.trim())
       ? requestOrigin.trim().replace(/\/+$/, '')
       : null;
-  const appUrl = getServerConfig().appUrl;
+  const appUrl = cfg.appUrl;
   const cleanAppUrl =
     appUrl && /^https?:\/\//i.test(appUrl) ? appUrl.replace(/\/+$/, '') : null;
+
+  if (provider === 'spotify') {
+    if (cfg.spotifyRedirectUri && /^https?:\/\//i.test(cfg.spotifyRedirectUri)) {
+      return cfg.spotifyRedirectUri.replace(/\/+$/, '');
+    }
+    const isLocalOrigin = Boolean(
+      cleanOrigin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleanOrigin)
+    );
+    const spotifyBase =
+      isLocalOrigin && cleanOrigin
+        ? cleanOrigin
+        : cleanOrigin && /iveo\.site$/i.test(new URL(cleanOrigin).hostname)
+          ? 'https://iveo.site'
+          : cleanAppUrl || cleanOrigin || 'https://iveo.site';
+    return `${spotifyBase}/callback`;
+  }
 
   const base = cleanOrigin || cleanAppUrl || 'https://iveo.site';
   return `${base}/api/oauth/${provider}/callback`;
@@ -479,6 +496,17 @@ export function buildSocialOAuthUrl(
     url: `https://x.com/i/oauth2/authorize?${params.toString()}`,
     redirectUri,
   };
+}
+
+export function extractProviderFromOAuthState(stateParam?: string): SocialOAuthProvider | null {
+  if (!stateParam) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf8'));
+    if (typeof decoded?.p === 'string' && isValidSocialOAuthProvider(decoded.p)) {
+      return decoded.p;
+    }
+  } catch {}
+  return null;
 }
 
 export function parseSocialOAuthState(
