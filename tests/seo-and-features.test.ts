@@ -518,9 +518,9 @@ test('New card look presets, profile embed styles, and distinct VIBES preview li
   assert.ok(PROFILE_EMBED_STYLES.some((s) => s.id === 'showcase'));
 
   for (const vibe of VIBES) {
-    assert.ok(vibe.preview.links.length >= 4);
-    const hosts = new Set(vibe.preview.links.map((item) => new URL(item.url).hostname));
-    assert.ok(hosts.size >= 4, `Expected ${vibe.id} preview links to have varied domains`);
+    assert.ok(vibe.persona.links.length >= 4);
+    const hosts = new Set(vibe.persona.links.map((item) => new URL(item.url).hostname));
+    assert.ok(hosts.size >= 4, `Expected ${vibe.id} persona links to have varied domains`);
   }
 });
 

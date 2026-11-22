@@ -77,7 +77,7 @@ export const VIBES: readonly Vibe[] = [
       initials: 'ME',
       avatarUrl: 'https://i.postimg.cc/Rh5vdyVb/file-0000000002448211a254292ad6932ab5.png',
       links: [
-        { title: 'New zine, out now', url: 'https://mayaellis.substack.com' },
+        { title: 'New zine, out now', url: 'https://substack.com/@mayaellis' },
         { title: 'Shop limited prints', url: 'https://www.etsy.com/shop/mayaellis' },
         { title: 'Illustration portfolio', url: 'https://dribbble.com/mayaellis' },
         { title: 'Process & studio reels', url: 'https://instagram.com/mayaellis' },
@@ -114,7 +114,7 @@ export const VIBES: readonly Vibe[] = [
         { title: 'Listen on Spotify', url: 'https://open.spotify.com/artist/devsharma' },
         { title: 'Monthly SoundCloud mix', url: 'https://soundcloud.com/devsharma' },
         { title: 'Live set films', url: 'https://youtube.com/@devsharma' },
-        { title: 'Vinyl & tour merch', url: 'https://devsharma.bandcamp.com' },
+        { title: 'Vinyl & tour merch', url: 'https://bandcamp.com/devsharma' },
         { title: 'Community Discord', url: 'https://discord.gg/devsharma' },
         { title: 'Booking enquiries', url: 'mailto:bookings@devsharma.music' },
       ],
@@ -146,7 +146,7 @@ export const VIBES: readonly Vibe[] = [
       initials: 'LH',
       avatarUrl: 'https://i.postimg.cc/pVwmcc6W/file-000000000d048211bd8a5e2b54943ddb.png',
       links: [
-        { title: 'Read the latest essay', url: 'https://lenahoffmann.substack.com' },
+        { title: 'Read the latest essay', url: 'https://substack.com/@lenahoffmann' },
         { title: 'Follow on Goodreads', url: 'https://www.goodreads.com/lenahoffmann' },
         { title: 'Longform notes on Medium', url: 'https://medium.com/@lenahoffmann' },
         { title: 'Upcoming book talks', url: 'https://www.eventbrite.com/o/lenahoffmann' },
@@ -312,7 +312,7 @@ export const VIBES: readonly Vibe[] = [
         { title: 'Photo gallery on Instagram', url: 'https://instagram.com/ariasolphoto' },
         { title: 'Fine art print store', url: 'https://www.etsy.com/shop/ariasolprints' },
         { title: 'YouTube travel films', url: 'https://youtube.com/@ariasol' },
-        { title: 'Field notes on Substack', url: 'https://ariasol.substack.com' },
+        { title: 'Field notes on Substack', url: 'https://substack.com/@ariasol' },
         { title: 'Brand inquiries', url: 'mailto:aria@ariasol.co' },
       ],
     },
@@ -413,7 +413,7 @@ export const VIBES: readonly Vibe[] = [
       links: [
         { title: 'Order The Secret Forest', url: 'https://bookshop.org/a/rowanvale' },
         { title: 'Wild teas & blends', url: 'https://www.etsy.com/shop/rowanvalebotanicals' },
-        { title: 'Botanical field journal', url: 'https://rowanvale.substack.com' },
+        { title: 'Botanical field journal', url: 'https://substack.com/@rowanvale' },
         { title: 'Seasonal foraging walks', url: 'https://www.meetup.com/rowanvale' },
         { title: 'Documentary shorts', url: 'https://youtube.com/@rowanvale' },
       ],
@@ -447,7 +447,7 @@ export const VIBES: readonly Vibe[] = [
       links: [
         { title: 'Monthly Sticker Club', url: 'https://www.patreon.com/mochistudio' },
         { title: 'Shop enamel pins', url: 'https://www.etsy.com/shop/mochistudioco' },
-        { title: 'Play Cozy Quest on itch.io', url: 'https://mochistudio.itch.io/cozy-quest' },
+        { title: 'Play Cozy Quest on itch.io', url: 'https://itch.io/profile/mochistudio' },
         { title: 'Daily Blender clips', url: 'https://www.tiktok.com/@mochistudio' },
         { title: 'Hang out on Discord', url: 'https://discord.gg/mochistudio' },
       ],
