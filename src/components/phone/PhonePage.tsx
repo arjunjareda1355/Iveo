@@ -9,6 +9,7 @@ import {
   LayoutSettings,
 } from '../../data/types';
 import { PageRenderer } from '../page/PageRenderer';
+import type { Appearance } from '../../lib/appearance/types';
 
 export interface PhoneProfile {
   name: string;
@@ -28,6 +29,7 @@ export interface PhoneProfile {
   buttonColors?: ButtonColors | null;
   layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
+  appearance?: Appearance | null;
 }
 
 interface PhonePageProps {

@@ -121,6 +121,8 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             buttonColors: data.profile.buttonColors || null,
             layoutSettings: data.profile.layoutSettings || null,
             businessCard: data.profile.businessCard || null,
+            appearance: data.profile.appearance || null,
+            updatedAt: data.profile.updatedAt || null,
           },
           links: (Array.isArray(data.links) ? data.links : []).map((b: any) => ({
             id: String(b.id),
@@ -271,6 +273,8 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
           buttonColors: fbData.buttonColors || null,
           layoutSettings: fbData.layoutSettings || null,
           businessCard: fbData.businessCard || null,
+          appearance: fbData.appearance || null,
+          updatedAt: fbData.updatedAt || null,
         },
         links: mapFbBlocks(rawBlocks),
       };
@@ -324,6 +328,8 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
             buttonColors: parsed.buttonColors || null,
             layoutSettings: parsed.layoutSettings || null,
             businessCard: parsed.businessCard || null,
+            appearance: parsed.appearance || null,
+            updatedAt: parsed.updatedAt || null,
           },
           links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
         };

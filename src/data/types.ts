@@ -12,6 +12,7 @@ import type { FontSettings } from '../lib/fonts';
 import type { ButtonColors } from '../lib/colors';
 import type { BusinessCardConfig } from '../lib/businessCardConfig';
 import type { PlanSource, SubscriptionRecord } from '../lib/plan';
+import type { Appearance } from '../lib/appearance/types';
 
 export { DEFAULT_BACKGROUND_CONFIG };
 export type {
@@ -422,6 +423,8 @@ export interface Profile {
   buttonColors?: ButtonColors | null;
   layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
+  appearance?: Appearance | null;
+  updatedAt?: string | null;
 }
 
 export interface PublicProfileData {
@@ -451,6 +454,8 @@ export interface PublicProfileData {
   buttonColors?: ButtonColors | null;
   layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
+  appearance?: Appearance | null;
+  updatedAt?: string | null;
 }
 
 export interface PublicPageData {

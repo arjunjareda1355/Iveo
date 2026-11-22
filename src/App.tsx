@@ -166,6 +166,46 @@ export default function App() {
             }
           />
           <Route
+            path="/dashboard/appearance/vibe"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
+            path="/dashboard/appearance/background"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
+            path="/dashboard/appearance/typography"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
+            path="/dashboard/appearance/buttons"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
+            path="/dashboard/appearance/layout"
+            element={
+              <RequireOnboarded>
+                <DashboardPage />
+              </RequireOnboarded>
+            }
+          />
+          <Route
             path="/dashboard/contacts"
             element={
               <RequireOnboarded>

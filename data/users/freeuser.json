@@ -1,0 +1,1030 @@
+{
+  "profile": {
+    "userId": "user-free-1",
+    "username": "freeuser",
+    "displayName": "Free User",
+    "bio": "",
+    "avatarUrl": null,
+    "avatarData": null,
+    "avatarType": "default",
+    "avatarId": null,
+    "vibeId": "clean",
+    "buttonShape": "rounded",
+    "socials": {},
+    "socialsPosition": "top",
+    "primaryEmail": "free@example.com",
+    "plan": "free",
+    "createdAt": "2026-11-22T08:50:33.455Z",
+    "subscription": null,
+    "status": "active",
+    "isPublished": true,
+    "hideFooter": false,
+    "hideFromSearch": false,
+    "background": null,
+    "googleAnalyticsId": null,
+    "metaPixelId": null,
+    "whatsappNumber": null,
+    "customSeoTitle": null,
+    "customSeoDescription": null,
+    "fontSettings": {
+      "nameFont": "inter",
+      "bioFont": "inter",
+      "buttonFont": "inter"
+    },
+    "buttonColors": {
+      "bg": "#0A0A0A",
+      "text": "#FFFFFF",
+      "border": "#0A0A0A"
+    },
+    "businessCard": null,
+    "layoutSettings": {
+      "avatarShape": "circle",
+      "headerAlign": "center",
+      "buttonStyle": "solid",
+      "linkSpacing": "normal",
+      "pageWidth": "standard",
+      "cardLook": "match_page"
+    },
+    "appearance": {
+      "schemaVersion": 2,
+      "vibeId": "oat-milk",
+      "background": {
+        "type": "solid",
+        "color": "#FFFFFF"
+      },
+      "typography": {
+        "name": {
+          "family": "Inter",
+          "weight": 700,
+          "size": "m",
+          "tracking": "normal",
+          "case": "normal",
+          "source": "vibe"
+        },
+        "bio": {
+          "family": "Inter",
+          "weight": 400,
+          "size": "m",
+          "tracking": "normal",
+          "case": "normal",
+          "source": "vibe"
+        },
+        "button": {
+          "family": "Inter",
+          "weight": 600,
+          "size": "m",
+          "tracking": "normal",
+          "case": "normal",
+          "source": "vibe"
+        }
+      },
+      "buttons": {
+        "shape": "rounded",
+        "radius": 12,
+        "fill": "#0A0A0A",
+        "text": "#FFFFFF",
+        "border": "#0A0A0A",
+        "borderWidth": 0,
+        "surface": "solid",
+        "size": "m",
+        "shadow": "none",
+        "align": "center",
+        "icon": "left",
+        "motion": "lift",
+        "states": {}
+      },
+      "layout": {
+        "header": "centered",
+        "avatar": {
+          "frame": "circle",
+          "size": "m",
+          "glow": "none"
+        },
+        "linkLayout": "stack",
+        "spacing": "balanced",
+        "width": "standard",
+        "entrance": "fade-up",
+        "socialIcons": "outline"
+      },
+      "locks": [],
+      "autoMatchButtons": false,
+      "migratedFrom": {
+        "vibe": "clean",
+        "background": "default",
+        "at": "2026-11-22T08:50:35.769Z"
+      },
+      "updatedAt": "2026-11-22T08:56:40.078Z"
+    },
+    "updatedAt": "2026-11-22T08:56:43.727Z"
+  },
+  "blocks": [],
+  "blocksInitialized": false,
+  "deletedBlockIds": [],
+  "contacts": [],
+  "passwords": {},
+  "analytics": [],
+  "appearanceHistory": {
+    "undoStack": [
+      {
+        "id": "294057bb-6193-4d1b-85c9-d24ab990e9d4",
+        "data": {
+          "schemaVersion": 2,
+          "vibeId": "porcelain",
+          "background": {
+            "type": "solid",
+            "color": "#FFFFFF"
+          },
+          "typography": {
+            "name": {
+              "family": "Inter",
+              "weight": 700,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "bio": {
+              "family": "Inter",
+              "weight": 400,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "button": {
+              "family": "Inter",
+              "weight": 600,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            }
+          },
+          "buttons": {
+            "shape": "rounded",
+            "radius": 12,
+            "fill": "#0A0A0A",
+            "text": "#FFFFFF",
+            "border": "#0A0A0A",
+            "borderWidth": 0,
+            "surface": "solid",
+            "size": "m",
+            "shadow": "none",
+            "align": "center",
+            "icon": "left",
+            "motion": "lift",
+            "states": {}
+          },
+          "layout": {
+            "header": "centered",
+            "avatar": {
+              "frame": "circle",
+              "size": "m",
+              "glow": "none"
+            },
+            "linkLayout": "stack",
+            "spacing": "balanced",
+            "width": "standard",
+            "entrance": "fade-up",
+            "socialIcons": "outline"
+          },
+          "locks": [],
+          "autoMatchButtons": false,
+          "migratedFrom": {
+            "vibe": "clean",
+            "background": "default",
+            "at": "2026-11-22T08:50:35.769Z"
+          }
+        },
+        "createdAt": "2026-11-22T08:50:35.770Z"
+      },
+      {
+        "id": "98f6a881-1d4c-4934-8c62-5722639c1da5",
+        "data": {
+          "schemaVersion": 2,
+          "vibeId": "oat-milk",
+          "background": {
+            "type": "solid",
+            "color": "#FFFFFF"
+          },
+          "typography": {
+            "name": {
+              "family": "Inter",
+              "weight": 700,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "bio": {
+              "family": "Inter",
+              "weight": 400,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "button": {
+              "family": "Inter",
+              "weight": 600,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            }
+          },
+          "buttons": {
+            "shape": "rounded",
+            "radius": 12,
+            "fill": "#0A0A0A",
+            "text": "#FFFFFF",
+            "border": "#0A0A0A",
+            "borderWidth": 0,
+            "surface": "solid",
+            "size": "m",
+            "shadow": "none",
+            "align": "center",
+            "icon": "left",
+            "motion": "lift",
+            "states": {}
+          },
+          "layout": {
+            "header": "centered",
+            "avatar": {
+              "frame": "circle",
+              "size": "m",
+              "glow": "none"
+            },
+            "linkLayout": "stack",
+            "spacing": "balanced",
+            "width": "standard",
+            "entrance": "fade-up",
+            "socialIcons": "outline"
+          },
+          "locks": [],
+          "autoMatchButtons": false,
+          "migratedFrom": {
+            "vibe": "clean",
+            "background": "default",
+            "at": "2026-11-22T08:50:35.769Z"
+          },
+          "updatedAt": "2026-11-22T08:50:35.770Z"
+        },
+        "createdAt": "2026-11-22T08:52:35.448Z"
+      },
+      {
+        "id": "e17e2225-4505-4cc8-9044-3e2653b2c9b3",
+        "data": {
+          "schemaVersion": 2,
+          "vibeId": "oat-milk",
+          "background": {
+            "type": "solid",
+            "color": "#FFFFFF"
+          },
+          "typography": {
+            "name": {
+              "family": "Inter",
+              "weight": 700,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "bio": {
+              "family": "Inter",
+              "weight": 400,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "button": {
+              "family": "Inter",
+              "weight": 600,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            }
+          },
+          "buttons": {
+            "shape": "rounded",
+            "radius": 12,
+            "fill": "#0A0A0A",
+            "text": "#FFFFFF",
+            "border": "#0A0A0A",
+            "borderWidth": 0,
+            "surface": "solid",
+            "size": "m",
+            "shadow": "none",
+            "align": "center",
+            "icon": "left",
+            "motion": "lift",
+            "states": {}
+          },
+          "layout": {
+            "header": "centered",
+            "avatar": {
+              "frame": "circle",
+              "size": "m",
+              "glow": "none"
+            },
+            "linkLayout": "stack",
+            "spacing": "balanced",
+            "width": "standard",
+            "entrance": "fade-up",
+            "socialIcons": "outline"
+          },
+          "locks": [],
+          "autoMatchButtons": false,
+          "migratedFrom": {
+            "vibe": "clean",
+            "background": "default",
+            "at": "2026-11-22T08:50:35.769Z"
+          },
+          "updatedAt": "2026-11-22T08:52:35.448Z"
+        },
+        "createdAt": "2026-11-22T08:54:41.083Z"
+      },
+      {
+        "id": "feda4a42-96fe-477f-9bd4-54cfb1e7b94f",
+        "data": {
+          "schemaVersion": 2,
+          "vibeId": "oat-milk",
+          "background": {
+            "type": "solid",
+            "color": "#FFFFFF"
+          },
+          "typography": {
+            "name": {
+              "family": "Inter",
+              "weight": 700,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "bio": {
+              "family": "Inter",
+              "weight": 400,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            },
+            "button": {
+              "family": "Inter",
+              "weight": 600,
+              "size": "m",
+              "tracking": "normal",
+              "case": "normal",
+              "source": "vibe"
+            }
+          },
+          "buttons": {
+            "shape": "rounded",
+            "radius": 12,
+            "fill": "#0A0A0A",
+            "text": "#FFFFFF",
+            "border": "#0A0A0A",
+            "borderWidth": 0,
+            "surface": "solid",
+            "size": "m",
+            "shadow": "none",
+            "align": "center",
+            "icon": "left",
+            "motion": "lift",
+            "states": {}
+          },
+          "layout": {
+            "header": "centered",
+            "avatar": {
+              "frame": "circle",
+              "size": "m",
+              "glow": "none"
+            },
+            "linkLayout": "stack",
+            "spacing": "balanced",
+            "width": "standard",
+            "entrance": "fade-up",
+            "socialIcons": "outline"
+          },
+          "locks": [],
+          "autoMatchButtons": false,
+          "migratedFrom": {
+            "vibe": "clean",
+            "background": "default",
+            "at": "2026-11-22T08:50:35.769Z"
+          },
+          "updatedAt": "2026-11-22T08:54:41.082Z"
+        },
+        "createdAt": "2026-11-22T08:56:40.078Z"
+      }
+    ],
+    "redoStack": [],
+    "lastCoalesceKey": null,
+    "lastCoalesceAt": 1795337800078
+  },
+  "appearanceThemes": [
+    {
+      "id": "theme_74711dba-b6f",
+      "name": "Second",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:56:40.078Z"
+      },
+      "createdAt": "2026-11-22T08:56:43.310Z"
+    },
+    {
+      "id": "theme_e128363e-698",
+      "name": "First",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:56:40.078Z"
+      },
+      "createdAt": "2026-11-22T08:56:43.098Z"
+    },
+    {
+      "id": "theme_ef09dcb5-321",
+      "name": "Second",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:54:41.082Z"
+      },
+      "createdAt": "2026-11-22T08:54:44.301Z"
+    },
+    {
+      "id": "theme_2d4f5b55-76f",
+      "name": "First",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:54:41.082Z"
+      },
+      "createdAt": "2026-11-22T08:54:44.114Z"
+    },
+    {
+      "id": "theme_62848316-46d",
+      "name": "Second",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:52:35.448Z"
+      },
+      "createdAt": "2026-11-22T08:52:38.548Z"
+    },
+    {
+      "id": "theme_f3ed3507-4d0",
+      "name": "First",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:52:35.448Z"
+      },
+      "createdAt": "2026-11-22T08:52:38.368Z"
+    },
+    {
+      "id": "theme_3d62eae2-7af",
+      "name": "Second",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:50:35.770Z"
+      },
+      "createdAt": "2026-11-22T08:50:41.135Z"
+    },
+    {
+      "id": "theme_405bdc3e-698",
+      "name": "First",
+      "data": {
+        "schemaVersion": 2,
+        "vibeId": "oat-milk",
+        "background": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "typography": {
+          "name": {
+            "family": "Inter",
+            "weight": 700,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "bio": {
+            "family": "Inter",
+            "weight": 400,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          },
+          "button": {
+            "family": "Inter",
+            "weight": 600,
+            "size": "m",
+            "tracking": "normal",
+            "case": "normal",
+            "source": "vibe"
+          }
+        },
+        "buttons": {
+          "shape": "rounded",
+          "radius": 12,
+          "fill": "#0A0A0A",
+          "text": "#FFFFFF",
+          "border": "#0A0A0A",
+          "borderWidth": 0,
+          "surface": "solid",
+          "size": "m",
+          "shadow": "none",
+          "align": "center",
+          "icon": "left",
+          "motion": "lift",
+          "states": {}
+        },
+        "layout": {
+          "header": "centered",
+          "avatar": {
+            "frame": "circle",
+            "size": "m",
+            "glow": "none"
+          },
+          "linkLayout": "stack",
+          "spacing": "balanced",
+          "width": "standard",
+          "entrance": "fade-up",
+          "socialIcons": "outline"
+        },
+        "locks": [],
+        "autoMatchButtons": false,
+        "migratedFrom": {
+          "vibe": "clean",
+          "background": "default",
+          "at": "2026-11-22T08:50:35.769Z"
+        },
+        "updatedAt": "2026-11-22T08:50:35.770Z"
+      },
+      "createdAt": "2026-11-22T08:50:40.953Z"
+    }
+  ]
+}

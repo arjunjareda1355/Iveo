@@ -91,33 +91,64 @@ export const BlocksProvider: React.FC<{
     [ownerUserId, primaryEmail, isDemoMode]
   );
 
+  const persistPublicBlocksCache = useCallback(
+    (nextBlocks: Block[]) => {
+      if (typeof window === 'undefined' || !userId) return;
+      const clean = userId.replace(/^@+/, '').toLowerCase().trim();
+      if (!clean) return;
+      const nowIso = new Date().toISOString();
+      try {
+        const publicBlocks = [...nextBlocks]
+          .filter((b) => b.isActive !== false && !b.isArchived)
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+          .map((b) => ({
+            ...b,
+            url: b.isProtected ? null : b.url ?? null,
+          }));
+        localStorage.setItem(`iveo_blocks_${clean}`, JSON.stringify(publicBlocks));
+      } catch {}
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const ch = new BroadcastChannel('iveo_profile_sync');
+          ch.postMessage({ username: clean, type: 'blocks', updatedAt: nowIso });
+          ch.close();
+        }
+      } catch {}
+    },
+    [userId]
+  );
+
   const syncAllTargets = useCallback(
     async (nextBlocks: Block[]) => {
+      persistPublicBlocksCache(nextBlocks);
       if (isDemoMode) return;
       await syncAllBlocksToFirebase(userId, nextBlocks).catch(() => {});
       if (ownerUserId && ownerUserId !== userId) {
         await syncAllBlocksToFirebase(ownerUserId, nextBlocks).catch(() => {});
       }
     },
-    [userId, ownerUserId, isDemoMode]
+    [userId, ownerUserId, isDemoMode, persistPublicBlocksCache]
   );
 
   const syncBlockTargets = useCallback(
     async (block: Block) => {
+      persistPublicBlocksCache(blocksRef.current);
       if (isDemoMode) return;
       await syncBlockToFirebase(userId, block).catch(() => {});
       if (ownerUserId && ownerUserId !== userId) {
         await syncBlockToFirebase(ownerUserId, block).catch(() => {});
       }
     },
-    [userId, ownerUserId, isDemoMode]
+    [userId, ownerUserId, isDemoMode, persistPublicBlocksCache]
   );
 
   const fetchBlocks = useCallback(async () => {
     if (!userId) return;
     try {
       const data = await listMyBlocks(token, userId, authCtx);
+      blocksRef.current = data;
       setBlocks(data);
+      persistPublicBlocksCache(data);
       if (!isDemoMode) {
         syncAllTargets(data).catch(() => {});
       }
@@ -126,7 +157,7 @@ export const BlocksProvider: React.FC<{
     } finally {
       setIsLoading(false);
     }
-  }, [userId, token, authCtx, isDemoMode, syncAllTargets]);
+  }, [userId, token, authCtx, isDemoMode, syncAllTargets, persistPublicBlocksCache]);
 
   useEffect(() => {
     fetchBlocks();
@@ -143,7 +174,11 @@ export const BlocksProvider: React.FC<{
         layout: 'classic',
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Link added');
     } catch (err: unknown) {
@@ -169,7 +204,11 @@ export const BlocksProvider: React.FC<{
         layout: 'classic',
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Embed added');
     } catch (err: unknown) {
@@ -192,7 +231,11 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
         signup: config,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Signup form added');
     } catch (err: unknown) {
@@ -215,7 +258,11 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
         tipJar: config,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Tip Jar added');
     } catch (err: unknown) {
@@ -234,7 +281,11 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
         faq: { items },
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('FAQ section added');
     } catch (err: unknown) {
@@ -571,7 +622,9 @@ export const BlocksProvider: React.FC<{
 
     try {
       await apiDeleteBlock(token, userId, id, authCtx);
-      if (!isDemoMode) {
+      if (isDemoMode) {
+        persistPublicBlocksCache(next);
+      } else {
         await Promise.all([
           deleteBlockFromFirebase(userId, id).catch(() => {}),
           ownerUserId && ownerUserId !== userId

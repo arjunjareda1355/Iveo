@@ -30,9 +30,12 @@ const app = firebaseConfig
   ? (!getApps().length ? initializeApp(firebaseConfig) : getApp())
   : null;
 
-export const serverDb = app && firebaseConfig?.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : null;
+export const serverDb =
+  app &&
+  firebaseConfig?.firestoreDatabaseId &&
+  process.env.IVEO_DISABLE_REMOTE_DB !== '1'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : null;
 
 /**
  * Checks whether a username is claimed in Firebase
@@ -312,7 +315,8 @@ export async function firebaseSaveProfile(
     buttonColors: profileData.buttonColors ?? null,
     businessCard: profileData.businessCard ?? null,
     layoutSettings: profileData.layoutSettings ?? null,
-    updatedAt: new Date().toISOString(),
+    appearance: profileData.appearance ?? null,
+    updatedAt: profileData.updatedAt || new Date().toISOString(),
   };
 
   if (typeof profileData.avatarData === 'string' && profileData.avatarData.length <= 350000) {
@@ -327,11 +331,22 @@ export async function firebaseSaveProfile(
     cleanProfile.avatarData = null;
   }
 
+  const nestedOverwritePayload = {
+    socials: cleanProfile.socials,
+    background: cleanProfile.background,
+    fontSettings: cleanProfile.fontSettings,
+    buttonColors: cleanProfile.buttonColors,
+    businessCard: cleanProfile.businessCard,
+    layoutSettings: cleanProfile.layoutSettings,
+    appearance: cleanProfile.appearance,
+    updatedAt: cleanProfile.updatedAt,
+  };
+
   try {
-    // Save to users collection and overwrite nested socials map so deleted icons stay deleted
+    // Save to users collection and explicitly overwrite nested maps so removed keys never linger
     const userRef = doc(serverDb, 'users', clean);
     await setDoc(userRef, cleanProfile, { merge: true });
-    await updateDoc(userRef, { socials: cleanProfile.socials }).catch(() => {});
+    await updateDoc(userRef, nestedOverwritePayload).catch(() => {});
 
     // Also save claim registry record
     await setDoc(doc(serverDb, 'claims', clean), {
@@ -347,7 +362,7 @@ export async function firebaseSaveProfile(
     if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
       const mirrorRef = doc(serverDb, 'users', effectiveUserId);
       await setDoc(mirrorRef, cleanProfile, { merge: true });
-      await updateDoc(mirrorRef, { socials: cleanProfile.socials }).catch(() => {});
+      await updateDoc(mirrorRef, nestedOverwritePayload).catch(() => {});
     }
   } catch (err) {
     console.warn('[FirebaseServer] Background saveProfile notice:', err);
@@ -818,4 +833,44 @@ export async function firebaseGetAllProfiles(): Promise<any[]> {
     return [];
   }
 }
+
+export async function firebaseGetAppearanceState(username: string): Promise<{
+  appearance?: any;
+  history?: any;
+  themes?: any[];
+} | null> {
+  if (!serverDb || !username) return null;
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  try {
+    const snap = await getDoc(doc(serverDb, 'users', clean, 'appearance', 'v2'));
+    if (snap.exists()) {
+      return snap.data() as any;
+    }
+  } catch {}
+  return null;
+}
+
+export async function firebaseSaveAppearanceState(
+  username: string,
+  state: { appearance?: any; history?: any; themes?: any[] },
+  userId?: string
+): Promise<void> {
+  if (!serverDb || !username) return;
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  const payload = {
+    username: clean,
+    userId: userId || 'owner',
+    appearance: state.appearance ?? null,
+    history: state.history ?? { undoStack: [], redoStack: [] },
+    themes: Array.isArray(state.themes) ? state.themes : [],
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    await setDoc(doc(serverDb, 'users', clean, 'appearance', 'v2'), payload);
+    if (userId && userId !== clean && userId !== 'owner') {
+      await setDoc(doc(serverDb, 'users', userId, 'appearance', 'v2'), payload).catch(() => {});
+    }
+  } catch {}
+}
+
 

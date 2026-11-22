@@ -2,6 +2,7 @@ import type { VibeId } from './vibes.ts';
 import { type FontSettings, parseFontSettings } from './fonts.ts';
 import { type ButtonColors, parseButtonColors } from './colors.ts';
 import { type BusinessCardConfig, parseBusinessCardConfig } from './businessCardConfig.ts';
+import type { Appearance } from './appearance/types.ts';
 
 export type ButtonShape = 'square' | 'rounded' | 'pill';
 
@@ -297,6 +298,8 @@ export interface IveoPreferences {
   buttonColors?: ButtonColors | null;
   layoutSettings?: LayoutSettings | null;
   businessCard?: BusinessCardConfig | null;
+  appearance?: Appearance | null;
+  updatedAt?: string | null;
 }
 
 export type IvioPreferences = IveoPreferences;
@@ -325,6 +328,8 @@ export const DEFAULT_PREFERENCES: IveoPreferences = {
   buttonColors: null,
   layoutSettings: null,
   businessCard: null,
+  appearance: null,
+  updatedAt: null,
 };
 
 const VALID_VIBE_IDS = new Set<VibeId>([
@@ -443,6 +448,17 @@ export function parsePreferences(raw: unknown): IveoPreferences {
   const buttonColors = parseButtonColors(record.buttonColors);
   const layoutSettings = parseLayoutSettings(record.layoutSettings);
   const businessCard = parseBusinessCardConfig(record.businessCard);
+  const appearance =
+    record.appearance &&
+    typeof record.appearance === 'object' &&
+    !Array.isArray(record.appearance) &&
+    (record.appearance as Record<string, unknown>).version === 2
+      ? (record.appearance as Appearance)
+      : null;
+  const updatedAt =
+    typeof record.updatedAt === 'string' && record.updatedAt.length > 0
+      ? record.updatedAt
+      : null;
 
   return {
     vibeId,
@@ -468,6 +484,8 @@ export function parsePreferences(raw: unknown): IveoPreferences {
     buttonColors,
     layoutSettings,
     businessCard,
+    appearance,
+    updatedAt,
   };
 }
 

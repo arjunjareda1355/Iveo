@@ -89,6 +89,16 @@ service cloud.firestore {
         allow create, update: if isValidId(userId) && isValidId(eventId) && isValidAnalyticsEvent(request.resource.data);
         allow delete: if isValidId(userId);
       }
+
+      // Structured Appearance v2 state & history
+      match /appearance/{docId} {
+        allow get, list: if isValidId(userId);
+        allow create, update: if isValidId(userId) && docId == 'v2'
+          && request.resource.data.keys().hasAll(['username', 'userId', 'updatedAt'])
+          && request.resource.data.username is string
+          && request.resource.data.userId is string;
+        allow delete: if isValidId(userId) && docId == 'v2';
+      }
     }
   }
 }

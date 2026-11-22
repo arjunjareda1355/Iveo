@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ArrowUpRight,
   Lock,
   Mail,
   Share2,
@@ -48,6 +49,9 @@ import {
   getBlockContrastPalette,
 } from '../../lib/blockTheme';
 import { BlueskyBlock } from './BlueskyBlock';
+import { resolveTokens } from '../../lib/appearance/resolveTokens';
+import { buildButtonSurfaceCss } from '../../lib/appearance/catalog/surfaces';
+import { getAvatarClipAndRadiusCss } from '../../lib/appearance/catalog/layouts';
 
 export interface PageRendererProps {
   vibe: Vibe;
@@ -85,6 +89,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   protectedIds,
 }) => {
   const { persona } = vibe;
+  const isVerified = Boolean(profile?.isVerified ?? profile?.isPro);
+  const resolvedV2 =
+    profile?.appearance && profile.appearance.schemaVersion === 2
+      ? resolveTokens(profile.appearance, {
+          isPro: profile.isPro ?? profile.isVerified ?? true,
+        })
+      : null;
+
   const themeContract = resolveBlockThemeContract({
     vibeId: vibe.id,
     vibeTokens: vibe.tokens,
@@ -93,12 +105,13 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     background: profile?.background,
     layoutSettings: profile?.layoutSettings,
     fontSettings: profile?.fontSettings,
+    appearance: profile?.appearance,
+    isPro: profile?.isPro ?? profile?.isVerified ?? true,
     buttonRadiusOverride,
     scale,
   });
   const tokens = themeContract.tokens;
   const effectiveVibe: Vibe = { ...vibe, tokens };
-  const isVerified = Boolean(profile?.isVerified ?? profile?.isPro);
   const onDarkTick = themeContract.isDarkPage;
 
   const nameFontFamily = themeContract.nameFontFamily;
@@ -115,31 +128,88 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
     cardLook: profile?.layoutSettings?.cardLook || DEFAULT_LAYOUT_SETTINGS.cardLook,
   };
 
-  const avatarRadiusCss =
-    layout.avatarShape === 'squircle'
-      ? `${Math.round(20 * scale)}px`
+  const headerLayout = resolvedV2
+    ? resolvedV2.layout.header
+    : layout.headerAlign === 'left'
+      ? 'editorial'
+      : 'centered';
+  const isLeftHeader = headerLayout === 'editorial';
+  const isCompactHeader = headerLayout === 'compact';
+  const isHeroHeader = headerLayout === 'hero';
+
+  const avatarFrame = resolvedV2
+    ? resolvedV2.layout.avatar.frame
+    : layout.avatarShape === 'squircle'
+      ? 'squircle'
       : layout.avatarShape === 'rounded'
-        ? `${Math.round(12 * scale)}px`
-        : '9999px';
+        ? 'rounded'
+        : layout.avatarShape === 'ring'
+          ? 'halo'
+          : 'circle';
 
-  const avatarRingShadow =
-    layout.avatarShape === 'ring'
-      ? `0 0 0 ${Math.max(2, Math.round(2.5 * scale))}px ${tokens.bg}, 0 0 0 ${Math.max(4, Math.round(5 * scale))}px ${tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg}`
-      : undefined;
+  const avatarPx = resolvedV2
+    ? isPublicPage
+      ? resolvedV2.layout.avatarSizePx
+      : Math.round(Math.min(resolvedV2.layout.avatarSizePx * 0.72, 112) * scale)
+    : Math.round(72 * scale);
 
-  const linkGapPx =
-    layout.linkSpacing === 'compact'
+  const avatarClip = getAvatarClipAndRadiusCss(avatarFrame, avatarPx);
+  const avatarGlow = resolvedV2?.layout.avatar.glow || 'none';
+  const accentHex = resolvedV2?.pageAccent || (tokens.buttonBg === 'transparent' ? tokens.text : tokens.buttonBg);
+
+  const avatarGlowShadow =
+    avatarGlow === 'accent'
+      ? `0 0 32px ${accentHex}73`
+      : avatarGlow === 'soft'
+        ? `0 0 24px ${accentHex}40`
+        : undefined;
+
+  const avatarFrameShadow = (() => {
+    const shadows: string[] = [];
+    if (avatarFrame === 'halo') {
+      shadows.push(`0 0 0 ${Math.max(2, Math.round(3 * scale))}px ${accentHex}`);
+      shadows.push(`0 0 20px ${accentHex}44`);
+    } else if (avatarFrame === 'double-ring') {
+      shadows.push(`0 0 0 ${Math.max(2, Math.round(2 * scale))}px ${tokens.bg}`);
+      shadows.push(`0 0 0 ${Math.max(4, Math.round(4.5 * scale))}px ${tokens.text}`);
+      shadows.push(`0 0 0 ${Math.max(6, Math.round(6.5 * scale))}px ${tokens.bg}`);
+      shadows.push(`0 0 0 ${Math.max(7, Math.round(8 * scale))}px ${accentHex}`);
+    } else if (avatarFrame === 'sticker') {
+      shadows.push(`0 0 0 ${Math.max(3, Math.round(4 * scale))}px #FFFFFF`);
+      shadows.push(`${Math.round(3 * scale)}px ${Math.round(4 * scale)}px 0 rgba(10,10,12,0.85)`);
+    }
+    if (avatarGlowShadow) shadows.push(avatarGlowShadow);
+    return shadows.length > 0 ? shadows.join(', ') : undefined;
+  })();
+
+  const linkGapPx = resolvedV2
+    ? Math.round(resolvedV2.layout.gapPx * scale)
+    : layout.linkSpacing === 'compact'
       ? Math.round(6 * scale)
       : layout.linkSpacing === 'airy'
         ? Math.round(16 * scale)
         : Math.round(10 * scale);
 
-  const pageMaxWidthClass =
-    layout.pageWidth === 'compact'
+  const pageMaxWidthClass = resolvedV2
+    ? resolvedV2.layout.width === 'focused'
+      ? 'max-w-[440px]'
+      : resolvedV2.layout.width === 'wide'
+        ? 'max-w-[720px]'
+        : 'max-w-[560px]'
+    : layout.pageWidth === 'compact'
       ? 'max-w-[440px]'
       : layout.pageWidth === 'wide'
         ? 'max-w-[660px]'
         : 'max-w-[540px]';
+
+  const linkLayout = resolvedV2 ? resolvedV2.layout.linkLayout : 'stack';
+  const entranceMode = resolvedV2?.layout.entrance || 'none';
+  const entranceClass =
+    entranceMode === 'fade-up'
+      ? 'iveo-entrance-fade-up'
+      : entranceMode === 'stagger-scale'
+        ? 'iveo-entrance-stagger'
+        : '';
 
   const buttonSurfaceStyle = themeContract.surfaceStyle;
   const buttonPalette = getBlockContrastPalette(buttonSurfaceStyle, tokens);
@@ -153,7 +223,38 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       : effectiveRadius <= 0
         ? '0px'
         : `${Math.round(Math.max(6, Math.min(12, effectiveRadius)) * scale)}px`;
-  const isLeftHeader = layout.headerAlign === 'left';
+
+  const socialIconStyle = resolvedV2?.layout.socialIcons || (layout.buttonStyle === 'glass' ? 'glass' : 'outline');
+  const getSocialBtnStyle = (): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      width: `${Math.round(36 * scale)}px`,
+      height: `${Math.round(36 * scale)}px`,
+      borderRadius: socialBorderRadiusCss,
+    };
+    if (socialIconStyle === 'filled') {
+      return {
+        ...base,
+        ...buttonSurfaceStyle,
+        border: buttonSurfaceStyle.border || `1px solid ${tokens.text}1A`,
+      };
+    }
+    if (socialIconStyle === 'glass') {
+      return {
+        ...base,
+        backgroundColor: themeContract.isDarkPage ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.58)',
+        color: tokens.text,
+        border: themeContract.isDarkPage ? '1px solid rgba(255,255,255,0.28)' : '1px solid rgba(10,10,12,0.14)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      };
+    }
+    return {
+      ...base,
+      backgroundColor: 'transparent',
+      color: tokens.text,
+      border: `1.5px solid ${tokens.buttonBorder && tokens.buttonBorder !== 'transparent' ? tokens.buttonBorder : `${tokens.text}40`}`,
+    };
+  };
 
   const [activeEmbedId, setActiveEmbedId] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
@@ -161,12 +262,18 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
   // Load any customized Google Fonts used on this page
   React.useEffect(() => {
     loadGoogleFonts([
+      resolvedV2?.typography.name.family,
+      resolvedV2?.typography.bio.family,
+      resolvedV2?.typography.button.family,
       profile?.fontSettings?.nameFont,
       profile?.fontSettings?.bioFont,
       profile?.fontSettings?.buttonFont,
       profile?.businessCard?.fontId,
     ]);
   }, [
+    resolvedV2?.typography.name.family,
+    resolvedV2?.typography.bio.family,
+    resolvedV2?.typography.button.family,
     profile?.fontSettings?.nameFont,
     profile?.fontSettings?.bioFont,
     profile?.fontSettings?.buttonFont,
@@ -244,6 +351,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         <BackgroundLayer
           mode="contained"
           background={profile?.background}
+          backgroundV2={resolvedV2?.background || null}
+          smartScrim={resolvedV2?.smartScrim || null}
           fallbackBg={tokens.bg}
         />
       )}
@@ -274,100 +383,219 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           isLeftHeader ? 'items-start' : 'items-center'
         }`}
       >
-        {/* Avatar */}
-        <div
-          className="overflow-hidden flex items-center justify-center shrink-0 font-medium"
-          style={{
-            width: `${Math.round(72 * scale)}px`,
-            height: `${Math.round(72 * scale)}px`,
-            borderRadius: avatarRadiusCss,
-            boxShadow: avatarRingShadow,
-            backgroundColor: tokens.avatarBg,
-            color: tokens.avatarText,
-            fontSize: `${Math.round(22 * scale)}px`,
-          }}
-        >
-          {(profile?.avatarUrl ?? persona.avatarUrl) && !avatarError ? (
-            <img
-              src={profile?.avatarUrl ?? persona.avatarUrl}
-              alt={displayName}
-              loading="eager"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
-              onError={() => setAvatarError(true)}
-              className="w-full h-full object-cover block"
-            />
-          ) : (
-            <span>{displayInitials}</span>
-          )}
-        </div>
-
-        {/* Name & Handle */}
-        <div
-          className={`w-full flex flex-col ${
-            isLeftHeader ? 'items-start text-left' : 'items-center text-center'
-          }`}
-          style={{
-            marginTop: `${Math.round(12 * scale)}px`,
-            gap: `${Math.round(2 * scale)}px`,
-          }}
-        >
-          <h1
-            className={`font-medium tracking-tight leading-tight max-w-full truncate ${
-              isLeftHeader ? '' : 'px-2'
-            }`}
-            style={{
-              fontSize: `${Math.max(14, Math.round(17 * scale))}px`,
-              color: tokens.text,
-              fontFamily: nameFontFamily,
-            }}
-          >
-            {displayName}
-          </h1>
-
+        {/* Hero Banner Strip when header === 'hero' */}
+        {isHeroHeader && (
           <div
-            className={`font-mono tracking-tight max-w-full inline-flex items-center gap-1.5 ${
-              isLeftHeader ? 'justify-start text-left' : 'justify-center text-center px-2'
-            }`}
+            aria-hidden="true"
+            className="w-full relative overflow-hidden"
             style={{
-              fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
-              color: tokens.muted,
+              height: `${Math.round(92 * scale)}px`,
+              borderRadius: `${Math.round(16 * scale)}px`,
+              marginBottom: `-${Math.round(avatarPx * 0.42)}px`,
+              background: `linear-gradient(135deg, ${accentHex}44 0%, ${tokens.text}18 100%)`,
+              border: `1px solid ${tokens.text}18`,
             }}
-          >
-            <span className="truncate">@{displayHandle}</span>
-            {isVerified && (
-              <VerifiedTick
-                size={Math.max(13, Math.round(15 * scale))}
-                onDark={onDarkTick}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Bio */}
-        {displayBio && (
-          <p
-            className={`${
-              isLeftHeader ? 'text-left' : 'text-center'
-            } font-normal leading-relaxed max-w-[34ch] break-words`}
-            style={{
-              marginTop: `${Math.round(8 * scale)}px`,
-              fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
-              color: tokens.muted,
-              fontFamily: bioFontFamily,
-            }}
-          >
-            {displayBio}
-          </p>
+          />
         )}
+
+        {/* Header: Compact Row vs Centered/Editorial/Hero Stacked */}
+        {(() => {
+          const avatarCore = (
+            <div
+              className="overflow-hidden flex items-center justify-center shrink-0 font-medium"
+              style={{
+                width: `${avatarPx}px`,
+                height: `${avatarPx}px`,
+                borderRadius: avatarClip.borderRadius,
+                clipPath: avatarClip.clipPath,
+                boxShadow: avatarFrame === 'gradient-ring' ? undefined : avatarFrameShadow,
+                transform: avatarFrame === 'sticker' ? 'rotate(-1.5deg)' : undefined,
+                backgroundColor: tokens.avatarBg,
+                color: tokens.avatarText,
+                fontSize: `${Math.max(16, Math.round(avatarPx * 0.3))}px`,
+              }}
+            >
+              {(profile?.avatarUrl ?? persona.avatarUrl) && !avatarError ? (
+                <img
+                  src={profile?.avatarUrl ?? persona.avatarUrl}
+                  alt={displayName}
+                  loading="eager"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
+                  onError={() => setAvatarError(true)}
+                  className="w-full h-full object-cover block"
+                />
+              ) : (
+                <span>{displayInitials}</span>
+              )}
+            </div>
+          );
+
+          const avatarNode =
+            avatarFrame === 'gradient-ring' ? (
+              <div
+                className="shrink-0 flex items-center justify-center"
+                style={{
+                  padding: `${Math.max(2, Math.round(3 * scale))}px`,
+                  borderRadius: avatarClip.borderRadius,
+                  background: `conic-gradient(from 0deg, ${accentHex}, ${tokens.text}, ${accentHex})`,
+                  boxShadow: avatarGlowShadow,
+                }}
+              >
+                <div
+                  className="flex items-center justify-center"
+                  style={{
+                    padding: `${Math.max(1, Math.round(2 * scale))}px`,
+                    borderRadius: avatarClip.borderRadius,
+                    backgroundColor: resolvedV2?.bgProfile.meanHex || tokens.bg,
+                  }}
+                >
+                  {avatarCore}
+                </div>
+              </div>
+            ) : (
+              avatarCore
+            );
+
+          const nameSizePx = resolvedV2
+            ? Math.max(
+                14,
+                Math.round(
+                  (resolvedV2.typography.name.size === 'l'
+                    ? 24
+                    : resolvedV2.typography.name.size === 's'
+                      ? 16
+                      : 20) * scale
+                )
+              )
+            : Math.max(14, Math.round(17 * scale));
+
+          const bioSizePx = resolvedV2
+            ? Math.max(
+                11,
+                Math.round(
+                  (resolvedV2.typography.bio.size === 'l'
+                    ? 16
+                    : resolvedV2.typography.bio.size === 's'
+                      ? 12
+                      : 14) * scale
+                )
+              )
+            : Math.max(12, Math.round(13 * scale));
+
+          const nameWeight = resolvedV2?.typography.name.weight || 600;
+          const nameTracking =
+            resolvedV2?.typography.name.tracking === 'wide'
+              ? '0.04em'
+              : resolvedV2?.typography.name.tracking === 'tight'
+                ? '-0.025em'
+                : '-0.01em';
+          const nameUppercase = resolvedV2?.typography.name.case === 'upper';
+          const bioLineHeight =
+            resolvedV2?.typography.bio.lineHeight === 'compact'
+              ? 1.35
+              : resolvedV2?.typography.bio.lineHeight === 'relaxed'
+                ? 1.75
+                : 1.55;
+
+          const metaTextBlock = (
+            <div
+              className={`w-full flex flex-col min-w-0 ${
+                isCompactHeader || isLeftHeader
+                  ? 'items-start text-left'
+                  : 'items-center text-center'
+              }`}
+              style={{
+                marginTop: isCompactHeader ? '0px' : `${Math.round(12 * scale)}px`,
+                gap: `${Math.round(2 * scale)}px`,
+              }}
+            >
+              <h1
+                className={`leading-tight max-w-full truncate ${
+                  isCompactHeader || isLeftHeader ? '' : 'px-2'
+                } ${nameUppercase ? 'uppercase' : ''}`}
+                style={{
+                  fontSize: `${nameSizePx}px`,
+                  fontWeight: nameWeight,
+                  letterSpacing: nameTracking,
+                  color: tokens.text,
+                  fontFamily: nameFontFamily,
+                }}
+              >
+                {displayName}
+              </h1>
+
+              <div
+                className={`font-mono tracking-tight max-w-full inline-flex items-center gap-1.5 ${
+                  isCompactHeader || isLeftHeader
+                    ? 'justify-start text-left'
+                    : 'justify-center text-center px-2'
+                }`}
+                style={{
+                  fontSize: `${Math.max(12, Math.round(13 * scale))}px`,
+                  color: tokens.muted,
+                }}
+              >
+                <span className="truncate">@{displayHandle}</span>
+                {isVerified && (
+                  <VerifiedTick
+                    size={Math.max(13, Math.round(15 * scale))}
+                    onDark={onDarkTick}
+                  />
+                )}
+              </div>
+
+              {displayBio && (
+                <p
+                  className={`${
+                    isCompactHeader || isLeftHeader ? 'text-left' : 'text-center'
+                  } max-w-[38ch] break-words`}
+                  style={{
+                    marginTop: `${Math.round(6 * scale)}px`,
+                    fontSize: `${bioSizePx}px`,
+                    fontWeight: resolvedV2?.typography.bio.weight || 400,
+                    lineHeight: bioLineHeight,
+                    color: tokens.muted,
+                    fontFamily: bioFontFamily,
+                  }}
+                >
+                  {displayBio}
+                </p>
+              )}
+            </div>
+          );
+
+          if (isCompactHeader) {
+            return (
+              <div
+                className="w-full flex items-center gap-3.5 text-left relative z-10"
+                style={{ gap: `${Math.round(14 * scale)}px` }}
+              >
+                {avatarNode}
+                {metaTextBlock}
+              </div>
+            );
+          }
+
+          return (
+            <div
+              className={`w-full flex flex-col relative z-10 ${
+                isLeftHeader ? 'items-start' : 'items-center'
+              }`}
+            >
+              {avatarNode}
+              {metaTextBlock}
+            </div>
+          );
+        })()}
 
       {/* Top Socials placement if configured ('top' or 'both') */}
       {(profile?.socialsPosition === 'top' || profile?.socialsPosition === 'both' || !profile?.socialsPosition) &&
         activeSocialEntries.length > 0 && (
         <div
           className={`flex items-center flex-wrap shrink-0 ${
-            isLeftHeader ? 'justify-start' : 'justify-center'
+            isLeftHeader || isCompactHeader ? 'justify-start' : 'justify-center'
           }`}
           style={{
             marginTop: `${Math.round(14 * scale)}px`,
@@ -376,13 +604,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         >
           {activeSocialEntries.map(([platform, url]) => {
             const cleanUrl = formatExternalUrl(url);
-            const btnStyle: React.CSSProperties = {
-              width: `${Math.round(36 * scale)}px`,
-              height: `${Math.round(36 * scale)}px`,
-              borderRadius: socialBorderRadiusCss,
-              ...buttonSurfaceStyle,
-              border: buttonSurfaceStyle.border || `1px solid ${tokens.text}1A`,
-            };
+            const btnStyle = getSocialBtnStyle();
             if (isPublicPage) {
               return (
                 <a
@@ -417,7 +639,13 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
       {/* Blocks Container */}
       <div
-        className="w-full flex flex-col"
+        className={
+          linkLayout === 'grid2'
+            ? 'w-full iveo-links-grid2'
+            : linkLayout === 'chips'
+              ? 'w-full flex flex-wrap items-center justify-center'
+              : 'w-full flex flex-col'
+        }
         style={{
           marginTop: `${Math.round(
             (activeSocialEntries.length > 0 &&
@@ -434,11 +662,12 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             return (
               <div
                 key={block.id}
-                className="w-full text-center font-semibold pt-2 pb-1"
+                className={`w-full col-span-full text-center font-semibold pt-2 pb-1 ${entranceClass}`}
                 style={{
                   fontSize: `${Math.max(13, Math.round(15 * scale))}px`,
                   color: tokens.text,
                   fontFamily: nameFontFamily,
+                  animationDelay: entranceClass ? `${Math.min(idx, 6) * 40}ms` : undefined,
                 }}
               >
                 {block.title}
@@ -451,7 +680,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             return (
               <div
                 key={block.id}
-                className="w-full my-1.5 flex items-center justify-center"
+                className="w-full col-span-full my-1.5 flex items-center justify-center"
               >
                 <div
                   className="w-full border-t opacity-30"
@@ -466,8 +695,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           // 3. Embed / Platform card or player
           if (block.kind === 'embed') {
             return (
+              <div key={block.id} className="w-full col-span-full">
               <EmbedBlock
-                key={block.id}
                 block={block}
                 vibe={effectiveVibe}
                 effectiveRadius={effectiveRadius}
@@ -481,13 +710,14 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 pageCardLook={layout.cardLook}
                 background={profile?.background}
               />
+              </div>
             );
           }
 
           // 3b. Bluesky Block (Profile, Feed, Single Post, Compact Button)
           if (block.kind === 'bluesky') {
             return (
-              <div key={block.id} className="w-full">
+              <div key={block.id} className="w-full col-span-full">
                 <BlueskyBlock
                   block={block}
                   tokens={tokens}
@@ -506,7 +736,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           if (block.kind === 'signup') {
             if (renderSignupForm && isPublicPage) {
               return (
-                <div key={block.id} className="w-full">
+                <div key={block.id} className="w-full col-span-full">
                   {renderSignupForm(block, buttonSurfaceStyle)}
                 </div>
               );
@@ -560,7 +790,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             return (
               <div
                 key={block.id}
-                className={`w-full overflow-hidden flex flex-col select-none ${
+                className={`w-full col-span-full overflow-hidden flex flex-col select-none ${
                   isCompact || isMinimal ? 'items-start text-left' : 'items-center text-center'
                 }`}
                 style={previewContainerStyle}
@@ -1109,20 +1339,96 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             block.animation === 'glow'
               ? `0 0 16px ${tokens.text}40`
               : undefined;
-          const classicSurfaceStyle = getButtonSurfaceStyle(glowOverride);
+
+          const v2BtnCss = resolvedV2
+            ? buildButtonSurfaceCss({
+                surface: resolvedV2.buttons.surface,
+                fill: resolvedV2.buttons.fill,
+                text: resolvedV2.buttons.text,
+                border: resolvedV2.buttons.border,
+                borderWidth: resolvedV2.buttons.borderWidth,
+                shadow: resolvedV2.buttons.shadow,
+                gradient: resolvedV2.buttons.gradient,
+                bgProfile: resolvedV2.bgProfile,
+                index: idx,
+              })
+            : null;
+
+          const classicSurfaceStyle: React.CSSProperties = v2BtnCss
+            ? {
+                backgroundColor: v2BtnCss.backgroundColor,
+                ...(v2BtnCss.backgroundImage ? { backgroundImage: v2BtnCss.backgroundImage } : {}),
+                ...(v2BtnCss.backgroundSize ? { backgroundSize: v2BtnCss.backgroundSize } : {}),
+                color: v2BtnCss.color,
+                border: v2BtnCss.border,
+                ...(v2BtnCss.borderBottom ? { borderBottom: v2BtnCss.borderBottom } : {}),
+                boxShadow: glowOverride || v2BtnCss.boxShadow,
+                ...(v2BtnCss.backdropFilter
+                  ? { backdropFilter: v2BtnCss.backdropFilter, WebkitBackdropFilter: v2BtnCss.backdropFilter }
+                  : {}),
+                ...(v2BtnCss.textShadow ? { textShadow: v2BtnCss.textShadow } : {}),
+                ...(v2BtnCss.transform ? { transform: v2BtnCss.transform } : {}),
+                ...(v2BtnCss.fallbackBgCss ? ({ '--iveo-glass-fallback': v2BtnCss.fallbackBgCss } as React.CSSProperties) : {}),
+              }
+            : getButtonSurfaceStyle(glowOverride);
+
+          const isChips = linkLayout === 'chips';
+          const btnHeightPx = resolvedV2
+            ? isChips
+              ? Math.round(38 * scale)
+              : Math.round(resolvedV2.buttons.heightPx * scale)
+            : Math.round(44 * scale);
+
+          const btnFontSizePx = resolvedV2
+            ? Math.max(12, Math.round(resolvedV2.buttons.fontSizePx * scale))
+            : Math.max(12, Math.round(14 * scale));
+
+          const btnWeight = resolvedV2?.buttons.weight || resolvedV2?.typography.button.weight || 500;
+          const btnTracking =
+            resolvedV2?.buttons.tracking === 'wide'
+              ? '0.05em'
+              : resolvedV2?.buttons.tracking === 'tight'
+                ? '-0.02em'
+                : undefined;
+          const btnUpper = resolvedV2?.buttons.case === 'upper';
+          const btnAlign = resolvedV2?.buttons.align || 'center';
+          const btnIconPos = resolvedV2?.buttons.icon || 'left';
+          const isGlassSurface = resolvedV2?.buttons.surface === 'glass';
+          const isUnderlineSurface = resolvedV2?.buttons.surface === 'underline-only';
+          const motionCls =
+            resolvedV2?.buttons.motion && resolvedV2.buttons.motion !== 'none'
+              ? `iveo-btn-motion-${resolvedV2.buttons.motion}`
+              : '';
+
+          const effectiveSidePad = isChips
+            ? Math.round(14 * scale)
+            : btnIconPos === 'none'
+              ? Math.round((resolvedV2?.buttons.paddingXPx ?? 20) * scale)
+              : sidePadding;
 
           const innerButton = (
             <div
-              className={`w-full relative flex items-center justify-center truncate transition-all duration-150 select-none ${animClass}`}
+              className={`relative flex items-center truncate transition-all duration-150 select-none ${
+                isChips ? 'w-auto max-w-full gap-2' : 'w-full'
+              } ${
+                btnAlign === 'left' && btnIconPos !== 'right'
+                  ? 'justify-start'
+                  : btnAlign === 'left'
+                    ? 'justify-between'
+                    : 'justify-center'
+              } ${isGlassSurface ? 'iveo-btn-glass' : ''} ${motionCls} ${animClass} ${
+                btnUpper ? 'uppercase' : ''
+              }`}
               style={{
-                height: `${Math.round(44 * scale)}px`,
-                paddingLeft: `${sidePadding}px`,
-                paddingRight: `${sidePadding}px`,
+                height: `${btnHeightPx}px`,
+                paddingLeft: `${effectiveSidePad}px`,
+                paddingRight: `${effectiveSidePad}px`,
                 ...classicSurfaceStyle,
                 fontFamily: buttonFontFamily,
-                borderRadius: `${barRadius}px`,
-                fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
-                fontWeight: 500,
+                borderRadius: isUnderlineSurface ? '0px' : `${barRadius}px`,
+                fontSize: `${btnFontSizePx}px`,
+                fontWeight: btnWeight,
+                letterSpacing: btnTracking,
               }}
             >
               {/* Badge if specified */}
@@ -1138,44 +1444,57 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   {block.badge}
                 </span>
               )}
+
               {/* Left thumbnail or icon */}
-              {hasThumb ? (
-                <div
-                  className="absolute left-2 top-1/2 -translate-y-1/2 overflow-hidden flex items-center justify-center bg-black/5"
-                  style={{
-                    width: `${thumbSize}px`,
-                    height: `${thumbSize}px`,
-                    borderRadius: `${thumbRadius}px`,
-                  }}
-                >
-                  <img
-                    src={effectiveThumbUrl!}
-                    alt=""
-                    loading={isEager ? 'eager' : 'lazy'}
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover block"
-                  />
-                </div>
-              ) : (
-                <span
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center shrink-0"
-                  style={{ width: `${Math.round(18 * scale)}px`, height: `${Math.round(18 * scale)}px` }}
-                >
+              {btnIconPos === 'left' && !isChips && (
+                hasThumb ? (
+                  <div
+                    className="absolute left-2 top-1/2 -translate-y-1/2 overflow-hidden flex items-center justify-center bg-black/5"
+                    style={{
+                      width: `${thumbSize}px`,
+                      height: `${thumbSize}px`,
+                      borderRadius: `${thumbRadius}px`,
+                    }}
+                  >
+                    <img
+                      src={effectiveThumbUrl!}
+                      alt=""
+                      loading={isEager ? 'eager' : 'lazy'}
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover block"
+                    />
+                  </div>
+                ) : (
+                  <span
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center shrink-0"
+                    style={{ width: `${Math.round(18 * scale)}px`, height: `${Math.round(18 * scale)}px` }}
+                  >
+                    <LinkFaviconOrFallback
+                      url={block.url}
+                      size={Math.round(16 * scale)}
+                      className="opacity-85"
+                    />
+                  </span>
+                )
+              )}
+
+              {btnIconPos !== 'none' && isChips && (
+                <span className="flex items-center justify-center shrink-0">
                   <LinkFaviconOrFallback
                     url={block.url}
-                    size={Math.round(16 * scale)}
+                    size={Math.round(14 * scale)}
                     className="opacity-85"
                   />
                 </span>
               )}
 
-              <span className="truncate text-center leading-none px-2">
+              <span className={`truncate leading-none ${btnAlign === 'left' ? 'text-left' : 'text-center px-2'}`}>
                 {block.title}
               </span>
 
-              {/* Right Lock icon if protected */}
-              {isProtected && (
+              {/* Right icon slot (custom right icon, underline trailing arrow, or lock) */}
+              {isProtected ? (
                 <span
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0 opacity-80"
                   style={{ color: String(classicSurfaceStyle.color || tokens.buttonText) }}
@@ -1183,9 +1502,21 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 >
                   <Lock size={lockSize} strokeWidth={1.5} />
                 </span>
-              )}
+              ) : isUnderlineSurface || (btnIconPos === 'right' && !isChips) ? (
+                <span
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center shrink-0 opacity-80"
+                  style={{ color: String(classicSurfaceStyle.color || tokens.buttonText) }}
+                  aria-hidden="true"
+                >
+                  <ArrowUpRight size={Math.round(15 * scale)} strokeWidth={1.75} />
+                </span>
+              ) : null}
             </div>
           );
+
+          const outerMotionWrap = entranceClass
+            ? { animationDelay: `${Math.min(idx, 6) * 40}ms` }
+            : undefined;
 
           // Protected link: NEVER render as <a>! Render as interactive button on public page
           if (isProtected) {
@@ -1197,14 +1528,18 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                   onClick={() => onUnlock?.(block)}
                   aria-haspopup="dialog"
                   aria-label={`${block.title}, password protected`}
-                  className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
-                  style={{ borderRadius: `${barRadius}px` }}
+                  className={`${isChips ? 'inline-flex' : 'w-full block'} transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer ${entranceClass}`}
+                  style={{ borderRadius: `${barRadius}px`, ...outerMotionWrap }}
                 >
                   {innerButton}
                 </button>
               );
             }
-            return <div key={block.id}>{innerButton}</div>;
+            return (
+              <div key={block.id} className={`${isChips ? 'inline-flex' : 'w-full'} ${entranceClass}`} style={outerMotionWrap}>
+                {innerButton}
+              </div>
+            );
           }
 
           // Normal classic link
@@ -1217,15 +1552,19 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 rel="noopener noreferrer nofollow"
                 onClick={() => onLinkClick?.(block)}
                 onAuxClick={() => onLinkClick?.(block)}
-                className="w-full block transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ borderRadius: `${barRadius}px` }}
+                className={`${isChips ? 'inline-flex' : 'w-full block'} transition-transform duration-120 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 ${entranceClass}`}
+                style={{ borderRadius: `${barRadius}px`, ...outerMotionWrap }}
               >
                 {innerButton}
               </a>
             );
           }
 
-          return <div key={block.id}>{innerButton}</div>;
+          return (
+            <div key={block.id} className={`${isChips ? 'inline-flex' : 'w-full'} ${entranceClass}`} style={outerMotionWrap}>
+              {innerButton}
+            </div>
+          );
         })}
       </div>
 
@@ -1241,13 +1580,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
         >
           {activeSocialEntries.map(([platform, url]) => {
             const cleanUrl = formatExternalUrl(url);
-            const btnStyle: React.CSSProperties = {
-              width: `${Math.round(36 * scale)}px`,
-              height: `${Math.round(36 * scale)}px`,
-              borderRadius: socialBorderRadiusCss,
-              ...buttonSurfaceStyle,
-              border: buttonSurfaceStyle.border || `1px solid ${tokens.text}1A`,
-            };
+            const btnStyle = getSocialBtnStyle();
             if (isPublicPage) {
               return (
                 <a
@@ -1314,73 +1647,85 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           );
         })()}
 
-        {/* Formatted "Create your page" button on its own line */}
-        {isPublicPage && (
-          <a
-            href="https://iveo.site/signup"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center px-4 py-1.5 text-[11.5px] font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] select-none"
-            style={{
-              color: tokens.text,
-              backgroundColor: themeContract.isDarkPage
-                ? 'rgba(255,255,255,0.08)'
-                : 'rgba(10,10,10,0.05)',
-              border: `1px solid ${
-                tokens.buttonBorder && tokens.buttonBorder !== 'transparent'
-                  ? tokens.buttonBorder
-                  : themeContract.isDarkPage
-                    ? 'rgba(255,255,255,0.2)'
-                    : 'rgba(10,10,10,0.16)'
-              }`,
-              borderRadius: effectiveRadius <= 0 ? '4px' : '9999px',
-              fontFamily: buttonFontFamily,
-            }}
-          >
-            Create your page
-          </a>
-        )}
+        {/* Public Footer CTA + Utility Links unified with vibe font, curvature, and border/surface */}
+        {isPublicPage && (() => {
+          const footerBtnRadius =
+            effectiveRadius <= 0
+              ? '2px'
+              : effectiveRadius >= 999
+                ? '9999px'
+                : `${Math.min(12, Math.round(effectiveRadius * 0.8))}px`;
+          const footerSurfaceBg = themeContract.isDarkPage
+            ? 'rgba(255,255,255,0.08)'
+            : 'rgba(10,10,10,0.05)';
+          const footerBorderColor =
+            tokens.buttonBorder && tokens.buttonBorder !== 'transparent'
+              ? tokens.buttonBorder
+              : themeContract.isDarkPage
+                ? 'rgba(255,255,255,0.22)'
+                : 'rgba(10,10,10,0.16)';
+          const footerUtilityStyle: React.CSSProperties = {
+            fontFamily: buttonFontFamily,
+            color: tokens.text,
+            backgroundColor: footerSurfaceBg,
+            border: `1px solid ${footerBorderColor}`,
+            borderRadius: footerBtnRadius,
+          };
 
-        {/* Second utility line: Report (hidden for owner profiles) · Terms · Privacy */}
-        {isPublicPage && (
-          <div
-            className="inline-flex items-center justify-center flex-wrap gap-1.5 text-[11px] select-none"
-            style={{ color: tokens.muted }}
-          >
-            {displayHandle && !profile?.isOwnerProfile && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(true)}
-                  className="px-1.5 py-0.5 rounded opacity-75 hover:opacity-100 hover:underline underline-offset-2 transition-opacity cursor-pointer"
-                  style={{ color: tokens.muted }}
+          return (
+            <>
+              <a
+                href="https://iveo.site/signup"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-4 py-1.5 text-[11.5px] font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] select-none"
+                style={{
+                  ...footerUtilityStyle,
+                  fontFamily: buttonFontFamily,
+                }}
+              >
+                Create your page
+              </a>
+
+              <div
+                className="inline-flex items-center justify-center flex-wrap gap-2 text-[11px] font-medium select-none"
+                style={{
+                  fontFamily: buttonFontFamily,
+                  color: tokens.muted,
+                }}
+              >
+                {displayHandle && !profile?.isOwnerProfile && (
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(true)}
+                    className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium opacity-85 hover:opacity-100 transition-all duration-150 hover:scale-[1.02] cursor-pointer"
+                    style={footerUtilityStyle}
+                  >
+                    Report
+                  </button>
+                )}
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium opacity-85 hover:opacity-100 transition-all duration-150 hover:scale-[1.02]"
+                  style={footerUtilityStyle}
                 >
-                  Report
-                </button>
-                <span aria-hidden="true" className="opacity-45">·</span>
-              </>
-            )}
-            <a
-              href="/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-1.5 py-0.5 rounded opacity-75 hover:opacity-100 hover:underline underline-offset-2 transition-opacity"
-              style={{ color: tokens.muted }}
-            >
-              Terms
-            </a>
-            <span aria-hidden="true" className="opacity-45">·</span>
-            <a
-              href="/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-1.5 py-0.5 rounded opacity-75 hover:opacity-100 hover:underline underline-offset-2 transition-opacity"
-              style={{ color: tokens.muted }}
-            >
-              Privacy
-            </a>
-          </div>
-        )}
+                  Terms
+                </a>
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium opacity-85 hover:opacity-100 transition-all duration-150 hover:scale-[1.02]"
+                  style={footerUtilityStyle}
+                >
+                  Privacy
+                </a>
+              </div>
+            </>
+          );
+        })()}
       </div>
       </div>
 

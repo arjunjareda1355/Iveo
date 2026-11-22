@@ -10,15 +10,26 @@ import type { Block } from '../data/types';
 export async function syncProfileToFirebase(userId: string, profileData: Record<string, any>): Promise<void> {
   if (!userId) return;
   try {
-    const cleanData = {
+    const updatedAt = profileData.updatedAt || new Date().toISOString();
+    const cleanData: Record<string, any> = {
       userId,
       ...profileData,
-      updatedAt: new Date().toISOString(),
+      updatedAt,
     };
     const userRef = doc(db, 'users', userId);
     await setDoc(userRef, cleanData, { merge: true });
-    if (profileData.socials !== undefined) {
-      await updateDoc(userRef, { socials: profileData.socials || {} }).catch(() => {});
+
+    const explicitMaps: Record<string, any> = { updatedAt };
+    if (profileData.socials !== undefined) explicitMaps.socials = profileData.socials || {};
+    if (profileData.background !== undefined) explicitMaps.background = profileData.background ?? null;
+    if (profileData.fontSettings !== undefined) explicitMaps.fontSettings = profileData.fontSettings ?? null;
+    if (profileData.buttonColors !== undefined) explicitMaps.buttonColors = profileData.buttonColors ?? null;
+    if (profileData.businessCard !== undefined) explicitMaps.businessCard = profileData.businessCard ?? null;
+    if (profileData.layoutSettings !== undefined) explicitMaps.layoutSettings = profileData.layoutSettings ?? null;
+    if (profileData.appearance !== undefined) explicitMaps.appearance = profileData.appearance ?? null;
+
+    if (Object.keys(explicitMaps).length > 1) {
+      await updateDoc(userRef, explicitMaps).catch(() => {});
     }
   } catch (err) {
     // Non-blocking background log

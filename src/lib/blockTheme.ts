@@ -18,6 +18,9 @@ import {
   resolveCssColorToHex,
   resolveEffectiveTokens,
 } from './colors.ts';
+import type { Appearance } from './appearance/types.ts';
+import { resolveTokens } from './appearance/resolveTokens.ts';
+import { buildButtonSurfaceCss } from './appearance/catalog/surfaces.ts';
 
 export interface BlockThemeInput {
   vibeId?: VibeId | string | null;
@@ -28,6 +31,8 @@ export interface BlockThemeInput {
   background?: BackgroundConfig | null;
   layoutSettings?: LayoutSettings | null;
   fontSettings?: FontSettings | null;
+  appearance?: Appearance | null;
+  isPro?: boolean;
   buttonRadiusOverride?: number;
   scale?: number;
 }
@@ -59,10 +64,135 @@ const BUTTON_SHAPE_RADIUS: Record<string, number> = {
 };
 
 export function resolveBlockThemeContract(input: BlockThemeInput): BlockThemeContract {
+  const scale = input.scale && input.scale > 0 ? input.scale : 1;
+
+  if (input.appearance && input.appearance.schemaVersion === 2) {
+    const resolvedV2 = resolveTokens(input.appearance, { isPro: input.isPro ?? true });
+    const isDarkPage = resolvedV2.bgProfile.meanL < 0.5;
+    const baseBg = resolvedV2.bgProfile.meanHex;
+    const effRadius =
+      input.buttonRadiusOverride !== undefined
+        ? input.buttonRadiusOverride
+        : resolvedV2.buttons.derivedRadius;
+    const barRadius = resolveCardBorderRadius(effRadius, scale, 'bar');
+    const cardRadius = resolveCardBorderRadius(effRadius, scale, 'card');
+    const innerRadius = resolveCardBorderRadius(effRadius, scale, 'inner');
+    const controlRadius = resolveButtonControlRadius(effRadius, scale);
+
+    const surfaceCss = buildButtonSurfaceCss({
+      surface: resolvedV2.buttons.surface,
+      fill: resolvedV2.buttons.fill,
+      text: resolvedV2.buttons.text,
+      border: resolvedV2.buttons.border,
+      borderWidth: resolvedV2.buttons.borderWidth,
+      shadow: resolvedV2.buttons.shadow,
+      gradient: resolvedV2.buttons.gradient,
+      bgProfile: resolvedV2.bgProfile,
+    });
+
+    const surfaceStyle: CSSProperties = {
+      backgroundColor: surfaceCss.backgroundColor,
+      ...(surfaceCss.backgroundImage ? { backgroundImage: surfaceCss.backgroundImage } : {}),
+      ...(surfaceCss.backgroundSize ? { backgroundSize: surfaceCss.backgroundSize } : {}),
+      color: surfaceCss.color,
+      border: surfaceCss.border,
+      ...(surfaceCss.borderBottom ? { borderBottom: surfaceCss.borderBottom } : {}),
+      boxShadow: surfaceCss.boxShadow,
+      ...(surfaceCss.backdropFilter
+        ? { backdropFilter: surfaceCss.backdropFilter, WebkitBackdropFilter: surfaceCss.backdropFilter }
+        : {}),
+      ...(surfaceCss.textShadow ? { textShadow: surfaceCss.textShadow } : {}),
+    };
+
+    const isLightSurf =
+      (getHexLuminance(
+        resolveCssColorToHex(
+          surfaceCss.backgroundColor === 'transparent' ? baseBg : surfaceCss.backgroundColor,
+          baseBg
+        )
+      ) ?? 255) >= 165;
+    const ctaBg =
+      resolvedV2.buttons.fill !== 'transparent'
+        ? resolveCssColorToHex(resolvedV2.buttons.fill, baseBg)
+        : isLightSurf
+          ? '#0A0A0A'
+          : '#FFFFFF';
+    const ctaText = ensureContrastText(resolvedV2.buttons.text, ctaBg, 4.5, baseBg);
+
+    const tokens: VibeTokens = {
+      bg: baseBg,
+      text: resolvedV2.pageText,
+      muted: resolvedV2.pageMuted,
+      avatarBg: isDarkPage ? 'rgba(255,255,255,0.12)' : 'rgba(10,10,10,0.08)',
+      avatarText: resolvedV2.pageText,
+      buttonBg: String(resolvedV2.buttons.fill),
+      buttonText: String(resolvedV2.buttons.text),
+      buttonBorder: resolvedV2.buttons.border === 'transparent' ? undefined : String(resolvedV2.buttons.border),
+      buttonBorderWidth: `${resolvedV2.buttons.borderWidth}px`,
+      buttonRadius: effRadius,
+      buttonShadow: surfaceCss.boxShadow === 'none' ? undefined : surfaceCss.boxShadow,
+    };
+
+    const v2ButtonStyle: ButtonStyleEffect =
+      resolvedV2.buttons.surface === 'outline-hairline' || resolvedV2.buttons.surface === 'underline-only'
+        ? 'outline'
+        : resolvedV2.buttons.surface === 'soft-tint'
+          ? 'soft'
+          : resolvedV2.buttons.surface === 'offset-3d' || resolvedV2.buttons.surface === 'sticker'
+            ? 'offset'
+            : resolvedV2.buttons.surface === 'glass'
+              ? 'glass'
+              : resolvedV2.buttons.surface === 'gradient-flow' || resolvedV2.buttons.surface === 'metallic'
+                ? 'gradient'
+                : 'solid';
+
+    return {
+      tokens,
+      buttonStyle: v2ButtonStyle,
+      baseBg,
+      isDarkPage,
+      nameFontFamily: resolvedV2.typography.name.cssFamily,
+      bioFontFamily: resolvedV2.typography.bio.cssFamily,
+      buttonFontFamily: resolvedV2.typography.button.cssFamily,
+      radii: {
+        effective: effRadius,
+        bar: barRadius,
+        card: cardRadius,
+        inner: innerRadius,
+        control: controlRadius,
+      },
+      surfaceStyle,
+      ctaStyle: {
+        backgroundColor: ctaBg,
+        color: ctaText,
+        borderRadius: `${controlRadius}px`,
+      },
+      cssVars: {
+        ...resolvedV2.cssVars,
+        '--page-bg': baseBg,
+        '--page-text': resolvedV2.pageText,
+        '--page-muted': resolvedV2.pageMuted,
+        '--block-bg': surfaceCss.backgroundColor,
+        '--block-text': surfaceCss.color,
+        '--block-muted': isDarkPage ? 'rgba(248, 250, 252, 0.80)' : 'rgba(10, 10, 10, 0.78)',
+        '--block-border': surfaceCss.border,
+        '--block-border-color': String(resolvedV2.buttons.border),
+        '--block-shadow': surfaceCss.boxShadow,
+        '--block-backdrop': surfaceCss.backdropFilter || 'none',
+        '--block-radius': `${cardRadius}px`,
+        '--block-bar-radius': `${barRadius}px`,
+        '--block-inner-radius': `${innerRadius}px`,
+        '--block-control-radius': `${controlRadius}px`,
+        '--block-font': resolvedV2.typography.button.cssFamily,
+        '--btn-bg': ctaBg,
+        '--btn-text': ctaText,
+      },
+    };
+  }
+
   const matchedVibe = VIBES.find((v) => v.id === input.vibeId) || VIBES[0];
   const baseTokens = input.vibeTokens || matchedVibe.tokens;
   const fallbackFont = input.vibeFontFamily || matchedVibe.fontFamily;
-  const scale = input.scale && input.scale > 0 ? input.scale : 1;
 
   const tokens = resolveEffectiveTokens(baseTokens, input.buttonColors, input.background);
   const bgLayers = computeBackgroundLayers(input.background, tokens.bg);
@@ -325,11 +455,20 @@ export function buildProfileSsrHeadTags(input: BlockThemeInput): string {
     .map(([k, v]) => `${k}: ${v};`)
     .join(' ');
 
-  const fontUrl = buildGoogleFontsStylesheetUrl([
-    input.fontSettings?.nameFont,
-    input.fontSettings?.bioFont,
-    input.fontSettings?.buttonFont,
-  ]);
+  const fontFamilies =
+    input.appearance && input.appearance.schemaVersion === 2
+      ? [
+          input.appearance.typography.name.family,
+          input.appearance.typography.bio.family,
+          input.appearance.typography.button.family,
+        ]
+      : [
+          input.fontSettings?.nameFont,
+          input.fontSettings?.bioFont,
+          input.fontSettings?.buttonFont,
+        ];
+
+  const fontUrl = buildGoogleFontsStylesheetUrl(fontFamilies);
 
   const fontLinkTag = fontUrl
     ? `<link id="iveo-ssr-fonts" rel="stylesheet" href="${fontUrl.replace(/&/g, '&amp;')}" />\n    `

@@ -336,6 +336,8 @@ export interface UserRecord {
   contacts: any[];
   passwords: Record<string, string>;
   analytics: any[];
+  appearanceHistory?: { undoStack: any[]; redoStack: any[]; lastCoalesceKey?: string | null; lastCoalesceAt?: number };
+  appearanceThemes?: any[];
 }
 
 type IndexPasswordEntry = { password: string; username?: string };
@@ -481,7 +483,17 @@ function readUserRecord(username: string): UserRecord {
   ensureMigratedToPerUserStore();
   const clean = username.replace(/^@+/, '').toLowerCase().trim();
   if (!clean) {
-    return { profile: null, blocks: [], blocksInitialized: false, deletedBlockIds: [], contacts: [], passwords: {}, analytics: [] };
+    return {
+      profile: null,
+      blocks: [],
+      blocksInitialized: false,
+      deletedBlockIds: [],
+      contacts: [],
+      passwords: {},
+      analytics: [],
+      appearanceHistory: { undoStack: [], redoStack: [] },
+      appearanceThemes: [],
+    };
   }
   const raw = readJsonFile<Partial<UserRecord>>(getUserFilePath(clean), {});
   const blocks = Array.isArray(raw.blocks) ? raw.blocks : [];
@@ -493,6 +505,16 @@ function readUserRecord(username: string): UserRecord {
     contacts: Array.isArray(raw.contacts) ? raw.contacts : [],
     passwords: raw.passwords && typeof raw.passwords === 'object' ? raw.passwords : {},
     analytics: Array.isArray(raw.analytics) ? raw.analytics : [],
+    appearanceHistory:
+      raw.appearanceHistory && typeof raw.appearanceHistory === 'object'
+        ? {
+            undoStack: Array.isArray(raw.appearanceHistory.undoStack) ? raw.appearanceHistory.undoStack : [],
+            redoStack: Array.isArray(raw.appearanceHistory.redoStack) ? raw.appearanceHistory.redoStack : [],
+            lastCoalesceKey: raw.appearanceHistory.lastCoalesceKey ?? null,
+            lastCoalesceAt: typeof raw.appearanceHistory.lastCoalesceAt === 'number' ? raw.appearanceHistory.lastCoalesceAt : 0,
+          }
+        : { undoStack: [], redoStack: [] },
+    appearanceThemes: Array.isArray(raw.appearanceThemes) ? raw.appearanceThemes : [],
   };
 }
 
@@ -999,7 +1021,9 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           buttonColors: appearance.buttonColors || null,
           businessCard: appearance.businessCard || null,
           layoutSettings: appearance.layoutSettings || null,
+          appearance: appearance.appearanceV2 || null,
           isPublished: Boolean(row.is_published),
+          updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         };
       }
     } catch {
@@ -1088,7 +1112,9 @@ export async function dbSaveProfile(profile: {
   buttonColors?: any;
   businessCard?: any;
   layoutSettings?: any;
-}): Promise<{ ok: boolean; error?: string }> {
+  appearance?: any;
+  updatedAt?: string;
+}): Promise<{ ok: boolean; error?: string; updatedAt?: string }> {
   const cleanUsername = profile.username.replace(/^@+/, '').toLowerCase().trim();
 
   // Ownership verification check
@@ -1126,6 +1152,7 @@ export async function dbSaveProfile(profile: {
       buttonColors: merged.buttonColors,
       businessCard: merged.businessCard,
       layoutSettings: merged.layoutSettings,
+      appearanceV2: merged.appearance ?? null,
     },
   };
 
@@ -1169,7 +1196,7 @@ export async function dbSaveProfile(profile: {
           INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
           VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
       `);
-      return { ok: true };
+      return { ok: true, updatedAt: merged.updatedAt };
     } catch {
       // Fall through to server store fallback
     }
@@ -1178,11 +1205,12 @@ export async function dbSaveProfile(profile: {
   // Isolated per-user store fallback
   return withUserLock(cleanUsername, () => {
     const record = readUserRecord(cleanUsername);
+    const nowIso = merged.updatedAt || new Date().toISOString();
     record.profile = {
       ...record.profile,
       ...merged,
       username: cleanUsername,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     };
     writeUserRecord(cleanUsername, record);
 
@@ -1193,7 +1221,7 @@ export async function dbSaveProfile(profile: {
         writeUserIndex(userIndex);
       }
     }
-    return { ok: true };
+    return { ok: true, updatedAt: nowIso };
   });
 }
 
@@ -1277,6 +1305,7 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           buttonColors: appearance.buttonColors || null,
           businessCard: appearance.businessCard || null,
           layoutSettings: appearance.layoutSettings || null,
+          appearance: appearance.appearanceV2 || null,
           isPublished: Boolean(row.is_published),
           updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         };
@@ -1427,8 +1456,65 @@ export async function dbSaveBlocks(
       isActive: b.isActive !== false,
       isArchived: Boolean(b.isArchived),
     }));
+    if (record.profile) {
+      record.profile = { ...record.profile, updatedAt: new Date().toISOString() };
+    }
     writeUserRecord(clean, record);
     return { ok: true };
+  });
+}
+
+export async function dbReadAppearanceState(username: string): Promise<{
+  profile: any | null;
+  history: { undoStack: any[]; redoStack: any[]; lastCoalesceKey?: string | null; lastCoalesceAt?: number };
+  themes: any[];
+}> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  const [sqlProf, rec] = await Promise.all([
+    dbGetProfile(clean).catch(() => null),
+    Promise.resolve(readUserRecord(clean)),
+  ]);
+  const profile = sqlProf || rec.profile || null;
+  return {
+    profile,
+    history: rec.appearanceHistory || { undoStack: [], redoStack: [] },
+    themes: Array.isArray(rec.appearanceThemes) ? rec.appearanceThemes : [],
+  };
+}
+
+export async function dbWriteAppearanceState<T>(
+  username: string,
+  updater: (current: {
+    profile: any | null;
+    history: { undoStack: any[]; redoStack: any[]; lastCoalesceKey?: string | null; lastCoalesceAt?: number };
+    themes: any[];
+  }) => {
+    nextProfile?: any | null;
+    nextHistory?: { undoStack: any[]; redoStack: any[]; lastCoalesceKey?: string | null; lastCoalesceAt?: number };
+    nextThemes?: any[];
+    result: T;
+  }
+): Promise<T> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  return withUserLock(clean, async () => {
+    const rec = readUserRecord(clean);
+    const current = {
+      profile: rec.profile,
+      history: rec.appearanceHistory || { undoStack: [], redoStack: [] },
+      themes: Array.isArray(rec.appearanceThemes) ? rec.appearanceThemes : [],
+    };
+    const out = updater(current);
+    if (out.nextProfile !== undefined) {
+      rec.profile = out.nextProfile;
+    }
+    if (out.nextHistory !== undefined) {
+      rec.appearanceHistory = out.nextHistory;
+    }
+    if (out.nextThemes !== undefined) {
+      rec.appearanceThemes = out.nextThemes;
+    }
+    writeUserRecord(clean, rec);
+    return out.result;
   });
 }
 

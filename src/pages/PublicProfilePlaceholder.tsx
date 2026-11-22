@@ -24,6 +24,7 @@ import { computeBackgroundLayers } from '../lib/backgrounds';
 import { BackgroundLayer } from '../components/page/BackgroundLayer';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 import { Loader } from '../components/ui/Loader';
+import { resolveTokens } from '../lib/appearance/resolveTokens';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -65,13 +66,13 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
   const [pageData, setPageData] = useState<PublicPageData | null>(() => {
     if (typeof window === 'undefined' || !clean) return null;
 
-    // 1. Read SSR-injected bootstrap payload first so cold visits hydrate identically with zero FOUC
+    let ssrData: PublicPageData | null = null;
     try {
       const ssrEl = document.getElementById('iveo-ssr-bootstrap');
       if (ssrEl && ssrEl.textContent) {
         const ssrParsed = JSON.parse(ssrEl.textContent);
         if (ssrParsed?.profile?.username?.toLowerCase() === clean) {
-          return {
+          ssrData = {
             profile: {
               ...ssrParsed.profile,
               avatarUrl: isAllowedAvatarUrl(ssrParsed.profile.avatarUrl)
@@ -83,50 +84,64 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
         }
       }
     } catch {
-      // Fall back cleanly to local cache
+      // Ignore invalid SSR JSON
     }
 
-    // 2. Fallback: local browser cache (e.g. instant preview / returning visitor)
+    let localData: PublicPageData | null = null;
     try {
       const cached = localStorage.getItem(`iveo_profile_${clean}`);
-      if (!cached) return null;
-      const parsed = JSON.parse(cached);
-      const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
-      const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
-      return {
-        profile: {
-          username: clean,
-          displayName: parsed.displayName || clean,
-          bio: parsed.bio || '',
-          avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
-          avatarType: parsed.avatarType,
-          avatarId: parsed.avatarId,
-          vibeId: parsed.vibeId || 'clean',
-          plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
-          isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
-          isVerified: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
-          isOwnerProfile: Boolean(parsed.isOwnerProfile),
-          buttonShape: parsed.buttonShape || null,
-          socials: parsed.socials || {},
-          socialsPosition: parsed.socialsPosition || 'top',
-          hideFromSearch: Boolean(parsed.hideFromSearch),
-          hideFooter: Boolean(parsed.hideFooter),
-          background: parsed.background || null,
-          googleAnalyticsId: parsed.googleAnalyticsId || null,
-          metaPixelId: parsed.metaPixelId || null,
-          whatsappNumber: parsed.whatsappNumber || null,
-          customSeoTitle: parsed.customSeoTitle || null,
-          customSeoDescription: parsed.customSeoDescription || null,
-          fontSettings: parsed.fontSettings || null,
-          buttonColors: parsed.buttonColors || null,
-          layoutSettings: parsed.layoutSettings || null,
-          businessCard: parsed.businessCard || null,
-        },
-        links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
-      };
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
+        const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
+        localData = {
+          profile: {
+            username: clean,
+            displayName: parsed.displayName || clean,
+            bio: parsed.bio || '',
+            avatarUrl: isAllowedAvatarUrl(parsed.avatarUrl) ? parsed.avatarUrl : null,
+            avatarType: parsed.avatarType,
+            avatarId: parsed.avatarId,
+            vibeId: parsed.vibeId || 'clean',
+            plan: parsed.isPro || parsed.plan === 'pro' ? 'pro' : 'free',
+            isPro: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
+            isVerified: Boolean(parsed.isVerified ?? parsed.isPro ?? parsed.plan === 'pro'),
+            isOwnerProfile: Boolean(parsed.isOwnerProfile),
+            buttonShape: parsed.buttonShape || null,
+            socials: parsed.socials || {},
+            socialsPosition: parsed.socialsPosition || 'top',
+            hideFromSearch: Boolean(parsed.hideFromSearch),
+            hideFooter: Boolean(parsed.hideFooter),
+            background: parsed.background || null,
+            googleAnalyticsId: parsed.googleAnalyticsId || null,
+            metaPixelId: parsed.metaPixelId || null,
+            whatsappNumber: parsed.whatsappNumber || null,
+            customSeoTitle: parsed.customSeoTitle || null,
+            customSeoDescription: parsed.customSeoDescription || null,
+            fontSettings: parsed.fontSettings || null,
+            buttonColors: parsed.buttonColors || null,
+            layoutSettings: parsed.layoutSettings || null,
+            businessCard: parsed.businessCard || null,
+            appearance: parsed.appearance || null,
+            updatedAt: parsed.updatedAt || null,
+          },
+          links: Array.isArray(cachedBlocks) ? cachedBlocks : [],
+        };
+      }
     } catch {
-      return null;
+      // Ignore invalid localStorage cache
     }
+
+    if (ssrData && localData) {
+      const ssrTime = ssrData.profile?.updatedAt ? Date.parse(ssrData.profile.updatedAt) : 0;
+      const localTime = localData.profile?.updatedAt ? Date.parse(localData.profile.updatedAt) : 0;
+      if (localTime > ssrTime) {
+        return localData;
+      }
+      return ssrData;
+    }
+
+    return ssrData || localData;
   });
   const [isLoading, setIsLoading] = useState(() => pageData === null);
   const [unlockedUrls, setUnlockedUrls] = useState<Record<string, string>>({});
@@ -135,16 +150,28 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
   const session = useIveoSession();
   const viewTrackedRef = useRef(false);
   const ownerExclusionDoneRef = useRef(false);
-  const lastFetchedAtRef = useRef<number>(pageData ? Date.now() : 0);
+  const isFetchingRef = useRef(false);
 
   const loadData = useCallback(async () => {
-    lastFetchedAtRef.current = Date.now();
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const data = await fetchPublicPage(clean);
-      setPageData(data);
+      setPageData((prev) => {
+        if (!data) return data;
+        if (prev?.profile?.updatedAt && data?.profile?.updatedAt) {
+          const prevTs = Date.parse(prev.profile.updatedAt);
+          const nextTs = Date.parse(data.profile.updatedAt);
+          if (!Number.isNaN(prevTs) && !Number.isNaN(nextTs) && prevTs > nextTs) {
+            return { ...data, profile: prev.profile };
+          }
+        }
+        return data;
+      });
     } catch {
       // Keep existing data on error
     } finally {
+      isFetchingRef.current = false;
       setIsLoading(false);
     }
   }, [clean]);
@@ -152,25 +179,47 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
   useEffect(() => {
     loadData();
 
-    // Refetch interval 60s while tab is visible (does NOT re-trigger tracking)
+    // Refetch every 30s while tab is visible + immediate on focus/visibility/BroadcastChannel
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       loadData();
-    }, 60000);
+    }, 30000);
 
     const handleVisibility = () => {
-      if (!document.hidden && Date.now() - lastFetchedAtRef.current > 45000) {
+      if (!document.hidden) {
         loadData();
       }
     };
 
+    const handleFocus = () => {
+      loadData();
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel('iveo_profile_sync');
+        channel.onmessage = (event) => {
+          const msg = event?.data;
+          if (msg && typeof msg === 'object' && String(msg.username || '').toLowerCase() === clean) {
+            loadData();
+          }
+        };
+      }
+    } catch {}
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      try {
+        channel?.close();
+      } catch {}
     };
-  }, [loadData]);
+  }, [loadData, clean]);
 
   // Sync full-viewport document background color with active background/vibe so overscroll matches theme
   useEffect(() => {
@@ -477,6 +526,13 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       ? BUTTON_RADIUS_MAP[pageData.profile.buttonShape]
       : undefined;
 
+    const resolvedV2 =
+      pageData.profile.appearance && pageData.profile.appearance.schemaVersion === 2
+        ? resolveTokens(pageData.profile.appearance, {
+            isPro: Boolean(pageData.profile.isVerified ?? pageData.profile.isPro ?? true),
+          })
+        : null;
+
     const effectiveBlocks = pageData.links.map((b) => {
       if (unlockedUrls[b.id]) {
         return {
@@ -488,27 +544,36 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       return b;
     });
 
+    const widthClass = resolvedV2
+      ? resolvedV2.layout.width === 'focused'
+        ? 'max-w-[440px]'
+        : resolvedV2.layout.width === 'wide'
+          ? 'max-w-[720px]'
+          : 'max-w-[560px]'
+      : pageData.profile.layoutSettings?.pageWidth === 'compact'
+        ? 'max-w-[460px]'
+        : pageData.profile.layoutSettings?.pageWidth === 'wide'
+          ? 'max-w-[680px]'
+          : 'max-w-[580px]';
+
     return (
       <div
         className="relative min-h-[100dvh] w-full flex justify-center overflow-x-hidden"
-        style={{ backgroundColor: vibe.tokens.bg }}
+        style={{
+          backgroundColor: resolvedV2 ? resolvedV2.bgProfile.meanHex : vibe.tokens.bg,
+          ...(resolvedV2 ? (resolvedV2.cssVars as React.CSSProperties) : {}),
+        }}
       >
-        {/* Full-Viewport Background Layer (Pure White default, solid, gradient/mesh, wallpaper image, or pattern) */}
+        {/* Full-Viewport Background Layer */}
         <BackgroundLayer
           mode="fixed"
           background={pageData.profile.background}
-          fallbackBg={vibe.tokens.bg}
+          backgroundV2={resolvedV2?.background || null}
+          smartScrim={resolvedV2?.smartScrim || null}
+          fallbackBg={resolvedV2?.bgProfile.meanHex || vibe.tokens.bg}
         />
 
-        <div
-          className={`relative z-10 w-full min-h-[100dvh] flex flex-col ${
-            pageData.profile.layoutSettings?.pageWidth === 'compact'
-              ? 'max-w-[460px]'
-              : pageData.profile.layoutSettings?.pageWidth === 'wide'
-                ? 'max-w-[680px]'
-                : 'max-w-[580px]'
-          }`}
-        >
+        <div className={`relative z-10 w-full min-h-[100dvh] flex flex-col ${widthClass}`}>
           {(() => {
             const effectiveTokens = resolveEffectiveTokens(
               vibe.tokens,
@@ -516,10 +581,9 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
               pageData.profile.background
             );
             const effectiveVibe = { ...vibe, tokens: effectiveTokens };
-            const buttonFontFamily = getFontCssFamily(
-              pageData.profile.fontSettings?.buttonFont,
-              vibe.fontFamily
-            );
+            const buttonFontFamily =
+              resolvedV2?.typography.button.cssFamily ||
+              getFontCssFamily(pageData.profile.fontSettings?.buttonFont, vibe.fontFamily);
 
             return (
               <>
@@ -541,6 +605,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
                     buttonColors: pageData.profile.buttonColors,
                     layoutSettings: pageData.profile.layoutSettings,
                     businessCard: pageData.profile.businessCard,
+                    appearance: pageData.profile.appearance || null,
                   }}
                   blocks={effectiveBlocks}
                   buttonRadiusOverride={buttonRadiusOverride}

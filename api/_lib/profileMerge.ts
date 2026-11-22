@@ -31,6 +31,8 @@ export interface ProfileSaveInput {
   buttonColors?: any;
   businessCard?: any;
   layoutSettings?: any;
+  appearance?: any;
+  updatedAt?: string | null;
 }
 
 export interface MergedProfileSave {
@@ -64,6 +66,8 @@ export interface MergedProfileSave {
   buttonColors: any;
   businessCard: any;
   layoutSettings: any;
+  appearance: any;
+  updatedAt: string;
 }
 
 export function mergeProfileForSave(
@@ -228,5 +232,10 @@ export function mergeProfileForSave(
       incoming.layoutSettings !== undefined
         ? incoming.layoutSettings
         : (prev.layoutSettings ?? null),
+    appearance:
+      incoming.appearance !== undefined
+        ? incoming.appearance
+        : (prev.appearance ?? null),
+    updatedAt: new Date().toISOString(),
   };
 }

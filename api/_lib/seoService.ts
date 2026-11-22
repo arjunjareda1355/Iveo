@@ -437,6 +437,8 @@ export async function buildProfileSeoPayload(
     background: page.background || null,
     layoutSettings: page.layoutSettings || null,
     fontSettings: page.fontSettings || null,
+    appearance: page.appearance || null,
+    isPro: Boolean(page.isPro),
   });
 
   const now = new Date();
@@ -502,6 +504,8 @@ export async function buildProfileSeoPayload(
       buttonColors: page.buttonColors || null,
       layoutSettings: page.layoutSettings || null,
       businessCard: page.businessCard || null,
+      appearance: page.appearance || null,
+      updatedAt: page.updatedAt || null,
     },
     links: bootstrapLinks,
   };

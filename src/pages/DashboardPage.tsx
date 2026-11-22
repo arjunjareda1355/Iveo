@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Eye,
@@ -16,7 +16,6 @@ import { BottomSheet } from '../components/ui/BottomSheet';
 import { IvioUserButton } from '../auth/IvioUserButton';
 import { LinksTab } from '../components/dashboard/LinksTab';
 import { ProfilesTab } from '../components/dashboard/ProfilesTab';
-import { AppearanceTab } from '../components/dashboard/AppearanceTab';
 import { SettingsTab } from '../components/dashboard/SettingsTab';
 import { AnalyticsTab } from './AnalyticsTab';
 import { ContactsTab } from './ContactsTab';
@@ -26,20 +25,37 @@ import { ShareDialog } from '../components/share/ShareDialog';
 import { BlocksProvider, useBlocks } from '../data/BlocksContext';
 import { useIvioSession } from '../auth/useIvioSession';
 import { useProtectedLinkIds } from '../data/hooks/useProtectedLinkIds';
-import { VIBES, VibeId } from '../lib/vibes';
-import { ButtonShape, LayoutSettings } from '../lib/preferences';
-import { FontSettings } from '../lib/fonts';
-import { ButtonColors } from '../lib/colors';
-import { BackgroundConfig } from '../data/types';
+import { VIBES } from '../lib/vibes';
+import { ButtonShape } from '../lib/preferences';
 import { useNow, isBlockVisibleNow } from '../lib/time';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
+import {
+  AppearanceProvider,
+  useAppearance,
+} from '../components/appearance/AppearanceContext';
+import { AppearanceHome } from '../components/appearance/AppearanceHome';
+import { VibeScreen } from '../components/appearance/VibeScreen';
+import { BackgroundScreen } from '../components/appearance/BackgroundScreen';
+import { ButtonsScreen } from '../components/appearance/ButtonsScreen';
+import { TypographyScreen } from '../components/appearance/TypographyScreen';
+import { LayoutScreen } from '../components/appearance/LayoutScreen';
+import { appearanceToLegacyMirror } from '../lib/appearance/migrate';
+import { resolveAnyVibeToV2Id } from '../lib/appearance/catalog/vibes';
 
 const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
   square: 0,
   rounded: 12,
   pill: 999,
 };
+
+type AppearanceSubRoute =
+  | 'home'
+  | 'vibe'
+  | 'background'
+  | 'typography'
+  | 'buttons'
+  | 'layout';
 
 const DashboardContent: React.FC = () => {
   usePageMeta({ robots: 'noindex, nofollow' });
@@ -48,36 +64,10 @@ const DashboardContent: React.FC = () => {
   const { blocks } = useBlocks();
   const { protectedIds } = useProtectedLinkIds();
   const now = useNow(30000);
+  const appearanceCtx = useAppearance();
 
-  const [previewVibeId, setPreviewVibeId] = useState<VibeId>(session.vibeId);
-  const [previewShape, setPreviewShape] = useState<ButtonShape | null>(session.buttonShape);
-  const [previewFontSettings, setPreviewFontSettings] = useState<FontSettings | null>(
-    session.fontSettings ?? null
-  );
-  const [previewButtonColors, setPreviewButtonColors] = useState<ButtonColors | null>(
-    session.buttonColors ?? null
-  );
-  const [previewLayoutSettings, setPreviewLayoutSettings] = useState<LayoutSettings | null>(
-    session.layoutSettings ?? null
-  );
-  const [previewBackground, setPreviewBackground] = useState<BackgroundConfig | null>(null);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
-
-  // Sync state with session
-  useEffect(() => {
-    setPreviewVibeId(session.vibeId);
-    setPreviewShape(session.buttonShape ?? null);
-    setPreviewFontSettings(session.fontSettings ?? null);
-    setPreviewButtonColors(session.buttonColors ?? null);
-    setPreviewLayoutSettings(session.layoutSettings ?? null);
-  }, [
-    session.vibeId,
-    session.buttonShape,
-    session.fontSettings,
-    session.buttonColors,
-    session.layoutSettings,
-  ]);
 
   const isProfiles = location.pathname.includes('/profiles');
   const isAppearance = location.pathname.includes('/appearance');
@@ -86,13 +76,17 @@ const DashboardContent: React.FC = () => {
   const isSettings = location.pathname.includes('/settings');
   const isLinks = !isProfiles && !isAppearance && !isContacts && !isAnalytics && !isSettings;
 
-  useEffect(() => {
-    if (!isAppearance) {
-      setPreviewBackground(null);
-    }
-  }, [isAppearance]);
+  const appearanceSubSection: AppearanceSubRoute = useMemo(() => {
+    if (!isAppearance) return 'home';
+    if (location.pathname.endsWith('/appearance/vibe')) return 'vibe';
+    if (location.pathname.endsWith('/appearance/background')) return 'background';
+    if (location.pathname.endsWith('/appearance/typography')) return 'typography';
+    if (location.pathname.endsWith('/appearance/buttons')) return 'buttons';
+    if (location.pathname.endsWith('/appearance/layout')) return 'layout';
+    return 'home';
+  }, [isAppearance, location.pathname]);
 
-  const demoSearch = React.useMemo(() => {
+  const demoSearch = useMemo(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('demo') === '1' || params.get('autostart') === '1') {
       return location.search;
@@ -116,7 +110,36 @@ const DashboardContent: React.FC = () => {
     }
   }, [isProfiles, isAppearance, isContacts, isAnalytics, isSettings]);
 
-  const activeVibe = VIBES.find((v) => v.id === previewVibeId) || VIBES[0];
+  const activeAppearance = isAppearance
+    ? appearanceCtx.draft
+    : session.appearance || appearanceCtx.draft;
+  const activeResolved = appearanceCtx.resolved;
+  const mirrored = useMemo(
+    () => appearanceToLegacyMirror(activeAppearance, session.layoutSettings),
+    [activeAppearance, session.layoutSettings]
+  );
+
+  const baseVibe = useMemo(() => {
+    const v1Match = VIBES.find(
+      (v) => v.id === session.vibeId || resolveAnyVibeToV2Id(v.id) === activeAppearance.vibeId
+    );
+    return v1Match || VIBES[0];
+  }, [session.vibeId, activeAppearance.vibeId]);
+
+  const activeVibe = useMemo(
+    () =>
+      isAppearance
+        ? {
+            ...baseVibe,
+            tokens: {
+              ...baseVibe.tokens,
+              bg: activeResolved.bgProfile.meanHex,
+              text: activeResolved.pageText,
+            },
+          }
+        : baseVibe,
+    [isAppearance, baseVibe, activeResolved.bgProfile.meanHex, activeResolved.pageText]
+  );
 
   const profileData: PhoneProfile = {
     name: session.displayName || session.username || 'Your name',
@@ -128,20 +151,26 @@ const DashboardContent: React.FC = () => {
     socials: session.socials,
     socialsPosition: session.socialsPosition,
     whatsappNumber: session.whatsappNumber,
-    background: previewBackground ?? session.background,
-    fontSettings: previewFontSettings,
-    buttonColors: previewButtonColors,
-    layoutSettings: previewLayoutSettings,
+    background: session.background,
+    fontSettings: isAppearance ? mirrored.fontSettings : session.fontSettings,
+    buttonColors: isAppearance ? mirrored.buttonColors : session.buttonColors,
+    layoutSettings: isAppearance ? mirrored.layoutSettings : session.layoutSettings,
+    appearance: activeAppearance,
   };
 
-  const buttonRadiusOverride = previewShape ? BUTTON_RADIUS_MAP[previewShape] : undefined;
+  const buttonRadiusOverride = isAppearance
+    ? activeResolved.buttons.derivedRadius
+    : session.buttonShape
+      ? BUTTON_RADIUS_MAP[session.buttonShape]
+      : undefined;
 
   const visiblePreviewBlocks = blocks.filter((b) =>
     isBlockVisibleNow(b, session.plan, now)
   );
 
-  const hideFooterMark =
-    session.isPro && (session.hideIveoFooter || session.hideIvioFooter);
+  const hideFooterMark = isAppearance
+    ? appearanceCtx.hideFooterMark
+    : Boolean(session.isPro && (session.hideIveoFooter || session.hideIvioFooter));
 
   const navItems = [
     { to: `/dashboard${demoSearch}`, label: copy.dashboard.tabs.links, end: true, icon: Link2 },
@@ -153,6 +182,7 @@ const DashboardContent: React.FC = () => {
   ];
 
   const showLivePreviewColumn = isLinks || isProfiles || isAppearance;
+  const isAppearanceSubScreen = isAppearance && appearanceSubSection !== 'home';
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
@@ -223,7 +253,10 @@ const DashboardContent: React.FC = () => {
       </nav>
 
       {/* Main Content Area (Bottom padding reserves mobile fixed tab bar) */}
-      <main id="main" className="flex-1 py-5 sm:py-8 pb-24 md:pb-12">
+      <main
+        id="main"
+        className={`flex-1 ${isAppearanceSubScreen ? 'py-0 sm:py-5 pb-4 md:pb-6' : 'py-5 sm:py-8 pb-24 md:pb-12'}`}
+      >
         <Container>
           {isAnalytics ? (
             <div className="w-full max-w-[880px] mx-auto">
@@ -244,26 +277,24 @@ const DashboardContent: React.FC = () => {
                 {isLinks && <LinksTab />}
                 {isProfiles && <ProfilesTab />}
                 {isAppearance && (
-                  <AppearanceTab
-                    onPreviewVibeChange={(vId) => setPreviewVibeId(vId)}
-                    onPreviewShapeChange={(shape) => setPreviewShape(shape)}
-                    onPreviewFontSettingsChange={(fonts) => setPreviewFontSettings(fonts)}
-                    onPreviewButtonColorsChange={(colors) => setPreviewButtonColors(colors)}
-                    onPreviewLayoutChange={(layout) => setPreviewLayoutSettings(layout)}
-                    onPreviewBackgroundChange={(bg) => setPreviewBackground(bg)}
-                    mobilePhonePreview={
-                      <VibePhone
-                        currentVibe={activeVibe}
-                        profile={profileData}
-                        blocks={visiblePreviewBlocks}
-                        protectedIds={protectedIds}
-                        hideFooterMark={hideFooterMark}
-                        embedMode="placeholder"
-                        buttonRadiusOverride={buttonRadiusOverride}
-                        width={220}
-                      />
-                    }
-                  />
+                  <>
+                    {appearanceSubSection === 'home' && <AppearanceHome />}
+                    {appearanceSubSection === 'vibe' && (
+                      <VibeScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
+                    )}
+                    {appearanceSubSection === 'background' && (
+                      <BackgroundScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
+                    )}
+                    {appearanceSubSection === 'typography' && (
+                      <TypographyScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
+                    )}
+                    {appearanceSubSection === 'buttons' && (
+                      <ButtonsScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
+                    )}
+                    {appearanceSubSection === 'layout' && (
+                      <LayoutScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
+                    )}
+                  </>
                 )}
               </div>
 
@@ -290,40 +321,42 @@ const DashboardContent: React.FC = () => {
         </Container>
       </main>
 
-      {/* Mobile Fixed Bottom Tab Bar (<768px) — 6 equal columns, zero scroll/clipping */}
-      <nav
-        aria-label="Mobile dashboard navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-border pb-[env(safe-area-inset-bottom,0px)]"
-      >
-        <div className="grid grid-cols-6 h-16">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  `flex flex-col items-center justify-center gap-1 min-w-0 px-0.5 transition-colors select-none ${
-                    isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon size={18} strokeWidth={isActive ? 2 : 1.5} className="shrink-0" />
-                    <span className="text-[10px] leading-none tracking-tight truncate max-w-full">
-                      {item.label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Mobile Fixed Bottom Tab Bar (<768px) — hidden on sub-screens so sticky Done bar sits cleanly */}
+      {!isAppearanceSubScreen && (
+        <nav
+          aria-label="Mobile dashboard navigation"
+          className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-border pb-[env(safe-area-inset-bottom,0px)]"
+        >
+          <div className="grid grid-cols-6 h-16">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center gap-1 min-w-0 px-0.5 transition-colors select-none ${
+                      isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon size={18} strokeWidth={isActive ? 2 : 1.5} className="shrink-0" />
+                      <span className="text-[10px] leading-none tracking-tight truncate max-w-full">
+                        {item.label}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
+      )}
 
-      {/* Mobile/Tablet Preview Sheet (triggered from Header Eye Icon) */}
+      {/* Mobile/Tablet Preview Sheet (triggered from Header Eye Icon or Sub-screen Preview button) */}
       <BottomSheet
         isOpen={mobilePreviewOpen}
         onClose={() => setMobilePreviewOpen(false)}
@@ -353,9 +386,9 @@ const DashboardContent: React.FC = () => {
           displayName={session.displayName}
           bio={session.bio}
           avatarUrl={session.imageUrl}
-          vibeId={previewVibeId}
-          fontSettings={previewFontSettings}
-          buttonColors={previewButtonColors}
+          vibeId={session.vibeId}
+          fontSettings={mirrored.fontSettings}
+          buttonColors={mirrored.buttonColors}
           businessCard={session.businessCard}
           socials={session.socials}
           onSaveCardConfig={async (cfg) => {
@@ -380,7 +413,9 @@ export const DashboardPage: React.FC = () => {
       ownerUserId={session.userId}
       primaryEmail={session.primaryEmail}
     >
-      <DashboardContent />
+      <AppearanceProvider>
+        <DashboardContent />
+      </AppearanceProvider>
     </BlocksProvider>
   );
 };

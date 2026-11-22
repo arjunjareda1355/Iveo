@@ -39,6 +39,18 @@ import {
   handleBlueskyFeed,
   handleBlueskyPost,
 } from './_lib/db-handlers.ts';
+import {
+  handleGetAppearance,
+  handlePatchAppearance,
+  handleUndoAppearance,
+  handleRedoAppearance,
+  handleListThemes,
+  handleCreateTheme,
+  handleRenameTheme,
+  handleApplyTheme,
+  handleDeleteTheme,
+  handleUploadAppearanceBgImage,
+} from './_lib/appearance-handlers.ts';
 import { getCanonicalSiteOrigin } from './_lib/env.ts';
 import {
   buildLlmsTxt,
@@ -85,6 +97,21 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleMigrateLegacy(req, res);
     case 'profile':
       return handleSaveProfile(req, res);
+    case 'appearance':
+      return method === 'PATCH' ? handlePatchAppearance(req, res) : handleGetAppearance(req, res);
+    case 'appearance-undo':
+      return handleUndoAppearance(req, res);
+    case 'appearance-redo':
+      return handleRedoAppearance(req, res);
+    case 'appearance-themes':
+      if (method === 'POST') return handleCreateTheme(req, res);
+      if (method === 'PATCH') return handleRenameTheme(req, res);
+      if (method === 'DELETE') return handleDeleteTheme(req, res);
+      return handleListThemes(req, res);
+    case 'appearance-theme-apply':
+      return handleApplyTheme(req, res);
+    case 'appearance-background-image':
+      return handleUploadAppearanceBgImage(req, res);
     case 'avatar-upload':
       return handleUploadAvatar(req, res);
     case 'background-upload':
@@ -304,6 +331,10 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export async function DELETE(request: Request): Promise<Response> {
+  return dispatchWeb(request);
+}
+
+export async function PATCH(request: Request): Promise<Response> {
   return dispatchWeb(request);
 }
 

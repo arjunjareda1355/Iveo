@@ -280,6 +280,7 @@ async function startServer() {
 
   // 4. Azure SQL & Backend Persistence Routes
   const dbHandlers = await import('./api/_lib/db-handlers.ts');
+  const appearanceHandlers = await import('./api/_lib/appearance-handlers.ts');
   const dataHandlerModule = await import('./api/data.ts');
   app.all('/api/data', (req, res) => dataHandlerModule.default(req, res));
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
@@ -288,6 +289,16 @@ async function startServer() {
   app.get('/api/me', dbHandlers.handleGetMe);
   app.post('/api/migrate-legacy', dbHandlers.handleMigrateLegacy);
   app.post('/api/profile', dbHandlers.handleSaveProfile);
+  app.get('/api/appearance', appearanceHandlers.handleGetAppearance);
+  app.patch('/api/appearance', appearanceHandlers.handlePatchAppearance);
+  app.post('/api/appearance/undo', appearanceHandlers.handleUndoAppearance);
+  app.post('/api/appearance/redo', appearanceHandlers.handleRedoAppearance);
+  app.get('/api/appearance/themes', appearanceHandlers.handleListThemes);
+  app.post('/api/appearance/themes', appearanceHandlers.handleCreateTheme);
+  app.post('/api/appearance/themes/:id/apply', appearanceHandlers.handleApplyTheme);
+  app.patch('/api/appearance/themes/:id', appearanceHandlers.handleRenameTheme);
+  app.delete('/api/appearance/themes/:id', appearanceHandlers.handleDeleteTheme);
+  app.post('/api/appearance/background-image', appearanceHandlers.handleUploadAppearanceBgImage);
   app.post('/api/avatar', dbHandlers.handleUploadAvatar);
   app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);
   app.post('/api/background/upload', dbHandlers.handleUploadBackground);

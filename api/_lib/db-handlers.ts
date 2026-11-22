@@ -252,9 +252,13 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
-  const cached = publicPageCache.get(clean);
+  const bypassCache = Boolean(
+    req.query?._t ||
+    String(req.headers['cache-control'] || '').toLowerCase().includes('no-cache')
+  );
+  const cached = !bypassCache ? publicPageCache.get(clean) : undefined;
   if (cached && cached.expiresAt > Date.now()) {
-    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
     return res.status(cached.status).json(cached.payload);
   }
 
@@ -421,6 +425,8 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
         buttonColors: profile.buttonColors || null,
         businessCard: profile.businessCard || null,
         layoutSettings: profile.layoutSettings || null,
+        appearance: profile.appearance || null,
+        updatedAt: profile.updatedAt || null,
       },
       links: filteredBlocks,
     };
@@ -430,7 +436,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       payload: responsePayload,
       expiresAt: Date.now() + PUBLIC_PAGE_CACHE_TTL_MS,
     });
-    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
     return res.status(200).json(responsePayload);
   } catch (err: any) {
     return res.status(500).json({ error: 'server_error', message: err?.message });
@@ -608,12 +614,14 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
       }
     }
 
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
     return res.status(200).json({
       ok: true,
       claimed: true,
       username: profile.username,
       profile,
       blocks,
+      updatedAt: profile.updatedAt || null,
     });
   } catch (err: any) {
     return res.status(500).json({ error: 'fetch_failed', message: err?.message });
@@ -709,6 +717,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       buttonColors: body.buttonColors,
       businessCard: body.businessCard,
       layoutSettings: body.layoutSettings,
+      appearance: body.appearance,
     });
 
     if (saveResult && !saveResult.ok) {
@@ -718,11 +727,13 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       return res.status(400).json({ error: saveResult.error });
     }
 
+    const savedAt = saveResult?.updatedAt || new Date().toISOString();
+
     // Bounded await sync to Firebase Cloud Database so immediate page loads stay consistent
     await withTimeout(
       firebaseSaveProfile(
         username,
-        { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan },
+        { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan, updatedAt: savedAt },
         body.userId || req.headers['x-user-id'] as string || 'owner'
       ),
       undefined
@@ -731,7 +742,13 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
 
-    return res.status(200).json({ ok: true, plan: resolvedPlan, isPro: resolvedPlanInfo.isPro, planSource: resolvedPlanInfo.planSource });
+    return res.status(200).json({
+      ok: true,
+      plan: resolvedPlan,
+      isPro: resolvedPlanInfo.isPro,
+      planSource: resolvedPlanInfo.planSource,
+      updatedAt: savedAt,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
   }
@@ -1010,7 +1027,7 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, updatedAt: new Date().toISOString() });
   } catch (err: any) {
     return res.status(500).json({ error: 'save_failed', message: err?.message });
   }

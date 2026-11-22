@@ -20,6 +20,7 @@
         "layoutSettings": { "type": "object" },
         "background": { "type": "object" },
         "businessCard": { "type": "object" },
+        "appearance": { "type": "object" },
         "plan": { "type": "string", "enum": ["free", "pro"] },
         "updatedAt": { "type": "string" },
         "createdAt": { "type": "string" }
@@ -119,6 +120,20 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["from", "to", "updatedAt"]
+    },
+    "AppearanceV2State": {
+      "title": "AppearanceV2State",
+      "description": "Version 2 structured appearance configuration, undo/redo history, and saved themes",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "appearance": { "type": "object" },
+        "history": { "type": "object" },
+        "themes": { "type": "array" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["username", "userId", "updatedAt"]
     }
   },
   "firestore": {
@@ -149,6 +164,10 @@
     "/users/{userId}/analytics/{eventId}": {
       "schema": { "$ref": "#/entities/AnalyticsEvent" },
       "description": "Durable page view and link click analytics events"
+    },
+    "/users/{userId}/appearance/{docId}": {
+      "schema": { "$ref": "#/entities/AppearanceV2State" },
+      "description": "Version 2 structured appearance configuration, history, and themes"
     }
   }
 }

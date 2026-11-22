@@ -31,6 +31,7 @@ export interface PublicPageServerData {
   buttonColors?: any;
   layoutSettings?: any;
   businessCard?: any;
+  appearance?: any;
 }
 
 export function isAllowedAvatarHost(url: string | null | undefined): boolean {
@@ -103,6 +104,7 @@ export async function loadPublicPage(
         buttonColors: dbProf.buttonColors || null,
         layoutSettings: dbProf.layoutSettings || null,
         businessCard: dbProf.businessCard || null,
+        appearance: dbProf.appearance || null,
       };
     }
   } catch {}
@@ -153,6 +155,7 @@ export async function loadPublicPage(
         buttonColors: fbProf.buttonColors || null,
         layoutSettings: fbProf.layoutSettings || null,
         businessCard: fbProf.businessCard || null,
+        appearance: fbProf.appearance || null,
       };
     }
   } catch {}

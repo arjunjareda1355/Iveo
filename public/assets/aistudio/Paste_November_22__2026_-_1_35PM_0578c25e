@@ -1,0 +1,1071 @@
+====================================================================================================
+IVEO  -  APPEARANCE SYSTEM REFACTOR  -  FULL IMPLEMENTATION PROMPT
+Version 1.0   |   For an AI coding assistant (Claude Code, Cursor, Copilot Agent or similar)
+Product: iveo.site (link-in-bio pages)   |   Area: Dashboard > Appearance
+====================================================================================================
+
+====================================================================================================
+0. HOW TO USE THIS DOCUMENT
+====================================================================================================
+
+Paste this whole file to your coding assistant as the task brief. It is deliberately long: every screen, rule, formula,
+token and catalogue entry is defined so the assistant does not have to guess. Section numbers are referenced in code comments.
+
+Priority tags used below:  [MUST] required for release   [SHOULD] strongly recommended   [COULD] nice-to-have, only after all MUST/SHOULD pass.
+Everything not tagged is [MUST].
+
+====================================================================================================
+1. ROLE AND MISSION
+====================================================================================================
+
+You are a senior full-stack engineer and product designer working inside the existing iveo codebase.
+Mission: rebuild the five Appearance sections (Vibe, Background, Typography, Buttons, Layout & effects) so that they are
+  (a) minimal and well arranged,
+  (b) each opens as its own proper full screen (no inline accordions, no nested scroll boxes),
+  (c) filled with a brand-new, premium, cool catalogue of vibes, backgrounds, fonts, button styles and layouts,
+  (d) smart: the app SUGGESTS button colour sets, font combinations and layout combinations that fit the user's chosen background,
+      with a minimal refresh icon to get new ideas, while the user can always choose everything manually,
+  (e) fast, accessible (WCAG 2.2 AA) and safe for existing live pages (zero visual change for existing users after migration).
+
+Before writing code: audit the repo (framework, router, styling system, state management, DB, auth, Pro entitlement helper,
+where the public page is rendered, where appearance is stored). Follow the existing conventions and stack. Do not introduce a
+new framework. If the stack is Next.js (App Router) + TypeScript + Tailwind + Supabase/Postgres, the examples below apply directly;
+otherwise translate them 1:1. Do not ask questions unless truly blocked; make the most reasonable decision and document it.
+
+====================================================================================================
+2. CURRENT STATE (observed in the dashboard screenshots)
+====================================================================================================
+
+Mobile dashboard at iveo.site/dashboard/appearance. Top bar: logo, Preview (eye) icon, Share icon, avatar. Bottom tab bar: Links, Profiles,
+Appearance, Contacts, Analytics, Settings. The Appearance tab is one long page of accordion cards, each expanding inline:
+
+  Vibe        subtitle shows current vibe + colour dots. Grid of 12 vibes (Clean, Midnight, Paper, Sage, Clay, Mono, Cyberpunk,
+              Sunset Warm, Glassmorphism, Brutalist Pop, Emerald Forest, Pastel Dream). Descriptions truncated with "...".
+              Footer: "Reset to default" + "Collapse".
+  Background  subtitle "Pure White". Contains a "STUDIO PREVIEW" block (Mobile/Desktop toggle, sample card, "Text contrast 21:1")
+              then tabs Presets | Solid Color | Gradient, search, category chips (All, Minimal, Pastel & Gradients, Dark, Aurora,
+              Abstract, Glass, Textures) and a long preset list inside its own scroll area.
+  Typography  subtitle "Playfair Display / Lora". Live preview card, 4 quick pairings (Modern Clean, Tech Grotesk, Editorial Serif,
+              Bold Display), element tabs Name | Bio | Buttons, then 8 free + 11 Pro font cards, each with "Click to apply to name" and
+              "Apply to all".
+  Buttons     subtitle "Square, #FFFFFF". Button shape shown TWICE (segmented control + shape cards), a button preview, then three
+              colour blocks (Fill, Text, Border) each with HEX field + Transparent chip + 12 preset circles.
+  Layout & effects  subtitle "Solid, Centered". Profile & card architecture: Avatar frame (Circle, Squircle, Rounded, Halo - labels
+              truncated), Button surface & effects (Solid Fill, Soft Tint, 3D Offset, Frosted Glass, Gradient Flow, Minimal Outline),
+              Header alignment, Link spacing, Page column width.
+  Below them: "Remove iveo branding" toggle (Pro) - NOT part of this task.
+
+====================================================================================================
+3. PROBLEMS TO FIX
+====================================================================================================
+
+P1  Inline accordions push content and create a very long page. Each section must be its own full screen.
+P2  Nested scrolling (a scrolling list inside a scrolling page) with repeated sticky headers/tabs. Use ONE scroll container per screen.
+P3  Duplicate controls (button shape appears twice). Every setting appears exactly once.
+P4  Truncated labels ("Squir...", "Roun...", "Halo ..."). Use 2-column grids with wrapping labels; never truncate a name.
+P5  Studio Preview block is heavy, duplicates the Preview button and wastes the top of the Background section. REMOVE COMPLETELY.
+P6  Per-font cards repeat three lines of sample text and two actions each; 19 cards = a huge scroll. Use a compact list.
+P7  Colours are picked from fixed circles with no guidance. The app should recommend combinations for the chosen background.
+P8  Catalogues feel dated. Replace them with the new premium catalogue in section 10.
+
+====================================================================================================
+4. SCOPE
+====================================================================================================
+
+IN SCOPE
+  - Appearance home screen + five full-screen section screens (route, UI, state, persistence).
+  - New design-token data model, resolver, migration from the old model (section 7, 14).
+  - New catalogues: vibes, backgrounds, fonts, button surfaces, avatar frames, layout recipes (section 10).
+  - Colour engine + three suggestion engines (button colours, fonts, layout) with refresh (sections 8, 11).
+  - Public page renderer update so the new tokens render exactly as configured (section 12).
+  - Server validation and Pro gating (section 13), tests, accessibility, performance, analytics.
+
+OUT OF SCOPE (do not touch)
+  - Profile & Photo, Links, Contacts, Analytics, Settings, billing, auth, "Remove iveo branding" toggle, Preview component internals
+    (only wire it to the new tokens), the public page content/blocks logic.
+
+REMOVE COMPLETELY (delete UI, state, styles, dead code; keep legacy DB columns for two releases for rollback):
+  - Studio Preview (Mobile/Desktop toggle, sample card, text-contrast readout) and any state/props that only served it.
+  - The 12 old vibes and all old background presets, their category chips and the old search.
+  - The yellow "Typography live preview" card and "Button preview" card inside the sections.
+  - The duplicate button-shape cards, the 12 fixed colour circles, per-font "Click to apply to name" cards.
+  - Old quick-pairing and old layout option definitions (replaced by section 10).
+
+====================================================================================================
+5. NON-NEGOTIABLE RULES
+====================================================================================================
+
+R1  Existing live pages must look pixel-identical after the migration (section 14). No surprise restyling.
+R2  Changes autosave (debounced 400 ms, optimistic UI, rollback on failure) and every change is undoable (Undo snackbar, 20-step history).
+R3  User choice always beats suggestions. Suggestions never overwrite a field the user has locked or manually edited unless the user taps Apply.
+R4  Every generated suggestion must pass the contrast rules in section 8.4. Never show a suggestion that fails them.
+R5  Pro gating is enforced on the server. The client only shows lock badges. (Pro entitlement helper already exists - reuse it; it may
+    also be granted by a promotion, so never hard-code plan names.)
+R6  No Studio Preview. The only preview is the existing global Preview (eye) button, wired to the live tokens.
+R7  Mobile first (360-430 px), then tablet and desktop. Touch targets >= 44x44 px. Works with keyboard and screen readers.
+R8  No new heavy dependency (>30 KB gzip) without a written reason. Colour maths is written in-house (section 8).
+R9  All user-supplied values (hex, font ids, numbers, image uploads) are validated and clamped on the server.
+R10 Respect prefers-reduced-motion everywhere (animations off or reduced to opacity fades).
+
+====================================================================================================
+6. INFORMATION ARCHITECTURE AND NAVIGATION
+====================================================================================================
+
+6.1 Routes [MUST]
+  /dashboard/appearance                 Appearance home (list of 5 rows + quick actions)
+  /dashboard/appearance/vibe            full screen
+  /dashboard/appearance/background      full screen
+  /dashboard/appearance/typography      full screen
+  /dashboard/appearance/buttons         full screen
+  /dashboard/appearance/layout          full screen
+  Each is a real route (deep-linkable, browser Back works, refresh keeps you on the screen, scroll position restored on Back).
+  Mobile: push transition from the right, 220 ms ease-out; Back arrow top-left; swipe-back where the platform supports it.
+  Desktop (>=1024 px): the dashboard sidebar stays; the section screen replaces the content area (same route, wider layout, content
+  max-width 720 px, centred). Do NOT use modals for the sections.
+  Reduced motion: replace the slide with a 120 ms fade.
+
+6.2 Appearance home [MUST]  (minimal: nothing but five rows and two quick actions)
+  +-----------------------------------------+
+  | <  Appearance                 (undo) ... |   top app bar. "..." = Redo, Reset everything, My themes
+  +-----------------------------------------+
+  | [ Surprise me ]        [ My themes ]    |   two compact buttons (see 6.4, 6.5)
+  |                                         |
+  | +-------------------------------------+ |
+  | | [icon]  Vibe                        | |   row height 72 px, icon tile 40 px, title 16/600,
+  | |         Obsidian . Dark & Bold  ooo >| |   subtitle 14 muted = current value, right = 3 colour dots + chevron
+  | +-------------------------------------+ |
+  | | [icon]  Background                  | |   subtitle: name + type, e.g. "Mesh Lagoon . Mesh"; right: 28 px thumbnail
+  | | [icon]  Typography                  | |   subtitle: "Name Sora . Bio Inter"; right: "Aa" in the name font
+  | | [icon]  Buttons                     | |   subtitle: "Pill . #F5F5F5 on #0A0A0B"; right: mini button chip
+  | | [icon]  Layout & effects            | |   subtitle: "Centered . Balanced . Glass"; right: tiny layout glyph
+  | +-------------------------------------+ |
+  | "Remove iveo branding" card (unchanged) |
+  +-----------------------------------------+
+  Rows are links (<a>), whole row tappable, focus ring visible, subtitle updates live when values change.
+  Each row has a small (i) info icon only if the section needs one (use a tooltip/popover, max 2 lines).
+  If a Pro feature is in use while the user is not Pro, the row shows a small PRO badge.
+
+6.3 Section screen skeleton [MUST]  (identical for all five)
+  +-----------------------------------------+
+  | <  Buttons                        (i)... |   sticky top bar 56 px: Back, title, info popover, overflow (Reset section, Undo, Redo)
+  +-----------------------------------------+
+  |  [ Suggestions strip: only on Background->buttons prompt,
+  |    Buttons, Typography, Layout ]        |   horizontal scroll, snap, 148 px cards, refresh icon at the right of the strip title
+  |  Section groups, each: small caption     |   caption 12/600 uppercase muted, then controls. 24 px between groups.
+  |  ...                                    |
+  +-----------------------------------------+
+  | [ Preview (eye) ]            [ Done ]   |   sticky bottom bar 64 px, safe-area aware. Preview opens the existing preview.
+  +-----------------------------------------+   Done returns to the Appearance home (changes are already saved).
+  - One vertical scroll container (the page). Sticky parts: top bar, bottom bar, and at most ONE secondary sticky row (tabs/search).
+  - Use progressive disclosure: "Advanced" groups are collapsed by default and remember their state per user.
+  - Snackbar after any applied change: "Applied . Undo" for 5 s, above the bottom bar.
+
+6.4 Surprise me [SHOULD]
+  Picks a random vibe the user can use (free vibes only if not Pro), then re-runs the three suggestion engines and applies the top
+  result of each, so the whole page changes coherently. Always shows Undo. Never overwrites locked fields.
+
+6.5 My themes [SHOULD]
+  Save the current full appearance as a named theme (Free: 1 slot, Pro: 10 slots - make the limits config values). List with name,
+  small preview, Apply, Rename, Delete. Applying a theme replaces overrides; clear confirmation with Undo.
+
+6.6 Interaction details [MUST]
+  - Focus moves to the screen title on route change; Escape or the Back arrow returns; trap no focus.
+  - Loading: skeletons (not spinners) for catalogue grids; images/thumbnails lazy-loaded; no layout shift.
+  - Offline/failed save: inline "Not saved. Retry" chip in the top bar; local state is kept; retry with backoff.
+  - Info (i) popovers explain each section in one or two plain sentences (see copy in each section).
+  - Copy tone: short, friendly, no jargon. Sentence case for all labels.
+
+====================================================================================================
+7. DESIGN TOKENS AND DATA MODEL
+====================================================================================================
+
+7.1 Principle [MUST]
+  Appearance = Vibe (a bundle of default tokens)  +  Overrides (what the user changed)  +  Locks (fields suggestions must not touch).
+  Resolved tokens = deepMerge(systemDefaults, vibe.tokens, overrides). The public page ONLY consumes resolved tokens.
+
+7.2 TypeScript model [MUST]
+  type Hex = `#${string}`;                       // 6-digit only in storage; 8-digit allowed for alpha fills
+  type Color = Hex | "transparent" | `rgba(${number},${number},${number},${number})`;
+  interface Appearance {
+    schemaVersion: 2;
+    vibeId: string;                              // catalogue id (section 10.1) or "custom"
+    background: Background;
+    typography: { name: FontRole; bio: FontRole; button: FontRole };
+    buttons: ButtonTokens;
+    layout: LayoutTokens;
+    locks: Array<"background"|"btn.fill"|"btn.text"|"btn.border"|"font.name"|"font.bio"|"font.button"|"layout">;
+    migratedFrom?: { vibe?: string; background?: string; at: string };   // set by migration only
+  }
+  type Background =
+    | { type: "preset"; id: string; grain?: number; blur?: number; vignette?: number; tone?: number; pattern?: PatternOverlay; animate?: boolean }
+    | { type: "solid"; color: Hex }
+    | { type: "gradient"; kind: "linear"|"radial"|"conic"; angle: number; stops: Array<{ color: Hex; at: number }> }   // 2..4 stops
+    | { type: "image"; assetId: string; blur: number; opacity: number; brightness: number; overlay?: { color: Hex; alpha: number }; focal: { x: number; y: number } }  // Pro
+    | { type: "legacy"; css: string };           // frozen CSS of an old preset; read-only; created by migration
+  interface FontRole { family: string; weight: number; size: "s"|"m"|"l"; tracking: "tight"|"normal"|"wide"; case?: "normal"|"upper"; source: "vibe"|"user"|"suggestion" }
+  interface ButtonTokens {
+    shape: "square"|"rounded"|"pill"|"custom"; radius: number;           // px, 0..40; radius is derived unless shape = custom
+    fill: Color; text: Color; border: Color; borderWidth: 0|1|2|3|4;
+    gradient?: { to: Hex; angle: number };                                // for surface = gradient-flow / metallic
+    surface: "solid"|"solid-soft"|"soft-tint"|"outline-hairline"|"glass"|"offset-3d"|"gradient-flow"|"neon-glow"|"metallic"|"neumorphic-soft"|"underline-only"|"sticker";
+    size: "s"|"m"|"l";  shadow: "none"|"soft"|"deep";  align: "center"|"left";  icon: "left"|"right"|"none";
+    motion: "none"|"lift"|"press"|"shine";
+    states: { hover?: Partial<{fill:Color;text:Color;border:Color}>; pressed?: Partial<{fill:Color;text:Color;border:Color}> }  // auto-derived unless set
+  }
+  interface LayoutTokens {
+    header: "centered"|"editorial"|"compact"|"hero";
+    avatar: { frame: "circle"|"squircle"|"rounded"|"square"|"hexagon"|"halo"|"double-ring"|"gradient-ring"|"sticker"|"none"; size: "s"|"m"|"l"|"xl" };
+    linkLayout: "stack"|"grid2"|"chips";  spacing: "compact"|"balanced"|"airy";  width: "focused"|"standard"|"wide";
+    entrance: "none"|"fade-up"|"stagger-scale";   socialIcons: "outline"|"filled"|"glass";
+  }
+
+7.3 Database (Postgres/Supabase example) [MUST]
+  create table page_appearance (
+    page_id uuid primary key references pages(id) on delete cascade,
+    schema_version int not null default 2,
+    data jsonb not null,                       -- the Appearance object above
+    updated_at timestamptz not null default now()
+  );
+  create table appearance_history (id bigserial primary key, page_id uuid, data jsonb, created_at timestamptz default now()); -- keep last 20 per page
+  create table appearance_themes (id uuid primary key default gen_random_uuid(), page_id uuid, name text, data jsonb, created_at timestamptz default now());
+  RLS: a user may select/insert/update/delete rows only where the page belongs to auth.uid(). Public page reads use the service role / public view.
+  Keep the legacy appearance columns untouched for two releases (rollback path).
+
+7.4 Resolver [MUST]
+  resolveTokens(appearance, catalogue): returns a flat object of final values + derived values (hover/pressed colours, radius from shape,
+  heights from size, gap from spacing, column px from width). Pure function, unit-tested, shared by dashboard and public renderer.
+  Derived: hover = lighten/darken fill by 0.04 OKLCH L toward the text colour; pressed = 0.08; focus ring = text colour at 2 px with 2 px offset.
+
+====================================================================================================
+8. COLOUR ENGINE (write in-house, pure TypeScript, no dependencies)  [MUST]
+====================================================================================================
+
+File suggestion: /lib/color/*.ts   (contrast.ts, oklch.ts, gamut.ts, analyze.ts, recipes.ts, prng.ts). Fully unit-tested (section 16).
+
+8.1 Contrast
+  lin(c) = c <= 0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4          (c in 0..1)
+  Y(hex) = 0.2126*lin(R) + 0.7152*lin(G) + 0.0722*lin(B)
+  contrast(a,b) = (max(Ya,Yb)+0.05) / (min(Ya,Yb)+0.05)
+  Colours with alpha: composite over the background sample first (out = a*fg + (1-a)*bg), then compute contrast.
+  Test vectors: contrast(#000000,#FFFFFF)=21.00 | contrast(#777777,#FFFFFF)=4.48 | contrast(#767676,#FFFFFF)=4.54 | contrast(#121212,#FAFAF9)=17.9 (+-0.1)
+
+8.2 OKLab / OKLCH (Bjorn Ottosson) - use for all hue / chroma / lightness manipulation
+  sRGB -> linear -> LMS:  l=0.4122214708R+0.5363325363G+0.0514459929B ; m=0.2119034982R+0.6806995451G+0.1073969566B ; s=0.0883024619R+0.2817188376G+0.6299787005B
+  l_=cbrt(l) m_=cbrt(m) s_=cbrt(s)
+  L=0.2104542553l_+0.7936177850m_-0.0040720468s_ ; a=1.9779984951l_-2.4285922050m_+0.4505937099s_ ; b=0.0259040371l_+0.7827717662m_-0.8086757660s_
+  C=sqrt(a^2+b^2) ; h=atan2(b,a) in degrees (0..360)
+  inverse: l_=L+0.3963377774a+0.2158037573b ; m_=L-0.1055613458a-0.0638541728b ; s_=L-0.0894841775a-1.2914855480b ; cube them ->
+  R=4.0767416621l-3.3077115913m+0.2309699292s ; G=-1.2684380046l+2.6097574011m-0.3413193965s ; B=-0.0041960863l-0.7034186147m+1.7076147010s -> gamma encode
+  Gamut: if any channel is outside 0..1, binary-search the chroma downward (12 iterations) keeping L and h. Never clip channels blindly.
+  Distance between colours: deltaE = sqrt((dL)^2 + (da)^2 + (db)^2) in OKLab (values around 0.02 = barely different, 0.1 = clearly different).
+
+8.3 Background analysis  analyzeBackground(bg) -> BgProfile  [MUST]
+  Render the resolved background (preset, solid, gradient or image) to an offscreen canvas 96x96 (OffscreenCanvas in a Web Worker when available;
+  for presets/gradients you may rasterise the CSS layers analytically). Then take a 48x48 grid of samples, convert each to OKLab, and compute:
+    meanL, meanC, meanHue (from the mean of a and b), p05L / p95L (5th and 95th percentile of L), complexity = clamp(stdDevL / 0.18, 0, 1),
+    darkest = sample at p05L, lightest = sample at p95L,   tone = light (meanL>=0.72) | mid (0.45..0.72) | dark (<0.45),
+    chromatic = meanC >= 0.04,   warm = hue in 15..75 or 330..360,  cool = hue in 180..270.
+  Cache the profile per background signature (hash of the config). For catalogue presets, precompute offline and store in the catalogue.
+  IMPORTANT worst-case rule: text must pass against BOTH the darkest and the lightest sample of the background, not only the average.
+  For image backgrounds: compute server-side after upload (sharp or equivalent), store the 8x8 luminance grid and dominant colours with the asset.
+  If the worst-case contrast for the page text is below 4.5, add a smart scrim: rgba(black or white, alpha) over the image, alpha = minimal value
+  (step 0.05, max 0.55) that makes the contrast pass; tell the user once ("We added a soft overlay so text stays readable").
+
+8.4 Hard rules every suggested set must satisfy (STRICT)  [MUST]
+  T1  button text vs button fill (blended over the background if translucent) >= 4.5:1  (prefer >= 7:1 for the first/baseline suggestion)
+  T2  if fill is transparent: button text vs worst-case background >= 4.5:1
+  T3  affordance: max( fill vs worst-case background , border vs worst-case background ) >= 3:1  (WCAG 1.4.11)
+  T4  focus ring colour vs background >= 3:1 (derive it; do not let the user lose it)
+  T5  page text (name, bio) vs worst-case background >= 4.5:1; muted/bio text >= 4.5:1
+  SOFT-tier exception: recipes marked SOFT (tonal / soft-tint) may fail T3 but must pass T1, T2, T5, and must show a small "Subtle" tag. Never
+  offer SOFT recipes as the first card.
+
+8.5 Tone-to-strategy table (what suits which background)  [MUST - implement as data, not if/else spaghetti]
+  BG meanL        Recommended fills                           Text on fill        Border                    Avoid
+  >= 0.92 (white) near-black tinted (L 0.15-0.22); deep accent   near-white           same as fill / 1.5px ink  pale fills, light greys
+                  (L 0.42-0.55, C 0.12-0.20); outline ink
+  0.78-0.92       same as above + tonal soft (fill L -0.07)     near-white / ink    fill L -0.06              fills within 0.05 L of bg
+  0.62-0.78       dark ink (L 0.18-0.30), deep accent L<=0.50   white               same as fill              mid-tone fills (low contrast)
+  0.45-0.62 (mid) pure extremes: ink L<=0.20 or paper L>=0.96   opposite extreme     2px opposite extreme      mid fills, same-hue mids
+                  glass works well (blur 16px)
+  0.28-0.45       light paper (L>=0.92), bright accent L 0.75-0.85  ink L<=0.20     light, 1.5px             dark fills close to bg
+  < 0.28 (dark)   light paper L 0.94-0.98; neon outline (L 0.82-0.9,   ink          neon / light, glow        black fills, grey outlines
+                  C 0.15-0.22); gold foil if warm; glass
+  Accent hue relative to bg hue (chromatic bg): analogous = +-25..35 deg, complement = +180 (use +-160..200 jitter), triad = +-120,
+  split-complement = +150 / +210. For neutral bg (meanC < 0.04) use the vibe accent or a seeded hue from the wheel.
+  Chroma caps for fills: L<0.4 -> C<=0.14 ; 0.4-0.7 -> C<=0.20 ; >0.7 -> C<=0.16 (then gamut-reduce).
+
+8.6 Auto text colour  bestText(fill, bgWorst)  [MUST]  returns whichever of ink (#0A0A0B tinted to the fill hue, C<=0.02) or paper (#FAFAF9 tinted)
+  has the higher contrast with the fill; if neither reaches 4.5, move the FILL lightness in 0.02 steps (max 20 steps) toward whichever side helps.
+8.7 Seeded randomness  [MUST]  mulberry32(seed) PRNG; seed = hash32(pageId + bgSignature + vibeId + refreshCount). Same inputs = same ideas (stable
+  across reloads); refreshCount increments on each tap of the refresh icon, so ideas change on demand but remain reproducible for tests.
+
+====================================================================================================
+9. SECTION SPECIFICATIONS (each is a full screen, skeleton in 6.3)
+====================================================================================================
+
+9.1 VIBE SCREEN
+  Purpose: pick a starting style. A vibe is a bundle of tokens (background, colours, fonts, button style, layout).
+  Info popover: "A vibe sets a starting look for your whole page. You can change anything afterwards."
+  Layout: one sticky chip row (All, Free, Pro, then the six collections of 10.1), then a 2-column grid, gap 12 px.
+  Card (aspect 1 : 1.15): live miniature rendered from the vibe tokens = its background, round avatar, name in the vibe name font, two mini
+  buttons with the vibe's real fill/text/border/shape/surface. Under it: vibe name (16/600) and tagline (14 muted, wraps to 2 lines, never "...").
+  PRO badge top-right when locked; check badge + 2 px ink border when selected. No separate description screen.
+  Behaviour:
+   - Tap on a vibe when the user has NO overrides: apply immediately + Undo snackbar.
+   - Tap when the user HAS overrides: compact bottom sheet "Apply [Vibe]" with a radio group: Everything (default) | Colours and background only |
+     Fonts and layout only, plus a checkbox "Keep my customisations" (default off). Buttons: Apply, Cancel.
+   - Locked (Pro) vibe for a free user: open the existing upgrade sheet; never apply.
+   - Overflow menu: "Reset to default vibe" (applies Porcelain with no overrides).
+   - Applying a vibe clears overrides according to the chosen scope, sets background = the vibe default (unless scope excludes it),
+     then triggers nothing else (suggestions are computed lazily when the user opens other screens).
+
+9.2 BACKGROUND SCREEN  (no Studio Preview!)
+  Info popover: "Choose what sits behind your links. Buttons can match it automatically."
+  Top: segmented control with four tabs: Presets | Color | Gradient | Image (PRO badge).
+  PRESETS tab
+   - Sticky row: search input (placeholder "Search: dark, mesh, grain...") + single-line horizontally scrollable category chips:
+     All, Solid & Tonal, Soft Gradient, Mesh, Aurora, Glass, Grain & Texture, Pattern, Animated.
+   - Grid of 3 columns on phones (gap 10), thumbnails aspect 1 : 1.35, name below (wraps to 2 lines), PRO badge, selected = 2 px ink ring + check.
+   - Virtualise (>= 30 items). CSS-only presets render as CSS; mesh/aurora/glass thumbnails are pre-rendered 240 px WebP with blur-up placeholders.
+   - Search matches name, category and mood words (dark, light, warm, cool, neon, paper, glass...). Empty state: "Nothing found. Try Mesh or Grain."
+   - "Adjust" group appears directly under the tabs when a preset is selected (collapsed by default, remembers state):
+       Grain 0-40 % | Blur 0-60 px (mesh, aurora, glass only) | Vignette 0-50 % | Tone -20..+20 (lighten/darken) |
+       Pattern overlay: None, Dots, Grid, Lines, Contours + opacity 0-30 % | Animate toggle (PRO; allowed for animated presets and mesh).
+  COLOR tab
+   - Large swatch + hex input + OKLCH picker (L, C, hue sliders and a 2-D area), recent colours (8), eyedropper where supported.
+   - Row "From your photo": 5 colours extracted from the profile photo (k-means in OKLab on a 64 px downscale, run client-side).
+   - Row "Suggested": 6 curated solids derived from the active vibe accent (tints/shades/analogous), each passing T5 with the current page text.
+  GRADIENT tab
+   - Type: Linear | Radial | Conic. Angle dial (linear/conic). 2-4 stops, each with colour chip, position slider 0-100, remove; "Add stop".
+   - "Harmonize" menu: Monochrome | Analogous | Complementary | Triad -> rebuilds stops from the first colour using OKLCH rules of 8.5.
+   - Randomize icon (seeded, 8.7) for happy accidents. A live gradient bar shows the stops.
+  IMAGE tab (PRO)
+   - Upload jpg/png/webp, max 8 MB, min 1080 px on the short side; progress bar; server resizes to 1080/1920 WebP, strips EXIF, stores dominant colours
+     and the 8x8 luminance grid; show "Processing..." state with skeleton.
+   - Focal point (tap on the thumbnail), Blur 0-40, Opacity 30-100, Brightness 60-120, Overlay colour + alpha, "Smart scrim" toggle (default on, see 8.3).
+  Smart follow-up [MUST]: after a background change that flips the tone or moves the mean colour by deltaE > 0.12, show a snackbar once:
+   "Background changed. Update buttons to match?"  [Update] [Keep]. Update = apply the top button suggestion (locks respected).
+   Overflow setting "Auto-match buttons to background" (new pages: ON, existing pages: OFF) applies it silently with Undo.
+
+9.3 BUTTONS SCREEN  (colour intelligence lives here)
+  Info popover: "Pick your own colours or tap an idea. Ideas are built to be readable on your background."
+  Group 0  SUGGESTIONS STRIP (spec in 11.1): title "Ideas for your background", a small swatch + tone label ("Dark, cool blue"), and the REFRESH icon.
+  Group 1  SHAPE (shown exactly once): segmented Square | Rounded | Pill | Custom. Custom reveals a radius slider 0-40 px with a number field.
+  Group 2  COLOURS: three rows - Fill, Text, Border. Each row has:
+     label | swatch chip (opens picker) | hex field (monospace, upper-case, accepts 3/6/8 digits with or without #, validates on blur) |
+     contrast badge | lock toggle.
+     Badges: Fill -> "vs page 12.4:1"; Text -> "7.2:1 AAA" / "5.1:1 AA" / "3.2:1 Low" (red-orange text + icon, not colour alone); Border -> "vs page 3.4:1".
+     Fill and Border have a "Transparent" chip. Text row has an "Auto" link = bestText() (8.6).
+     Picker (bottom sheet on mobile, popover on desktop): OKLCH sliders + hex, a row "From your background" (6 colours that pass the rules for that field),
+     recent colours (8), eyedropper where supported. Closing the picker keeps the value.
+  Group 3  SURFACE & EFFECT: grid of 3 columns, each chip shows a live mini button using the CURRENT colours and shape:
+     Solid | Soft shadow | Soft tint | Outline | Glass | 3D offset | Gradient | Neon glow | Metallic | Neumorphic | Underline | Sticker (specs in 10.5).
+     Incompatible options are disabled with a one-line reason ("Needs a dark background", "Needs a patterned or colourful background").
+  Group 4  SIZE & TEXT: Height S 46 / M 56 / L 68 px | Border width stepper 0-4 | Shadow None/Soft/Deep | Weight 400/500/600/700 | Case Normal/Upper | Tracking.
+  Group 5  MOTION & ICON: Motion None / Lift / Press / Shine | Icon Left / Right / None | Text alignment Center / Left.
+  ADVANCED (collapsed): second gradient colour + angle (for Gradient/Metallic), hover and pressed overrides, focus ring colour (auto, shows T4 result).
+  There is NO separate preview card. Verification happens through the mini buttons, the contrast badges and the global Preview button.
+
+9.4 TYPOGRAPHY SCREEN
+  Info popover: "Choose fonts for your name, bio and buttons. Ideas are matched to your vibe and background."
+  Group 0  SUGGESTIONS STRIP (11.2): cards 188 x 132 px. Each card renders three real lines - the user's display name (name font, 22 px), the first
+           40 characters of the bio (bio font, 12 px) and a mini button label (button font) - plus a mood tag (e.g. "Quiet luxury") and a lock if Pro.
+           Tap applies all three roles. Refresh icon at the right of the strip title.
+  Group 1  ROLE TABS: Name | Bio | Buttons (segmented; each tab shows the current family under the label). Overflow per role: "Use vibe default",
+           "Apply this font to all roles".
+  Group 2  FONT LIST for the selected role: search + category chips (All, Sans, Serif, Display, Mono, Script, Rounded) + optional Mood chips.
+           Row 56 px: the family name rendered in that family (18 px), small category, PRO badge, radio. The sample text IS the role's real content
+           (display name / bio snippet / first button label) - never "Aa Bb Cc". Virtualised; fonts load lazily for visible rows only (max 12 in flight,
+           font-display: swap, subset latin + latin-ext). Roles a font is not suited for are hidden or marked (e.g. scripts never offered for Bio).
+  Group 3  STYLE for the selected role: Size S/M/L | Weight (only the weights that family ships) | Tracking Tight/Normal/Wide | Case Normal/Upper (Name, Buttons) |
+           Line height Compact/Normal/Relaxed (Bio).
+  Hints (non-blocking, one line): thin weights on dark backgrounds, all-caps with long labels, more than 3 families in use (blocked: max 3).
+  Footer: "Reset fonts to vibe default".
+
+9.5 LAYOUT & EFFECTS SCREEN
+  Info popover: "Set how your header, links and page are arranged. Ideas are matched to your vibe."
+  Group 0  SUGGESTIONS STRIP (11.3): cards 140 x 120 with a tiny wireframe drawn from the tokens (avatar, name line, three buttons with the real surface); name below; refresh icon.
+  Group 1  HEADER: alignment as 2 x 2 wireframe cards - Centered | Editorial (left) | Compact row | Hero; AVATAR FRAME as a 2 x 5 grid with full names
+           (Circle, Squircle, Rounded, Square, Hexagon, Halo, Double ring, Gradient ring, Sticker, None); AVATAR SIZE S 72 / M 96 / L 128 / XL 160 px;
+           Avatar glow None / Soft / Accent.
+  Group 2  LINKS: Layout Stack | 2-column | Chips (hint "2-column works best with short labels"; warn, do not block); Spacing Compact 8 / Balanced 14 / Airy 22 px;
+           Social icons Outline / Filled / Glass.
+  Group 3  PAGE: Column width Focused 440 / Standard 560 / Wide 720 px; Entrance animation None / Fade up / Stagger scale.
+  The old "Button surface & effects" options are NOT here any more - they live in Buttons (9.3) so every setting exists exactly once.
+
+====================================================================================================
+10. CATALOGUES (replace the old catalogues completely)
+====================================================================================================
+
+All values below were pre-checked against the rules of 8.4 (text/page >= 4.5:1, muted/page >= 4.5:1, button text/fill >= 4.5:1,
+fill-or-border/page >= 3:1) against the darkest AND lightest sample of each background. Keep them as typed data files
+(/lib/appearance/catalog/vibes.ts, backgrounds.ts, fonts.ts, pairings.ts, surfaces.ts, layouts.ts) and add a unit test that re-runs the checks.
+Tier values (free/pro) are recommendations - the product owner may change them; keep them as data, never in logic.
+
+10.1 VIBES  (24)   collections: Light & Calm, Dark & Bold, Color & Energy, Editorial & Luxe, Futuristic, Organic
+     line format: id | name | collection | tier | tagline ; then background, page colours, button, fonts, layout, verified contrast
+
+  [porcelain] Porcelain | Light & Calm | FREE | "Quiet, bright and sharp."
+     background: bg-studio-white (Studio White) | text #121212 | muted #5C5C57 | accent #1F6FEB
+     button: fill #121212 | text #FFFFFF | border #121212 | shape rounded (radius 14 px) | surface solid-soft
+     fonts: name Plus Jakarta Sans 700 | bio Inter 400 | button Inter 500
+     layout: header centered | avatar circle | spacing balanced | width standard
+     verified: page text >= 17.9:1 | button text/fill >= 18.7:1
+
+  [oat-milk] Oat Milk | Light & Calm | PRO | "Warm paper, soft serif voice."
+     background: bg-washi-paper (Washi Paper) | text #2B2117 | muted #6A5B4A | accent #A5541B
+     button: fill #2B2117 | text #F5F0E6 | border #2B2117 | shape pill | surface solid-soft
+     fonts: name Fraunces 600 | bio Lora 400 | button DM Sans 500
+     layout: header centered | avatar squircle | spacing airy | width focused
+     verified: page text >= 13.9:1 | button text/fill >= 13.9:1
+
+  [dawn-mist] Dawn Mist | Light & Calm | FREE | "Fresh morning air."
+     background: bg-sky-linen (Sky Linen) | text #0F1B2D | muted #4B5D75 | accent #3B6FD8
+     button: fill #FFFFFF | text #0F1B2D | border #3B6FD8 | shape rounded (radius 14 px) | surface outline-hairline
+     fonts: name DM Sans 700 | bio DM Sans 400 | button DM Sans 500
+     layout: header centered | avatar circle | spacing balanced | width standard
+     verified: page text >= 15.5:1 | button text/fill >= 17.3:1
+
+  [celadon] Celadon | Light & Calm | FREE | "Soft green calm."
+     background: bg-mint-tint (Mint Tint) | text #14261C | muted #43594B | accent #2E7D57
+     button: fill #1E4D36 | text #FFFFFF | border #1E4D36 | shape pill | surface solid-soft
+     fonts: name Plus Jakarta Sans 700 | bio Inter 400 | button Inter 500
+     layout: header centered | avatar circle | spacing balanced | width standard
+     verified: page text >= 13.8:1 | button text/fill >= 9.7:1
+
+  [rose-quartz] Rose Quartz | Light & Calm | PRO | "Blush tones, editorial warmth."
+     background: bg-peach-fizz (Peach Fizz) | text #3A1620 | muted #6B3A47 | accent #D1456B
+     button: fill #3A1620 | text #FFE9EF | border #3A1620 | shape rounded (radius 18 px) | surface solid-soft
+     fonts: name Playfair Display 700 | bio Lora 400 | button DM Sans 500
+     layout: header editorial | avatar rounded | spacing balanced | width focused
+     verified: page text >= 9.5:1 | button text/fill >= 13.8:1
+
+  [obsidian] Obsidian | Dark & Bold | FREE | "Pure black, pure focus."
+     background: bg-ink-black (Ink Black) | text #F5F5F5 | muted #A0A0A6 | accent #FFFFFF
+     button: fill #F5F5F5 | text #0A0A0B | border #F5F5F5 | shape rounded (radius 12 px) | surface solid
+     fonts: name Inter 700 | bio Inter 400 | button Inter 600
+     layout: header centered | avatar circle | spacing balanced | width standard
+     verified: page text >= 18.2:1 | button text/fill >= 18.2:1
+
+  [eclipse] Eclipse | Dark & Bold | FREE | "Night-sky blues."
+     background: bg-film-grain-dark (Film Grain Dark) | text #E8ECF3 | muted #9AA5B8 | accent #7C9CFF
+     button: fill #1B2230 | text #E8ECF3 | border #6B7FA6 | shape rounded (radius 14 px) | surface soft-tint
+     fonts: name Space Grotesk 700 | bio Inter 400 | button Space Grotesk 500
+     layout: header centered | avatar squircle | spacing balanced | width standard
+     verified: page text >= 16.0:1 | button text/fill >= 13.4:1
+
+  [onyx-gold] Onyx Gold | Dark & Bold | PRO | "Black and gold, quietly rich."
+     background: bg-ink-black (Ink Black) | text #F3EBDD | muted #A89F8D | accent #D4AF37
+     button: fill #D4AF37 | text #0A0A09 | border #D4AF37 | shape pill | surface metallic
+     fonts: name Cormorant Garamond 700 | bio Lora 400 | button DM Sans 600
+     layout: header centered | avatar double-ring | spacing airy | width focused
+     verified: page text >= 16.7:1 | button text/fill >= 9.4:1
+
+  [velvet-noir] Velvet Noir | Dark & Bold | PRO | "Ruby spotlight on black."
+     background: bg-mesh-ember (Mesh Ember) | text #F8E9EC | muted #DDB8C2 | accent #FB7185
+     button: fill #FB7185 | text #12060A | border #FB7185 | shape rounded (radius 14 px) | surface solid
+     fonts: name Bodoni Moda 700 | bio Newsreader 400 | button Inter 600
+     layout: header editorial | avatar circle | spacing balanced | width standard
+     verified: page text >= 8.4:1 | button text/fill >= 7.4:1
+
+  [graphite-mono] Graphite Mono | Dark & Bold | FREE | "Terminal-clean, all outline."
+     background: bg-graphite (Graphite) | text #EDEDED | muted #A3A3A3 | accent #EDEDED
+     button: fill transparent | text #EDEDED | border #EDEDED | shape square | surface outline-hairline
+     fonts: name JetBrains Mono 700 | bio Inter 400 | button JetBrains Mono 500
+     layout: header editorial | avatar rounded | spacing compact | width standard
+     verified: page text >= 15.5:1 | button text/fill >= 15.5:1
+
+  [tangerine-pop] Tangerine Pop | Color & Energy | FREE | "Loud orange, hard shadows."
+     background: bg-tangerine (Tangerine) | text #111111 | muted #2B1308 | accent #111111
+     button: fill #111111 | text #FF6B2C | border #111111 | shape square | surface offset-3d
+     fonts: name Space Grotesk 700 | bio Inter 500 | button Space Grotesk 700
+     layout: header centered | avatar sticker | spacing balanced | width standard
+     verified: page text >= 6.6:1 | button text/fill >= 6.6:1
+
+  [ultraviolet] Ultraviolet | Color & Energy | PRO | "Electric violet energy."
+     background: bg-violet-storm (Violet Storm) | text #F4EEFF | muted #B7A6E0 | accent #A78BFA
+     button: fill #F4EEFF | text #2A1065 | border #A78BFA | shape pill | surface gradient-flow
+     fonts: name Unbounded 600 | bio Inter 400 | button Inter 600
+     layout: header centered | avatar gradient-ring | spacing balanced | width standard
+     verified: page text >= 11.4:1 | button text/fill >= 13.6:1
+
+  [aqua-pulse] Aqua Pulse | Color & Energy | PRO | "Cool cyan rush."
+     background: bg-aqua-rush (Aqua Rush) | text #04201E | muted #0B3B38 | accent #04201E
+     button: fill #04201E | text #E8FFFD | border #04201E | shape pill | surface solid
+     fonts: name Outfit 700 | bio Outfit 400 | button Outfit 600
+     layout: header centered | avatar circle | spacing balanced | width standard
+     verified: page text >= 6.4:1 | button text/fill >= 16.4:1
+
+  [bubblegum] Bubblegum | Color & Energy | FREE | "Sweet pink and sky."
+     background: bg-cotton-candy (Cotton Candy) | text #3B0A24 | muted #6A3550 | accent #E11D74
+     button: fill #3B0A24 | text #FFD1E8 | border #3B0A24 | shape pill | surface solid-soft
+     fonts: name DM Sans 700 | bio DM Sans 400 | button DM Sans 600
+     layout: header centered | avatar circle | spacing airy | width focused
+     verified: page text >= 12.4:1 | button text/fill >= 12.4:1
+
+  [ivory-press] Ivory Press | Editorial & Luxe | PRO | "Printed paper, hairline rules."
+     background: bg-film-grain-light (Film Grain Light) | text #1A1A1A | muted #5A5A57 | accent #8C1C13
+     button: fill transparent | text #1A1A1A | border #1A1A1A | shape square | surface outline-hairline
+     fonts: name Playfair Display 700 | bio Newsreader 400 | button DM Sans 500
+     layout: header editorial | avatar square | spacing airy | width focused
+     verified: page text >= 15.4:1 | button text/fill >= 15.4:1
+
+  [noir-editions] Noir Éditions | Editorial & Luxe | PRO | "Black-and-white magazine."
+     background: bg-film-grain-dark (Film Grain Dark) | text #F2F2F2 | muted #A6A6A6 | accent #F2F2F2
+     button: fill transparent | text #F2F2F2 | border #F2F2F2 | shape square | surface outline-hairline
+     fonts: name Bodoni Moda 700 | bio Newsreader 400 | button Inter 500
+     layout: header editorial | avatar square | spacing airy | width focused
+     verified: page text >= 17.0:1 | button text/fill >= 17.0:1
+
+  [burgundy-library] Burgundy Library | Editorial & Luxe | PRO | "Old library, gold leaf."
+     background: bg-burgundy-velvet (Burgundy Velvet) | text #F6E7D8 | muted #C9AE9A | accent #C9A66B
+     button: fill #C9A66B | text #1B070D | border #C9A66B | shape rounded (radius 12 px) | surface metallic
+     fonts: name Cormorant Garamond 700 | bio EB Garamond 400 | button DM Sans 600
+     layout: header centered | avatar double-ring | spacing airy | width focused
+     verified: page text >= 13.5:1 | button text/fill >= 8.5:1
+
+  [sapphire-club] Sapphire Club | Editorial & Luxe | PRO | "Members-only navy."
+     background: bg-sapphire-night (Sapphire Night) | text #EAF0FF | muted #A8B8DA | accent #C8D4F0
+     button: fill #EAF0FF | text #071433 | border #EAF0FF | shape rounded (radius 14 px) | surface solid
+     fonts: name Marcellus 400 | bio Inter 400 | button Inter 600
+     layout: header centered | avatar circle | spacing balanced | width standard
+     verified: page text >= 12.0:1 | button text/fill >= 15.9:1
+
+  [neon-grid] Neon Grid | Futuristic | PRO | "Grid lines and glow."
+     background: bg-neon-grid (Neon Grid) | text #E9F1FF | muted #9FB3D6 | accent #00F5D4
+     button: fill #0C1230 | text #00F5D4 | border #00F5D4 | shape rounded (radius 12 px) | surface neon-glow
+     fonts: name Space Grotesk 700 | bio Inter 400 | button JetBrains Mono 500
+     layout: header editorial | avatar hexagon | spacing balanced | width standard
+     verified: page text >= 17.4:1 | button text/fill >= 13.1:1
+
+  [chrome-y2k] Chrome Y2K | Futuristic | PRO | "Liquid chrome nostalgia."
+     background: bg-concrete (Concrete) | text #0E1220 | muted #3C4458 | accent #2B3A67
+     button: fill #EEF1F8 | text #0E1220 | border #5A6479 | shape pill | surface metallic
+     fonts: name Unbounded 600 | bio Inter 400 | button Inter 600
+     layout: header centered | avatar gradient-ring | spacing balanced | width standard
+     verified: page text >= 10.4:1 | button text/fill >= 16.5:1
+
+  [aurora-glass] Aurora Glass | Futuristic | PRO | "Frosted glass over aurora."
+     background: bg-northern-veil (Northern Veil) | text #F0F6FF | muted #C8D5EC | accent #7DD3FC
+     button: fill rgba(255,255,255,0.12) | text #F0F6FF | border rgba(255,255,255,0.45) | shape pill | surface glass
+     fonts: name Sora 700 | bio Inter 400 | button Sora 500
+     layout: header centered | avatar halo | spacing balanced | width standard
+     verified: page text >= 7.3:1 | button text/fill >= 5.4:1
+
+  [holo-foil] Holo Foil | Futuristic | PRO | "Pearl foil, soft rainbow."
+     background: bg-shimmer-foil (Shimmer Foil) | text #1B1530 | muted #4A4160 | accent #7C5CFF
+     button: fill #D8CCFF | text #1B1530 | border #5B3DF0 | shape pill | surface gradient-flow
+     fonts: name Outfit 700 | bio Outfit 400 | button Outfit 600
+     layout: header centered | avatar gradient-ring | spacing balanced | width standard
+     verified: page text >= 11.9:1 | button text/fill >= 11.7:1
+
+  [moss-stone] Moss & Stone | Organic | FREE | "Earthy stone and moss."
+     background: bg-stone-grain (Stone Grain) | text #1F2A1C | muted #4A5946 | accent #2F4A2B
+     button: fill #2F4A2B | text #F3F7EE | border #2F4A2B | shape rounded (radius 14 px) | surface solid-soft
+     fonts: name Merriweather 700 | bio Merriweather 400 | button Inter 500
+     layout: header centered | avatar squircle | spacing balanced | width standard
+     verified: page text >= 11.7:1 | button text/fill >= 9.1:1
+
+  [terracotta] Terracotta | Organic | PRO | "Baked clay and cream."
+     background: bg-terracotta-clay (Terracotta Clay) | text #FFF8F1 | muted #FBE6D6 | accent #FFF8F1
+     button: fill #FFF8F1 | text #5A2210 | border #FFF8F1 | shape rounded (radius 18 px) | surface solid-soft
+     fonts: name Fraunces 700 | bio DM Sans 400 | button DM Sans 600
+     layout: header centered | avatar squircle | spacing airy | width focused
+     verified: page text >= 5.4:1 | button text/fill >= 11.9:1
+
+10.2 BACKGROUNDS  (40 presets + custom Color, Gradient and Image)
+     line format: id | name | category | tier | tone ; then the exact layer recipe. Renderers must reproduce these recipes faithfully.
+     Searchable words = name + category + tone (light/mid/dark) + warm/cool. Thumbnails are generated from the same recipes.
+
+  -- SOLID & TONAL --
+  [bg-studio-white] Studio White | Solid & Tonal | FREE | light
+       solid #FAFAF9
+  [bg-warm-bone] Warm Bone | Solid & Tonal | FREE | light
+       solid #F3EEE6
+  [bg-slate-fog] Slate Fog | Solid & Tonal | FREE | light
+       solid #E8EBEF
+  [bg-mint-tint] Mint Tint | Solid & Tonal | FREE | light
+       solid #E7F2EA
+  [bg-ink-black] Ink Black | Solid & Tonal | FREE | dark
+       solid #0A0A0B
+  [bg-graphite] Graphite | Solid & Tonal | FREE | dark
+       solid #161616
+  [bg-tangerine] Tangerine | Solid & Tonal | FREE | mid
+       solid #FF6B2C
+  [bg-terracotta-clay] Terracotta Clay | Solid & Tonal | PRO | mid
+       solid #A84A22
+
+  -- SOFT GRADIENT --
+  [bg-morning-haze] Morning Haze | Soft Gradient | FREE | light
+       linear 160deg: #FFF1E6 0%, #F3E8FF 55%, #E6F0FF 100%
+  [bg-peach-fizz] Peach Fizz | Soft Gradient | FREE | light
+       linear 135deg: #FFD9C2 0%, #FFB3C7 100%
+  [bg-sky-linen] Sky Linen | Soft Gradient | FREE | light
+       linear 180deg: #EAF4FF 0%, #FFFFFF 100%
+  [bg-citrus-haze] Citrus Haze | Soft Gradient | FREE | light
+       linear 150deg: #FFF7C2 0%, #FFE0A3 100%
+  [bg-cotton-candy] Cotton Candy | Soft Gradient | FREE | light
+       linear 150deg: #FFD1E8 0%, #D9E6FF 100%
+  [bg-aqua-rush] Aqua Rush | Soft Gradient | PRO | mid
+       linear 140deg: #00D2C6 0%, #00A6FF 100%
+  [bg-dusk-plum] Dusk Plum | Soft Gradient | PRO | dark
+       linear 160deg: #2B1B3D 0%, #0F0A1A 100%
+  [bg-burgundy-velvet] Burgundy Velvet | Soft Gradient | PRO | dark
+       linear 160deg: #3A121C 0%, #1B070D 100%
+  [bg-sapphire-night] Sapphire Night | Soft Gradient | PRO | dark
+       linear 160deg: #0F2A63 0%, #071433 100%
+
+  -- MESH --
+  [bg-mesh-lagoon] Mesh Lagoon | Mesh | PRO | dark
+       base #07111F + radial(55% 45% at 12% 18%, #14B8A6) + radial(50% 50% at 88% 30%, #6366F1) + radial(60% 50% at 40% 95%, #0EA5E9); each fades to transparent at 70%; grain 4% [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-mesh-blush] Mesh Blush | Mesh | PRO | light
+       base #FFF5F5 + radial(55% 45% at 15% 20%, #FFB4C8) + radial(50% 50% at 85% 35%, #FFD6A5) + radial(60% 50% at 45% 95%, #D9C2FF); fade 70%; grain 3% [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-mesh-ember] Mesh Ember | Mesh | PRO | dark
+       base #12060A + radial(55% 45% at 10% 15%, #F97316) + radial(50% 50% at 90% 40%, #E11D48) + radial(60% 50% at 50% 100%, #C026D3); fade 70%; grain 5% [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-mesh-meadow] Mesh Meadow | Mesh | PRO | light
+       base #F3FAEF + radial(55% 45% at 15% 20%, #BBF7D0) + radial(50% 50% at 85% 30%, #FEF08A) + radial(60% 50% at 40% 95%, #A7F3D0); fade 70%; grain 3% [blob/band peak opacity capped at 40% so text contrast holds]
+
+  -- AURORA --
+  [bg-northern-veil] Northern Veil | Aurora | PRO | dark
+       base #050B1A + linear(115deg, transparent 20%, #22D3AA 40%, #7C3AED 58%, transparent 78%) at 40% opacity, blur 60px, skewed -12deg; + radial(70% 40% at 50% 0%, #1E3A8A) at 60% [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-polar-dawn] Polar Dawn | Aurora | PRO | light
+       base #F2FBFF + linear(120deg, transparent 15%, #A5F3FC 40%, #FBCFE8 62%, transparent 85%) at 40% opacity, blur 70px [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-violet-storm] Violet Storm | Aurora | PRO | dark
+       base #0B0720 + linear(110deg, transparent 18%, #6D28D9 42%, #2563EB 62%, transparent 82%) at 40% opacity, blur 64px [blob/band peak opacity capped at 40% so text contrast holds]
+
+  -- GLASS --
+  [bg-frosted-pane] Frosted Pane | Glass | PRO | light
+       base linear(150deg, #E9EEF9, #F9E9F3) + two blurred circles (#BFD3FF 40% 40vmin, #FFC9E3 40% 34vmin) + white veil 35% + backdrop blur 24px [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-smoked-glass] Smoked Glass | Glass | PRO | dark
+       base #0D0F14 + circles (#334155 40% 44vmin, #1E293B 40% 36vmin) + black veil 25% + backdrop blur 28px [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-prism-glass] Prism Glass | Glass | PRO | dark
+       base #0B1020 + circles (#22D3EE, #A78BFA, #F472B6) at 40% opacity, blur 70px, + grain 5% [blob/band peak opacity capped at 40% so text contrast holds]
+
+  -- GRAIN & TEXTURE --
+  [bg-film-grain-light] Film Grain Light | Grain & Texture | FREE | light
+       solid #F4F1EC + SVG feTurbulence (baseFrequency .8, 2 octaves) at 10% opacity, mix-blend multiply
+  [bg-film-grain-dark] Film Grain Dark | Grain & Texture | FREE | dark
+       solid #101012 + SVG feTurbulence (baseFrequency .8, 2 octaves) at 12% opacity, mix-blend screen
+  [bg-washi-paper] Washi Paper | Grain & Texture | PRO | light
+       solid #F5F0E6 + fibre noise (feTurbulence baseFrequency .02 x .6, 3 octaves) at 8% + fine grain 6%
+  [bg-stone-grain] Stone Grain | Grain & Texture | FREE | light
+       solid #E3E5DC + feTurbulence (baseFrequency .6, 3 octaves) at 9%
+  [bg-concrete] Concrete | Grain & Texture | PRO | light
+       linear 180deg #D7D9DC to #BFC2C7 + feTurbulence (baseFrequency .35, 4 octaves) at 14%
+
+  -- PATTERN --
+  [bg-dot-matrix] Dot Matrix | Pattern | FREE | light
+       solid #F7F7F5 + dots #111111 at 12% opacity, 1.5px radius, 16px grid
+  [bg-graph-sheet] Graph Sheet | Pattern | FREE | light
+       solid #F2F6FB + 1px lines #A9BDD6 at 40%, 32px grid
+  [bg-neon-grid] Neon Grid | Pattern | PRO | dark
+       solid #070A18 + 1px lines #00F5D4 at 14%, 40px grid + radial vignette to transparent at 70%
+  [bg-contour-lines] Contour Lines | Pattern | PRO | dark
+       solid #0F1A14 + SVG topographic contours #2E5A44 at 55%, 1.2px stroke
+  [bg-soft-waves] Soft Waves | Pattern | PRO | light
+       solid #EFF6FF + 3 stacked SVG sine layers (#DBEAFE, #BFDBFE, #93C5FD at 45%)
+
+  -- ANIMATED (PRO) --
+  [bg-drift-gradient] Drift Gradient | Animated (Pro) | PRO | light
+       linear 120deg: #FFE3F1, #E0E7FF, #D1FAE5; size 300%; animate background-position 0%->100% over 28s alternate ease-in-out [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-liquid-mesh] Liquid Mesh | Animated (Pro) | PRO | dark
+       base #080814 + 3 blurred blobs (#7C3AED, #06B6D4, #F43F5E) at 40% opacity; animate transform translate/scale over 30s, each offset; CSS only [blob/band peak opacity capped at 40% so text contrast holds]
+  [bg-shimmer-foil] Shimmer Foil | Animated (Pro) | PRO | light
+       linear 135deg: #E5E7EB, #F9FAFB, #D1D5DB + moving highlight (white 55%, 20% wide) sweeping every 12s [blob/band peak opacity capped at 40% so text contrast holds]
+
+  Noise layer recipe (all "Grain & Texture" presets and the Grain slider): inline SVG data-URI
+    <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" stitchTiles="stitch"/>
+    <feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+    used as background-image with the stated opacity and mix-blend-mode (multiply on light, screen on dark). Tile it; never a full-size image.
+  Animated presets: CSS keyframes only, transform/opacity/background-position, paused when document.hidden and under prefers-reduced-motion,
+    will-change only while animating, max 2 animated layers per page.
+
+10.3 FONT LIBRARY  (56 families = 19 existing + 37 new).  All from Google Fonts (open licence). Role fit: N = Name, B = Bio, T = Button text.
+     Store per font: id, family, category, moods[], roles, weights[], tier, xHeight (0-1), width (condensed|normal|wide), legibility (0-1), subsets, file size.
+
+  EXISTING FREE (8) - keep
+   - Inter | Sans | moods: modern, neutral, calm | roles: NBT | FREE
+   - Geist | Sans | moods: modern, techy, clean | roles: NBT | FREE
+   - DM Sans | Sans | moods: friendly, modern | roles: NBT | FREE
+   - Plus Jakarta Sans | Sans | moods: modern, friendly, bold | roles: NBT | FREE
+   - Space Grotesk | Grotesk | moods: techy, quirky, bold | roles: NT | FREE
+   - Merriweather | Serif (text) | moods: warm, editorial, readable | roles: NB | FREE
+   - Geist Mono | Mono | moods: techy, precise | roles: NT | FREE
+   - JetBrains Mono | Mono | moods: techy, developer | roles: NT | FREE
+
+  EXISTING PRO (11) - keep
+   - Fraunces | Serif (display) | moods: soft, warm, editorial | roles: NB | PRO
+   - Instrument Serif | Serif (display) | moods: elegant, gallery | roles: N | PRO
+   - Playfair Display | Serif (display) | moods: editorial, luxury | roles: N | PRO
+   - Cormorant Garamond | Serif (display) | moods: luxury, classic, light | roles: N | PRO
+   - Bricolage Grotesque | Grotesk (display) | moods: quirky, bold, playful | roles: NT | PRO
+   - Outfit | Geometric sans | moods: clean, modern, friendly | roles: NBT | PRO
+   - Syne | Display | moods: artsy, wide, bold | roles: N | PRO
+   - Lora | Serif (text) | moods: editorial, readable | roles: NB | PRO
+   - Oswald | Condensed display | moods: bold, impact, poster | roles: NT | PRO
+   - Caveat | Script | moods: personal, handmade | roles: N | PRO
+   - IBM Plex Mono | Mono | moods: techy, serious | roles: NT | PRO
+
+  NEW FREE (3)
+   - Manrope | Sans | moods: modern, tidy | roles: NBT | FREE
+   - Figtree | Sans | moods: friendly, warm | roles: NBT | FREE
+   - Newsreader | Serif (text) | moods: editorial, literary | roles: NB | FREE
+
+  NEW PRO (34)
+   - Sora | Geometric sans | moods: futuristic, techy | roles: NT | PRO
+   - Urbanist | Geometric sans | moods: clean, friendly | roles: NBT | PRO
+   - Lexend | Sans | moods: readable, open | roles: NBT | PRO
+   - Onest | Sans | moods: neutral, modern | roles: NBT | PRO
+   - Instrument Sans | Sans | moods: modern, gallery | roles: NBT | PRO
+   - Hanken Grotesk | Grotesk | moods: neutral, crisp | roles: NBT | PRO
+   - Red Hat Display | Sans (display) | moods: confident, modern | roles: NT | PRO
+   - Familjen Grotesk | Grotesk | moods: quirky, editorial | roles: NT | PRO
+   - Epilogue | Grotesk | moods: editorial, bold | roles: NT | PRO
+   - Unbounded | Display (wide) | moods: futuristic, bold | roles: N | PRO
+   - Archivo | Sans (variable width) | moods: poster, sturdy | roles: NBT | PRO
+   - Anton | Condensed display | moods: poster, loud | roles: N | PRO
+   - Bebas Neue | Condensed caps | moods: poster, loud | roles: NT | PRO
+   - Bodoni Moda | Serif (didone) | moods: fashion, luxury | roles: N | PRO
+   - DM Serif Display | Serif (display) | moods: classic, press | roles: N | PRO
+   - Gloock | Serif (display) | moods: bold, editorial | roles: N | PRO
+   - Young Serif | Serif (display) | moods: warm, human | roles: N | PRO
+   - Libre Caslon Text | Serif (text) | moods: classic, literary | roles: NB | PRO
+   - EB Garamond | Serif (text) | moods: classic, luxury | roles: NB | PRO
+   - Spectral | Serif (text) | moods: editorial, calm | roles: NB | PRO
+   - Source Serif 4 | Serif (text) | moods: neutral, readable | roles: NB | PRO
+   - Marcellus | Roman caps | moods: luxury, classical | roles: NT | PRO
+   - Cinzel | Roman caps | moods: luxury, ceremonial | roles: NT | PRO
+   - Italiana | Thin display serif | moods: fashion, minimal | roles: N | PRO
+   - Tenor Sans | Humanist sans | moods: luxury, calm | roles: NBT | PRO
+   - Dancing Script | Script | moods: personal, flowing | roles: N | PRO
+   - Permanent Marker | Marker | moods: brutalist, handmade | roles: N | PRO
+   - Space Mono | Mono | moods: retro, techy | roles: NBT | PRO
+   - DM Mono | Mono | moods: techy, calm | roles: NT | PRO
+   - Press Start 2P | Pixel | moods: retro arcade (use sparingly) | roles: N | PRO
+   - Quicksand | Rounded sans | moods: playful, friendly | roles: NBT | PRO
+   - Nunito | Rounded sans | moods: friendly, soft | roles: NBT | PRO
+   - Fredoka | Rounded display | moods: playful, bold | roles: NT | PRO
+   - Poppins | Geometric sans | moods: friendly, bold | roles: NBT | PRO
+
+  Rules: never offer Script, Marker, Pixel, Condensed-caps or Roman-caps fonts for Bio. Max 3 families per page. Load only the families and weights in use.
+         Fallback stacks per category (e.g. serif: Georgia, "Times New Roman", serif; sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; mono: ui-monospace, Menlo, monospace)
+         with size-adjust / ascent-override metrics to avoid layout shift. Self-host via next/font (or equivalent), subset latin + latin-ext, font-display: swap.
+
+10.4 CURATED FONT PAIRINGS  (18) - the engine adds generated combinations on top (11.2)
+     name | mood | NAME font+weight | BIO font+weight | BUTTON font+weight
+   - Modern Clean | calm, modern | Plus Jakarta Sans 700 | Inter 400 | Inter 500
+   - Tech Grotesk | techy, bold | Space Grotesk 700 | DM Sans 400 | Space Grotesk 500
+   - Editorial Serif | editorial | Playfair Display 700 | Lora 400 | DM Sans 500
+   - Bold Display | bold, artsy | Syne 800 | Outfit 400 | Bricolage Grotesque 600
+   - Quiet Luxury | luxury, calm | Cormorant Garamond 600 | EB Garamond 400 | Tenor Sans 400
+   - Fashion Print | luxury, editorial | Bodoni Moda 700 | Newsreader 400 | Inter 500
+   - Soft Studio | warm, friendly | Fraunces 600 | DM Sans 400 | DM Sans 600
+   - Mono Dev | techy | JetBrains Mono 700 | Inter 400 | JetBrains Mono 500
+   - Future Wide | futuristic | Unbounded 600 | Inter 400 | Sora 500
+   - Warm Human | warm, friendly | Young Serif 400 | Figtree 400 | Figtree 600
+   - Poster Heavy | bold, loud | Anton 400 | Archivo 400 | Archivo 700
+   - Friendly Round | playful | Fredoka 600 | Nunito 400 | Nunito 700
+   - Handmade | personal, playful | Caveat 700 | Lora 400 | Quicksand 600
+   - Classic Press | editorial, classic | DM Serif Display 400 | Source Serif 4 400 | Inter 500
+   - Roman Caps | luxury, ceremonial | Cinzel 600 | Libre Caslon Text 400 | Tenor Sans 400
+   - Clean Geometric | modern, friendly | Outfit 700 | Urbanist 400 | Outfit 600
+   - Retro Arcade | retro, playful (use sparingly) | Press Start 2P 400 | Space Mono 400 | Space Mono 700
+   - Art Gallery | editorial, calm | Instrument Serif 400 | Instrument Sans 400 | Instrument Sans 500
+
+10.5 BUTTON SURFACES (token -> CSS).  C = button colours, bw = border width, r = radius. Always include :focus-visible ring (2 px, T4) and :disabled styles.
+   solid            background:C.fill; color:C.text; border:bw solid C.border; box-shadow:none
+   solid-soft       as solid + box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 8px 24px -12px rgba(0,0,0,.28)
+   soft-tint        fill = bg shifted +-0.07 OKLCH L away from the page (darker on light, lighter on dark) with C+0.01; border = fill +-0.06 L; text = hue-matched (L .26 / .93)   [SOFT tier]
+   outline-hairline background:transparent; border:1px solid C.border; color:C.text (T2/T3 apply)
+   glass            background:C.fill (rgba .10-.22 dark / .45-.60 light); backdrop-filter: blur(16px) saturate(140%); border:1px solid rgba(255,255,255,.28);
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 10px 30px -14px rgba(0,0,0,.35); fallback without backdrop-filter = solid rgba at +.15 alpha
+   offset-3d        border:bw solid C.border; box-shadow: 5px 5px 0 C.border; :active transform:translate(3px,3px); box-shadow:2px 2px 0 C.border
+   gradient-flow    background:linear-gradient(135deg, C.fill, gradient.to) ; background-size:200% 200%; hover shifts background-position 0 -> 100% in 400 ms; gradient.to = fill hue +-25, L +-0.06
+   neon-glow        dark pages only; background: fill at L+0.03 of page; border:1.5px solid C.border; color:C.text; box-shadow:0 0 0 1px C.border@40%, 0 0 18px C.border@55%, inset 0 0 12px C.border@20%; text-shadow:0 0 8px C.text@50%
+   metallic         gold: linear-gradient(135deg,#F6E3A1 0%,#D4AF37 35%,#8A6A22 65%,#E7C873 100%); silver: linear-gradient(135deg,#FFFFFF 0%,#C8CEDA 40%,#8E98AD 70%,#EEF1F8 100%);
+                    inset 0 1px 0 rgba(255,255,255,.6); text near-black; use gold on warm/dark pages, silver otherwise
+   neumorphic-soft  light, low-complexity pages only; background = page colour; box-shadow:6px 6px 14px rgba(0,0,0,.12), -6px -6px 14px rgba(255,255,255,.9); pressed = inset of the same
+   underline-only   no box; border-bottom:1.5px solid C.border; text with trailing arrow icon; requires text vs page >= 7:1
+   sticker          fill #FFFFFF or paper; border:3px solid ink; box-shadow:4px 4px 0 ink; transform:rotate(-0.8deg) (alternate +0.8deg per item); :hover rotate(0)
+   Motion tokens: lift = translateY(-2px) + shadow grow, 160 ms; press = scale(.98) on :active; shine = a 60 deg white 35% highlight sweeping across in 700 ms on hover/focus.
+   Sizes: S 46 px, M 56 px, L 68 px height; horizontal padding 20/24/28 px; font-size 14/16/17 px (before the role size setting).
+   Radius from shape: square 0, rounded 14 (vibes may set 12/14/18), pill 9999, custom = slider.
+
+10.6 AVATAR FRAMES (token -> rendering)
+   circle (border-radius 50%) | squircle (superellipse via clip-path or border-radius 32%) | rounded (22%) | square (0) | hexagon (clip-path polygon) |
+   halo (2 px accent ring, 4 px gap, soft glow) | double-ring (2 px ink ring + 4 px gap + 1 px accent ring) | gradient-ring (3 px conic accent gradient ring) |
+   sticker (white 4 px border, 3 px offset shadow, slight rotate) | none (image only, no frame).   Sizes S 72 / M 96 / L 128 / XL 160 px. Glow: None / Soft (accent 25 %, 24 px) / Accent (accent 45 %, 32 px).
+
+10.7 LAYOUT RECIPES  (12) used by the layout suggestion engine (11.3)
+     name | mood | header | avatar | links | spacing | width | button surface/size | motion | entrance | requires
+   - Clean Stack | modern, calm | centered | circle M | stack | balanced | standard | solid-soft, M | lift | fade-up | any
+   - Editorial Left | editorial, luxury | editorial | squircle S | stack | airy | focused | outline-hairline, M, align left, icon right | none | fade-up | light/dark, low complexity
+   - Glass Float | futuristic | centered | halo L | stack | balanced | standard | glass, M | shine | stagger-scale | needs colourful/complex background (C1)
+   - Brutal Grid | bold, playful | editorial | sticker M | grid2 | compact | wide | offset-3d square, bw 3, L | press | none | solid or low complexity (C4); short labels (C8)
+   - Compact Pro | modern, techy | compact | rounded S | stack | compact | focused | solid, S | none | none | any
+   - Hero Spotlight | bold, luxury | hero | gradient-ring XL | stack | balanced | standard | gradient-flow, L | lift | stagger-scale | chromatic background
+   - Soft Cards | calm, friendly | centered | squircle M | stack | airy | standard | soft-tint, L, radius 18 | none | fade-up | light backgrounds (SOFT tier)
+   - Neon Night | futuristic, techy | editorial | hexagon M | stack | balanced | standard | neon-glow, M | shine | fade-up | dark only (C2)
+   - Luxe Minimal | luxury | centered | double-ring L | stack | airy | focused | metallic or outline-hairline, M, pill | none | fade-up | dark or warm backgrounds (C5)
+   - Playful Stickers | playful | centered | sticker L | stack | balanced | standard | sticker, pill, L | press | stagger-scale | low complexity (C4)
+   - Paper Press | editorial, classic | editorial | square S | stack | airy | focused | underline-only, M, align left | none | none | text vs page >= 7:1 (C6)
+   - Wide Showcase | modern, portfolio | compact | rounded M | grid2 | balanced | wide | solid, M | lift | fade-up | short labels (C8)
+
+     Compatibility rules (hard constraints, implement as data-driven predicates):
+      C1 glass needs a non-flat background (complexity >= 0.25, or chromatic, or type gradient/mesh/aurora/glass/image)
+      C2 neon-glow needs tone = dark            C3 neumorphic-soft needs tone = light and complexity < 0.2
+      C4 offset-3d and sticker need complexity < 0.35 (busy backgrounds make hard shadows muddy)
+      C5 metallic needs tone dark, or warm + mid     C6 underline-only needs worst-case text contrast >= 7:1
+      C7 gradient-flow needs a chromatic background or an accent with chroma >= 0.08
+      C8 grid2 and chips warn when any link label > 24 characters (warn only)    C9 hero header needs avatar size l or xl (auto-bump)
+      C10 animated background + glass buttons: reduce blur to 12 px, never stack more than 2 blurred layers
+      C11 at most 3 font families per page
+
+10.8 OLD -> NEW MAPPING (display names only; the real migration freezes the old look, see 14)
+   Clean->porcelain | Midnight->obsidian | Paper->ivory-press | Sage->celadon | Clay->terracotta | Mono->graphite-mono | Cyberpunk->neon-grid |
+   Sunset Warm->tangerine-pop | Glassmorphism->aurora-glass | Brutalist Pop->tangerine-pop | Emerald Forest->burgundy-library | Pastel Dream->bubblegum
+
+====================================================================================================
+11. SMART SUGGESTION ENGINES (pure functions, deterministic per seed, run client-side)
+====================================================================================================
+
+Shared UI component: <SuggestionStrip title items onApply onRefresh loading emptyText />  [MUST]
+  - Horizontal scroll with scroll-snap, 8 px gap, edge fade, keyboard arrow navigation, each card is a button (role="button", clear label).
+  - Header row: strip title (14/600) + optional context chip (e.g. a colour dot and "Dark, cool blue") + REFRESH icon at the far right.
+  - Skeleton cards while computing (> 80 ms). Empty state: "No safe ideas for this background. Try another background or tap refresh."
+  - Applying a card = one undoable change; snackbar "Applied . Undo".
+
+REFRESH ICON  <RefreshButton onClick busy />  [MUST]
+  - Icon only (Lucide RefreshCw, 20 px, stroke 1.75, muted colour), 44 x 44 hit area, tooltip/title "New ideas", aria-label "Show new ideas".
+  - On tap: refreshCount++, icon rotates 360 deg in 500 ms (reduced motion: no rotation, brief opacity pulse), button disabled for 600 ms,
+    new cards fade in (stagger 30 ms), light haptic (navigator.vibrate(10)) where available.
+  - aria-live="polite" announcement: "8 new ideas" (buttons), "6 new combinations" (fonts), "6 new layouts" (layout).
+  - The previous set is kept in a 3-step in-memory history so a long-press (or the overflow menu "Previous ideas") can go back.
+  - Never return a combination already shown in the last 40 (ring buffer in sessionStorage), except if the pool is exhausted.
+
+11.1 BUTTON COLOUR SUGGESTIONS  suggestButtons(bgProfile, vibe, current, locks, seed, seen) -> 8 ButtonSet
+  ButtonSet = { id, recipe, name, fill, text, border, borderWidth, surface?, shape?, subtle?: boolean, why: string, scores }
+  Recipes (formulas in OKLCH relative to the background profile; always gamut-reduce, always run the T-rules of 8.4):
+   R1 "Contrast Ink"   light/mid-light bg: fill = oklch(0.18, min(0.03, 0.35*C), h) ; dark/mid-dark bg: fill = oklch(0.97, min(0.012, C), h).
+                        text = bestText(fill) ; border = fill ; borderWidth 0. Baseline: prefer text/fill >= 7:1.
+   R2 "Tonal Soft"     [SOFT] fill = bg L -0.07 (light) / +0.07 (dark), C = max(C, 0.02)*1.1 ; text = oklch(0.26 or 0.93, 0.02, h) ; border = fill L -+0.06 ; borderWidth 1.
+   R3 "Accent Pop"     hue = h + 180 (+-20 seeded jitter) for chromatic bg ; seeded hue for neutral bg ; L = 0.78 (dark bg) or 0.52 (light bg) ; C = 0.17 gamut-reduced ;
+                        text = bestText ; border = fill. If T3 fails (e.g. orange page + teal fill = 1.9:1) push L toward an extreme in 0.02 steps or add a 2 px ink border; else discard.
+   R4 "Analogous Glow" hue = h +-28 ; L as R3 ; C = 0.11 ; border = fill L +0.08 ; add glow shadow 0 8px 24px fill@35 %.
+   R5 "Outline Clean"  fill transparent ; text = oklch(0.2 or 0.95, 0.02, h) ; border = text ; borderWidth 1.5 -> 2 ; requires T2 >= 7:1 worst-case.
+   R6 "Glass"          surface glass ; light bg: fill rgba(255,255,255,0.55), text ink ; dark bg: fill rgba(255,255,255,0.12), text paper ; border rgba(255,255,255,0.32) ;
+                        evaluate contrast on the blended fill over the darkest AND lightest sample ; only if C1 allows.
+   R7 "Inverse Duo"    fill = oklch(clamp(1 - L, 0.12, 0.92), min(C, 0.06), h) ; text = the page colour adjusted to pass 7:1 ; border = text, 2 px.
+   R8 "Triad Bold"     hue = h +120 or h -120 (seeded) ; L/C as R3.
+   R9 "Vibe Accent"    fill = the active vibe accent (adjusted by 0.02 L steps until T1/T3 pass) ; text = bestText.
+   R10 "Gold Foil"     only if tone dark, or warm hue with meanL < 0.6 ; surface metallic gold ; text #0A0A09 ; border #E7C873.
+   R11 "Neon Edge"     only if tone dark ; fill = bg L +0.03 (C <= 0.06) ; text = border = oklch(0.86, 0.17, seeded hue 150..330) ; surface neon-glow.
+   R12 "Wildcard"      seeded: random recipe parameters inside the same constraints (a hue anywhere on the wheel, L within the tone-table band, C <= cap).
+  Pipeline [MUST]:
+   1) Generate 3 variants per recipe with seeded jitter (hue +-12 deg, L +-0.03, C x0.85..1.10)  -> ~36 candidates.
+   2) Drop candidates failing STRICT (SOFT recipes use the SOFT exceptions). Drop candidates incompatible with C1-C11 for their surface.
+   3) Respect locks: locked fields keep their value; recompute the others to stay valid (fill locked -> bestText + border; text locked -> search fills that pass T1;
+      border locked -> keep and validate T3). If a locked combination cannot be made valid, show it with a "Low contrast" tag instead of hiding.
+   4) Score = 0.45*contrastScore + 0.25*harmonyScore + 0.15*vibeAffinity + 0.15*novelty.
+        contrastScore = min(1, (textContrast-4.5)/(10-4.5)) averaged with min(1, (affordance-3)/(8-3)).
+        harmonyScore = 1 for exact analogous/complement/triad/split hue relations (+-6 deg), falling to 0 at +-30 deg; neutral sets score 0.8.
+        vibeAffinity = 1 - min(1, deltaE(fill, vibe.fill or vibe.accent) / 0.35).     novelty = min(1, deltaE to nearest seen set / 0.12).
+   5) Select 8: at most 2 per recipe, pairwise fill deltaE >= 0.09 or different surface, at least one of {R1,R5}, at least one of {R3,R4,R8,R9}, SOFT sets only after slot 3.
+      First load (refreshCount = 0): slot 1 is always the best R1 so the user sees the safest option first.
+   6) Name each set (recipe name + optional hue word, e.g. "Accent Pop . Violet") and write the "why" line ("Deep ink on a light page. Easy to read.").
+  Card (148 x 96 px): a real mini button 120 x 40 drawn with the set's exact fill/text/border and the CURRENT shape and surface; under it name (13/600), a contrast chip
+   ("AAA 12.1", "AA 5.4"), three tiny colour dots, and a "Subtle" tag when SOFT. Tap = apply. Long-press / "..." = "Colours only" or "Colours + style".
+  Applying sets fill, text, border, borderWidth, and (only for R4, R6, R10, R11) the surface; shape and size are never changed by an idea. Applied values are stored as
+   overrides with no lock; the user can then fine-tune in the colour rows.
+
+11.2 FONT SUGGESTIONS  suggestFonts(bgProfile, vibe, current, locks, seed, seen, isPro) -> 6 FontCombo
+  FontCombo = { id, name?, mood, nameFont:{family,weight,tracking}, bioFont:{...}, buttonFont:{...}, locked: boolean (needs Pro), scores }
+  Mood inference (weights, then take the top 3 moods):
+    vibe collection + tags (0.4) ; background tone/chroma/complexity (0.4) ; current button surface (0.2).
+    dark + neutral -> modern, techy, luxury | light + neutral -> calm, modern, editorial | light + warm -> warm, editorial, friendly, organic |
+    meanC >= 0.10 -> bold, playful, friendly | type glass/aurora/neon or surface neon/glass -> futuristic, techy | paper/grain textures -> editorial, classic |
+    surface offset-3d/sticker -> playful, bold | surface metallic/underline -> luxury.
+  Candidates: the curated pairings of 10.4 (18) plus 30 generated combinations.
+  Generation rules:
+    NAME font: role N, moods overlap >= 1, weight 600-800 (display fonts 400-900 per availability), tracking: tight (-0.02em) for large display, wide (+0.04em) when case = upper.
+    BIO font: role B, legibility >= 0.8, xHeight >= 0.48, weight 400 (on dark backgrounds allow 400-500, never below 400), never script/condensed/pixel.
+    BUTTON font: role T, either the bio family at weight 500-600 or a UI sans/mono with legibility >= 0.75; uppercase only if the family supports it well (sans, mono, roman caps).
+    Category contrast: NAME category must differ from BIO category (serif display + sans, sans display + serif text, mono + sans, rounded + serif ...), unless both come from the same superfamily.
+    Limit: <= 3 distinct families overall. Dark backgrounds: bump weights +50..100 (max 700) and tracking +0.01em to counter halation.
+  Score = 0.40*moodMatch + 0.25*categoryContrast + 0.20*legibility + 0.15*novelty ; subtract 0.20 for Pro-locked combos when the user is not Pro.
+  Select 6: 3 curated + 3 generated, at most 2 locked (Pro) combos for free users, no two with the same NAME family. First load: slot 1 = curated pairing that best matches the vibe.
+  Card (188 x 132): three real lines (display name, 40-char bio snippet, mini button label) + mood tag + lock badge. Tap applies all three roles (source = "suggestion").
+  Locked roles (font.name / font.bio / font.button) keep their value and the engine only fills the other roles.
+
+11.3 LAYOUT SUGGESTIONS  suggestLayouts(bgProfile, vibe, buttons, current, locks, seed, seen) -> 6 LayoutIdea
+  Pipeline: take the 12 recipes of 10.7 -> drop any that violate C1-C11 for the current background/buttons -> score = 0.40*moodOverlap(vibe, recipe) + 0.30*backgroundFit +
+  0.15*novelty + 0.15*consistency(current surface if locked) -> add 2 seeded MUTATIONS of the top recipes (spacing +-1 step, width +-1 step, avatar frame swapped within its mood) ->
+  select 6 with distinct header or link layout. Applying an idea sets only layout tokens (header, avatar, linkLayout, spacing, width, entrance, social style) and, when the
+  recipe names a surface/size/motion and those are NOT locked, the button surface/size/motion too (ask nothing, show Undo).
+  Card (140 x 120): tiny wireframe from the tokens + recipe name + one-line tag ("Glass . Airy").
+
+11.4 WORKED EXAMPLES (use as unit-test fixtures; tolerance +-2 per RGB channel, +-0.2 contrast)
+   Background #FAFAF9 (light, neutral, OKLCH L .985 C .001 h 106):
+     R1 Contrast Ink  fill #121211 | text #F5F5F4 (17.2:1) | border #121211 | fill vs page 17.9:1
+     R5 Outline Clean fill transparent | text/border #161615 (17.3:1)
+     R3 Accent Pop    fill #6552C4 | text #F4F4FD (5.4:1) | fill vs page 5.7:1   (neutral bg -> seeded hue 285)
+   Background #0B1020 (dark, cool, L .177 C .034 h 270):
+     R1 Contrast Ink  fill #F2F5FE | text #0B0D13 (17.8:1) | border #F2F5FE | fill vs page 17.4:1
+     R5 Outline Clean fill transparent | text/border #EAEEF9 (16.3:1)
+     R3 Accent Pop    fill #DFB100 (complement) | text #110D04 (9.6:1) | fill vs page 9.4:1
+     R11 Neon Edge    fill #111727 | text/border #00F2D5 (12.5:1) | border vs page 13.2:1
+   Background #FF6B2C (mid, chromatic, L .704 C .195 h 41):
+     R1 Contrast Ink  fill #1D0D07 | text #FDF3EF (17.3:1) | fill vs page 6.6:1
+     R5 Outline Clean fill transparent | text/border #1E130F (6.4:1)  [passes T2 >= 4.5 but is below the 7:1 preference -> never slot 1]
+     R3 candidate fill #00758F (teal complement) -> fill vs page = 1.9:1 FAILS T3 -> engine must push L to an extreme or add a 2 px ink border, otherwise discard.
+
+====================================================================================================
+12. PUBLIC PAGE RENDERING
+====================================================================================================
+
+  - The public page renders from resolveTokens() only. Emit tokens as CSS custom properties on the page root (server-rendered, no flash of default style):
+      --ap-bg, --ap-text, --ap-muted, --ap-accent, --ap-btn-fill, --ap-btn-text, --ap-btn-border, --ap-btn-bw, --ap-btn-radius, --ap-btn-h, --ap-btn-px,
+      --ap-btn-shadow, --ap-gap, --ap-col, --ap-font-name, --ap-font-bio, --ap-font-btn, --ap-w-name, --ap-w-bio, --ap-w-btn, --ap-track-name, --ap-avatar
+  - Background layer: one absolutely positioned element behind content (position:fixed; inset:0; z-index:-1; contain:paint; pointer-events:none).
+    Preset recipes (10.2) as stacked CSS gradients + tiled SVG noise; image backgrounds as <img> with srcset (640/1080/1920 WebP), object-fit:cover,
+    object-position from the focal point, filter blur/brightness, opacity, and the smart scrim (8.3). Provide a blur-up placeholder colour from the dominant colour.
+  - Button surfaces exactly as 10.5. backdrop-filter with a solid-rgba fallback via @supports not (backdrop-filter: blur(1px)). Honour prefers-reduced-transparency.
+  - Motion: entrance animations run once on first paint (CSS only), stagger 40 ms, disabled under prefers-reduced-motion. Animated backgrounds pause when hidden.
+  - Fonts: inline critical @font-face for the 1-3 families used, preload only the name font, font-display: swap, size-adjust fallbacks, no layout shift.
+  - Layout: column width tokens with 16 px side padding on phones; grid2 falls back to stack below 360 px or when a label does not fit; safe-area insets respected.
+  - Guarantee: with the same tokens, the dashboard Preview and the public page are identical (share the same renderer component).
+  - Performance budget for a typical page: no extra JS for static backgrounds, CSS < 12 KB gzip, LCP < 2.0 s on 4G for light presets, CLS < 0.02.
+
+====================================================================================================
+13. API, VALIDATION AND PRO GATING
+====================================================================================================
+
+  Endpoints (adapt to the existing API style; Next.js route handlers or server actions are fine):
+    GET   /api/appearance                       -> { appearance, resolved, entitlements, warnings }
+    PATCH /api/appearance                       -> JSON merge-patch of Appearance; returns the new appearance + warnings; coalesces history snapshots within 2 s
+    POST  /api/appearance/undo | /redo          -> moves through the last 20 snapshots
+    POST  /api/appearance/themes                -> save current as a theme ; GET list ; POST apply ; PATCH rename ; DELETE
+    POST  /api/appearance/background-image      -> returns a signed upload URL ; a server job resizes, strips EXIF, stores dominant colours + 8x8 luminance grid
+  Validation (zod or the existing validator): hex regex /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/ normalised to 6/8 digits upper-case; numbers clamped to their ranges;
+    enum values checked; font ids must exist in the catalogue and weights must be offered by the family; max 3 families; max 4 gradient stops; image size/type checked.
+  Pro gating (server-side, reuse the existing entitlement helper): Pro vibes, Pro backgrounds (all presets tagged PRO, image, animated), Pro fonts, Animate toggle,
+    themes beyond the free limit. On violation return HTTP 402 with { code: "PRO_REQUIRED", fields: ["background.preset", ...] } and DO NOT persist the offending fields
+    (persist the rest). The client then opens the upgrade sheet. If the plan lapses, Pro-only values stay stored but the renderer falls back to the nearest free equivalent.
+  Concurrency: send updated_at/ETag; on conflict return 409 with the latest appearance; the client merges field-by-field and keeps the user's newest edits.
+  Rate limit 60 requests/min per user; log validation failures (no PII).
+
+====================================================================================================
+14. MIGRATION AND REMOVAL PLAN
+====================================================================================================
+
+  Goal: no existing live page changes appearance (rule R1).
+  Steps [MUST]:
+   1) Feature flag appearance_v2 (per user/percentage). Flag off = old UI + old renderer on legacy columns. Flag on = new UI + new renderer on page_appearance.
+   2) Migration script (idempotent, resumable, batch 500): for each page run the OLD resolver one last time to get its final look, then write an Appearance v2 object:
+        vibeId = nearest new vibe per 10.8 (display only) | background = { type:"legacy", css:<exact old CSS> } (or solid/gradient when it is exactly representable) |
+        typography = explicit families/weights from the old resolution | buttons = explicit fill/text/border/shape/surface | layout = explicit tokens |
+        migratedFrom = { vibe, background, at }.   Old catalogue ids that no longer exist must still resolve through this frozen data.
+   3) Visual regression gate: render 200 random pages (and every old vibe/background combination at least once) with old vs new renderer at 360, 768 and 1280 px;
+        fail the rollout if pixel difference > 0.1 % per page (anti-aliasing excluded).
+   4) UI behaviour for migrated pages: Background screen shows a "Current background (legacy)" card at the top of Presets; Vibe screen shows the nearest vibe as selected with a
+        small "Customised" tag; selecting a new vibe with scope Everything clears the legacy data.
+   5) Roll out: internal -> 5 % -> 25 % -> 100 %. Monitor errors, save failures, Pro-gating 402s and support tickets. Rollback = turn the flag off.
+   6) After two stable releases: drop legacy columns and delete the old code.
+  Delete list (after the flag is 100 % for two releases): StudioPreview + its state, old Vibe grid, old Background list/filters, TypographyLivePreview, ButtonPreview, duplicate shape cards,
+  fixed colour circle lists, old pairing/layout constants. Find them with: grep -ri "studio preview\|text contrast\|quick pairing\|Click to apply to name\|Reset to default" src/.
+
+====================================================================================================
+15. ACCESSIBILITY, PERFORMANCE, ANALYTICS
+====================================================================================================
+
+Accessibility [MUST]
+  - WCAG 2.2 AA for the dashboard screens; targets >= 44 x 44 px; visible focus ring (2 px, 3:1); logical tab order; skip repeated headers; Escape/Back to leave a screen.
+  - Colour is never the only signal: contrast badges include text and an icon; selected state = ring + check; PRO = text badge.
+  - Swatch buttons have labels like "Fill colour 121211, contrast with page 17.9 to 1, double A A A". Font rows are radio items with the family name as label.
+  - Strips are keyboard operable (arrow keys), refresh announces results via aria-live, snackbars use role="status" and are dismissible; Undo reachable by keyboard.
+  - Respect prefers-reduced-motion and prefers-contrast (increase borders), support 200 % text zoom and RTL.
+Performance [MUST]
+  - Each section screen <= 90 KB gzip of its own JS (code-split per route); catalogue data lazy-loaded; thumbnails lazy; lists virtualised.
+  - Colour engine: 8 suggestions in <= 30 ms on a mid-range phone (benchmark in tests); heavy sampling in a Web Worker; debounce hex typing 150 ms; memoise profiles.
+  - No layout shift when fonts/thumbnails load; skeletons keep sizes; interaction latency (INP) < 200 ms.
+Analytics [SHOULD] (no personal data): appearance_section_opened {section}, vibe_applied {vibe, scope}, background_changed {type, preset}, suggestion_refreshed {engine, count},
+  suggestion_applied {engine, recipe, position}, manual_color_changed {field}, lock_toggled {field}, auto_match_prompt {action}, undo_used {section}, pro_gate_hit {field}.
+
+====================================================================================================
+16. TESTING AND ACCEPTANCE
+====================================================================================================
+
+Unit [MUST]
+  - Contrast vectors of 8.1; OKLab round-trip for 1,000 random colours (max channel error <= 1/255); gamut reduction keeps L and h; bestText never returns < 4.5 when possible.
+  - Catalogue test: re-run 8.4 on every vibe and every background (darkest + lightest sample) - must be green.
+  - Resolver tests: precedence (system < vibe < overrides), locks, derived values, legacy tokens.
+Property tests [MUST]
+  - 1,000 random backgrounds (solids, 2-4 stop gradients, synthetic noisy images incl. extremes #000, #FFF, #7F7F7F, saturated primaries): every returned button set passes STRICT (or SOFT with the tag);
+    pairwise fill deltaE >= 0.06 inside a set of 8; same seed -> same output; refresh -> at least 5 of 8 are new compared with the previous set; fonts: never > 3 families, never script for Bio;
+    layouts: never violate C1-C11.
+Component and E2E (Playwright) [MUST]
+  - Home -> each section opens as its own route; Back returns; refresh keeps the screen; scroll position restored; no nested scroll containers (assert one scrollable ancestor).
+  - Vibe: apply with no overrides (immediate + Undo); apply with overrides (sheet with scopes); Pro vibe as free user opens upgrade sheet and persists nothing.
+  - Background: each tab works; Studio Preview is absent (assert no element/text "Studio preview", no Mobile/Desktop toggle, no "Text contrast" readout); changing to a dark preset triggers the
+    "Update buttons to match?" snackbar; Update applies the top idea; Keep does nothing; auto-match setting works.
+  - Buttons: ideas render and are safe; refresh changes ideas and announces; manual hex edit; lock prevents overwrite; Transparent; contrast badges update; incompatible surfaces disabled with reasons.
+  - Typography: ideas, role tabs, search/filter, lazy font loading (network assertion), apply to all roles, weights limited to what the family ships, 3-family limit message.
+  - Layout: ideas, header/avatar/links/page controls, C-rule disabling, grid2 warning.
+  - Autosave: offline -> "Not saved. Retry" chip -> retry succeeds; undo/redo across sections; 409 conflict merge.
+  - Public page: tokens render identically to the dashboard Preview (screenshot diff); reduced-motion respected; animated background pauses when hidden.
+  - Accessibility: axe-core zero serious/critical on all six screens; keyboard-only run-through; VoiceOver/TalkBack labels spot-checked.
+Migration [MUST]: the visual regression gate of section 14 step 3 on staging data.
+Acceptance criteria (all must be true):
+  A1 Five sections open as separate full screens with working Back, deep links and restored scroll.   A2 No Studio Preview anywhere.   A3 None of the old catalogue items remain in the UI.
+  A4 New catalogues present: 24 vibes, 40 backgrounds, 56 fonts, 12 button surfaces, 10 avatar frames, 12 layout recipes, 18 curated font pairings.
+  A5 Button colour ideas adapt to the background, always pass 8.4, refresh gives new ideas, user colours always possible, locks work.
+  A6 Font and layout ideas adapt to the vibe/background, refresh works, user choice always possible.   A7 Each setting exists exactly once.   A8 Existing pages unchanged after migration.
+  A9 Autosave + Undo/Redo everywhere.   A10 Pro gating enforced server-side.   A11 Budgets of section 15 met.   A12 All tests green in CI.
+
+====================================================================================================
+17. DELIVERABLES AND PHASED PLAN
+====================================================================================================
+
+Work in small, reviewable pull requests (each green on typecheck, lint, tests). Update docs/CHANGELOG and add docs/appearance.md (architecture, tokens, engines, how to add a vibe/background/font).
+Phase 0  Audit: docs/appearance-audit.md (stack, files, data flow, old catalogues, entitlement helper, renderer) + migration risk list.
+Phase 1  Shell: routes, Appearance home, section screen skeleton, snackbar/undo infrastructure, feature flag. (No catalogue changes yet.)
+Phase 2  Tokens + resolver + new catalogue data files + catalogue contrast test.
+Phase 3  Colour engine (contrast, OKLCH, analysis, recipes, seeded PRNG) + unit and property tests.
+Phase 4  Screens in this order: Vibe -> Background (incl. gradient builder, image upload) -> Buttons -> Typography -> Layout & effects; each with E2E tests.
+Phase 5  Public renderer + shared Preview wiring + performance pass.
+Phase 6  API/validation/Pro gating/history/themes; migration script + visual regression gate.
+Phase 7  Cleanup, analytics, accessibility audit, documentation, rollout plan.
+At the end of each phase output: what changed, how to test it, known gaps. Do not start the next phase before the current one is green.
+
+====================================================================================================
+18. FINAL CHECKLIST (Definition of Done)
+====================================================================================================
+
+[ ] Appearance home is minimal: five rows + Surprise me + My themes; subtitles update live.
+[ ] Each section is a full-screen route; no accordions; no nested scroll; one sticky secondary row at most; bottom bar with Preview + Done.
+[ ] Studio Preview, old vibes, old backgrounds, old typography/button preview cards, duplicate shape cards and fixed colour circles are gone.
+[ ] Vibes: 24 new vibes in 6 collections with apply-scope sheet and Pro handling.
+[ ] Backgrounds: 40 presets + Color, Gradient builder (2-4 stops, harmonize, randomize), Image (Pro) with focal point, scrim and adjust sliders; smart "Update buttons?" prompt.
+[ ] Buttons: single shape control, three colour rows with contrast badges + locks + picker + eyedropper, 12 surfaces with compatibility rules, size/type/motion groups, advanced states.
+[ ] Button idea strip with 8 safe, diverse sets + minimal refresh icon; manual choice always possible.
+[ ] Typography: 56 families, role tabs, compact list using real content, style controls, idea strip with refresh, 3-family limit.
+[ ] Layout & effects: header/avatar/links/page groups, 12 recipes with rules C1-C11, idea strip with refresh.
+[ ] Autosave, undo/redo (20 steps), history, themes, Surprise me.
+[ ] Public renderer uses resolved tokens, identical to Preview, within the performance budget.
+[ ] Migration preserves every existing page (visual regression green), feature flag + rollback documented.
+[ ] Accessibility, performance, analytics and tests complete; docs written.
+
+APPENDIX A  Icons (Lucide or the existing icon set): Vibe = Sparkles | Background = Image | Typography = Type | Buttons = RectangleHorizontal | Layout = LayoutPanelTop |
+            Refresh = RefreshCw | Undo = Undo2 | Redo = Redo2 | Info = Info | Lock = Lock | Preview = Eye | Overflow = MoreHorizontal | Surprise = Wand2 | Themes = Bookmark.
+APPENDIX B  Visual style: keep the existing dashboard look (white cards, 1 px #E6E6E6 borders, 20-24 px radius, Inter/Geist UI font, ink #111). Do not redesign the shell,
+            only the five Appearance sections. Spacing scale 4/8/12/16/24/32. Section captions 12/600 uppercase muted. Body 14-16 px.
+APPENDIX C  Example of a fully resolved appearance (vibe "obsidian", unmodified):
+            { schemaVersion:2, vibeId:"obsidian", background:{type:"preset",id:"bg-ink-black"},
+              typography:{ name:{family:"Inter",weight:700,size:"m",tracking:"normal",source:"vibe"}, bio:{family:"Inter",weight:400,size:"m",tracking:"normal",source:"vibe"},
+                           button:{family:"Inter",weight:600,size:"m",tracking:"normal",source:"vibe"} },
+              buttons:{ shape:"rounded", radius:12, fill:"#F5F5F5", text:"#0A0A0B", border:"#F5F5F5", borderWidth:0, surface:"solid", size:"m", shadow:"none", align:"center", icon:"left", motion:"lift", states:{} },
+              layout:{ header:"centered", avatar:{frame:"circle",size:"m"}, linkLayout:"stack", spacing:"balanced", width:"standard", entrance:"fade-up", socialIcons:"outline" },
+              locks:[] }
+
+=== END OF PROMPT ===

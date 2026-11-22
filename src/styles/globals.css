@@ -225,4 +225,113 @@ section[id], [id] {
     animation: none !important;
     stroke-dashoffset: 0 !important;
   }
+  .iveo-bg-animated {
+    animation: none !important;
+  }
 }
+
+/* Appearance v2 Background & Button Motion Rules */
+@keyframes iveo-bg-drift {
+  0% { background-position: 0% 50%; transform: scale(1.04) translate3d(0, 0, 0); }
+  50% { background-position: 100% 50%; transform: scale(1.08) translate3d(-1%, 1%, 0); }
+  100% { background-position: 0% 50%; transform: scale(1.04) translate3d(0, 0, 0); }
+}
+
+@keyframes iveo-bg-liquid {
+  0% { background-position: 0% 0%; transform: scale(1.05); }
+  50% { background-position: 80% 100%; transform: scale(1.1); }
+  100% { background-position: 0% 0%; transform: scale(1.05); }
+}
+
+@keyframes iveo-bg-shimmer {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(1.07); }
+  100% { filter: brightness(1); }
+}
+
+.iveo-bg-animated[data-anim="drift"] {
+  background-size: 200% 200%;
+  animation: iveo-bg-drift 18s ease-in-out infinite;
+}
+
+.iveo-bg-animated[data-anim="liquid"] {
+  background-size: 220% 220%;
+  animation: iveo-bg-liquid 14s ease-in-out infinite;
+}
+
+.iveo-bg-animated[data-anim="shimmer"] {
+  animation: iveo-bg-shimmer 7s ease-in-out infinite;
+}
+
+.iveo-bg-paused {
+  animation-play-state: paused !important;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .iveo-btn-glass {
+    background-color: var(--ap-btn-glass-fallback, rgba(255, 255, 255, 0.85)) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+.iveo-btn-motion-lift:hover {
+  transform: translateY(-2px);
+}
+.iveo-btn-motion-lift:active {
+  transform: translateY(0px);
+}
+
+.iveo-btn-motion-press:hover {
+  transform: translateY(1px);
+}
+.iveo-btn-motion-press:active {
+  transform: translateY(3px) scale(0.99);
+}
+
+.iveo-btn-motion-shine {
+  position: relative;
+  overflow: hidden;
+}
+.iveo-btn-motion-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.28) 50%, transparent 75%);
+  transform: translateX(-120%);
+  transition: transform 0.55s ease;
+  pointer-events: none;
+}
+.iveo-btn-motion-shine:hover::after {
+  transform: translateX(120%);
+}
+
+@keyframes iveo-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes iveo-stagger-scale {
+  from { opacity: 0; transform: scale(0.97) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.iveo-entrance-fade-up {
+  animation: iveo-fade-up 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.iveo-entrance-stagger {
+  animation: iveo-stagger-scale 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.iveo-links-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 359px) {
+  .iveo-links-grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
