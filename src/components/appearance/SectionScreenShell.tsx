@@ -167,7 +167,7 @@ export const SectionScreenShell: React.FC<SectionScreenShellProps> = ({
               <h1
                 ref={titleRef}
                 tabIndex={-1}
-                className="text-[18px] font-semibold text-ink tracking-tight truncate outline-none"
+                className="text-[18px] font-semibold text-ink tracking-tight truncate outline-none focus:outline-none focus-visible:outline-none"
               >
                 {title}
               </h1>
@@ -334,11 +334,11 @@ export const SectionScreenShell: React.FC<SectionScreenShellProps> = ({
       )}
 
       {/* Sticky 64px Safe-Area Bottom Bar */}
-      <div className="fixed bottom-0 inset-x-0 lg:sticky lg:bottom-0 lg:inset-x-auto z-30 h-16 bg-surface/95 backdrop-blur-md border-t border-border px-4 lg:px-0 pb-[env(safe-area-inset-bottom,0px)] flex items-center justify-between gap-3">
+      <div className="fixed bottom-0 inset-x-0 lg:sticky lg:bottom-0 lg:inset-x-auto z-30 h-16 bg-surface/95 backdrop-blur-md border-t border-border px-4 lg:px-0 pb-[env(safe-area-inset-bottom,0px)] flex items-center justify-between lg:justify-end gap-3">
         <button
           type="button"
           onClick={onOpenPreview}
-          className="h-11 px-4 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
+          className="lg:hidden h-11 px-4 rounded-xl border border-border bg-surface hover:bg-surface-2 text-ink text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
         >
           <Eye size={17} strokeWidth={1.75} />
           <span>Preview</span>

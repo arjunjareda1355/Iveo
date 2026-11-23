@@ -304,7 +304,7 @@ const DashboardContent: React.FC = () => {
                   <VibePhone
                     currentVibe={activeVibe}
                     profile={profileData}
-                    blocks={visiblePreviewBlocks}
+                    blocks={visiblePreviewBlocks.length > 0 || !appearanceCtx.isDemo ? visiblePreviewBlocks : undefined}
                     protectedIds={protectedIds}
                     hideFooterMark={hideFooterMark}
                     embedMode="placeholder"
@@ -367,7 +367,7 @@ const DashboardContent: React.FC = () => {
           <VibePhone
             currentVibe={activeVibe}
             profile={profileData}
-            blocks={visiblePreviewBlocks}
+            blocks={visiblePreviewBlocks.length > 0 || !appearanceCtx.isDemo ? visiblePreviewBlocks : undefined}
             protectedIds={protectedIds}
             hideFooterMark={hideFooterMark}
             embedMode="placeholder"

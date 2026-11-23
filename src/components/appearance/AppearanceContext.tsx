@@ -312,6 +312,21 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     await persistAppearanceNow(draftRef.current);
   }, [persistAppearanceNow]);
 
+  useEffect(() => {
+    const flushIfPending = () => {
+      if (debounceSaveTimerRef.current) {
+        clearTimeout(debounceSaveTimerRef.current);
+        debounceSaveTimerRef.current = null;
+        void persistAppearanceNow(draftRef.current);
+      }
+    };
+    window.addEventListener('pagehide', flushIfPending);
+    return () => {
+      window.removeEventListener('pagehide', flushIfPending);
+      flushIfPending();
+    };
+  }, [persistAppearanceNow]);
+
   // Perform undo
   const undo = useCallback(async () => {
     const prevStack = [...undoStack];

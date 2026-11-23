@@ -155,7 +155,7 @@ export const AppearanceHome: React.FC = () => {
           {homeSummary.vibeDots.map((hex, i) => (
             <span
               key={i}
-              className="w-3.5 h-3.5 rounded-full border border-white shadow-xs"
+              className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-xs"
               style={{ backgroundColor: hex }}
             />
           ))}

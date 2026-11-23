@@ -8,7 +8,7 @@ import { SignupFormBlock } from '../components/public/SignupFormBlock';
 import { NotFound } from './NotFound';
 import { PRIVATE_ROUTES, validateUsername, normalizeUsername } from '../lib/username-rules';
 import { fetchPublicPage } from '../data/publicPageApi';
-import { PublicPageData, PageBlock } from '../data/types';
+import { PublicPageData, PageBlock, PublicBlock } from '../data/types';
 import { VIBES } from '../lib/vibes';
 import { pageUrl, SITE_ORIGIN } from '../lib/site';
 import { copy } from '../content/copy';
@@ -152,7 +152,82 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
   const ownerExclusionDoneRef = useRef(false);
   const isFetchingRef = useRef(false);
 
+  const isDemoMode =
+    typeof window !== 'undefined' &&
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('demo') === '1' || params.get('autostart') === '1';
+    })();
+
+  const buildDemoPageData = useCallback((): PublicPageData | null => {
+    if (!isDemoMode || !session.username || session.username.toLowerCase() !== clean) {
+      return null;
+    }
+    let cachedBlocks: PublicBlock[] = [];
+    try {
+      const raw = localStorage.getItem(`iveo_blocks_${clean}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) cachedBlocks = parsed;
+      }
+    } catch {}
+    if (cachedBlocks.length === 0) {
+      const baseVibe = VIBES.find((v) => v.id === session.vibeId) || VIBES[0];
+      cachedBlocks = baseVibe.persona.links.map((item, idx) => ({
+        id: `demo-${idx}`,
+        kind: 'link' as const,
+        title: typeof item === 'string' ? item : item.title,
+        url: typeof item === 'string' ? 'https://iveo.site' : item.url,
+        icon: null,
+        thumbnailPath: null,
+        thumbnailUrl: null,
+        embedProvider: null,
+        layout: 'classic' as const,
+        isProtected: false,
+      }));
+    }
+    return {
+      profile: {
+        username: clean,
+        displayName: session.displayName || clean,
+        bio: session.bio || '',
+        avatarUrl: session.imageUrl,
+        vibeId: session.vibeId || 'clean',
+        plan: session.plan,
+        isPro: session.isPro,
+        isVerified: session.isPro,
+        isOwnerProfile: false,
+        buttonShape: session.buttonShape || null,
+        socials: session.socials || {},
+        socialsPosition: session.socialsPosition || 'top',
+        hideFromSearch: false,
+        hideFooter: Boolean(session.hideIveoFooter || session.hideIvioFooter),
+        background: session.background || null,
+        googleAnalyticsId: session.googleAnalyticsId || null,
+        metaPixelId: session.metaPixelId || null,
+        whatsappNumber: session.whatsappNumber || null,
+        customSeoTitle: session.customSeoTitle || null,
+        customSeoDescription: session.customSeoDescription || null,
+        fontSettings: session.fontSettings || null,
+        buttonColors: session.buttonColors || null,
+        layoutSettings: session.layoutSettings || null,
+        businessCard: session.businessCard || null,
+        appearance: session.appearance || null,
+        updatedAt: session.updatedAt || null,
+      },
+      links: cachedBlocks,
+    };
+  }, [isDemoMode, session, clean]);
+
   const loadData = useCallback(async () => {
+    if (isDemoMode && session.username?.toLowerCase() === clean) {
+      const demoData = buildDemoPageData();
+      if (demoData) {
+        setPageData(demoData);
+        setIsLoading(false);
+        return;
+      }
+    }
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
@@ -174,7 +249,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       isFetchingRef.current = false;
       setIsLoading(false);
     }
-  }, [clean]);
+  }, [clean, isDemoMode, session.username, buildDemoPageData]);
 
   useEffect(() => {
     loadData();
@@ -225,7 +300,15 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
   useEffect(() => {
     if (!pageData?.profile) return;
     const vibe = VIBES.find((v) => v.id === pageData.profile?.vibeId) || VIBES[0];
-    const baseBg = computeBackgroundLayers(pageData.profile.background, vibe.tokens.bg).baseColor;
+    const resolvedBodyV2 =
+      pageData.profile.appearance && pageData.profile.appearance.schemaVersion === 2
+        ? resolveTokens(pageData.profile.appearance, {
+            isPro: Boolean(pageData.profile.isVerified ?? pageData.profile.isPro ?? true),
+          })
+        : null;
+    const baseBg =
+      resolvedBodyV2?.bgProfile.meanHex ||
+      computeBackgroundLayers(pageData.profile.background, vibe.tokens.bg).baseColor;
     const prevBodyBg = document.body.style.backgroundColor;
     const prevHtmlBg = document.documentElement.style.backgroundColor;
     document.body.style.backgroundColor = baseBg;
