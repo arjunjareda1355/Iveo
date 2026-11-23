@@ -162,7 +162,8 @@ export default async function handler(req: any, res?: any): Promise<Response | v
 
 export async function resolveSeoHeadForSegment(
   origin: string,
-  rawSegment: string
+  rawSegment: string,
+  options?: { pageNum?: number }
 ): Promise<{
   tags: string;
   ssrBodyHtml: string;
@@ -276,21 +277,34 @@ export async function resolveSeoHeadForSegment(
       title: MAIN_SEO_TITLE,
       description: MAIN_SEO_DESCRIPTION,
     };
-    const canonical = `https://iveo.site/${firstSegment}`;
+    const pageNum = Math.max(1, Number(options?.pageNum || 1) || 1);
+    const canonical =
+      firstSegment === 'discover' && pageNum > 1
+        ? `https://iveo.site/discover?page=${pageNum}`
+        : `https://iveo.site/${firstSegment}`;
     const ogImg = ogImageAddress(origin);
-    const ssrBodyHtml = firstSegment === 'discover' ? await buildDiscoverSsrHtml(origin) : '';
-    const tags = `<title>${escapeHtml(meta.title)}</title>
+    const ssrBodyHtml =
+      firstSegment === 'discover' ? await buildDiscoverSsrHtml(origin, pageNum) : '';
+    const pageSuffix = firstSegment === 'discover' && pageNum > 1 ? ` (Page ${pageNum})` : '';
+    const resolvedTitle =
+      pageSuffix && meta.title.includes(' | Iveo')
+        ? meta.title.replace(' | Iveo', `${pageSuffix} | Iveo`)
+        : `${meta.title}${pageSuffix}`;
+    const tags = `<title>${escapeHtml(resolvedTitle)}</title>
     <meta name="description" content="${escapeHtml(meta.description)}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:site_name" content="Iveo" />
-    <meta property="og:title" content="${escapeHtml(meta.title)}" />
+    <meta property="og:title" content="${escapeHtml(resolvedTitle)}" />
     <meta property="og:description" content="${escapeHtml(meta.description)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
     <meta property="og:image" content="${escapeHtml(ogImg)}" />
+    <meta property="og:image:type" content="image/png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${escapeHtml(meta.title)}" />
+    <meta name="twitter:site" content="@iveosite" />
+    <meta name="twitter:title" content="${escapeHtml(resolvedTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(meta.description)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />`;
     return {
@@ -319,8 +333,11 @@ async function handleRequest(request: Request, isHead: boolean): Promise<Respons
   const origin = getSiteOrigin(request);
   const url = new URL(request.url);
   const rawSegment = url.searchParams.get('u') || '';
+  const pageParam = parseInt(url.searchParams.get('page') || '1', 10);
 
-  const resolved = await resolveSeoHeadForSegment(origin, rawSegment);
+  const resolved = await resolveSeoHeadForSegment(origin, rawSegment, {
+    pageNum: Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1,
+  });
   if (resolved.httpStatus === 301 && resolved.redirectLocation) {
     return new Response(null, {
       status: 301,

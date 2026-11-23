@@ -8,10 +8,12 @@ import {
 } from './_lib/razorpay.ts';
 import { getRazorpayKeyId } from './_lib/env.ts';
 import { adminClient } from './_lib/supabase.ts';
-import { dbGetProfile, dbGetProfileByUserId, dbSaveProfile } from './_lib/azureSql.ts';
-import { firebaseSaveProfile } from './_lib/firebaseServer.ts';
 import { invalidatePublicPageCache } from './_lib/db-handlers.ts';
-import type { SubscriptionRecord } from '../src/lib/plan.ts';
+import {
+  activateOrRenewSubscription,
+  processWebhookEvent,
+  recordCheckoutPending,
+} from './_lib/billingService.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +39,23 @@ export async function handleCreateOrder(request: Request): Promise<Response> {
       username: typeof body.username === 'string' ? body.username : undefined,
       email: typeof body.email === 'string' ? body.email : undefined,
     });
+
+    try {
+      const recorded = await recordCheckoutPending({
+        username: typeof body.username === 'string' ? body.username : undefined,
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
+        email: typeof body.email === 'string' ? body.email : undefined,
+        period,
+        currency,
+        orderId: order.id,
+        amountMinor: order.amount,
+      });
+      if (recorded.username) {
+        invalidatePublicPageCache(recorded.username);
+      }
+    } catch (trackErr) {
+      console.warn('Unable to record checkout_pending state:', trackErr);
+    }
 
     return Response.json(
       {
@@ -84,8 +103,10 @@ export async function handleVerifyPayment(request: Request): Promise<Response> {
       razorpay_payment_id,
       razorpay_signature,
       period: rawPeriod,
+      currency: rawCurrency,
       userId,
       username,
+      email,
     } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -141,55 +162,24 @@ export async function handleVerifyPayment(request: Request): Promise<Response> {
     }
 
     const period: PlanPeriod = rawPeriod === 'yearly' ? 'yearly' : 'monthly';
-    const durationDays = period === 'yearly' ? 365 : 30;
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
-    const amountInr =
-      typeof payment?.amount === 'number'
-        ? Math.round(payment.amount / 100)
-        : (period === 'yearly' ? 1990 : 199);
+    const currency: PaymentCurrency =
+      String(rawCurrency || payment?.currency || '').toUpperCase() === 'USD' ? 'USD' : 'INR';
 
-    const subscriptionRecord: SubscriptionRecord = {
-      status: 'active',
-      cycle: period,
-      startedAt: now.toISOString(),
-      currentPeriodEnd: expiresAt,
-      cancelledAt: null,
-      cancelAtPeriodEnd: false,
-      paymentId: razorpay_payment_id,
+    // 3. Persist Pro plan, verified invoice & billing history atomically
+    const activated = await activateOrRenewSubscription({
+      username: typeof username === 'string' ? username : undefined,
+      userId: typeof userId === 'string' ? userId : undefined,
+      email: typeof email === 'string' ? email : undefined,
+      period,
+      currency,
       orderId: razorpay_order_id,
-      amountInr,
-    };
+      paymentId: razorpay_payment_id,
+      paymentEntity: payment,
+      actor: 'user',
+    });
 
-    // 3. Persist Pro plan & subscription details to server store / Azure SQL / Firebase
-    try {
-      const cleanUname = typeof username === 'string' ? username.replace(/^@+/, '').toLowerCase().trim() : '';
-      const existing = cleanUname
-        ? await dbGetProfile(cleanUname).catch(() => null)
-        : userId
-          ? await dbGetProfileByUserId(String(userId)).catch(() => null)
-          : null;
-
-      if (existing) {
-        await dbSaveProfile({
-          userId: existing.userId || String(userId || 'owner'),
-          username: existing.username,
-          primaryEmail: existing.primaryEmail || null,
-          plan: 'pro',
-          subscription: subscriptionRecord,
-        });
-        await Promise.race([
-          firebaseSaveProfile(
-            existing.username,
-            { ...existing, plan: 'pro', subscription: subscriptionRecord },
-            existing.userId
-          ).catch(() => {}),
-          new Promise((resolve) => setTimeout(resolve, 1500)),
-        ]);
-        invalidatePublicPageCache(existing.username);
-      }
-    } catch (err) {
-      console.error('Error persisting subscription to dbSaveProfile:', err);
+    if (activated.username) {
+      invalidatePublicPageCache(activated.username);
     }
 
     // 4. Update database profile if Supabase is connected
@@ -219,14 +209,15 @@ export async function handleVerifyPayment(request: Request): Promise<Response> {
       {
         ok: true,
         verified: true,
-        plan: 'pro',
-        planSource: 'paid',
+        plan: activated.plan,
+        planSource: activated.planSource,
+        lifecycleState: activated.lifecycleState,
         period,
-        subscribedAt: now.toISOString(),
-        expiresAt,
+        subscribedAt: activated.subscription.startedAt || new Date().toISOString(),
+        expiresAt: activated.subscription.currentPeriodEnd,
         paymentId: razorpay_payment_id,
         orderId: razorpay_order_id,
-        subscription: subscriptionRecord,
+        subscription: activated.subscription,
       },
       {
         status: 200,
@@ -251,17 +242,15 @@ export async function handleWebhook(request: Request): Promise<Response> {
   try {
     const rawBody = await request.text();
     const signature = request.headers.get('x-razorpay-signature');
+    const eventIdHeader = request.headers.get('x-razorpay-event-id');
 
-    // If signature header is provided, verify it
-    if (signature) {
-      const isValid = verifyWebhookSignature(rawBody, signature);
-      if (!isValid) {
-        console.warn('Invalid Razorpay webhook signature');
-        return Response.json(
-          { error: 'invalid_signature' },
-          { status: 400 }
-        );
-      }
+    const isValid = verifyWebhookSignature(rawBody, signature);
+    if (!isValid) {
+      console.warn('Invalid or missing Razorpay webhook signature');
+      return Response.json(
+        { error: 'invalid_signature' },
+        { status: 400 }
+      );
     }
 
     let event: any = {};
@@ -271,56 +260,47 @@ export async function handleWebhook(request: Request): Promise<Response> {
       return Response.json({ error: 'invalid_json' }, { status: 400 });
     }
 
-    const eventType = event?.event;
-    console.log('Received Razorpay webhook event:', eventType);
+    const result = await processWebhookEvent({
+      event,
+      eventIdHeader,
+    });
 
-    if (eventType === 'payment.captured' || eventType === 'order.paid') {
-      const paymentEntity = event?.payload?.payment?.entity;
-      const notes = paymentEntity?.notes || event?.payload?.order?.entity?.notes || {};
+    if (result.username) {
+      invalidatePublicPageCache(result.username);
+    }
+
+    const eventType = result.eventType;
+    if (
+      !result.deduplicated &&
+      (eventType === 'payment.captured' || eventType === 'order.paid' || eventType === 'subscription.charged')
+    ) {
+      const notes =
+        event?.payload?.payment?.entity?.notes ||
+        event?.payload?.order?.entity?.notes ||
+        event?.payload?.subscription?.entity?.notes ||
+        {};
       const userId = notes?.userId;
-      const username = notes?.username;
-      const period: PlanPeriod = notes?.period === 'yearly' ? 'yearly' : 'monthly';
-      const now = new Date();
-      const durationDays = period === 'yearly' ? 365 : 30;
-      const subscriptionRecord: SubscriptionRecord = {
-        status: 'active',
-        cycle: period,
-        startedAt: now.toISOString(),
-        currentPeriodEnd: new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString(),
-        cancelledAt: null,
-        cancelAtPeriodEnd: false,
-        paymentId: paymentEntity?.id || null,
-        orderId: paymentEntity?.order_id || null,
-        amountInr: typeof paymentEntity?.amount === 'number' ? Math.round(paymentEntity.amount / 100) : null,
-      };
-
-      const cleanUname = username ? String(username).replace(/^@+/, '').toLowerCase().trim() : '';
-      const existing = cleanUname
-        ? await dbGetProfile(cleanUname).catch(() => null)
-        : userId
-          ? await dbGetProfileByUserId(String(userId)).catch(() => null)
-          : null;
-      if (existing) {
-        await dbSaveProfile({
-          userId: existing.userId || String(userId || 'owner'),
-          username: existing.username,
-          primaryEmail: existing.primaryEmail || null,
-          plan: 'pro',
-          subscription: subscriptionRecord,
-        }).catch(() => {});
-        invalidatePublicPageCache(existing.username);
-      }
-
+      const cleanUname = notes?.username
+        ? String(notes.username).replace(/^@+/, '').toLowerCase().trim()
+        : '';
       const supabase = adminClient();
-      if (supabase && (userId || username)) {
+      if (supabase && (userId || cleanUname)) {
         let query = supabase.from('profiles').update({ plan: 'pro' });
         if (userId) query = query.eq('user_id', userId);
-        else if (username) query = query.eq('username', cleanUname);
+        else if (cleanUname) query = query.eq('username', cleanUname);
         await query;
       }
     }
 
-    return Response.json({ received: true }, { status: 200 });
+    return Response.json(
+      {
+        received: true,
+        eventType: result.eventType,
+        eventId: result.eventId,
+        deduplicated: result.deduplicated,
+      },
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error('Razorpay webhook error:', err);
     return Response.json({ error: 'internal_error' }, { status: 500 });
@@ -363,7 +343,12 @@ export default async function handler(req: any, res?: any): Promise<Response | v
 
     let body: any = undefined;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      body = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body;
+      body =
+        req.rawBody !== undefined
+          ? req.rawBody
+          : typeof req.body === 'object'
+            ? JSON.stringify(req.body)
+            : req.body;
     }
 
     const headers = new Headers();

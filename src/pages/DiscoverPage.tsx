@@ -25,18 +25,22 @@ interface DiscoverProfile {
 export const DiscoverPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
+  const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
   const [query, setQuery] = useState(initialQuery);
   const [profiles, setProfiles] = useState<DiscoverProfile[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
   const [failedAvatars, setFailedAvatars] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   usePageMeta({
-    title: 'Discover Creators & Public Profiles | Iveo',
+    title: currentPage > 1
+      ? `Discover Creators & Public Profiles (Page ${currentPage}) | Iveo`
+      : 'Discover Creators & Public Profiles | Iveo',
     description:
       'Explore public creator profiles, digital portfolios, and personal link pages built with Iveo.',
-    canonical: `${SITE_ORIGIN}/discover`,
+    canonical: currentPage > 1 ? `${SITE_ORIGIN}/discover?page=${currentPage}` : `${SITE_ORIGIN}/discover`,
     robots: 'index, follow',
   });
 
@@ -46,7 +50,13 @@ export const DiscoverPage: React.FC = () => {
     setError(null);
 
     const trimmed = query.trim();
-    const qs = trimmed ? `?q=${encodeURIComponent(trimmed)}` : '';
+    const params = new URLSearchParams();
+    if (trimmed) {
+      params.set('q', trimmed);
+    } else if (currentPage > 1) {
+      params.set('page', String(currentPage));
+    }
+    const qs = params.toString() ? `?${params.toString()}` : '';
 
     const timer = setTimeout(async () => {
       try {
@@ -59,6 +69,7 @@ export const DiscoverPage: React.FC = () => {
         }
         setProfiles(data.profiles);
         setTotalCount(typeof data.totalCount === 'number' ? data.totalCount : data.profiles.length);
+        setTotalPages(typeof data.totalPages === 'number' ? Math.max(1, data.totalPages) : 1);
       } catch {
         if (active) setError('Network error while loading creator directory.');
       } finally {
@@ -70,7 +81,7 @@ export const DiscoverPage: React.FC = () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, currentPage]);
 
   const handleQueryChange = (value: string) => {
     setQuery(value);
@@ -184,81 +195,114 @@ export const DiscoverPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {profiles.map((profile) => {
-                const vibe = VIBES.find((v) => v.id === profile.vibeId) || VIBES[0];
-                const initial = (profile.displayName || profile.username || 'I')
-                  .charAt(0)
-                  .toUpperCase();
+            <>
+              <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {profiles.map((profile) => {
+                  const vibe = VIBES.find((v) => v.id === profile.vibeId) || VIBES[0];
+                  const initial = (profile.displayName || profile.username || 'I')
+                    .charAt(0)
+                    .toUpperCase();
 
-                return (
-                  <Link
-                    key={profile.username}
-                    to={`/@${encodeURIComponent(profile.username)}`}
-                    className="group rounded-2xl border border-border bg-surface p-5 flex flex-col justify-between gap-4 hover:border-ink/40 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {profile.avatarUrl && !failedAvatars[profile.username] ? (
-                          <img
-                            src={profile.avatarUrl}
-                            alt={profile.displayName}
-                            className="w-11 h-11 rounded-full object-cover border border-border shrink-0"
-                            loading="lazy"
-                            onError={() =>
-                              setFailedAvatars((prev) => ({
-                                ...prev,
-                                [profile.username]: true,
-                              }))
-                            }
-                          />
-                        ) : (
-                          <div
-                            className="w-11 h-11 rounded-full flex items-center justify-center font-semibold text-[16px] shrink-0 border border-border"
-                            style={{
-                              backgroundColor: vibe.tokens.bg,
-                              color: vibe.tokens.text,
-                            }}
-                          >
-                            {initial}
+                  return (
+                    <Link
+                      key={profile.username}
+                      to={`/@${encodeURIComponent(profile.username)}`}
+                      className="group rounded-2xl border border-border bg-surface p-5 flex flex-col justify-between gap-4 hover:border-ink/40 hover:shadow-sm transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {profile.avatarUrl && !failedAvatars[profile.username] ? (
+                            <img
+                              src={profile.avatarUrl}
+                              alt={profile.displayName}
+                              className="w-11 h-11 rounded-full object-cover border border-border shrink-0"
+                              loading="lazy"
+                              onError={() =>
+                                setFailedAvatars((prev) => ({
+                                  ...prev,
+                                  [profile.username]: true,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <div
+                              className="w-11 h-11 rounded-full flex items-center justify-center font-semibold text-[16px] shrink-0 border border-border"
+                              style={{
+                                backgroundColor: vibe.tokens.bg,
+                                color: vibe.tokens.text,
+                              }}
+                            >
+                              {initial}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h2 className="text-[16px] font-semibold text-ink truncate group-hover:underline underline-offset-2">
+                              {profile.displayName}
+                            </h2>
+                            <p className="inline-flex items-center gap-1.5 text-[12px] font-mono text-muted max-w-full">
+                              <span className="truncate">iveo.site/@{profile.username}</span>
+                              {(profile.isVerified || profile.isPro) && <VerifiedTick size={13} />}
+                            </p>
                           </div>
-                        )}
-                        <div className="min-w-0">
-                          <h2 className="text-[16px] font-semibold text-ink truncate group-hover:underline underline-offset-2">
-                            {profile.displayName}
-                          </h2>
-                          <p className="inline-flex items-center gap-1.5 text-[12px] font-mono text-muted max-w-full">
-                            <span className="truncate">iveo.site/@{profile.username}</span>
-                            {(profile.isVerified || profile.isPro) && <VerifiedTick size={13} />}
-                          </p>
                         </div>
+
+                        <ArrowUpRight
+                          size={16}
+                          className="text-muted group-hover:text-ink group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0"
+                        />
                       </div>
 
-                      <ArrowUpRight
-                        size={16}
-                        className="text-muted group-hover:text-ink group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0"
-                      />
-                    </div>
+                      <p className="text-[13px] text-muted line-clamp-2 leading-relaxed">
+                        {profile.bio ||
+                          `Explore links, social profiles, and projects by ${profile.displayName}.`}
+                      </p>
 
-                    <p className="text-[13px] text-muted line-clamp-2 leading-relaxed">
-                      {profile.bio ||
-                        `Explore links, social profiles, and projects by ${profile.displayName}.`}
-                    </p>
+                      <div className="flex items-center justify-between pt-2 border-t border-border/70 text-[11px] text-subtle">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-black/15"
+                            style={{ backgroundColor: vibe.tokens.bg }}
+                          />
+                          <span>{vibe.name} vibe</span>
+                        </span>
+                        <span className="font-medium text-ink/80">Visit page</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-border/70 text-[11px] text-subtle">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full border border-black/15"
-                          style={{ backgroundColor: vibe.tokens.bg }}
-                        />
-                        <span>{vibe.name} vibe</span>
-                      </span>
-                      <span className="font-medium text-ink/80">Visit page</span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+              {!query.trim() && totalPages > 1 && (
+                <nav
+                  aria-label="Creator directory pagination"
+                  className="mt-8 flex items-center justify-between gap-4 border-t border-border pt-6 text-[13px]"
+                >
+                  <span className="text-muted tabular-nums">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {currentPage > 1 && (
+                      <Link
+                        to={currentPage === 2 ? '/discover' : `/discover?page=${currentPage - 1}`}
+                        rel="prev"
+                        className="inline-flex items-center justify-center min-h-[36px] px-3.5 rounded-lg border border-border bg-surface text-ink hover:border-ink/40 transition-colors"
+                      >
+                        Previous
+                      </Link>
+                    )}
+                    {currentPage < totalPages && (
+                      <Link
+                        to={`/discover?page=${currentPage + 1}`}
+                        rel="next"
+                        className="inline-flex items-center justify-center min-h-[36px] px-3.5 rounded-lg border border-border bg-surface text-ink hover:border-ink/40 transition-colors"
+                      >
+                        Next
+                      </Link>
+                    )}
+                  </div>
+                </nav>
+              )}
+            </>
           )}
         </Container>
       </main>

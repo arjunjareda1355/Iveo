@@ -1,7 +1,19 @@
 User-agent: *
+Allow: /
+Allow: /@*
+Allow: /discover
 Allow: /api/og
 Disallow: /api/
 Disallow: /dashboard
+Disallow: /admin
+Disallow: /admin/
 Disallow: /onboarding
 Disallow: /account
-Allow: /
+Disallow: /login
+Disallow: /signup
+Disallow: /sso-callback
+
+Sitemap: https://iveo.site/sitemap.xml
+Sitemap: https://iveo.site/sitemap-pages.xml
+Sitemap: https://iveo.site/sitemap-profiles.xml
+

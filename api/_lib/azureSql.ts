@@ -2,7 +2,7 @@ import sql from 'mssql';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mergeProfileForSave } from './profileMerge.ts';
-import { resolveEffectivePlan, type SubscriptionRecord } from '../../src/lib/plan.ts';
+import { resolveEffectivePlan, type SubscriptionRecord, type UserBillingStore } from '../../src/lib/plan.ts';
 import { normalizeAnalyticsSource } from '../../src/lib/analytics/sources.ts';
 import { detectDevice } from '../../src/lib/analytics/device.ts';
 import {
@@ -338,6 +338,7 @@ export interface UserRecord {
   analytics: any[];
   appearanceHistory?: { undoStack: any[]; redoStack: any[]; lastCoalesceKey?: string | null; lastCoalesceAt?: number };
   appearanceThemes?: any[];
+  billing?: UserBillingStore;
 }
 
 type IndexPasswordEntry = { password: string; username?: string };
@@ -515,6 +516,24 @@ function readUserRecord(username: string): UserRecord {
           }
         : { undoStack: [], redoStack: [] },
     appearanceThemes: Array.isArray(raw.appearanceThemes) ? raw.appearanceThemes : [],
+    billing:
+      raw.billing && typeof raw.billing === 'object'
+        ? {
+            billingHistory: Array.isArray(raw.billing.billingHistory) ? raw.billing.billingHistory : [],
+            invoices: Array.isArray(raw.billing.invoices) ? raw.billing.invoices : [],
+            notifications: Array.isArray(raw.billing.notifications) ? raw.billing.notifications : [],
+            auditLogs: Array.isArray(raw.billing.auditLogs) ? raw.billing.auditLogs : [],
+            processedWebhookEvents: Array.isArray(raw.billing.processedWebhookEvents)
+              ? raw.billing.processedWebhookEvents
+              : [],
+          }
+        : {
+            billingHistory: [],
+            invoices: [],
+            notifications: [],
+            auditLogs: [],
+            processedWebhookEvents: [],
+          },
   };
 }
 
@@ -545,6 +564,50 @@ async function withUserLock<T>(username: string, fn: () => Promise<T> | T): Prom
       userWriteQueues.delete(key);
     }
   }
+}
+
+export async function dbReadUserBilling(username: string): Promise<UserBillingStore> {
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
+  const empty: UserBillingStore = {
+    billingHistory: [],
+    invoices: [],
+    notifications: [],
+    auditLogs: [],
+    processedWebhookEvents: [],
+  };
+  if (!clean) return empty;
+  const record = readUserRecord(clean);
+  return record.billing || empty;
+}
+
+export async function dbUpdateUserBilling(
+  username: string,
+  updater: (prev: UserBillingStore) => UserBillingStore
+): Promise<UserBillingStore> {
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) {
+    return updater({
+      billingHistory: [],
+      invoices: [],
+      notifications: [],
+      auditLogs: [],
+      processedWebhookEvents: [],
+    });
+  }
+  return withUserLock(clean, () => {
+    const record = readUserRecord(clean);
+    const prevBilling: UserBillingStore = record.billing || {
+      billingHistory: [],
+      invoices: [],
+      notifications: [],
+      auditLogs: [],
+      processedWebhookEvents: [],
+    };
+    const nextBilling = updater(prevBilling);
+    record.billing = nextBilling;
+    writeUserRecord(clean, record);
+    return nextBilling;
+  });
 }
 
 function readUserIndex(): Record<string, string> {
@@ -2295,14 +2358,19 @@ export async function dbGetAnalytics(
 
   const fromMs = fromDate.getTime();
   const toMs = toDate.getTime();
+  const fromDayStr = fromDate.toISOString().slice(0, 10);
+  const toDayStr = toDate.toISOString().slice(0, 10);
+  // Pad backend query range by +/- 14h to account for client timezone offsets without dropping today's events
+  const queryFromDate = new Date(fromMs - 14 * 60 * 60 * 1000);
+  const queryToDate = new Date(toMs + 14 * 60 * 60 * 1000);
 
   const pool = await getAzureSqlPool();
   const sqlEventsPromise: Promise<any[]> = pool
     ? pool
         .request()
         .input('username', sql.NVarChar(64), clean)
-        .input('from', sql.DateTime2, fromDate)
-        .input('to', sql.DateTime2, toDate)
+        .input('from', sql.DateTime2, queryFromDate)
+        .input('to', sql.DateTime2, queryToDate)
         .query(`
           SELECT id, event_type, block_id, country, referrer, device, created_at
           FROM iveo_analytics_events
@@ -2323,13 +2391,15 @@ export async function dbGetAnalytics(
     : Promise.resolve([]);
 
   const fbEventsPromise: Promise<any[]> = Promise.race([
-    firebaseGetAnalyticsEvents(clean, fromDate, toDate).catch(() => []),
+    firebaseGetAnalyticsEvents(clean, queryFromDate, queryToDate).catch(() => []),
     new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 4000)),
   ]);
 
   const localList = readUserRecord(clean).analytics.filter((e) => {
     const t = new Date(e.createdAt).getTime();
-    return !Number.isNaN(t) && t >= fromMs && t <= toMs;
+    if (Number.isNaN(t)) return false;
+    const evDay = new Date(t).toISOString().slice(0, 10);
+    return evDay >= fromDayStr && evDay <= toDayStr;
   });
 
   const [sqlEvents, fbEvents] = await Promise.all([sqlEventsPromise, fbEventsPromise]);
@@ -2338,7 +2408,9 @@ export async function dbGetAnalytics(
   const deduped = new Map<string, any>();
   for (const ev of [...sqlEvents, ...localList, ...fbEvents]) {
     const ts = new Date(ev.createdAt || '').getTime();
-    if (Number.isNaN(ts) || ts < fromMs || ts > toMs) continue;
+    if (Number.isNaN(ts)) continue;
+    const evDay = new Date(ts).toISOString().slice(0, 10);
+    if (evDay < fromDayStr || evDay > toDayStr) continue;
     const normRef = normalizeStoredSource(ev.referrer);
     const normDev = normalizeStoredDevice(ev.device);
     const key = ev.id
@@ -2363,7 +2435,7 @@ export async function dbGetAnalytics(
   const deviceMap = new Map<string, { views: number; clicks: number }>();
 
   for (const ev of events) {
-    const day = String(ev.createdAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const day = new Date(ev.createdAt || Date.now()).toISOString().slice(0, 10);
     const dayEntry = byDayMap.get(day) || { views: 0, clicks: 0 };
     const refKey = normalizeStoredSource(ev.referrer);
     const countryKey = String(ev.country || 'Unknown').trim() || 'Unknown';

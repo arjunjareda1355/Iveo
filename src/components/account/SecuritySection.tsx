@@ -71,10 +71,15 @@ interface RowOverflowProps {
 
 const RowOverflowMenu: React.FC<RowOverflowProps> = ({ ariaLabel, items }) => {
   const [open, setOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    if (ref.current && typeof window !== 'undefined') {
+      const rect = ref.current.getBoundingClientRect();
+      setOpenUp(window.innerHeight - rect.bottom < 160 && rect.top > 160);
+    }
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -106,7 +111,9 @@ const RowOverflowMenu: React.FC<RowOverflowProps> = ({ ariaLabel, items }) => {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+4px)] w-48 rounded-[12px] bg-surface border border-border shadow-[0_12px_32px_rgba(10,10,10,0.12)] py-1.5 z-40"
+          className={`absolute right-0 w-48 rounded-[12px] bg-surface border border-border shadow-[0_12px_32px_rgba(10,10,10,0.12)] py-1.5 z-40 ${
+            openUp ? 'bottom-[calc(100%+4px)]' : 'top-[calc(100%+4px)]'
+          }`}
         >
           {items.map((item) => (
             <button
@@ -587,17 +594,17 @@ const ClerkSecuritySectionInner: React.FC<{
 
             return (
               <li key={email.id} className="py-3 flex items-center justify-between gap-3 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 min-w-0">
-                  <span className="text-[14px] font-medium text-ink truncate">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                  <span className="text-[14px] font-medium text-ink break-all sm:break-normal sm:truncate">
                     {email.emailAddress}
                   </span>
                   {isPrimary && (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-ink text-surface">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-ink text-surface shrink-0">
                       Primary
                     </span>
                   )}
                   {!isVerified && (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-[#92400E] border border-amber-200">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-[#92400E] border border-amber-200 shrink-0">
                       Needs verification
                     </span>
                   )}
@@ -685,8 +692,8 @@ const ClerkSecuritySectionInner: React.FC<{
               const needsReauth = acct.verification && acct.verification.status !== 'verified';
 
               return (
-                <li key={acct.id} className="py-3 flex items-center justify-between gap-3 min-w-0">
-                  <div className="min-w-0">
+                <li key={acct.id} className="py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 min-w-0">
+                  <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[14px] font-medium text-ink">{title}</span>
                       {needsReauth ? (
@@ -702,11 +709,11 @@ const ClerkSecuritySectionInner: React.FC<{
                       ) : null}
                     </div>
                     {identifier && (
-                      <p className="text-[12px] text-muted truncate mt-0.5">{identifier}</p>
+                      <p className="text-[12px] text-muted break-all sm:break-normal sm:truncate mt-0.5">{identifier}</p>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                     {needsReauth && (
                       <Button
                         type="button"
@@ -849,23 +856,23 @@ const ClerkSecuritySectionInner: React.FC<{
               const lastActiveLabel = formatSessionDate(sess.lastActiveAt);
 
               return (
-                <li key={sess.id} className="py-3 flex items-center justify-between gap-3 min-w-0">
-                  <div className="flex items-start gap-3 min-w-0">
+                <li key={sess.id} className="py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 min-w-0">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
                     <span className="w-9 h-9 rounded-[10px] bg-surface-2 border border-border flex items-center justify-center text-ink shrink-0 mt-0.5">
                       {act.isMobile ? <Smartphone size={16} /> : <Laptop size={16} />}
                     </span>
-                    <div className="min-w-0">
+                    <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[14px] font-medium text-ink truncate">
+                        <span className="text-[14px] font-medium text-ink break-words leading-snug">
                           {deviceLabel || 'Web session'}
                         </span>
                         {isCurrent && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-ink text-surface">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-ink text-surface shrink-0">
                             This device
                           </span>
                         )}
                       </div>
-                      <p className="text-[12px] text-muted mt-0.5 truncate">
+                      <p className="text-[12px] text-muted mt-0.5 break-words leading-snug">
                         {locationLabel ? `${locationLabel} · ` : ''}Last active {lastActiveLabel}
                       </p>
                     </div>

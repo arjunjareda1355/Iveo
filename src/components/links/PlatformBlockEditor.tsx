@@ -235,6 +235,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [oauthAvailability, setOauthAvailability] = useState<Record<string, boolean> | null>(null);
 
   const linkInputRef = useRef<HTMLInputElement | null>(null);
   const lastResolvedUrlRef = useRef<string>(block?.url || '');
@@ -263,7 +264,21 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     const timer = setTimeout(() => {
       if (!block) linkInputRef.current?.focus();
     }, 60);
-    return () => clearTimeout(timer);
+
+    let cancelled = false;
+    fetch('/api/oauth/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!cancelled && json?.ok && json?.providers && typeof json.providers === 'object') {
+          setOauthAvailability(json.providers);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [isOpen, block, initialProvider, initialUrl]);
 
   // Body scroll lock + Escape close guard
@@ -1027,7 +1042,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                   </div>
                 )}
 
-                {providerDef.supportsOAuth && (
+                {providerDef.supportsOAuth && (Boolean(meta.connectedViaOAuth) || Boolean(oauthAvailability && oauthAvailability[provider])) && (
                   <div className="flex items-center justify-between gap-2 pt-0.5">
                     {meta.connectedViaOAuth ? (
                       <div className="flex items-center gap-2 flex-wrap">

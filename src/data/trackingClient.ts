@@ -8,41 +8,39 @@ export async function sendTrackingRpc(
   fnName: string,
   params: Record<string, unknown>
 ): Promise<void> {
-  const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
-
-  if (!rawUrl || !anonKey) {
-    // Persist cross-device to unified Express/AzureSQL analytics endpoint + local fallback
-    if (fnName === 'record_page_event' && typeof window !== 'undefined') {
-      const username = String(params.p_username || '').replace(/^@+/, '').toLowerCase().trim();
-      const eventType = params.p_event === 'click' ? 'link_click' : 'page_view';
-      const rawSource = String(params.p_source || '').trim();
-      const rawDevice = String(params.p_device || 'other').trim().toLowerCase();
-      if (username) {
-        fetch('/api/analytics/event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username,
-            eventType,
-            blockId: params.p_link_id || null,
-            source: rawSource,
-            referrer: rawSource || 'direct',
-            device: rawDevice || 'other',
-          }),
-          keepalive: true,
-        }).catch(() => {});
-      }
+  // Always persist cross-device to unified Express/AzureSQL analytics endpoint + local fallback
+  if (fnName === 'record_page_event' && typeof window !== 'undefined') {
+    const username = String(params.p_username || '').replace(/^@+/, '').toLowerCase().trim();
+    const eventType = params.p_event === 'click' ? 'link_click' : 'page_view';
+    const rawSource = String(params.p_source || '').trim();
+    const rawDevice = String(params.p_device || 'other').trim().toLowerCase();
+    if (username) {
+      fetch('/api/analytics/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          eventType,
+          blockId: params.p_link_id || null,
+          source: rawSource,
+          referrer: rawSource || 'direct',
+          device: rawDevice || 'other',
+        }),
+        keepalive: true,
+      }).catch(() => {});
     }
     try {
-      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
         recordLocalSimulation(fnName, params);
       }
     } catch {
       // Ignore
     }
-    return;
   }
+
+  const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (!rawUrl || !anonKey) return;
 
   try {
     await fetch(`${rawUrl}/rest/v1/rpc/${fnName}`, {

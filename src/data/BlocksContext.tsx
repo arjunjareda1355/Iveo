@@ -108,6 +108,9 @@ export const BlocksProvider: React.FC<{
         localStorage.setItem(`iveo_blocks_${clean}`, JSON.stringify(publicBlocks));
       } catch {}
       try {
+        window.dispatchEvent(new CustomEvent('iveo_profile_sync', { detail: { username: clean, type: 'blocks', updatedAt: nowIso } }));
+      } catch {}
+      try {
         if (typeof BroadcastChannel !== 'undefined') {
           const ch = new BroadcastChannel('iveo_profile_sync');
           ch.postMessage({ username: clean, type: 'blocks', updatedAt: nowIso });
@@ -304,10 +307,15 @@ export const BlocksProvider: React.FC<{
         position: blocks.length,
         vcard: config,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Contact card added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add contact card. Try again.");
       throw err;
@@ -321,7 +329,11 @@ export const BlocksProvider: React.FC<{
         title,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Header added');
     } catch {
@@ -336,7 +348,11 @@ export const BlocksProvider: React.FC<{
         title: '',
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Divider added');
     } catch {
@@ -350,7 +366,7 @@ export const BlocksProvider: React.FC<{
     badge?: string,
     coffee?: CoffeeData | null
   ) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'coffee',
@@ -360,10 +376,15 @@ export const BlocksProvider: React.FC<{
         coffee: coffee || null,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Buy Me a Coffee block added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add coffee block. Try again.");
       throw err;
@@ -371,7 +392,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addInstagram = async (title: string = 'Instagram', url: string = 'https://instagram.com', badge?: string) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'instagram',
@@ -380,10 +401,15 @@ export const BlocksProvider: React.FC<{
         badge,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Instagram showcase added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add Instagram block. Try again.");
       throw err;
@@ -396,7 +422,7 @@ export const BlocksProvider: React.FC<{
     badge?: string,
     youtube?: YouTubeData | null
   ) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'youtube',
@@ -406,10 +432,15 @@ export const BlocksProvider: React.FC<{
         youtube: youtube || null,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('YouTube showcase added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add YouTube block. Try again.");
       throw err;
@@ -417,7 +448,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addProduct = async (title: string, url: string, product: ProductConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'product',
@@ -426,10 +457,15 @@ export const BlocksProvider: React.FC<{
         product,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Product card added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add product card. Try again.");
       throw err;
@@ -437,7 +473,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addBooking = async (title: string, url: string, booking: BookingConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'booking',
@@ -446,10 +482,15 @@ export const BlocksProvider: React.FC<{
         booking,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Booking card added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add booking card. Try again.");
       throw err;
@@ -457,7 +498,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addCountdown = async (title: string, url: string | null, countdown: CountdownConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'countdown',
@@ -466,10 +507,15 @@ export const BlocksProvider: React.FC<{
         countdown,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Countdown added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add countdown. Try again.");
       throw err;
@@ -477,7 +523,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addPromo = async (title: string, url: string | null, promo: PromoConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'promo',
@@ -486,10 +532,15 @@ export const BlocksProvider: React.FC<{
         promo,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Promo code added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add promo code. Try again.");
       throw err;
@@ -497,7 +548,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addLocation = async (title: string, url: string, location: LocationConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'location',
@@ -506,10 +557,15 @@ export const BlocksProvider: React.FC<{
         location,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Location card added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add location card. Try again.");
       throw err;
@@ -517,7 +573,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addDownload = async (title: string, url: string, download: DownloadConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'download',
@@ -526,10 +582,15 @@ export const BlocksProvider: React.FC<{
         download,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Download card added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add download card. Try again.");
       throw err;
@@ -537,7 +598,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addBluesky = async (title: string, url: string, bluesky: BlueskyConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'bluesky',
@@ -546,10 +607,15 @@ export const BlocksProvider: React.FC<{
         bluesky,
         position: blocks.length,
       }, authCtx);
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Bluesky block added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add Bluesky block. Try again.");
       throw err;
@@ -745,10 +811,15 @@ export const BlocksProvider: React.FC<{
         },
         authCtx
       );
-      setBlocks((b) => [newBlock, ...b]);
+      setBlocks((b) => {
+        const next = [newBlock, ...b];
+        blocksRef.current = next;
+        return next;
+      });
       syncBlockTargets(newBlock).catch(() => {});
       showToast('Item duplicated');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
         openUpgrade('embeds');

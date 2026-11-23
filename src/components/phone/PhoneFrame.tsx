@@ -131,7 +131,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
           className={
             disableScroll
               ? 'relative w-full flex-1 min-h-0 overflow-hidden'
-              : 'relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(128,128,128,0.3)_transparent]'
+              : 'relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:rgba(128,128,128,0.3)_transparent]'
           }
           style={disableScroll ? undefined : { WebkitOverflowScrolling: 'touch' }}
         >

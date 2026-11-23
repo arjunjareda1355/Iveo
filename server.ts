@@ -79,8 +79,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Support JSON bodies (including up to 5MB base64 background uploads)
-app.use(express.json({ limit: '10mb' }));
+// Support JSON bodies (including up to 5MB base64 background uploads) and capture exact rawBody for HMAC webhook verification
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Allow WebAuthn passkey creation/get in top-level and self-origin contexts (skip /embed widgets)
@@ -119,7 +124,9 @@ function adaptWebHandler(
 
       let body: any = undefined;
       if (req.method !== 'GET' && req.method !== 'HEAD') {
-        body = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body;
+        body = (req as any).rawBody !== undefined
+          ? (req as any).rawBody
+          : (typeof req.body === 'object' ? JSON.stringify(req.body) : req.body);
       }
 
       const webRequest = new Request(url, {
@@ -170,8 +177,26 @@ async function startServer() {
   app.get('/api/check-username', adaptWebHandler(checkUsernameModule.GET));
   app.post('/api/check-username', adaptWebHandler(checkUsernameModule.POST));
 
-  // 2. OpenGraph dynamic image (SVG banner styled to user's Vibe + embedded real avatar)
+  // 2. OpenGraph dynamic image (1200x630 PNG from api/og.ts with SVG fallback)
   app.get('/api/og', async (req, res) => {
+    try {
+      const ogModule = await import('./api/og.ts');
+      const protocol = req.protocol || 'http';
+      const host = req.get('host') || `localhost:${port}`;
+      const webReq = new Request(`${protocol}://${host}${req.originalUrl}`, { method: 'GET' });
+      const webRes = await ogModule.GET(webReq);
+      res.status(webRes.status);
+      webRes.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
+      if (webRes.body) {
+        const buffer = await webRes.arrayBuffer();
+        return res.send(Buffer.from(buffer));
+      }
+    } catch {
+      // Fallback to inline SVG below if PNG generator fails
+    }
+
     const escapeXml = (str: string) =>
       String(str || '')
         .replace(/&/g, '&amp;')
@@ -314,6 +339,7 @@ async function startServer() {
   app.get('/api/integrations/youtube', dbHandlers.handleYouTubeShowcase);
   app.get('/api/integrations/embed', dbHandlers.handleSocialEmbedLookup);
   app.get('/api/integrations/pinterest/me', dbHandlers.handlePinterestTokenProfile);
+  app.get('/api/oauth/status', dbHandlers.handleOAuthStatus);
   app.get('/api/oauth/youtube/url', dbHandlers.handleYouTubeOAuthUrl);
   app.get(['/api/oauth/youtube/callback', '/api/oauth/youtube/callback/'], dbHandlers.handleYouTubeOAuthCallback);
   app.get('/api/oauth/:provider/url', dbHandlers.handleSocialOAuthUrl);
@@ -329,6 +355,11 @@ async function startServer() {
   app.get('/api/subscription', dbHandlers.handleGetSubscription);
   app.post('/api/subscription/cancel', dbHandlers.handleCancelSubscription);
   app.post('/api/subscription/reactivate', dbHandlers.handleReactivateSubscription);
+  app.post('/api/subscription/switch-cycle', dbHandlers.handleSwitchSubscriptionCycle);
+  app.get('/api/subscription/history', dbHandlers.handleGetSubscriptionHistory);
+  app.get('/api/subscription/invoice', dbHandlers.handleGetSubscriptionInvoice);
+  app.get('/api/admin/billing/inspect', dbHandlers.handleAdminBillingInspect);
+  app.post('/api/admin/billing/reconcile', dbHandlers.handleAdminBillingReconcile);
   app.get('/api/discover', dbHandlers.handleDiscoverProfiles);
   app.get('/api/seo/admin/overview', dbHandlers.handleSeoAdminOverview);
   app.post('/api/seo/admin/regenerate-sitemap', dbHandlers.handleSeoAdminRegenerate);
@@ -406,16 +437,41 @@ async function startServer() {
     }
   });
 
-  // 4.5 Subdomain to Path Redirect Handler (Legacy https://:username.iveo.site -> https://iveo.site/:username)
+  // 4.5 Canonical host redirect (www -> apex) + Subdomain to Path Redirect + Handle Canonicalization
   const { RESERVED, USERNAME_PATTERN } = await import('./api/_lib/usernames.ts');
   app.use((req, res, next) => {
     const host = (req.get('host') || '').toLowerCase().split(':')[0];
-    if (host.endsWith('.iveo.site') && host !== 'iveo.site' && host !== 'www.iveo.site') {
+    if (host === 'www.iveo.site') {
+      return res.redirect(301, `https://iveo.site${req.originalUrl || '/'}`);
+    }
+    if (host.endsWith('.iveo.site') && host !== 'iveo.site') {
       const candidate = host.slice(0, -'.iveo.site'.length);
       if (!RESERVED.has(candidate) && USERNAME_PATTERN.test(candidate)) {
         const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
         const pathSuffix = req.path === '/' ? '' : req.path;
         return res.redirect(301, `https://iveo.site/@${candidate}${pathSuffix}${queryString}`);
+      }
+    }
+    if ((req.method === 'GET' || req.method === 'HEAD') && req.path && req.path.startsWith('/@')) {
+      const p = req.path;
+      if (
+        !p.startsWith('/@vite') &&
+        !p.startsWith('/@react-refresh') &&
+        !p.startsWith('/@fs') &&
+        !p.startsWith('/@id') &&
+        !p.includes('.')
+      ) {
+        const withoutSlash = p.endsWith('/') && p.length > 2 ? p.slice(0, -1) : p;
+        const inner = withoutSlash.slice(2);
+        if (!inner.includes('/') && inner.length >= 2) {
+          const canonicalPath = `/@${inner.toLowerCase()}`;
+          if (p !== canonicalPath) {
+            const queryString = req.originalUrl.includes('?')
+              ? req.originalUrl.slice(req.originalUrl.indexOf('?'))
+              : '';
+            return res.redirect(301, `${canonicalPath}${queryString}`);
+          }
+        }
       }
     }
     next();
@@ -579,7 +635,8 @@ async function startServer() {
     }
 
     const origin = resolveRequestOrigin(req);
-    const resolved = await resolveSeoHeadForSegment(origin, cleanPath);
+    const pageNum = Math.max(1, parseInt(String(req.query?.page || '1'), 10) || 1);
+    const resolved = await resolveSeoHeadForSegment(origin, cleanPath, { pageNum });
 
     if (resolved.httpStatus === 301 && resolved.redirectLocation) {
       return { html: resultHtml, status: 301, redirectLocation: resolved.redirectLocation };

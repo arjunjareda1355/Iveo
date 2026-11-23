@@ -136,10 +136,15 @@ const PasskeyRowMenu: React.FC<PasskeyRowMenuProps> = ({
   onRemove,
 }) => {
   const [open, setOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    if (ref.current && typeof window !== 'undefined') {
+      const rect = ref.current.getBoundingClientRect();
+      setOpenUp(window.innerHeight - rect.bottom < 150 && rect.top > 150);
+    }
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -170,7 +175,9 @@ const PasskeyRowMenu: React.FC<PasskeyRowMenuProps> = ({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-[calc(100%+4px)] w-44 rounded-[12px] bg-surface border border-border shadow-[0_12px_32px_rgba(10,10,10,0.12)] py-1.5 z-40"
+          className={`absolute right-0 w-44 rounded-[12px] bg-surface border border-border shadow-[0_12px_32px_rgba(10,10,10,0.12)] py-1.5 z-40 ${
+            openUp ? 'bottom-[calc(100%+4px)]' : 'top-[calc(100%+4px)]'
+          }`}
         >
           <button
             type="button"
@@ -446,11 +453,11 @@ export const PasskeysSection: React.FC<{ offline?: boolean }> = ({ offline = fal
                   </form>
                 ) : (
                   <>
-                    <div className="min-w-0">
-                      <span className="text-[14px] font-medium text-ink block truncate">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[14px] font-medium text-ink block break-words leading-snug">
                         {label}
                       </span>
-                      <p className="text-[12px] text-muted mt-0.5">
+                      <p className="text-[12px] text-muted mt-0.5 break-words leading-snug">
                         Added {formatPasskeyDate(pk.createdAt)} · Last used {formatPasskeyDate(pk.lastUsedAt)}
                       </p>
                     </div>

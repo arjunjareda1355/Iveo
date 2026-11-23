@@ -15,9 +15,15 @@ export interface InvoiceData {
   orderId?: string;
   date?: string;
   expiresAt?: string;
+  status?: 'paid' | 'pending' | 'failed' | 'refunded' | 'partially_refunded' | string;
+  paymentMethodSummary?: string | null;
 }
 
 export function generateInvoicePdf(data: InvoiceData): jsPDF {
+  if (data.status && data.status !== 'paid') {
+    throw new Error('Invoice PDF can only be generated for verified paid transactions.');
+  }
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -185,7 +191,13 @@ export function generateInvoicePdf(data: InvoiceData): jsPDF {
   doc.setFontSize(8.5);
   doc.setTextColor(60, 60, 60);
   doc.text(`Processed securely via Razorpay Payment Gateway (PCI-DSS Level 1 Encrypted).`, 26, stampY + 14);
-  doc.text(`Reference Order ID: ${data.orderId || 'order_iveo_confirmed'} | Customer User ID: ${data.username}`, 26, stampY + 19.5);
+  doc.text(
+    `Reference Order ID: ${data.orderId || 'order_iveo_confirmed'}${
+      data.paymentMethodSummary ? ` | Method: ${data.paymentMethodSummary}` : ''
+    } | User: ${data.username}`,
+    26,
+    stampY + 19.5
+  );
 
   // 7. Footer
   doc.setFont('helvetica', 'normal');

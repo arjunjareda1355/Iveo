@@ -202,7 +202,7 @@ function useClerkSession(): IveoSession {
 
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 5000);
+        const timer = setTimeout(() => controller.abort(), 3000);
         try {
           const res = await fetch(
             `/api/me?userId=${encodeURIComponent(activeUser.id)}&email=${encodeURIComponent(email)}`,
@@ -219,49 +219,59 @@ function useClerkSession(): IveoSession {
         }
       } catch {}
 
-      // Direct Firestore fallback if /api/me timed out or had no local record
+      // Parallelized Direct Firestore fallback if /api/me timed out or had no local record
       if (!hydratedProfile) {
         try {
           const { doc, getDoc, getDocs, collection, query, where } = await import('firebase/firestore');
           const { db } = await import('../lib/firebase');
-          const uidDoc = await getDoc(doc(db, 'users', activeUser.id));
-          if (uidDoc.exists() && uidDoc.data()?.username && uidDoc.data()?.status !== 'deleted') {
-            hydratedProfile = uidDoc.data();
-          }
-          if (!hydratedProfile) {
-            const qUser = await getDocs(query(collection(db, 'users'), where('userId', '==', activeUser.id)));
-            for (const d of qUser.docs) {
-              const dData = d.data();
-              if (dData?.username && dData?.status !== 'deleted') {
-                hydratedProfile = dData;
-                break;
+
+          const uidPromise = getDoc(doc(db, 'users', activeUser.id))
+            .then((d) => (d.exists() && d.data()?.username && d.data()?.status !== 'deleted' ? d.data() : null))
+            .catch(() => null);
+
+          const userQueryPromise = getDocs(query(collection(db, 'users'), where('userId', '==', activeUser.id)))
+            .then((snap) => {
+              for (const d of snap.docs) {
+                const dData = d.data();
+                if (dData?.username && dData?.status !== 'deleted') return dData;
               }
-            }
-          }
-          if (!hydratedProfile) {
-            const qClaims = await getDocs(query(collection(db, 'claims'), where('userId', '==', activeUser.id)));
-            for (const d of qClaims.docs) {
-              const cData = d.data();
-              if (cData?.status !== 'deleted') {
-                const uname = String(cData.username || d.id || '').replace(/^@+/, '').toLowerCase().trim();
-                if (uname) {
-                  const uDoc = await getDoc(doc(db, 'users', uname));
-                  hydratedProfile = uDoc.exists() ? uDoc.data() : { username: uname, userId: activeUser.id, displayName: uname };
-                  break;
+              return null;
+            })
+            .catch(() => null);
+
+          const claimsPromise = getDocs(query(collection(db, 'claims'), where('userId', '==', activeUser.id)))
+            .then(async (snap) => {
+              for (const d of snap.docs) {
+                const cData = d.data();
+                if (cData?.status !== 'deleted') {
+                  const uname = String(cData.username || d.id || '').replace(/^@+/, '').toLowerCase().trim();
+                  if (uname) {
+                    const uDoc = await getDoc(doc(db, 'users', uname)).catch(() => null);
+                    return uDoc && uDoc.exists() ? uDoc.data() : { username: uname, userId: activeUser.id, displayName: uname };
+                  }
                 }
               }
-            }
-          }
-          if (!hydratedProfile && cleanEmail) {
-            const qEmail = await getDocs(query(collection(db, 'users'), where('primaryEmail', '==', cleanEmail)));
-            for (const d of qEmail.docs) {
-              const dData = d.data();
-              if (dData?.username && dData?.status !== 'deleted') {
-                hydratedProfile = dData;
-                break;
-              }
-            }
-          }
+              return null;
+            })
+            .catch(() => null);
+
+          const emailPromise = cleanEmail
+            ? getDocs(query(collection(db, 'users'), where('primaryEmail', '==', cleanEmail)))
+                .then((snap) => {
+                  for (const d of snap.docs) {
+                    const dData = d.data();
+                    if (dData?.username && dData?.status !== 'deleted') return dData;
+                  }
+                  return null;
+                })
+                .catch(() => null)
+            : Promise.resolve(null);
+
+          const results = await Promise.race([
+            Promise.all([uidPromise, userQueryPromise, claimsPromise, emailPromise]),
+            new Promise<null[]>((resolve) => setTimeout(() => resolve([null, null, null, null]), 3000)),
+          ]);
+          hydratedProfile = results.find((r) => Boolean(r && r.username)) || null;
         } catch {}
       }
 

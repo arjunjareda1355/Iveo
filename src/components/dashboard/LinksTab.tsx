@@ -878,35 +878,37 @@ export const LinksTab: React.FC = () => {
           </div>
         </div>
 
-        {/* Accurate Wrapping Filter Chips (zero clipping at 320px/360px) */}
-        {activeBlocks.length > 1 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 py-0.5 text-[12px]">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {filterChips.map((chip) => {
-                const selected = filterCategory === chip.id;
-                return (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    onClick={() => setFilterCategory(chip.id)}
-                    aria-pressed={selected}
-                    className={`min-h-[34px] px-3 py-1 rounded-full font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                      selected
-                        ? 'bg-ink text-surface'
-                        : 'bg-surface border border-border text-muted hover:text-ink hover:border-border-strong'
-                    }`}
-                  >
-                    {chip.label} ({chip.count})
-                  </button>
-                );
-              })}
-            </div>
+        {/* Compact Wrapping Filter Chips & Archived Toggle */}
+        {(activeBlocks.length > 1 || archivedBlocks.length > 0) && (
+          <div className="flex flex-wrap items-center justify-between gap-1.5 py-0.5 text-[12px]">
+            {activeBlocks.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1">
+                {filterChips.map((chip) => {
+                  const selected = filterCategory === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setFilterCategory(chip.id)}
+                      aria-pressed={selected}
+                      className={`h-8 min-h-[32px] px-2.5 py-0.5 rounded-full text-[12px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                        selected
+                          ? 'bg-ink text-surface'
+                          : 'bg-surface border border-border text-muted hover:text-ink hover:border-border-strong'
+                      }`}
+                    >
+                      {chip.label} ({chip.count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {archivedBlocks.length > 0 && (
               <button
                 type="button"
                 onClick={() => setShowArchived(!showArchived)}
-                className="ml-auto min-h-[34px] text-[12px] text-muted hover:text-ink font-medium px-3 py-1 rounded-full bg-surface border border-border hover:border-border-strong shrink-0 transition-colors cursor-pointer"
+                className="ml-auto h-8 min-h-[32px] text-[12px] text-muted hover:text-ink font-medium px-2.5 py-0.5 rounded-full bg-surface border border-border hover:border-border-strong shrink-0 transition-colors cursor-pointer"
               >
                 {showArchived ? 'Hide archived' : `Archived (${archivedBlocks.length})`}
               </button>
@@ -1951,7 +1953,7 @@ export const LinksTab: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => setDeletingBlock(b)}
-                      className="text-[color:var(--error,#B3261E)]"
+                      className="text-[color:var(--error,#B3261E)] min-w-[44px] min-h-[44px] px-2.5"
                       aria-label={`Delete ${b.title || 'archived item'}`}
                     >
                       <Trash2 size={14} />

@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   FileCode2,
   Activity,
+  CreditCard,
 } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 import { Card } from '../components/ui/Card';
@@ -115,6 +116,10 @@ export const SeoAdminPage: React.FC = () => {
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [gscResult, setGscResult] = useState<any>(null);
   const [moderatingUsername, setModeratingUsername] = useState<string | null>(null);
+
+  const [billingUsername, setBillingUsername] = useState('');
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingData, setBillingData] = useState<any>(null);
 
   const loadReport = useCallback(async () => {
     if (!isAuthorized || !adminEmail) return;
@@ -258,6 +263,65 @@ export const SeoAdminPage: React.FC = () => {
       showToast('Network error resetting background');
     } finally {
       setModeratingUsername(null);
+    }
+  };
+
+  const handleInspectBilling = async (e?: React.FormEvent, targetOverride?: string) => {
+    if (e) e.preventDefault();
+    const target = (targetOverride ?? billingUsername).trim().replace(/^@+/, '').toLowerCase();
+    if (!target || !adminEmail) return;
+    setBillingLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/billing/inspect?username=${encodeURIComponent(target)}&adminEmail=${encodeURIComponent(adminEmail)}`,
+        { headers: { 'x-user-email': adminEmail }, cache: 'no-store' }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        showToast(data?.message || data?.error || 'Could not inspect billing');
+        return;
+      }
+      setBillingData(data);
+    } catch {
+      showToast('Failed to inspect billing');
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handleReconcileBilling = async (
+    action: 'activate_paid' | 'grant_grace_period' | 'expire_now' | 'cancel_immediate'
+  ) => {
+    const target = (billingData?.username || billingUsername).trim().replace(/^@+/, '').toLowerCase();
+    if (!target || !adminEmail) return;
+    setBillingLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/billing/reconcile?adminEmail=${encodeURIComponent(adminEmail)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-email': adminEmail,
+          },
+          body: JSON.stringify({
+            username: target,
+            action,
+            note: `Admin action: ${action}`,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        showToast(data?.message || data?.error || 'Reconciliation failed');
+        return;
+      }
+      setBillingData(data);
+      showToast(`Billing updated (${action})`);
+    } catch {
+      showToast('Network error during billing reconciliation');
+    } finally {
+      setBillingLoading(false);
     }
   };
 
@@ -647,6 +711,122 @@ export const SeoAdminPage: React.FC = () => {
                     )}
                 </Card>
               </div>
+
+              {/* Billing & Subscription Inspector / Reconciliation */}
+              <Card className="p-5 sm:p-6 flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={18} className="text-ink" />
+                    <h2 className="text-[18px] font-semibold text-ink">
+                      Billing &amp; Subscription Inspector
+                    </h2>
+                  </div>
+                  <span className="text-[12px] text-muted">
+                    Privileged admin lookup &amp; lifecycle reconciliation
+                  </span>
+                </div>
+
+                <form
+                  onSubmit={(e) => handleInspectBilling(e)}
+                  className="flex flex-col sm:flex-row sm:items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    value={billingUsername}
+                    onChange={(e) => setBillingUsername(e.target.value)}
+                    placeholder="Enter creator handle to inspect billing (e.g. maya)"
+                    aria-label="Username for billing inspection"
+                    className="flex-1 h-10 px-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                  />
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="md"
+                    disabled={billingLoading}
+                    className="h-10 whitespace-nowrap"
+                  >
+                    {billingLoading ? 'Loading...' : 'Inspect Billing'}
+                  </Button>
+                </form>
+
+                {billingData && (
+                  <div className="flex flex-col gap-3 pt-2 border-t border-border text-[13px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full bg-surface-2 border border-border font-mono text-[12px] text-ink">
+                        @{billingData.username}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-medium text-ink">
+                        Plan: {billingData.plan} ({billingData.planSource})
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-mono text-ink">
+                        State: {billingData.lifecycleState}
+                      </span>
+                      {billingData.gracePeriod?.inGracePeriod && (
+                        <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[12px]">
+                          Grace Period: {billingData.gracePeriod.daysRemaining}d left
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={billingLoading}
+                        onClick={() => handleReconcileBilling('activate_paid')}
+                      >
+                        Activate Paid Pro
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={billingLoading}
+                        onClick={() => handleReconcileBilling('grant_grace_period')}
+                      >
+                        Grant 3-Day Grace
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={billingLoading}
+                        onClick={() => handleReconcileBilling('expire_now')}
+                      >
+                        Mark Expired
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={billingLoading}
+                        onClick={() => handleReconcileBilling('cancel_immediate')}
+                      >
+                        Cancel Immediate
+                      </Button>
+                    </div>
+
+                    {Array.isArray(billingData.auditLogs) && billingData.auditLogs.length > 0 && (
+                      <div className="rounded-xl border border-border bg-surface-2/40 p-3 flex flex-col gap-1.5 max-h-40 overflow-y-auto text-[12px]">
+                        <span className="font-semibold text-ink">
+                          Audit Log ({billingData.auditLogs.length})
+                        </span>
+                        {billingData.auditLogs.slice(0, 8).map((log: any) => (
+                          <div key={log.id} className="flex items-center justify-between gap-2 text-muted">
+                            <span className="truncate">
+                              [{log.actor}] {log.action}: {log.fromState} -&gt; {log.toState}
+                            </span>
+                            <span className="font-mono text-[11px] shrink-0">
+                              {String(log.createdAt || '').slice(0, 10)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
 
               {/* Profiles Indexability & Missing Metadata Table */}
               <Card className="p-5 sm:p-6 flex flex-col gap-4">

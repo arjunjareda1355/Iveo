@@ -15,8 +15,29 @@ function isRenderableLatin(text: string): boolean {
   return /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}\p{Sc}\p{Sm}]+$/u.test(trimmed);
 }
 
-async function fetchAvatarAsDataUrl(avatarUrl: string | null): Promise<string | null> {
-  if (!avatarUrl || !isAllowedAvatarHost(avatarUrl)) {
+async function fetchAvatarAsDataUrl(avatarUrl: string | null, username?: string): Promise<string | null> {
+  if (!avatarUrl && !username) return null;
+
+  if (avatarUrl && avatarUrl.startsWith('data:image/') && avatarUrl.length < 1_000_000) {
+    return avatarUrl;
+  }
+
+  if ((!avatarUrl || avatarUrl.startsWith('/api/avatar/')) && username) {
+    try {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const clean = username.replace(/^@+/, '').toLowerCase().trim();
+      const avatarFile = path.resolve(process.cwd(), 'data', 'avatars', `${clean}.jpg`);
+      if (fs.existsSync(avatarFile)) {
+        const buf = fs.readFileSync(avatarFile);
+        if (buf.byteLength > 0 && buf.byteLength < 1_000_000) {
+          return `data:image/jpeg;base64,${buf.toString('base64')}`;
+        }
+      }
+    } catch {}
+  }
+
+  if (!avatarUrl || !isAllowedAvatarHost(avatarUrl) || !/^https?:\/\//i.test(avatarUrl)) {
     return null;
   }
 
@@ -89,7 +110,7 @@ function renderGenericCard() {
                 marginTop: 24,
                 lineHeight: 1.2,
               },
-              children: 'One link for everything you make.',
+              children: 'One link for everything you create.',
             },
           },
         ],
@@ -137,7 +158,7 @@ export async function GET(request: Request): Promise<Response> {
     }
     bio = truncate(bio, 120);
 
-    const avatarDataUrl = await fetchAvatarAsDataUrl(page.avatarUrl);
+    const avatarDataUrl = await fetchAvatarAsDataUrl(page.avatarUrl, page.username);
 
     // Avatar element: <img> if dataUrl available, else Monogram circle
     const avatarElement = avatarDataUrl
@@ -281,7 +302,7 @@ export async function GET(request: Request): Promise<Response> {
                         fontSize: 30,
                         color: vibe.muted,
                       },
-                      children: `${host}/${page.username}`,
+                      children: `${host}/@${page.username}`,
                     },
                   },
                   {

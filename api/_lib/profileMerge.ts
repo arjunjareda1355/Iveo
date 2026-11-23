@@ -100,16 +100,32 @@ export function mergeProfileForSave(
       : incoming.subscription
         ? {
             status: incoming.subscription.status || prev.subscription?.status || 'none',
-            cycle: incoming.subscription.cycle ?? prev.subscription?.cycle ?? null,
-            startedAt: incoming.subscription.startedAt ?? prev.subscription?.startedAt ?? null,
+            cycle: incoming.subscription.cycle !== undefined ? incoming.subscription.cycle : (prev.subscription?.cycle ?? null),
+            startedAt: incoming.subscription.startedAt !== undefined ? incoming.subscription.startedAt : (prev.subscription?.startedAt ?? null),
             currentPeriodEnd:
-              incoming.subscription.currentPeriodEnd ?? prev.subscription?.currentPeriodEnd ?? null,
-            cancelledAt: incoming.subscription.cancelledAt ?? prev.subscription?.cancelledAt ?? null,
+              incoming.subscription.currentPeriodEnd !== undefined
+                ? incoming.subscription.currentPeriodEnd
+                : (prev.subscription?.currentPeriodEnd ?? null),
+            cancelledAt: incoming.subscription.cancelledAt !== undefined ? incoming.subscription.cancelledAt : (prev.subscription?.cancelledAt ?? null),
             cancelAtPeriodEnd:
-              incoming.subscription.cancelAtPeriodEnd ?? prev.subscription?.cancelAtPeriodEnd ?? false,
-            paymentId: incoming.subscription.paymentId ?? prev.subscription?.paymentId ?? null,
-            orderId: incoming.subscription.orderId ?? prev.subscription?.orderId ?? null,
-            amountInr: incoming.subscription.amountInr ?? prev.subscription?.amountInr ?? null,
+              incoming.subscription.cancelAtPeriodEnd !== undefined
+                ? incoming.subscription.cancelAtPeriodEnd
+                : (prev.subscription?.cancelAtPeriodEnd ?? false),
+            paymentId: incoming.subscription.paymentId !== undefined ? incoming.subscription.paymentId : (prev.subscription?.paymentId ?? null),
+            orderId: incoming.subscription.orderId !== undefined ? incoming.subscription.orderId : (prev.subscription?.orderId ?? null),
+            amountInr: incoming.subscription.amountInr !== undefined ? incoming.subscription.amountInr : (prev.subscription?.amountInr ?? null),
+            subscriptionId: incoming.subscription.subscriptionId !== undefined ? incoming.subscription.subscriptionId : (prev.subscription?.subscriptionId ?? null),
+            customerId: incoming.subscription.customerId !== undefined ? incoming.subscription.customerId : (prev.subscription?.customerId ?? null),
+            currency: incoming.subscription.currency !== undefined ? incoming.subscription.currency : (prev.subscription?.currency ?? null),
+            amountMinor: incoming.subscription.amountMinor !== undefined ? incoming.subscription.amountMinor : (prev.subscription?.amountMinor ?? null),
+            paymentMethodSummary: incoming.subscription.paymentMethodSummary !== undefined ? incoming.subscription.paymentMethodSummary : (prev.subscription?.paymentMethodSummary ?? null),
+            currentPeriodStart: incoming.subscription.currentPeriodStart !== undefined ? incoming.subscription.currentPeriodStart : (prev.subscription?.currentPeriodStart ?? null),
+            nextBillingAt: incoming.subscription.nextBillingAt !== undefined ? incoming.subscription.nextBillingAt : (prev.subscription?.nextBillingAt ?? null),
+            gracePeriodEndsAt: incoming.subscription.gracePeriodEndsAt !== undefined ? incoming.subscription.gracePeriodEndsAt : (prev.subscription?.gracePeriodEndsAt ?? null),
+            cancelReason: incoming.subscription.cancelReason !== undefined ? incoming.subscription.cancelReason : (prev.subscription?.cancelReason ?? null),
+            lastPaymentFailedAt: incoming.subscription.lastPaymentFailedAt !== undefined ? incoming.subscription.lastPaymentFailedAt : (prev.subscription?.lastPaymentFailedAt ?? null),
+            lastEventId: incoming.subscription.lastEventId !== undefined ? incoming.subscription.lastEventId : (prev.subscription?.lastEventId ?? null),
+            updatedAt: incoming.subscription.updatedAt || new Date().toISOString(),
           }
         : (prev.subscription ?? null);
 

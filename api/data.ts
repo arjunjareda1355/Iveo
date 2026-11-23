@@ -24,11 +24,17 @@ import {
   handleYouTubeOAuthCallback,
   handleSocialEmbedLookup,
   handlePinterestTokenProfile,
+  handleOAuthStatus,
   handleSocialOAuthUrl,
   handleSocialOAuthCallback,
   handleGetSubscription,
   handleCancelSubscription,
   handleReactivateSubscription,
+  handleSwitchSubscriptionCycle,
+  handleGetSubscriptionHistory,
+  handleGetSubscriptionInvoice,
+  handleAdminBillingInspect,
+  handleAdminBillingReconcile,
   handleDiscoverProfiles,
   handleSeoAdminOverview,
   handleSeoAdminRegenerate,
@@ -134,6 +140,8 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleSocialEmbedLookup(req, res);
     case 'pinterest-me':
       return handlePinterestTokenProfile(req, res);
+    case 'oauth-status':
+      return handleOAuthStatus(req, res);
     case 'oauth-youtube-url':
       return handleYouTubeOAuthUrl(req, res);
     case 'oauth-youtube-callback':
@@ -154,6 +162,16 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleCancelSubscription(req, res);
     case 'subscription-reactivate':
       return handleReactivateSubscription(req, res);
+    case 'subscription-switch-cycle':
+      return handleSwitchSubscriptionCycle(req, res);
+    case 'subscription-history':
+      return handleGetSubscriptionHistory(req, res);
+    case 'subscription-invoice':
+      return handleGetSubscriptionInvoice(req, res);
+    case 'admin-billing-inspect':
+      return handleAdminBillingInspect(req, res);
+    case 'admin-billing-reconcile':
+      return handleAdminBillingReconcile(req, res);
     case 'discover':
       return handleDiscoverProfiles(req, res);
     case 'seo-overview':

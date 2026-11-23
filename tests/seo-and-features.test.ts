@@ -18,7 +18,9 @@ import {
   validateProfileSeo,
   getAllUnifiedProfiles,
   isSyntheticTestHandle,
+  buildDiscoverSsrHtml,
 } from '../api/_lib/seoService';
+import { GET as ogGet } from '../api/og';
 import { extractBmcSlug } from '../api/_lib/buymeacoffee';
 import {
   isPrivilegedEmailServer,
@@ -74,7 +76,7 @@ test('Main domain SEO metadata contains brand title, canonical, and JSON-LD', ()
   assert.match(head, /<link rel="canonical" href="https:\/\/iveo\.site\/"/);
   assert.match(head, /"@type":"Organization"/);
   assert.match(head, /"@type":"WebSite"/);
-  assert.match(head, /image\/svg\+xml/);
+  assert.match(head, /image\/png/);
 });
 
 test('Profile indexability enforces 404 on missing/deleted/suspended and noindex on private/hidden', () => {
@@ -522,6 +524,29 @@ test('New card look presets, profile embed styles, and distinct VIBES preview li
     const hosts = new Set(vibe.persona.links.map((item) => new URL(item.url).hostname));
     assert.ok(hosts.size >= 4, `Expected ${vibe.id} persona links to have varied domains`);
   }
+});
+
+test('Discover SSR HTML includes crawlable directory heading and canonical pagination semantics', async () => {
+  const res = await buildDiscoverSsrHtml('https://iveo.site', 1);
+  assert.match(res.html, /<main id="iveo-ssr-discover">/);
+  assert.match(res.html, /Discover Creators on Iveo/);
+  assert.equal(res.page, 1);
+  assert.ok(res.totalPages >= 1);
+});
+
+test('Dynamic OG endpoint generates valid 1200x630 PNG image bytes', async () => {
+  const req = new Request('https://iveo.site/api/og?u=iveo-test-nonexistent');
+  const res = await ogGet(req);
+  assert.equal(res.status, 200);
+  const contentType = res.headers.get('content-type') || '';
+  assert.match(contentType, /image\/png/);
+  const buf = Buffer.from(await res.arrayBuffer());
+  // PNG magic header: 89 50 4E 47
+  assert.equal(buf[0], 0x89);
+  assert.equal(buf[1], 0x50);
+  assert.equal(buf[2], 0x4e);
+  assert.equal(buf[3], 0x47);
+  assert.ok(buf.byteLength > 500);
 });
 
 after(async () => {

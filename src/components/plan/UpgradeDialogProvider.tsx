@@ -74,6 +74,9 @@ export const UpgradeDialogProvider: React.FC<{ children: React.ReactNode }> = ({
           } catch {}
         }
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('iveo_subscription_updated', { detail: data }));
+      }
     },
     [user, showToast]
   );

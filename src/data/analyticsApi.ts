@@ -39,32 +39,30 @@ export async function getAnalytics(
   const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
   if (rawUrl && anonKey && token) {
-    const response = await fetch(`${rawUrl}/rest/v1/rpc/get_analytics`, {
-      method: 'POST',
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        p_from: from,
-        p_to: to,
-      }),
-    });
+    try {
+      const response = await fetch(`${rawUrl}/rest/v1/rpc/get_analytics`, {
+        method: 'POST',
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_from: from,
+          p_to: to,
+        }),
+      });
 
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('not_authenticated');
+      if (response.ok) {
+        const data = await response.json();
+        const mapped = analyticsFromJson(data);
+        if (mapped && (mapped.totals.views > 0 || mapped.totals.clicks > 0 || !username)) {
+          return mapped;
+        }
       }
-      throw new Error('Failed to load analytics');
+    } catch {
+      // Fall back cleanly to /api/analytics and local simulation
     }
-
-    const data = await response.json();
-    const mapped = analyticsFromJson(data);
-    if (!mapped) {
-      throw new Error('Invalid analytics response');
-    }
-    return mapped;
   }
 
   const cleanUsername = (username || '').toLowerCase().trim();

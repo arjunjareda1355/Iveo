@@ -77,6 +77,15 @@ import {
   type SubscriptionRecord,
 } from '../../src/lib/plan.ts';
 import {
+  adminInspectBilling,
+  adminReconcileBilling,
+  cancelBillingSubscription,
+  getBillingSnapshot,
+  getVerifiedInvoice,
+  reactivateBillingSubscription,
+  switchBillingCycle,
+} from './billingService.ts';
+import {
   buildSocialOAuthUrl,
   checkBlockRefreshCooldown,
   checkEmbedLookupRateLimit,
@@ -84,6 +93,7 @@ import {
   fetchPinterestAccountFromToken,
   fetchSocialEmbedMetadata,
   fetchUniversalSocialLinkMetadata,
+  getOAuthAvailability,
   isPinterestOAuthEnabled,
   isValidSocialOAuthProvider,
   extractProviderFromOAuthState,
@@ -840,6 +850,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
     );
 
     invalidatePublicPageCache(username);
+    notifyProfileSeoChanged('updated', username).catch(() => {});
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
   } catch (err: any) {
     return res.status(500).json({ error: 'upload_failed', message: err?.message });
@@ -1617,6 +1628,18 @@ export async function handlePinterestTokenProfile(req: ExpressReq, res: ExpressR
 }
 
 /**
+ * GET /api/oauth/status
+ * Reports which OAuth providers have valid credentials configured on the server
+ */
+export async function handleOAuthStatus(_req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  return res.status(200).json({
+    ok: true,
+    providers: getOAuthAvailability(),
+  });
+}
+
+/**
  * GET /api/oauth/:provider/url?origin=...
  * Generates authorization URL for creator page card connections (Discord, GitHub, LinkedIn, X, etc.)
  */
@@ -1742,50 +1765,38 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
  * GET /api/subscription
  * POST /api/subscription/cancel
  * POST /api/subscription/reactivate
+ * POST /api/subscription/switch-cycle
+ * GET /api/subscription/history
+ * GET /api/subscription/invoice
  */
 export async function handleGetSubscription(req: ExpressReq, res: ExpressRes) {
   const rawUsername = String(req.query.username || '').replace(/^@+/, '').toLowerCase().trim();
   const userId = String(req.query.userId || req.headers['x-user-id'] || '').trim();
   const email = String(req.query.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+  const limitRaw = parseInt(String(req.query.limit || '10'), 10);
+  const offsetRaw = parseInt(String(req.query.offset || '0'), 10);
 
   try {
-    const profile = rawUsername
-      ? await dbGetProfile(rawUsername)
-      : (userId || email)
-        ? await dbGetProfileByUserId(userId, email)
-        : null;
-
-    if (!profile) {
-      const fallback = resolveEffectivePlan({ email });
-      return res.status(200).json({
-        ok: true,
-        plan: fallback.plan,
-        isPro: fallback.isPro,
-        planSource: fallback.planSource,
-        createdAt: null,
-        earlyBirdDeadline: EARLY_BIRD_PRO_DEADLINE_ISO,
-        subscription: null,
-      });
+    if (rawUsername && (userId || email) && !isPrivilegedEmailServer(email)) {
+      const existing = await dbGetProfile(rawUsername).catch(() => null);
+      if (existing) {
+        const authorized = await dbVerifyOwnership(existing.username, userId || undefined, email || undefined);
+        if (!authorized) {
+          return res.status(403).json({ ok: false, error: 'unauthorized', message: 'Not authorized to view billing details for this account.' });
+        }
+      }
     }
 
-    const resolved = resolveEffectivePlan({
-      email: email || profile.primaryEmail,
-      storedPlan: profile.plan,
-      isProFlag: profile.isPro,
-      createdAt: profile.createdAt || profile.claimedAt || null,
-      subscription: profile.subscription || null,
+    const snapshot = await getBillingSnapshot({
+      username: rawUsername || null,
+      userId: userId || null,
+      email,
+      limit: Number.isFinite(limitRaw) ? limitRaw : 10,
+      offset: Number.isFinite(offsetRaw) ? offsetRaw : 0,
     });
 
-    return res.status(200).json({
-      ok: true,
-      username: profile.username,
-      plan: resolved.plan,
-      isPro: resolved.isPro,
-      planSource: resolved.planSource,
-      createdAt: profile.createdAt || profile.claimedAt || null,
-      earlyBirdDeadline: EARLY_BIRD_PRO_DEADLINE_ISO,
-      subscription: profile.subscription || null,
-    });
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.status(200).json(snapshot);
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'subscription_fetch_failed', message: err?.message });
   }
@@ -1796,72 +1807,32 @@ export async function handleCancelSubscription(req: ExpressReq, res: ExpressRes)
   const rawUsername = String(body.username || '').replace(/^@+/, '').toLowerCase().trim();
   const userId = String(body.userId || req.headers['x-user-id'] || '').trim();
   const email = String(body.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+  const mode = body.mode === 'immediate' ? 'immediate' : 'end_of_period';
+  const reason = typeof body.reason === 'string' ? body.reason : null;
 
   if (!rawUsername && !userId) {
     return res.status(400).json({ ok: false, error: 'missing_identifier' });
   }
 
   try {
-    const existing = rawUsername
-      ? await dbGetProfile(rawUsername)
-      : await dbGetProfileByUserId(userId, email);
-    if (!existing) {
-      return res.status(404).json({ ok: false, error: 'profile_not_found' });
+    const result = await cancelBillingSubscription({
+      username: rawUsername || null,
+      userId: userId || null,
+      email,
+      mode,
+      reason,
+      actor: 'user',
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error });
     }
 
-    const authorized = await dbVerifyOwnership(existing.username, userId || existing.userId, email || existing.primaryEmail);
-    if (!authorized) {
-      return res.status(403).json({ ok: false, error: 'unauthorized' });
+    if (result.username) {
+      invalidatePublicPageCache(result.username);
     }
 
-    const nowIso = new Date().toISOString();
-    const prevSub: Partial<SubscriptionRecord> = existing.subscription || {};
-    const hasPaidPeriod = Boolean(prevSub.paymentId || prevSub.orderId);
-    const updatedSubscription: SubscriptionRecord = {
-      status: 'cancelled',
-      cycle: prevSub.cycle || null,
-      startedAt: prevSub.startedAt || existing.createdAt || nowIso,
-      currentPeriodEnd: prevSub.currentPeriodEnd || null,
-      cancelledAt: nowIso,
-      cancelAtPeriodEnd: true,
-      paymentId: prevSub.paymentId || null,
-      orderId: prevSub.orderId || null,
-      amountInr: prevSub.amountInr ?? null,
-    };
-
-    const nextPlanInfo = resolveEffectivePlan({
-      email: email || existing.primaryEmail,
-      storedPlan: hasPaidPeriod ? 'pro' : 'free',
-      createdAt: existing.createdAt || null,
-      subscription: updatedSubscription,
-    });
-
-    await dbSaveProfile({
-      userId: userId || existing.userId,
-      username: existing.username,
-      primaryEmail: email || existing.primaryEmail,
-      plan: nextPlanInfo.plan,
-      subscription: updatedSubscription,
-    });
-
-    await Promise.race([
-      firebaseSaveProfile(
-        existing.username,
-        { ...existing, plan: nextPlanInfo.plan, subscription: updatedSubscription },
-        existing.userId
-      ).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ]);
-
-    invalidatePublicPageCache(existing.username);
-
-    return res.status(200).json({
-      ok: true,
-      plan: nextPlanInfo.plan,
-      isPro: nextPlanInfo.isPro,
-      planSource: nextPlanInfo.planSource,
-      subscription: updatedSubscription,
-    });
+    return res.status(200).json(result);
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'subscription_cancel_failed', message: err?.message });
   }
@@ -1878,67 +1849,193 @@ export async function handleReactivateSubscription(req: ExpressReq, res: Express
   }
 
   try {
-    const existing = rawUsername
-      ? await dbGetProfile(rawUsername)
-      : await dbGetProfileByUserId(userId, email);
-    if (!existing) {
-      return res.status(404).json({ ok: false, error: 'profile_not_found' });
+    const result = await reactivateBillingSubscription({
+      username: rawUsername || null,
+      userId: userId || null,
+      email,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error, message: (result as any).message });
     }
 
-    const authorized = await dbVerifyOwnership(existing.username, userId || existing.userId, email || existing.primaryEmail);
+    if (result.username) {
+      invalidatePublicPageCache(result.username);
+    }
+
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'subscription_reactivate_failed', message: err?.message });
+  }
+}
+
+export async function handleSwitchSubscriptionCycle(req: ExpressReq, res: ExpressRes) {
+  const body = req.body || {};
+  const rawUsername = String(body.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const userId = String(body.userId || req.headers['x-user-id'] || '').trim();
+  const email = String(body.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+  const targetCycle = body.cycle === 'yearly' || body.period === 'yearly' ? 'yearly' : 'monthly';
+
+  if (!rawUsername && !userId) {
+    return res.status(400).json({ ok: false, error: 'missing_identifier' });
+  }
+
+  try {
+    const result = await switchBillingCycle({
+      username: rawUsername || null,
+      userId: userId || null,
+      email,
+      targetCycle,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        ok: false,
+        error: result.error,
+        message: (result as any).message,
+      });
+    }
+
+    if (result.username) {
+      invalidatePublicPageCache(result.username);
+    }
+
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'cycle_switch_failed', message: err?.message });
+  }
+}
+
+export async function handleGetSubscriptionHistory(req: ExpressReq, res: ExpressRes) {
+  const rawUsername = String(req.query.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const userId = String(req.query.userId || req.headers['x-user-id'] || '').trim();
+  const email = String(req.query.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+  const limitRaw = parseInt(String(req.query.limit || '10'), 10);
+  const offsetRaw = parseInt(String(req.query.offset || '0'), 10);
+
+  if (!userId && !email) {
+    return res.status(401).json({ ok: false, error: 'unauthorized', message: 'Authentication required to access billing history.' });
+  }
+
+  try {
+    const target = rawUsername
+      ? await dbGetProfile(rawUsername).catch(() => null)
+      : await dbGetProfileByUserId(userId, email).catch(() => null);
+    if (!target) {
+      return res.status(200).json({ ok: true, billingHistory: [], historyTotal: 0, hasMoreHistory: false });
+    }
+
+    const authorized =
+      isPrivilegedEmailServer(email) ||
+      (await dbVerifyOwnership(target.username, userId || undefined, email || undefined));
     if (!authorized) {
       return res.status(403).json({ ok: false, error: 'unauthorized' });
     }
 
-    const prevSub: Partial<SubscriptionRecord> = existing.subscription || {};
-    const hasPaidPeriod = Boolean(prevSub.paymentId || prevSub.orderId);
-    const updatedSubscription: SubscriptionRecord = {
-      status: 'active',
-      cycle: prevSub.cycle || null,
-      startedAt: prevSub.startedAt || existing.createdAt || new Date().toISOString(),
-      currentPeriodEnd: prevSub.currentPeriodEnd || null,
-      cancelledAt: null,
-      cancelAtPeriodEnd: false,
-      paymentId: prevSub.paymentId || null,
-      orderId: prevSub.orderId || null,
-      amountInr: prevSub.amountInr ?? null,
-    };
-
-    const nextPlanInfo = resolveEffectivePlan({
-      email: email || existing.primaryEmail,
-      storedPlan: hasPaidPeriod ? 'pro' : existing.plan,
-      createdAt: existing.createdAt || null,
-      subscription: updatedSubscription,
+    const snapshot = await getBillingSnapshot({
+      username: target.username,
+      userId: target.userId,
+      email: target.primaryEmail,
+      limit: Number.isFinite(limitRaw) ? limitRaw : 10,
+      offset: Number.isFinite(offsetRaw) ? offsetRaw : 0,
     });
 
-    await dbSaveProfile({
-      userId: userId || existing.userId,
-      username: existing.username,
-      primaryEmail: email || existing.primaryEmail,
-      plan: nextPlanInfo.plan,
-      subscription: updatedSubscription,
-    });
-
-    await Promise.race([
-      firebaseSaveProfile(
-        existing.username,
-        { ...existing, plan: nextPlanInfo.plan, subscription: updatedSubscription },
-        existing.userId
-      ).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ]);
-
-    invalidatePublicPageCache(existing.username);
-
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     return res.status(200).json({
       ok: true,
-      plan: nextPlanInfo.plan,
-      isPro: nextPlanInfo.isPro,
-      planSource: nextPlanInfo.planSource,
-      subscription: updatedSubscription,
+      username: snapshot.username,
+      billingHistory: snapshot.billingHistory,
+      historyTotal: snapshot.historyTotal,
+      hasMoreHistory: snapshot.hasMoreHistory,
+      invoices: snapshot.invoices,
+      notifications: snapshot.notifications,
     });
   } catch (err: any) {
-    return res.status(500).json({ ok: false, error: 'subscription_reactivate_failed', message: err?.message });
+    return res.status(500).json({ ok: false, error: 'history_fetch_failed', message: err?.message });
+  }
+}
+
+export async function handleGetSubscriptionInvoice(req: ExpressReq, res: ExpressRes) {
+  const rawUsername = String(req.query.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const invoiceId = String(req.query.invoiceId || req.query.id || '').trim();
+  const userId = String(req.query.userId || req.headers['x-user-id'] || '').trim();
+  const email = String(req.query.email || req.headers['x-user-email'] || '').toLowerCase().trim() || null;
+
+  if (!invoiceId) {
+    return res.status(400).json({ ok: false, error: 'missing_invoice_id' });
+  }
+  if (!userId && !email) {
+    return res.status(401).json({ ok: false, error: 'unauthorized', message: 'Authentication required to download invoices.' });
+  }
+
+  try {
+    const result = await getVerifiedInvoice({
+      username: rawUsername || null,
+      userId: userId || null,
+      email,
+      invoiceId,
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error, message: result.message });
+    }
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.status(200).json({ ok: true, invoice: result.invoice });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'invoice_fetch_failed', message: err?.message });
+  }
+}
+
+export async function handleAdminBillingInspect(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'Admin access required.' });
+  }
+
+  const rawUsername = String(req.query.username || req.query.u || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!rawUsername) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+
+  try {
+    const result = await adminInspectBilling(rawUsername);
+    return res.status(result.status).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'admin_inspect_failed', message: err?.message });
+  }
+}
+
+export async function handleAdminBillingReconcile(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'Admin access required.' });
+  }
+
+  const body = req.body || {};
+  const adminEmail = String(req.query.adminEmail || req.headers['x-user-email'] || '').toLowerCase().trim();
+  const rawUsername = String(body.username || '').replace(/^@+/, '').toLowerCase().trim();
+  const action = String(body.action || '').trim() as any;
+
+  if (!rawUsername) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+  if (!['activate_paid', 'grant_grace_period', 'expire_now', 'cancel_immediate'].includes(action)) {
+    return res.status(400).json({ ok: false, error: 'invalid_action' });
+  }
+
+  try {
+    const result = await adminReconcileBilling({
+      adminEmail,
+      username: rawUsername,
+      action,
+      period: body.period === 'yearly' ? 'yearly' : 'monthly',
+      paymentId: typeof body.paymentId === 'string' ? body.paymentId : null,
+      orderId: typeof body.orderId === 'string' ? body.orderId : null,
+      note: typeof body.note === 'string' ? body.note : null,
+    });
+    if (result.ok) {
+      invalidatePublicPageCache(rawUsername);
+    }
+    return res.status(result.status).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'admin_reconcile_failed', message: err?.message });
   }
 }
 
@@ -1948,8 +2045,11 @@ export async function handleReactivateSubscription(req: ExpressReq, res: Express
  */
 export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
   const q = String(req.query.q || '').toLowerCase().trim();
+  const pageRaw = parseInt(String(req.query.page || '1'), 10);
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1;
+  const pageSize = 24;
   const origin = getCanonicalSiteOrigin();
-  const cacheKey = q || '__all__';
+  const cacheKey = `${q || '__all__'}::p${page}`;
   const cachedDiscover = discoverCache.get(cacheKey);
   if (cachedDiscover && cachedDiscover.expiresAt > Date.now()) {
     res.setHeader('Cache-Control', 'public, max-age=20, stale-while-revalidate=60');
@@ -1961,16 +2061,20 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
     const allIndexable = all
       .filter((p) => !isSyntheticTestHandle(p.username) && evaluateProfileIndexability(p).indexable);
 
-    const totalCount = allIndexable.length;
-
-    const filtered = (q
+    const matching = q
       ? allIndexable.filter((p) =>
           p.username.includes(q) ||
           (p.displayName || '').toLowerCase().includes(q) ||
           (p.bio || '').toLowerCase().includes(q)
-        ).slice(0, 50)
-      : allIndexable.slice(0, 16)
-    ).map((p) => ({
+        )
+      : allIndexable;
+
+    const totalCount = matching.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const startIdx = (safePage - 1) * pageSize;
+
+    const sliced = matching.slice(startIdx, startIdx + pageSize).map((p) => ({
       username: p.username,
       displayName: p.displayName || p.username,
       bio: p.bio || '',
@@ -1982,7 +2086,14 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
       updatedAt: p.updatedAt,
     }));
 
-    const payload = { ok: true, profiles: filtered, totalCount };
+    const payload = {
+      ok: true,
+      profiles: sliced,
+      totalCount,
+      page: safePage,
+      totalPages,
+      pageSize,
+    };
     discoverCache.set(cacheKey, { payload, expiresAt: Date.now() + DISCOVER_CACHE_TTL_MS });
     res.setHeader('Cache-Control', 'public, max-age=20, stale-while-revalidate=60');
     return res.status(200).json(payload);

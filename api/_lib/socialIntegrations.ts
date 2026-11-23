@@ -3,7 +3,7 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import { parseEmbedUrl, detectProviderUrl, type ParsedEmbed } from '../../src/lib/embeds.ts';
 import type { EmbedMetaData, EmbedProvider } from '../../src/data/types.ts';
-import { fetchYouTubeShowcase } from './youtube.ts';
+import { fetchYouTubeShowcase, getGoogleOAuthCredentials } from './youtube.ts';
 import {
   getServerConfig,
   redactSecrets,
@@ -96,6 +96,23 @@ export function isValidSocialOAuthProvider(value: string): value is SocialOAuthP
     value === 'spotify' ||
     value === 'pinterest'
   );
+}
+
+export function getOAuthAvailability(): Record<SocialOAuthProvider | 'youtube', boolean> {
+  const cfg = getServerConfig();
+  const google = getGoogleOAuthCredentials();
+  return {
+    youtube: Boolean(google?.clientId && google?.clientSecret),
+    discord: Boolean(cfg.oauth.discord.clientId && cfg.oauth.discord.clientSecret),
+    github: Boolean(cfg.oauth.github.clientId && cfg.oauth.github.clientSecret),
+    linkedin: Boolean(cfg.oauth.linkedin.clientId && cfg.oauth.linkedin.clientSecret),
+    x: Boolean(cfg.oauth.x.clientId && cfg.oauth.x.clientSecret),
+    instagram: Boolean(cfg.oauth.instagram.clientId && cfg.oauth.instagram.clientSecret),
+    facebook: Boolean(cfg.oauth.facebook.clientId && cfg.oauth.facebook.clientSecret),
+    threads: Boolean(cfg.oauth.threads.clientId && cfg.oauth.threads.clientSecret),
+    spotify: Boolean(cfg.oauth.spotify.clientId && cfg.oauth.spotify.clientSecret),
+    pinterest: Boolean(cfg.pinterestOAuthEnabled && cfg.oauth.pinterest.clientId && cfg.oauth.pinterest.clientSecret),
+  };
 }
 
 export function checkEmbedLookupRateLimit(key: string, limitPerMin = 20): { allowed: boolean; retryAfterSec?: number } {

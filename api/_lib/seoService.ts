@@ -345,6 +345,7 @@ export function buildMainDomainHeadTags(requestOrigin?: string): string {
     ${verifications}
     <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:site_name" content="Iveo" />
     <meta property="og:title" content="${escapeHtml(MAIN_SEO_TITLE)}" />
     <meta property="og:description" content="${escapeHtml(MAIN_SEO_DESCRIPTION)}" />
@@ -352,9 +353,10 @@ export function buildMainDomainHeadTags(requestOrigin?: string): string {
     <meta property="og:image" content="${escapeHtml(ogImg)}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:type" content="image/svg+xml" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content="Iveo – One Link for Everything You Create" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@iveosite" />
     <meta name="twitter:title" content="${escapeHtml(MAIN_SEO_TITLE)}" />
     <meta name="twitter:description" content="${escapeHtml(MAIN_SEO_DESCRIPTION)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />
@@ -381,32 +383,54 @@ export async function buildProfileSeoPayload(
     hideFromSearch: page.hideFromSearch,
   });
 
-  const ogImg = page.avatarUrl?.startsWith('http')
-    ? page.avatarUrl
-    : ogImageAddress(requestOrigin, page.username, pageVersion);
-
-  const sameAs = Array.from(
-    new Set(
-      Object.entries(page.socials || {})
-        .filter(([, u]) => typeof u === 'string' && u.trim().length > 0)
-        .map(([plat, u]) => normalizeSocialUrl(plat.toLowerCase().trim(), String(u)))
-        .filter((u) => /^https?:\/\//i.test(u))
-    )
-  );
+  const ogImg = ogImageAddress(requestOrigin, page.username, pageVersion);
 
   const blocks = await dbGetBlocks(page.username).catch(() => []);
-  const publicLinks = (blocks || []).filter(
-    (b: any) => b && b.isActive !== false && !b.isArchived && !b.isProtected && b.url
+  const now = new Date();
+  const activePublicBlocks = (blocks || []).filter((b: any) => {
+    if (!b || b.isActive === false || b.isArchived) return false;
+    if (b.isProtected) return false;
+    if (b.startAt && new Date(b.startAt) > now) return false;
+    if (b.endAt && new Date(b.endAt) <= now) return false;
+    return true;
+  });
+
+  const publicLinks = activePublicBlocks.filter((b: any) => b.url);
+
+  // Build sameAs strictly from verified / user-provided social profile links + OAuth-connected embed profiles
+  const verifiedSocialUrls: string[] = Object.entries(page.socials || {})
+    .filter(([, u]) => typeof u === 'string' && u.trim().length > 0)
+    .map(([plat, u]) => normalizeSocialUrl(plat.toLowerCase().trim(), String(u)));
+
+  for (const b of activePublicBlocks) {
+    if (
+      b.url &&
+      (b.embedMeta?.connectedViaOAuth === true ||
+        b.kind === 'youtube' ||
+        b.kind === 'bluesky')
+    ) {
+      const formatted = String(b.url).trim();
+      if (/^https?:\/\//i.test(formatted)) {
+        verifiedSocialUrls.push(formatted);
+      }
+    }
+  }
+
+  const sameAs = Array.from(
+    new Set(verifiedSocialUrls.filter((u) => /^https?:\/\//i.test(u)))
   );
 
   const personEntity: Record<string, unknown> = {
     '@type': 'Person',
+    '@id': `${canonical}#person`,
     name,
-    alternateName: `@${page.username}`,
+    alternateName: [page.username, `@${page.username}`],
+    identifier: page.username,
     url: canonical,
   };
-  if (pageDescription) {
-    personEntity.description = pageDescription;
+  const truthfulBio = page.bio?.trim() || '';
+  if (truthfulBio || pageDescription) {
+    personEntity.description = truthfulBio || pageDescription;
   }
   if (page.avatarUrl) {
     personEntity.image = page.avatarUrl.startsWith('/')
@@ -420,14 +444,36 @@ export async function buildProfileSeoPayload(
   const profilePageJsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'ProfilePage',
+    '@id': `${canonical}#profile`,
     url: canonical,
     name: pageTitle,
     description: pageDescription,
+    inLanguage: 'en',
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': canonical,
+    },
     mainEntity: personEntity,
   };
   if (page.updatedAt) {
     profilePageJsonLd.dateModified = page.updatedAt;
   }
+
+  const linkListJsonLd =
+    publicLinks.length > 0
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: `${name} links and projects`,
+          numberOfItems: Math.min(publicLinks.length, 30),
+          itemListElement: publicLinks.slice(0, 30).map((b: any, idx: number) => ({
+            '@type': 'ListItem',
+            position: idx + 1,
+            name: String(b.title || b.url),
+            url: String(b.url),
+          })),
+        }
+      : null;
 
   const { buildProfileSsrHeadTags } = await import('../../src/lib/blockTheme.ts');
   const ssrThemeTags = buildProfileSsrHeadTags({
@@ -441,7 +487,6 @@ export async function buildProfileSeoPayload(
     isPro: Boolean(page.isPro),
   });
 
-  const now = new Date();
   const bootstrapLinks = (blocks || [])
     .filter((b: any) => {
       if (!b || b.isActive === false || b.isArchived) return false;
@@ -518,20 +563,27 @@ export async function buildProfileSeoPayload(
     ${verifications}
     <link rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:type" content="profile" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:site_name" content="Iveo" />
     <meta property="og:title" content="${escapeHtml(pageTitle)}" />
     <meta property="og:description" content="${escapeHtml(pageDescription)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
     <meta property="og:image" content="${escapeHtml(ogImg)}" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${escapeHtml(name)}'s personal profile on Iveo" />
     <meta property="profile:username" content="${escapeHtml(page.username)}" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@iveosite" />
     <meta name="twitter:title" content="${escapeHtml(pageTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(pageDescription)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />
-    <script type="application/ld+json">${safeJsonLd(profilePageJsonLd)}</script>
+    <script type="application/ld+json">${safeJsonLd(profilePageJsonLd)}</script>${
+    linkListJsonLd
+      ? `\n    <script type="application/ld+json">${safeJsonLd(linkListJsonLd)}</script>`
+      : ''
+  }
     <script id="iveo-ssr-bootstrap" type="application/json">${safeJsonLd(ssrBootstrapPayload)}</script>`;
 
   const resolvedAvatar = page.avatarUrl
@@ -546,6 +598,44 @@ export async function buildProfileSeoPayload(
     )
     .join('');
 
+  // Semantic HTML for active non-link content blocks (headers, FAQs, products, locations, bookings)
+  const ssrRichBlocksHtml = activePublicBlocks
+    .slice(0, 30)
+    .map((b: any) => {
+      if (b.kind === 'header' && b.title) {
+        return `<h3>${escapeHtml(String(b.title))}</h3>`;
+      }
+      if (b.kind === 'faq' && Array.isArray(b.faq?.items) && b.faq.items.length > 0) {
+        const qa = b.faq.items
+          .filter((item: any) => item && item.question && item.answer)
+          .slice(0, 10)
+          .map(
+            (item: any) =>
+              `<dt>${escapeHtml(String(item.question))}</dt><dd>${escapeHtml(String(item.answer))}</dd>`
+          )
+          .join('');
+        return qa ? `<section><h3>${escapeHtml(String(b.title || 'FAQ'))}</h3><dl>${qa}</dl></section>` : '';
+      }
+      if (b.kind === 'product' && (b.title || b.product?.description)) {
+        return `<article><h3>${escapeHtml(String(b.title || 'Featured item'))}</h3>${
+          b.product?.description ? `<p>${escapeHtml(String(b.product.description))}</p>` : ''
+        }</article>`;
+      }
+      if (b.kind === 'location' && (b.location?.address || b.title)) {
+        return `<p>${escapeHtml(String(b.title || ''))}${
+          b.location?.address ? ` — ${escapeHtml(String(b.location.address))}` : ''
+        }</p>`;
+      }
+      if (b.kind === 'booking' && (b.title || b.booking?.description)) {
+        return `<article><h3>${escapeHtml(String(b.title || 'Booking'))}</h3>${
+          b.booking?.description ? `<p>${escapeHtml(String(b.booking.description))}</p>` : ''
+        }</article>`;
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('');
+
   const ssrSocialsHtml = Object.entries(page.socials || {})
     .filter(([, val]) => typeof val === 'string' && val.trim().length > 0)
     .map(([plat, val]) => {
@@ -556,23 +646,30 @@ export async function buildProfileSeoPayload(
 
   const ssrBodyHtml = `<main id="iveo-ssr-profile" class="iveo-ssr-only" data-username="${escapeHtml(page.username)}">
     <header>
-      ${resolvedAvatar ? `<img src="${escapeHtml(resolvedAvatar)}" alt="${escapeHtml(name)} profile photo" width="96" height="96" />` : ''}
+      ${resolvedAvatar ? `<img src="${escapeHtml(resolvedAvatar)}" alt="${escapeHtml(name)} (@${escapeHtml(page.username)}) profile photo" width="96" height="96" />` : ''}
       <h1>${escapeHtml(name)}</h1>
       <p>@${escapeHtml(page.username)}</p>
       ${page.bio ? `<p>${escapeHtml(page.bio)}</p>` : ''}
     </header>
     ${ssrSocialsHtml ? `<nav aria-label="Social profiles"><ul>${ssrSocialsHtml}</ul></nav>` : ''}
     ${ssrLinksHtml ? `<section aria-label="Links"><h2>Links &amp; Projects</h2><ul>${ssrLinksHtml}</ul></section>` : ''}
+    ${ssrRichBlocksHtml ? `<section aria-label="Featured content">${ssrRichBlocksHtml}</section>` : ''}
     <footer><a href="${escapeHtml(canonicalOrigin)}/">Create your own Iveo page</a> · <a href="${escapeHtml(canonicalOrigin)}/discover">Discover creators</a></footer>
   </main>`;
 
   return { headTags, ssrBodyHtml, decision };
 }
 
-export async function buildDiscoverSsrHtml(requestOrigin: string): Promise<string> {
+export async function buildDiscoverSsrHtml(requestOrigin: string, pageNum: number = 1): Promise<string> {
   const canonicalOrigin = getCanonicalSiteOrigin();
   const profiles = await getAllUnifiedProfiles();
-  const eligible = profiles.filter((p) => evaluateProfileIndexability(p).indexable).slice(0, 16);
+  const allEligible = profiles.filter((p) => evaluateProfileIndexability(p).indexable);
+  const pageSize = 24;
+  const totalPages = Math.max(1, Math.ceil(allEligible.length / pageSize));
+  const safePage = Math.max(1, Math.min(pageNum, totalPages));
+  const start = (safePage - 1) * pageSize;
+  const eligible = allEligible.slice(start, start + pageSize);
+
   const items = eligible
     .map(
       (p) =>
@@ -580,10 +677,20 @@ export async function buildDiscoverSsrHtml(requestOrigin: string): Promise<strin
     )
     .join('');
 
+  const navLinks: string[] = [];
+  if (safePage > 1) {
+    const prevHref = safePage === 2 ? '/discover' : `/discover?page=${safePage - 1}`;
+    navLinks.push(`<a href="${escapeHtml(prevHref)}" rel="prev">Previous page</a>`);
+  }
+  if (safePage < totalPages) {
+    navLinks.push(`<a href="/discover?page=${safePage + 1}" rel="next">Next page</a>`);
+  }
+
   return `<main id="iveo-ssr-discover" style="max-width:860px;margin:48px auto;padding:24px;font-family:system-ui,sans-serif;">
     <h1>Discover Creators on Iveo</h1>
     <p>Explore public creator profiles, digital portfolios, and link pages hosted on Iveo.</p>
     <ul>${items}</ul>
+    ${navLinks.length > 0 ? `<nav aria-label="Pagination">${navLinks.join(' · ')}</nav>` : ''}
     <footer><a href="${escapeHtml(canonicalOrigin)}/">Back to Iveo home</a></footer>
   </main>`;
 }
@@ -619,6 +726,7 @@ export function buildRobotsTxt(origin: string): string {
     'Allow: /',
     'Allow: /@*',
     'Allow: /discover',
+    'Allow: /api/og',
     'Disallow: /api/',
     'Disallow: /dashboard',
     'Disallow: /admin',
@@ -944,7 +1052,7 @@ export async function validateProfileSeo(origin: string, username: string) {
     canonical,
     title,
     description,
-    ogImage: page.avatarUrl?.startsWith('http') ? page.avatarUrl : ogImageAddress(origin, page.username),
+    ogImage: ogImageAddress(origin, page.username),
     issues,
   };
 }

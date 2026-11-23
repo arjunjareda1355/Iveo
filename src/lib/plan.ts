@@ -134,8 +134,29 @@ export const EARLY_BIRD_PRO_DEADLINE_ISO = '2027-01-01T00:00:00.000Z';
 export const EARLY_BIRD_PRO_DEADLINE_MS = Date.parse(EARLY_BIRD_PRO_DEADLINE_ISO);
 
 export type PlanSource = 'owner' | 'paid' | 'early_bird' | 'free';
-export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'none';
+export type SubscriptionLifecycleState =
+  | 'free'
+  | 'checkout_pending'
+  | 'payment_authentication'
+  | 'active'
+  | 'renewal'
+  | 'scheduled_cancellation'
+  | 'immediate_cancellation'
+  | 'expired';
+
+export type SubscriptionStatus =
+  | SubscriptionLifecycleState
+  | 'cancelled'
+  | 'none';
+
 export type SubscriptionCycle = 'monthly' | 'yearly';
+export type BillingCurrency = 'INR' | 'USD';
+export type BillingHistoryStatus =
+  | 'paid'
+  | 'pending'
+  | 'failed'
+  | 'refunded'
+  | 'partially_refunded';
 
 export interface SubscriptionRecord {
   status: SubscriptionStatus;
@@ -147,6 +168,165 @@ export interface SubscriptionRecord {
   paymentId: string | null;
   orderId: string | null;
   amountInr: number | null;
+  subscriptionId?: string | null;
+  customerId?: string | null;
+  currency?: BillingCurrency | null;
+  amountMinor?: number | null;
+  paymentMethodSummary?: string | null;
+  currentPeriodStart?: string | null;
+  nextBillingAt?: string | null;
+  gracePeriodEndsAt?: string | null;
+  cancelReason?: string | null;
+  lastPaymentFailedAt?: string | null;
+  lastEventId?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface BillingHistoryRecord {
+  id: string;
+  date: string;
+  amountMinor: number;
+  amountDisplay: string;
+  currency: BillingCurrency;
+  status: BillingHistoryStatus;
+  cycle: SubscriptionCycle | null;
+  orderId?: string | null;
+  paymentId?: string | null;
+  subscriptionId?: string | null;
+  invoiceNumber?: string | null;
+  invoiceAvailable: boolean;
+  paymentMethodSummary?: string | null;
+  description?: string;
+  failureReason?: string | null;
+  refundedAmountMinor?: number | null;
+}
+
+export interface InvoiceRecord {
+  id: string;
+  invoiceNumber: string;
+  transactionId: string;
+  issuedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  cycle: SubscriptionCycle;
+  amountMinor: number;
+  currency: BillingCurrency;
+  paymentId: string;
+  orderId: string;
+  status: 'paid';
+  paymentMethodSummary?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  username: string;
+}
+
+export interface BillingNotification {
+  id: string;
+  kind: 'info' | 'warning' | 'error' | 'success';
+  title: string;
+  message: string;
+  createdAt: string;
+  eventKey?: string | null;
+  read?: boolean;
+}
+
+export interface SubscriptionAuditLog {
+  id: string;
+  action: string;
+  actor: 'user' | 'webhook' | 'system' | 'admin';
+  actorEmail?: string | null;
+  fromState: string;
+  toState: string;
+  reason?: string | null;
+  orderId?: string | null;
+  paymentId?: string | null;
+  createdAt: string;
+}
+
+export interface UserBillingStore {
+  billingHistory: BillingHistoryRecord[];
+  invoices: InvoiceRecord[];
+  notifications: BillingNotification[];
+  auditLogs: SubscriptionAuditLog[];
+  processedWebhookEvents: string[];
+}
+
+export interface GracePeriodInfo {
+  inGracePeriod: boolean;
+  gracePeriodEndsAt: string | null;
+  daysRemaining: number;
+}
+
+export const GRACE_PERIOD_DAYS = 3;
+
+export function formatMinorCurrency(amountMinor: number, currency: BillingCurrency = 'INR'): string {
+  const safeMinor = Number.isFinite(amountMinor) ? amountMinor : 0;
+  if (currency === 'USD') {
+    const dollars = safeMinor / 100;
+    return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+  }
+  const rupees = Math.round(safeMinor / 100);
+  return `₹${rupees.toLocaleString('en-IN')}`;
+}
+
+export function getGracePeriodInfo(
+  sub?: Partial<SubscriptionRecord> | null,
+  nowMs: number = Date.now()
+): GracePeriodInfo {
+  const graceIso = sub?.gracePeriodEndsAt || null;
+  if (!graceIso) {
+    return { inGracePeriod: false, gracePeriodEndsAt: null, daysRemaining: 0 };
+  }
+  const graceMs = Date.parse(graceIso);
+  if (!Number.isFinite(graceMs) || graceMs <= nowMs) {
+    return { inGracePeriod: false, gracePeriodEndsAt: graceIso, daysRemaining: 0 };
+  }
+  const daysRemaining = Math.max(1, Math.ceil((graceMs - nowMs) / (24 * 60 * 60 * 1000)));
+  return {
+    inGracePeriod: true,
+    gracePeriodEndsAt: graceIso,
+    daysRemaining,
+  };
+}
+
+export function normalizeSubscriptionLifecycleState(
+  sub?: Partial<SubscriptionRecord> | null,
+  isPro: boolean = false,
+  nowMs: number = Date.now()
+): SubscriptionLifecycleState {
+  const raw = sub?.status;
+  if (raw === 'immediate_cancellation') return 'immediate_cancellation';
+  if (raw === 'expired') return 'expired';
+  if (raw === 'checkout_pending') return 'checkout_pending';
+  if (raw === 'payment_authentication') return 'payment_authentication';
+
+  const endMs = sub?.currentPeriodEnd ? Date.parse(sub.currentPeriodEnd) : NaN;
+  const grace = getGracePeriodInfo(sub, nowMs);
+
+  if (raw === 'scheduled_cancellation' || raw === 'cancelled' || (sub?.cancelAtPeriodEnd && (sub?.paymentId || sub?.orderId))) {
+    if (Number.isFinite(endMs) && endMs <= nowMs && !grace.inGracePeriod) {
+      return 'expired';
+    }
+    return 'scheduled_cancellation';
+  }
+
+  if (raw === 'renewal') {
+    if (Number.isFinite(endMs) && endMs <= nowMs && !grace.inGracePeriod) {
+      return 'expired';
+    }
+    return 'renewal';
+  }
+
+  if (raw === 'active') {
+    if (Number.isFinite(endMs) && endMs <= nowMs && !grace.inGracePeriod) {
+      return 'expired';
+    }
+    return 'active';
+  }
+
+  if (grace.inGracePeriod) return 'active';
+  if (isPro) return 'active';
+  return 'free';
 }
 
 export function isEarlyBirdEligible(
@@ -182,21 +362,46 @@ export function resolveEffectivePlan(params: {
   }
 
   const sub = params.subscription;
+  if (sub?.status === 'immediate_cancellation') {
+    return { plan: 'free', isPro: false, planSource: 'free' };
+  }
+
   const subEndMs = sub?.currentPeriodEnd ? Date.parse(sub.currentPeriodEnd) : NaN;
+  const grace = getGracePeriodInfo(sub, nowMs);
   const hasPaidPeriodRemaining =
     sub?.status === 'active' ||
-    (sub?.status === 'cancelled' && Number.isFinite(subEndMs) && subEndMs > nowMs);
+    sub?.status === 'renewal' ||
+    ((sub?.status === 'scheduled_cancellation' || sub?.status === 'cancelled') &&
+      Number.isFinite(subEndMs) &&
+      subEndMs > nowMs) ||
+    grace.inGracePeriod;
 
-  if (hasPaidPeriodRemaining || params.storedPlan === 'pro' || params.isProFlag === true) {
-    // Distinguish explicit paid subscription from early-bird granted accounts
-    if (sub?.paymentId || sub?.orderId || sub?.status === 'active' || hasPaidPeriodRemaining) {
+  // If paid active/renewal period has explicitly elapsed without grace period remaining, drop to expired -> free
+  if (
+    (sub?.status === 'active' || sub?.status === 'renewal') &&
+    Number.isFinite(subEndMs) &&
+    subEndMs <= nowMs &&
+    !grace.inGracePeriod
+  ) {
+    return { plan: 'free', isPro: false, planSource: 'free' };
+  }
+
+  if (hasPaidPeriodRemaining) {
+    if (sub?.paymentId || sub?.orderId || sub?.subscriptionId || grace.inGracePeriod || sub?.status === 'active' || sub?.status === 'renewal') {
       return { plan: 'pro', isPro: true, planSource: 'paid' };
     }
   }
 
-  // If subscription was explicitly cancelled and expired, fall through to early-bird only if user did not explicitly cancel an early-bird plan
-  const explicitCancelWithoutPaid = sub?.status === 'cancelled' && !sub?.paymentId && !sub?.orderId;
-  if (!explicitCancelWithoutPaid && isEarlyBirdEligible(params.createdAt, nowMs)) {
+  const explicitExpiredOrCancelled =
+    sub?.status === 'expired' ||
+    sub?.status === 'cancelled' ||
+    sub?.status === 'scheduled_cancellation';
+
+  if (explicitExpiredOrCancelled) {
+    return { plan: 'free', isPro: false, planSource: 'free' };
+  }
+
+  if (isEarlyBirdEligible(params.createdAt, nowMs)) {
     return { plan: 'pro', isPro: true, planSource: 'early_bird' };
   }
 

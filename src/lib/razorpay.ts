@@ -164,8 +164,10 @@ export async function startProSubscriptionCheckout(
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
             period,
+            currency,
             userId: user.userId || undefined,
             username: user.username || undefined,
+            email: user.email || undefined,
           }),
         });
 

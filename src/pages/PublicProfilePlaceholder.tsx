@@ -356,39 +356,52 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
 
       const robotsValue = pageData.profile.hideFromSearch ? 'noindex, nofollow' : 'index, follow';
       const origin = typeof window !== 'undefined' ? window.location.origin : SITE_ORIGIN;
-      const usesDynamicOg = !pageData.profile.avatarUrl?.startsWith('http');
-      const ogImageUrl = usesDynamicOg
-        ? `${origin}/api/og?u=${encodeURIComponent(clean)}`
-        : pageData.profile.avatarUrl!;
+      const ogImageUrl = `${origin}/api/og?u=${encodeURIComponent(clean)}`;
 
       upsertMetaTag('name', 'description', descText);
       upsertMetaTag('name', 'robots', robotsValue);
       upsertMetaTag('property', 'og:type', 'profile');
+      upsertMetaTag('property', 'og:locale', 'en_US');
       upsertMetaTag('property', 'og:site_name', 'Iveo');
       upsertMetaTag('property', 'og:title', titleText);
       upsertMetaTag('property', 'og:description', descText);
       upsertMetaTag('property', 'og:url', canonicalHref);
       upsertMetaTag('property', 'og:image', ogImageUrl);
-      upsertMetaTag('property', 'og:image:type', usesDynamicOg ? 'image/svg+xml' : 'image/jpeg');
+      upsertMetaTag('property', 'og:image:type', 'image/png');
       upsertMetaTag('property', 'profile:username', clean);
       upsertMetaTag('name', 'twitter:card', 'summary_large_image');
+      upsertMetaTag('name', 'twitter:site', '@iveosite');
       upsertMetaTag('name', 'twitter:title', titleText);
       upsertMetaTag('name', 'twitter:description', descText);
       upsertMetaTag('name', 'twitter:image', ogImageUrl);
 
-      const sameAs = Object.values(pageData.profile.socials || {})
+      const socialUrls = Object.values(pageData.profile.socials || {})
         .filter((val): val is string => typeof val === 'string' && val.trim().length > 0)
         .map((val) => formatExternalUrl(val));
+
+      for (const blk of pageData.links || []) {
+        if (
+          blk.url &&
+          !blk.isProtected &&
+          (blk.embedMeta?.connectedViaOAuth === true ||
+            blk.kind === 'youtube' ||
+            blk.kind === 'bluesky')
+        ) {
+          socialUrls.push(formatExternalUrl(blk.url));
+        }
+      }
+
+      const sameAs = Array.from(new Set(socialUrls.filter((u) => /^https?:\/\//i.test(u))));
 
       const mainEntity: Record<string, unknown> = {
         '@type': 'Person',
         '@id': `${canonicalHref}#person`,
         name: display,
-        alternateName: `@${clean}`,
+        alternateName: [clean, `@${clean}`],
         identifier: clean,
         url: canonicalHref,
       };
-      if (descText) mainEntity.description = descText;
+      if (bioClean || descText) mainEntity.description = bioClean || descText;
       if (pageData.profile.avatarUrl) {
         mainEntity.image = pageData.profile.avatarUrl.startsWith('/')
           ? `${origin}${pageData.profile.avatarUrl}`
@@ -408,7 +421,9 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       ldScript.textContent = JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'ProfilePage',
+        '@id': `${canonicalHref}#profile`,
         url: canonicalHref,
+        inLanguage: 'en',
         mainEntityOfPage: {
           '@type': 'WebPage',
           '@id': canonicalHref,

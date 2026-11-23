@@ -2,6 +2,7 @@ import { publicRpc } from './supabase.ts';
 import { dbGetProfile, dbGetRedirectTarget } from './azureSql.ts';
 import { firebaseGetProfile } from './firebaseServer.ts';
 import { isPrivilegedEmailServer } from './usernames.ts';
+import { resolveEffectivePlan } from '../../src/lib/plan.ts';
 
 export interface PublicPageServerData {
   displayName: string | null;
@@ -75,7 +76,14 @@ export async function loadPublicPage(
         return null;
       }
       const isOwnerProfile = isPrivilegedEmailServer(dbProf.primaryEmail);
-      const isPro = Boolean(dbProf.plan === 'pro' || isOwnerProfile);
+      const effectivePlan = resolveEffectivePlan({
+        email: dbProf.primaryEmail,
+        storedPlan: dbProf.plan,
+        isProFlag: dbProf.isPro,
+        createdAt: dbProf.createdAt || dbProf.claimedAt || null,
+        subscription: dbProf.subscription || null,
+      });
+      const isPro = effectivePlan.isPro;
       return {
         username: dbProf.username.toLowerCase(),
         displayName: dbProf.displayName || `@${dbProf.username}`,
@@ -126,7 +134,14 @@ export async function loadPublicPage(
         return null;
       }
       const isOwnerProfile = isPrivilegedEmailServer(fbProf.primaryEmail);
-      const isPro = Boolean(fbProf.plan === 'pro' || isOwnerProfile);
+      const effectivePlan = resolveEffectivePlan({
+        email: fbProf.primaryEmail,
+        storedPlan: fbProf.plan,
+        isProFlag: fbProf.isPro,
+        createdAt: fbProf.createdAt || fbProf.claimedAt || null,
+        subscription: fbProf.subscription || null,
+      });
+      const isPro = effectivePlan.isPro;
       return {
         username: fbProf.username.toLowerCase(),
         displayName: fbProf.displayName || `@${fbProf.username}`,

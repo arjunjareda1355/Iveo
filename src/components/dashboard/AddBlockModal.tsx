@@ -484,13 +484,13 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap pb-0.5 text-[12px]">
+          <div className="flex items-center gap-1 flex-wrap pb-0.5 text-[12px]">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`min-h-[34px] px-3 rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                className={`h-8 min-h-[32px] px-2.5 py-0.5 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   activeCategory === cat.id
                     ? 'bg-ink text-surface'
                     : 'bg-surface-2 text-muted hover:text-ink'

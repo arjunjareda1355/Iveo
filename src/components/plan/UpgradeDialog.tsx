@@ -123,7 +123,7 @@ export const UpgradeDialog: React.FC<UpgradeDialogProps> = ({
       period,
       currency,
       user: {
-        userId: session.username || undefined,
+        userId: session.userId || session.username || undefined,
         username: session.username || undefined,
         displayName: session.displayName || undefined,
         email: session.primaryEmail || undefined,
