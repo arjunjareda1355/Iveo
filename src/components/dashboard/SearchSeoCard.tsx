@@ -200,7 +200,13 @@ export const SearchSeoCard: React.FC = () => {
               Inspect profile indexability, regenerate sitemaps, and submit updates to search engines.
             </p>
           </div>
-          <Button as={Link} to="/admin/seo" variant="secondary" size="md" className="shrink-0">
+          <Button
+            as={Link}
+            to="/admin/seo"
+            variant="secondary"
+            size="sm"
+            className="shrink-0 !h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[7px]"
+          >
             Open SEO console
           </Button>
         </div>

@@ -26,7 +26,7 @@ import {
   validateUsernameSync,
   checkUsernameAvailability,
 } from '../lib/username';
-import { FREE_PLAN_HIGHLIGHTS, PRO_PLAN_HIGHLIGHTS } from '../lib/plan';
+import { FREE_PLAN_HIGHLIGHTS, PRO_PLAN_HIGHLIGHTS, isOwnerEmail } from '../lib/plan';
 import { useToast } from '../components/ui/Toast';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { copy } from '../content/copy';
@@ -808,16 +808,29 @@ export const AccountPage: React.FC = () => {
                         highlightedSection === 'plan' ? 'ring-2 ring-ink/20 ring-offset-4' : ''
                       }`}
                     >
-                      <div>
-                        <h2
-                          id="account-plan-heading"
-                          className="text-[18px] font-semibold text-ink leading-tight"
-                        >
-                          Plan &amp; billing
-                        </h2>
-                        <p className="mt-0.5 text-[13px] text-muted">
-                          Your current plan, billing schedule, and invoices.
-                        </p>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h2
+                            id="account-plan-heading"
+                            className="text-[18px] font-semibold text-ink leading-tight"
+                          >
+                            Plan &amp; billing
+                          </h2>
+                          <p className="mt-0.5 text-[13px] text-muted">
+                            Your current plan, billing schedule, and invoices.
+                          </p>
+                        </div>
+                        {isOwnerEmail(session.primaryEmail) && (
+                          <Button
+                            as={Link}
+                            to="/admin/seo"
+                            variant="secondary"
+                            size="sm"
+                            className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[7px] shrink-0"
+                          >
+                            Manage creator plans &amp; SEO
+                          </Button>
+                        )}
                       </div>
 
                       <div className="flex flex-col gap-3">

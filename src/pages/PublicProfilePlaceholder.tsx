@@ -92,7 +92,9 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       const cached = localStorage.getItem(`iveo_profile_${clean}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
+        const cachedBlocksRaw =
+          localStorage.getItem(`iveo_public_blocks_${clean}`) ||
+          localStorage.getItem(`iveo_blocks_${clean}`);
         const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
         localData = {
           profile: {
@@ -165,7 +167,9 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
     }
     let cachedBlocks: PublicBlock[] = [];
     try {
-      const raw = localStorage.getItem(`iveo_blocks_${clean}`);
+      const raw =
+        localStorage.getItem(`iveo_public_blocks_${clean}`) ||
+        localStorage.getItem(`iveo_blocks_${clean}`);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) cachedBlocks = parsed;
@@ -237,7 +241,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
         if (prev?.profile?.updatedAt && data?.profile?.updatedAt) {
           const prevTs = Date.parse(prev.profile.updatedAt);
           const nextTs = Date.parse(data.profile.updatedAt);
-          if (!Number.isNaN(prevTs) && !Number.isNaN(nextTs) && prevTs > nextTs) {
+          if (!Number.isNaN(prevTs) && !Number.isNaN(nextTs) && prevTs > nextTs && prevTs - nextTs < 10000) {
             return { ...data, profile: prev.profile };
           }
         }
@@ -270,8 +274,29 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       loadData();
     };
 
+    const handleSyncEvent = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      if (detail && typeof detail === 'object' && String(detail.username || '').toLowerCase() === clean) {
+        loadData();
+      }
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key &&
+        (event.key === `iveo_profile_${clean}` ||
+          event.key === `iveo_public_blocks_${clean}` ||
+          event.key === `iveo_blocks_${clean}` ||
+          event.key === 'iveo_demo_session_maya')
+      ) {
+        loadData();
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('iveo_profile_sync', handleSyncEvent);
+    window.addEventListener('storage', handleStorage);
 
     let channel: BroadcastChannel | null = null;
     try {
@@ -290,6 +315,8 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('iveo_profile_sync', handleSyncEvent);
+      window.removeEventListener('storage', handleStorage);
       try {
         channel?.close();
       } catch {}

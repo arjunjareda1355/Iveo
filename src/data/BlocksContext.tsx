@@ -105,7 +105,7 @@ export const BlocksProvider: React.FC<{
             ...b,
             url: b.isProtected ? null : b.url ?? null,
           }));
-        localStorage.setItem(`iveo_blocks_${clean}`, JSON.stringify(publicBlocks));
+        localStorage.setItem(`iveo_public_blocks_${clean}`, JSON.stringify(publicBlocks));
       } catch {}
       try {
         window.dispatchEvent(new CustomEvent('iveo_profile_sync', { detail: { username: clean, type: 'blocks', updatedAt: nowIso } }));
@@ -120,6 +120,12 @@ export const BlocksProvider: React.FC<{
     },
     [userId]
   );
+
+  const prependNormalizedBlock = useCallback((prev: Block[], newBlock: Block): Block[] => {
+    return [{ ...newBlock, position: 0 }, ...prev.filter((b) => b.id !== newBlock.id)].map(
+      (item, idx) => ({ ...item, position: idx })
+    );
+  }, []);
 
   const syncAllTargets = useCallback(
     async (nextBlocks: Block[]) => {
@@ -167,7 +173,7 @@ export const BlocksProvider: React.FC<{
   }, [fetchBlocks]);
 
   const addLink = async (title: string, url: string, options?: { thumbnailUrl?: string | null }) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'link',
@@ -175,16 +181,15 @@ export const BlocksProvider: React.FC<{
         url,
         thumbnailUrl: options?.thumbnailUrl ?? null,
         layout: 'classic',
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Link added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
         openUpgrade('scheduling');
@@ -196,7 +201,7 @@ export const BlocksProvider: React.FC<{
   };
 
   const addEmbed = async (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'embed',
@@ -205,16 +210,15 @@ export const BlocksProvider: React.FC<{
         embedProvider: provider,
         embedMeta: embedMeta || null,
         layout: 'classic',
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Embed added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
         openUpgrade('embeds');
@@ -226,22 +230,21 @@ export const BlocksProvider: React.FC<{
   };
 
   const addSignupForm = async (config: SignupConfig) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'signup',
         title: config.heading || 'Join my list',
-        position: blocks.length,
+        position: 0,
         signup: config,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Signup form added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       if (err instanceof Error && err.message === 'pro_required') {
         openUpgrade('contact_forms');
@@ -253,22 +256,21 @@ export const BlocksProvider: React.FC<{
   };
 
   const addTipJar = async (config: TipJarConfig, title: string = 'Support My Work') => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'tip_jar',
         title,
-        position: blocks.length,
+        position: 0,
         tipJar: config,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Tip Jar added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add tip jar. Try again.");
       throw err;
@@ -276,22 +278,21 @@ export const BlocksProvider: React.FC<{
   };
 
   const addFaq = async (items: FaqItem[], title: string = 'Frequently Asked Questions') => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'faq',
         title,
-        position: blocks.length,
+        position: 0,
         faq: { items },
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('FAQ section added');
     } catch (err: unknown) {
+      blocksRef.current = prev;
       setBlocks(prev);
       showToast("Couldn't add FAQ. Try again.");
       throw err;
@@ -299,20 +300,18 @@ export const BlocksProvider: React.FC<{
   };
 
   const addVCard = async (config: VCardConfig, title?: string) => {
-    const prev = [...blocks];
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'vcard',
         title: title || config.fullName || 'Save Contact',
-        position: blocks.length,
+        position: 0,
         vcard: config,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Contact card added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -323,39 +322,41 @@ export const BlocksProvider: React.FC<{
   };
 
   const addHeader = async (title: string) => {
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'header',
         title,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Header added');
     } catch {
+      blocksRef.current = prev;
+      setBlocks(prev);
       showToast("Couldn't add header. Try again.");
     }
   };
 
   const addDivider = async () => {
+    const prev = [...blocksRef.current];
     try {
       const newBlock = await createBlock(token, userId, {
         kind: 'divider',
         title: '',
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Divider added');
     } catch {
+      blocksRef.current = prev;
+      setBlocks(prev);
       showToast("Couldn't add divider. Try again.");
     }
   };
@@ -374,14 +375,12 @@ export const BlocksProvider: React.FC<{
         url,
         badge,
         coffee: coffee || null,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Buy Me a Coffee block added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -399,14 +398,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         badge,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Instagram showcase added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -430,14 +427,12 @@ export const BlocksProvider: React.FC<{
         url,
         badge,
         youtube: youtube || null,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('YouTube showcase added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -455,14 +450,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         product,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Product card added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -480,14 +473,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         booking,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Booking card added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -505,14 +496,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         countdown,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Countdown added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -530,14 +519,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         promo,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Promo code added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -555,14 +542,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         location,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Location card added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -580,14 +565,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         download,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Download card added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -605,14 +588,12 @@ export const BlocksProvider: React.FC<{
         title,
         url,
         bluesky,
-        position: blocks.length,
+        position: 0,
       }, authCtx);
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Bluesky block added');
     } catch (err: unknown) {
       blocksRef.current = prev;
@@ -807,16 +788,14 @@ export const BlocksProvider: React.FC<{
           bluesky: block.bluesky ?? undefined,
           animation: block.animation ?? undefined,
           badge: block.badge ?? undefined,
-          position: prev.length,
+          position: 0,
         },
         authCtx
       );
-      setBlocks((b) => {
-        const next = [newBlock, ...b];
-        blocksRef.current = next;
-        return next;
-      });
-      syncBlockTargets(newBlock).catch(() => {});
+      const next = prependNormalizedBlock(blocksRef.current, newBlock);
+      blocksRef.current = next;
+      setBlocks(next);
+      syncAllTargets(next).catch(() => {});
       showToast('Item duplicated');
     } catch (err: unknown) {
       blocksRef.current = prev;

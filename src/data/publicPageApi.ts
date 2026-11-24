@@ -157,7 +157,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem(`iveo_profile_${clean}`, JSON.stringify(mappedResult.profile));
-            localStorage.setItem(`iveo_blocks_${clean}`, JSON.stringify(mappedResult.links));
+            localStorage.setItem(`iveo_public_blocks_${clean}`, JSON.stringify(mappedResult.links));
           } catch {}
         }
 
@@ -172,6 +172,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(`iveo_profile_${clean}`);
+        localStorage.removeItem(`iveo_public_blocks_${clean}`);
         localStorage.removeItem(`iveo_blocks_${clean}`);
       } catch {}
     }
@@ -298,7 +299,9 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       const cached = localStorage.getItem(`iveo_profile_${clean}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        const cachedBlocksRaw = localStorage.getItem(`iveo_blocks_${clean}`);
+        const cachedBlocksRaw =
+          localStorage.getItem(`iveo_public_blocks_${clean}`) ||
+          localStorage.getItem(`iveo_blocks_${clean}`);
         const cachedBlocks = cachedBlocksRaw ? JSON.parse(cachedBlocksRaw) : [];
         return {
           profile: {

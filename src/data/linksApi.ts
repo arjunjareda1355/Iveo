@@ -172,13 +172,33 @@ function persistLocalStorageBlocks(userId: string, blocks: Block[]): void {
   } catch {}
 }
 
+function notifyBlockSync(userId: string) {
+  if (typeof window === 'undefined' || !userId) return;
+  const clean = userId.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return;
+  const updatedAt = new Date().toISOString();
+  try {
+    window.dispatchEvent(new CustomEvent('iveo_profile_sync', { detail: { username: clean, type: 'blocks', updatedAt } }));
+  } catch {}
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const ch = new BroadcastChannel('iveo_profile_sync');
+      ch.postMessage({ username: clean, type: 'blocks', updatedAt });
+      ch.close();
+    }
+  } catch {}
+}
+
 export async function flushSaveLocalBlocks(
   userId: string,
   blocks: Block[],
   auth?: BlockAuthContext
 ): Promise<void> {
   persistLocalStorageBlocks(userId, blocks);
-  if (auth?.isDemo) return;
+  if (auth?.isDemo) {
+    notifyBlockSync(userId);
+    return;
+  }
   const key = (userId || 'owner').trim().toLowerCase();
   const prevTimer = blockSyncTimers.get(key);
   if (prevTimer) {
@@ -188,7 +208,8 @@ export async function flushSaveLocalBlocks(
   const prevChain = blockSyncChains.get(key) || Promise.resolve();
   const nextChain = prevChain
     .catch(() => {})
-    .then(() => syncBlocksToServer(userId, blocks, auth));
+    .then(() => syncBlocksToServer(userId, blocks, auth))
+    .then(() => notifyBlockSync(userId));
   blockSyncChains.set(key, nextChain.catch(() => {}));
   await nextChain;
 }
@@ -199,7 +220,10 @@ export async function saveLocalBlocks(
   auth?: BlockAuthContext
 ): Promise<void> {
   persistLocalStorageBlocks(userId, blocks);
-  if (auth?.isDemo) return;
+  if (auth?.isDemo) {
+    notifyBlockSync(userId);
+    return;
+  }
   const key = (userId || 'owner').trim().toLowerCase();
   const prevTimer = blockSyncTimers.get(key);
   if (prevTimer) clearTimeout(prevTimer);
@@ -212,6 +236,7 @@ export async function saveLocalBlocks(
       const nextChain = prevChain
         .catch(() => {})
         .then(() => syncBlocksToServer(userId, latestBlocks, auth))
+        .then(() => notifyBlockSync(userId))
         .catch(() => {});
       blockSyncChains.set(key, nextChain);
     }, 80)
@@ -387,9 +412,12 @@ export async function createBlock(
 
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
-    const updated = [newBlock, ...list];
-    await saveLocalBlocks(userId, updated, auth);
-    return newBlock;
+    const updated = [{ ...newBlock, position: 0 }, ...list].map((item, idx) => ({
+      ...item,
+      position: idx,
+    }));
+    await flushSaveLocalBlocks(userId, updated, auth);
+    return { ...newBlock, position: 0 };
   }
 
   const payload: any = {
@@ -465,7 +493,7 @@ export async function updateBlock(
   if (!rawSupabaseUrl) {
     const list = getLocalBlocks(userId);
     const updated = list.map((b) => (b.id === blockId ? { ...b, ...input } : b));
-    if (input.isArchived !== undefined) {
+    if (input.isArchived !== undefined || input.isActive !== undefined) {
       await flushSaveLocalBlocks(userId, updated, auth);
     } else {
       await saveLocalBlocks(userId, updated, auth);
@@ -556,7 +584,7 @@ export async function saveOrderedBlocks(
   auth?: BlockAuthContext
 ): Promise<void> {
   if (!rawSupabaseUrl) {
-    await saveLocalBlocks(userId, orderedBlocks, auth);
+    await flushSaveLocalBlocks(userId, orderedBlocks, auth);
     return;
   }
 

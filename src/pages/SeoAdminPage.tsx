@@ -118,7 +118,9 @@ export const SeoAdminPage: React.FC = () => {
   const [moderatingUsername, setModeratingUsername] = useState<string | null>(null);
 
   const [billingUsername, setBillingUsername] = useState('');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const [billingData, setBillingData] = useState<any>(null);
 
   const loadReport = useCallback(async () => {
@@ -193,13 +195,13 @@ export const SeoAdminPage: React.FC = () => {
     try {
       const res = await fetch(
         `/api/seo/admin/validate?u=${encodeURIComponent(target)}&adminEmail=${encodeURIComponent(adminEmail)}`,
-        { headers: { 'x-user-email': adminEmail } }
+        { headers: { 'x-user-email': adminEmail }, cache: 'no-store' }
       );
       const data = await res.json().catch(() => null);
       if (res.ok && data?.ok && data.validation) {
         setValidation(data.validation);
       } else {
-        showToast('Validation failed');
+        showToast(data?.message || data?.error || 'Validation failed');
       }
     } catch {
       showToast('Network error during SEO validation');
@@ -255,10 +257,11 @@ export const SeoAdminPage: React.FC = () => {
       );
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        showToast(data?.message || 'Could not reset background');
+        showToast(data?.message || data?.error || 'Could not reset background');
         return;
       }
       showToast(`Reset @${targetUsername} background to Pure White`);
+      await loadReport();
     } catch {
       showToast('Network error resetting background');
     } finally {
@@ -269,7 +272,12 @@ export const SeoAdminPage: React.FC = () => {
   const handleInspectBilling = async (e?: React.FormEvent, targetOverride?: string) => {
     if (e) e.preventDefault();
     const target = (targetOverride ?? billingUsername).trim().replace(/^@+/, '').toLowerCase();
-    if (!target || !adminEmail) return;
+    if (!adminEmail) return;
+    if (!target) {
+      setBillingError('Enter a creator username to inspect billing.');
+      return;
+    }
+    setBillingError(null);
     setBillingLoading(true);
     try {
       const res = await fetch(
@@ -278,11 +286,14 @@ export const SeoAdminPage: React.FC = () => {
       );
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        showToast(data?.message || data?.error || 'Could not inspect billing');
+        const msg = data?.message || (data?.error === 'profile_not_found' ? `Profile @${target} not found.` : data?.error) || 'Could not inspect billing';
+        setBillingError(msg);
+        showToast(msg);
         return;
       }
       setBillingData(data);
     } catch {
+      setBillingError('Failed to inspect billing.');
       showToast('Failed to inspect billing');
     } finally {
       setBillingLoading(false);
@@ -294,6 +305,7 @@ export const SeoAdminPage: React.FC = () => {
   ) => {
     const target = (billingData?.username || billingUsername).trim().replace(/^@+/, '').toLowerCase();
     if (!target || !adminEmail) return;
+    setBillingError(null);
     setBillingLoading(true);
     try {
       const res = await fetch(
@@ -307,18 +319,29 @@ export const SeoAdminPage: React.FC = () => {
           body: JSON.stringify({
             username: target,
             action,
+            period: action === 'activate_paid' ? billingCycle : undefined,
             note: `Admin action: ${action}`,
           }),
         }
       );
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        showToast(data?.message || data?.error || 'Reconciliation failed');
+        const msg = data?.message || data?.error || 'Reconciliation failed';
+        setBillingError(msg);
+        showToast(msg);
         return;
       }
       setBillingData(data);
       showToast(`Billing updated (${action})`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('iveo_subscription_updated'));
+      }
+      if (session.username?.toLowerCase() === target) {
+        await session.refreshSession?.().catch(() => {});
+      }
+      await loadReport();
     } catch {
+      setBillingError('Network error during billing reconciliation.');
       showToast('Network error during billing reconciliation');
     } finally {
       setBillingLoading(false);
@@ -366,22 +389,28 @@ export const SeoAdminPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Button
               variant="secondary"
               size="sm"
               onClick={handleRegenerate}
               disabled={isRegenerating}
-              className="gap-1.5 whitespace-nowrap"
+              className="gap-1.5 whitespace-nowrap !h-7 !min-h-0 !px-2.5 !text-[12px] !rounded-[7px]"
             >
-              <RefreshCw size={14} className={isRegenerating ? 'animate-spin' : ''} />
+              <RefreshCw size={12} className={isRegenerating ? 'animate-spin' : ''} />
               <span className="hidden xs:inline sm:inline">
                 {isRegenerating ? 'Regenerating...' : 'Regenerate & Ping'}
               </span>
               <span className="sm:hidden xs:hidden">Sync</span>
             </Button>
-            <Button as={Link} to="/dashboard" variant="ghost" size="sm" className="gap-1.5 whitespace-nowrap">
-              <ArrowLeft size={14} />
+            <Button
+              as={Link}
+              to="/dashboard"
+              variant="ghost"
+              size="sm"
+              className="gap-1 whitespace-nowrap !h-7 !min-h-0 !px-2.5 !text-[12px] !rounded-[7px]"
+            >
+              <ArrowLeft size={12} />
               <span>Dashboard</span>
             </Button>
           </div>
@@ -482,7 +511,7 @@ export const SeoAdminPage: React.FC = () => {
                   >
                     <div className="relative flex-1 min-w-0">
                       <Search
-                        size={15}
+                        size={14}
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
                       />
                       <input
@@ -491,26 +520,26 @@ export const SeoAdminPage: React.FC = () => {
                         onChange={(e) => setInspectUsername(e.target.value)}
                         placeholder="Enter handle (e.g. maya or @maya)"
                         aria-label="Username to validate"
-                        className="w-full h-10 pl-9 pr-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                        className="w-full h-8 pl-8 pr-3 bg-surface border border-border rounded-lg text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                       />
                     </div>
-                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <Button
                         type="submit"
                         variant="primary"
-                        size="md"
+                        size="sm"
                         disabled={validating}
-                        className="h-10 whitespace-nowrap"
+                        className="!h-8 !min-h-0 !px-2.5 !text-[12px] !rounded-[7px] whitespace-nowrap"
                       >
                         {validating ? 'Checking...' : 'Validate SEO'}
                       </Button>
                       <Button
                         type="button"
                         variant="secondary"
-                        size="md"
+                        size="sm"
                         onClick={handleInspectGsc}
                         disabled={validating}
-                        className="h-10 whitespace-nowrap"
+                        className="!h-8 !min-h-0 !px-2.5 !text-[12px] !rounded-[7px] whitespace-nowrap"
                       >
                         GSC Inspect
                       </Button>
@@ -713,7 +742,7 @@ export const SeoAdminPage: React.FC = () => {
               </div>
 
               {/* Billing & Subscription Inspector / Reconciliation */}
-              <Card className="p-5 sm:p-6 flex flex-col gap-4">
+              <Card id="billing-inspector" className="p-5 sm:p-6 flex flex-col gap-3.5 scroll-mt-20">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <CreditCard size={18} className="text-ink" />
@@ -736,45 +765,61 @@ export const SeoAdminPage: React.FC = () => {
                     onChange={(e) => setBillingUsername(e.target.value)}
                     placeholder="Enter creator handle to inspect billing (e.g. maya)"
                     aria-label="Username for billing inspection"
-                    className="flex-1 h-10 px-3 bg-surface border border-border rounded-lg text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                    className="flex-1 h-8 px-3 bg-surface border border-border rounded-lg text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                   />
                   <Button
                     type="submit"
                     variant="primary"
-                    size="md"
+                    size="sm"
                     disabled={billingLoading}
-                    className="h-10 whitespace-nowrap"
+                    className="!h-8 !min-h-0 !px-3 !text-[12px] !rounded-[7px] whitespace-nowrap"
                   >
                     {billingLoading ? 'Loading...' : 'Inspect Billing'}
                   </Button>
                 </form>
 
+                {billingError && (
+                  <p className="text-[12px] text-[#B3261E] font-medium" role="alert">
+                    {billingError}
+                  </p>
+                )}
+
                 {billingData && (
                   <div className="flex flex-col gap-3 pt-2 border-t border-border text-[13px]">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-full bg-surface-2 border border-border font-mono text-[12px] text-ink">
+                      <span className="px-2 py-0.5 rounded-full bg-surface-2 border border-border font-mono text-[11.5px] text-ink">
                         @{billingData.username}
                       </span>
-                      <span className="px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-medium text-ink">
+                      <span className="px-2 py-0.5 rounded-full bg-surface-2 border border-border text-[11.5px] font-medium text-ink">
                         Plan: {billingData.plan} ({billingData.planSource})
                       </span>
-                      <span className="px-2.5 py-1 rounded-full bg-surface-2 border border-border text-[12px] font-mono text-ink">
+                      <span className="px-2 py-0.5 rounded-full bg-surface-2 border border-border text-[11.5px] font-mono text-ink">
                         State: {billingData.lifecycleState}
                       </span>
                       {billingData.gracePeriod?.inGracePeriod && (
-                        <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[12px]">
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11.5px]">
                           Grace Period: {billingData.gracePeriod.daysRemaining}d left
                         </span>
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <select
+                        value={billingCycle}
+                        onChange={(e) => setBillingCycle(e.target.value as 'monthly' | 'yearly')}
+                        aria-label="Billing cycle for activation"
+                        className="h-7 px-2 bg-surface border border-border rounded-[6px] text-[11.5px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
                         disabled={billingLoading}
                         onClick={() => handleReconcileBilling('activate_paid')}
+                        className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[6px]"
                       >
                         Activate Paid Pro
                       </Button>
@@ -784,6 +829,7 @@ export const SeoAdminPage: React.FC = () => {
                         size="sm"
                         disabled={billingLoading}
                         onClick={() => handleReconcileBilling('grant_grace_period')}
+                        className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[6px]"
                       >
                         Grant 3-Day Grace
                       </Button>
@@ -793,6 +839,7 @@ export const SeoAdminPage: React.FC = () => {
                         size="sm"
                         disabled={billingLoading}
                         onClick={() => handleReconcileBilling('expire_now')}
+                        className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[6px]"
                       >
                         Mark Expired
                       </Button>
@@ -802,6 +849,7 @@ export const SeoAdminPage: React.FC = () => {
                         size="sm"
                         disabled={billingLoading}
                         onClick={() => handleReconcileBilling('cancel_immediate')}
+                        className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[6px]"
                       >
                         Cancel Immediate
                       </Button>
@@ -885,22 +933,33 @@ export const SeoAdminPage: React.FC = () => {
                             {p.hasAvatar ? 'Photo' : 'Monogram OG'}
                           </td>
                           <td className="py-2.5 text-right">
-                            <div className="inline-flex items-center gap-3">
+                            <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => {
                                   setInspectUsername(p.username);
                                   handleValidateProfile(undefined, p.username);
                                 }}
-                                className="text-[12px] font-medium text-ink underline underline-offset-2 hover:opacity-75 cursor-pointer"
+                                className="px-2 py-0.5 text-[11px] font-medium text-ink rounded-[5px] border border-border bg-surface hover:bg-surface-2 cursor-pointer"
                               >
                                 Check
                               </button>
                               <button
                                 type="button"
+                                onClick={() => {
+                                  setBillingUsername(p.username);
+                                  handleInspectBilling(undefined, p.username);
+                                  document.getElementById('billing-inspector')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }}
+                                className="px-2 py-0.5 text-[11px] font-medium text-ink rounded-[5px] border border-border bg-surface hover:bg-surface-2 cursor-pointer"
+                              >
+                                Plan
+                              </button>
+                              <button
+                                type="button"
                                 disabled={moderatingUsername === p.username}
                                 onClick={() => handleModerateBackground(p.username)}
-                                className="text-[12px] font-medium text-red-600 underline underline-offset-2 hover:opacity-75 disabled:opacity-50 cursor-pointer"
+                                className="px-2 py-0.5 text-[11px] font-medium text-red-600 rounded-[5px] border border-red-200 bg-surface hover:bg-red-50 disabled:opacity-50 cursor-pointer"
                               >
                                 {moderatingUsername === p.username ? 'Resetting...' : 'Reset BG'}
                               </button>

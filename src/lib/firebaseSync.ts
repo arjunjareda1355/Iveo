@@ -31,6 +31,15 @@ export async function syncProfileToFirebase(userId: string, profileData: Record<
     if (Object.keys(explicitMaps).length > 1) {
       await updateDoc(userRef, explicitMaps).catch(() => {});
     }
+
+    const mirrorId = typeof profileData.userId === 'string' ? profileData.userId.trim() : '';
+    if (mirrorId && mirrorId !== userId && mirrorId !== 'owner') {
+      const mirrorRef = doc(db, 'users', mirrorId);
+      await setDoc(mirrorRef, cleanData, { merge: true });
+      if (Object.keys(explicitMaps).length > 1) {
+        await updateDoc(mirrorRef, explicitMaps).catch(() => {});
+      }
+    }
   } catch (err) {
     // Non-blocking background log
     console.warn('Firebase background profile sync notice:', err);

@@ -159,10 +159,12 @@ export function useDeleteAccount(): DeleteAccountState {
     // 5. Clean up all browser storage
     try {
       localStorage.removeItem(`iveo_blocks_${currentUsername}`);
+      localStorage.removeItem(`iveo_public_blocks_${currentUsername}`);
       localStorage.removeItem(`ivio_blocks_${currentUsername}`);
       localStorage.removeItem(`iveo_profile_${currentUsername}`);
       localStorage.removeItem(`ivio_profile_${currentUsername}`);
       localStorage.removeItem(`iveo_blocks_${userId}`);
+      localStorage.removeItem(`iveo_public_blocks_${userId}`);
       localStorage.removeItem('iveo_current_username');
       sessionStorage.clear();
     } catch {}

@@ -283,77 +283,194 @@ export async function firebaseSaveProfile(
 ): Promise<void> {
   if (!serverDb || !username) return;
   const clean = username.replace(/^@+/, '').toLowerCase().trim();
-  const effectiveUserId = userId || profileData.userId || 'owner';
-
-  const cleanProfile: Record<string, any> = {
-    userId: effectiveUserId,
-    username: clean,
-    displayName: profileData.displayName || clean,
-    bio: profileData.bio || '',
-    avatarUrl: profileData.avatarUrl || null,
-    avatarType: profileData.avatarType || (profileData.avatarId ? 'default' : (profileData.avatarUrl ? 'uploaded' : 'default')),
-    avatarId: profileData.avatarId || null,
-    vibeId: profileData.vibeId || 'clean',
-    buttonShape: profileData.buttonShape !== undefined ? profileData.buttonShape : null,
-    socials: profileData.socials || {},
-    socialsPosition: profileData.socialsPosition || 'top',
-    primaryEmail: profileData.primaryEmail || null,
-    plan: profileData.plan || 'free',
-    createdAt: profileData.createdAt || null,
-    subscription: profileData.subscription ?? null,
-    status: profileData.status || (profileData.isPublished === false ? 'unpublished' : 'active'),
-    isPublished: profileData.isPublished !== false,
-    hideFooter: Boolean(profileData.hideFooter),
-    hideFromSearch: Boolean(profileData.hideFromSearch),
-    background: profileData.background ?? null,
-    googleAnalyticsId: profileData.googleAnalyticsId ?? null,
-    metaPixelId: profileData.metaPixelId ?? null,
-    whatsappNumber: profileData.whatsappNumber ?? null,
-    customSeoTitle: profileData.customSeoTitle ?? null,
-    customSeoDescription: profileData.customSeoDescription ?? null,
-    fontSettings: profileData.fontSettings ?? null,
-    buttonColors: profileData.buttonColors ?? null,
-    businessCard: profileData.businessCard ?? null,
-    layoutSettings: profileData.layoutSettings ?? null,
-    appearance: profileData.appearance ?? null,
-    updatedAt: profileData.updatedAt || new Date().toISOString(),
-  };
-
-  if (typeof profileData.avatarData === 'string' && profileData.avatarData.length <= 350000) {
-    cleanProfile.avatarData = profileData.avatarData;
-  } else if (
-    profileData.avatarData === null ||
-    (profileData.avatarUrl !== undefined &&
-      (!profileData.avatarUrl ||
-        (!String(profileData.avatarUrl).startsWith('/api/avatar/') &&
-          !String(profileData.avatarUrl).startsWith('data:image/'))))
-  ) {
-    cleanProfile.avatarData = null;
-  }
-
-  const nestedOverwritePayload = {
-    socials: cleanProfile.socials,
-    background: cleanProfile.background,
-    fontSettings: cleanProfile.fontSettings,
-    buttonColors: cleanProfile.buttonColors,
-    businessCard: cleanProfile.businessCard,
-    layoutSettings: cleanProfile.layoutSettings,
-    appearance: cleanProfile.appearance,
-    updatedAt: cleanProfile.updatedAt,
-  };
+  const userRef = doc(serverDb, 'users', clean);
 
   try {
+    let existingData: Record<string, any> = {};
+    const hasCoreFields =
+      profileData.displayName !== undefined &&
+      profileData.bio !== undefined &&
+      profileData.socials !== undefined &&
+      profileData.vibeId !== undefined &&
+      profileData.plan !== undefined;
+
+    if (!hasCoreFields) {
+      const existingSnap = await getDoc(userRef).catch(() => null);
+      if (existingSnap && existingSnap.exists()) {
+        existingData = existingSnap.data() || {};
+      }
+    }
+
+    const effectiveUserId =
+      userId ||
+      profileData.userId ||
+      (existingData.userId && existingData.userId !== 'owner' ? existingData.userId : 'owner');
+
+    const resolvedStatus =
+      profileData.status !== undefined
+        ? profileData.status
+        : profileData.isPublished === false
+          ? 'unpublished'
+          : profileData.isPublished === true
+            ? 'active'
+            : existingData.status || (existingData.isPublished === false ? 'unpublished' : 'active');
+
+    const cleanProfile: Record<string, any> = {
+      userId: effectiveUserId,
+      username: clean,
+      displayName:
+        profileData.displayName !== undefined
+          ? profileData.displayName || clean
+          : existingData.displayName || clean,
+      bio: profileData.bio !== undefined ? profileData.bio || '' : existingData.bio ?? '',
+      avatarUrl:
+        profileData.avatarUrl !== undefined
+          ? profileData.avatarUrl || null
+          : existingData.avatarUrl ?? null,
+      avatarType:
+        profileData.avatarType !== undefined
+          ? profileData.avatarType
+          : existingData.avatarType ||
+            (profileData.avatarId ?? existingData.avatarId
+              ? 'default'
+              : (profileData.avatarUrl ?? existingData.avatarUrl)
+                ? 'uploaded'
+                : 'default'),
+      avatarId:
+        profileData.avatarId !== undefined ? profileData.avatarId || null : existingData.avatarId ?? null,
+      vibeId:
+        profileData.vibeId !== undefined ? profileData.vibeId || 'clean' : existingData.vibeId || 'clean',
+      buttonShape:
+        profileData.buttonShape !== undefined
+          ? profileData.buttonShape
+          : existingData.buttonShape !== undefined
+            ? existingData.buttonShape
+            : null,
+      socials:
+        profileData.socials !== undefined
+          ? profileData.socials || {}
+          : existingData.socials || {},
+      socialsPosition:
+        profileData.socialsPosition !== undefined
+          ? profileData.socialsPosition || 'top'
+          : existingData.socialsPosition || 'top',
+      primaryEmail:
+        profileData.primaryEmail !== undefined
+          ? profileData.primaryEmail || null
+          : existingData.primaryEmail ?? null,
+      plan:
+        profileData.plan !== undefined
+          ? profileData.plan || 'free'
+          : existingData.plan || 'free',
+      createdAt:
+        profileData.createdAt !== undefined
+          ? profileData.createdAt || null
+          : existingData.createdAt ?? null,
+      subscription:
+        profileData.subscription !== undefined
+          ? profileData.subscription ?? null
+          : existingData.subscription ?? null,
+      status: resolvedStatus,
+      isPublished:
+        profileData.isPublished !== undefined
+          ? profileData.isPublished !== false
+          : resolvedStatus === 'active',
+      hideFooter:
+        profileData.hideFooter !== undefined
+          ? Boolean(profileData.hideFooter)
+          : Boolean(existingData.hideFooter),
+      hideFromSearch:
+        profileData.hideFromSearch !== undefined
+          ? Boolean(profileData.hideFromSearch)
+          : Boolean(existingData.hideFromSearch),
+      background:
+        profileData.background !== undefined
+          ? profileData.background ?? null
+          : existingData.background ?? null,
+      googleAnalyticsId:
+        profileData.googleAnalyticsId !== undefined
+          ? profileData.googleAnalyticsId ?? null
+          : existingData.googleAnalyticsId ?? null,
+      metaPixelId:
+        profileData.metaPixelId !== undefined
+          ? profileData.metaPixelId ?? null
+          : existingData.metaPixelId ?? null,
+      whatsappNumber:
+        profileData.whatsappNumber !== undefined
+          ? profileData.whatsappNumber ?? null
+          : existingData.whatsappNumber ?? null,
+      customSeoTitle:
+        profileData.customSeoTitle !== undefined
+          ? profileData.customSeoTitle ?? null
+          : existingData.customSeoTitle ?? null,
+      customSeoDescription:
+        profileData.customSeoDescription !== undefined
+          ? profileData.customSeoDescription ?? null
+          : existingData.customSeoDescription ?? null,
+      fontSettings:
+        profileData.fontSettings !== undefined
+          ? profileData.fontSettings ?? null
+          : existingData.fontSettings ?? null,
+      buttonColors:
+        profileData.buttonColors !== undefined
+          ? profileData.buttonColors ?? null
+          : existingData.buttonColors ?? null,
+      businessCard:
+        profileData.businessCard !== undefined
+          ? profileData.businessCard ?? null
+          : existingData.businessCard ?? null,
+      layoutSettings:
+        profileData.layoutSettings !== undefined
+          ? profileData.layoutSettings ?? null
+          : existingData.layoutSettings ?? null,
+      appearance:
+        profileData.appearance !== undefined
+          ? profileData.appearance ?? null
+          : existingData.appearance ?? null,
+      updatedAt: profileData.updatedAt || new Date().toISOString(),
+    };
+
+    if (typeof profileData.avatarData === 'string' && profileData.avatarData.length <= 350000) {
+      cleanProfile.avatarData = profileData.avatarData;
+    } else if (
+      profileData.avatarData === null ||
+      (profileData.avatarUrl !== undefined &&
+        (!profileData.avatarUrl ||
+          (!String(profileData.avatarUrl).startsWith('/api/avatar/') &&
+            !String(profileData.avatarUrl).startsWith('data:image/'))))
+    ) {
+      cleanProfile.avatarData = null;
+    } else if (existingData.avatarData !== undefined) {
+      cleanProfile.avatarData = existingData.avatarData;
+    }
+
+    const nestedOverwritePayload: Record<string, any> = {
+      updatedAt: cleanProfile.updatedAt,
+    };
+    if (profileData.socials !== undefined) nestedOverwritePayload.socials = cleanProfile.socials;
+    if (profileData.background !== undefined) nestedOverwritePayload.background = cleanProfile.background;
+    if (profileData.fontSettings !== undefined) nestedOverwritePayload.fontSettings = cleanProfile.fontSettings;
+    if (profileData.buttonColors !== undefined) nestedOverwritePayload.buttonColors = cleanProfile.buttonColors;
+    if (profileData.businessCard !== undefined) nestedOverwritePayload.businessCard = cleanProfile.businessCard;
+    if (profileData.layoutSettings !== undefined) nestedOverwritePayload.layoutSettings = cleanProfile.layoutSettings;
+    if (profileData.appearance !== undefined) nestedOverwritePayload.appearance = cleanProfile.appearance;
+
     // Save to users collection and explicitly overwrite nested maps so removed keys never linger
-    const userRef = doc(serverDb, 'users', clean);
     await setDoc(userRef, cleanProfile, { merge: true });
-    await updateDoc(userRef, nestedOverwritePayload).catch(() => {});
+    if (Object.keys(nestedOverwritePayload).length > 1) {
+      await updateDoc(userRef, nestedOverwritePayload).catch(() => {});
+    }
 
     // Also save claim registry record
-    await setDoc(doc(serverDb, 'claims', clean), {
-      username: clean,
-      userId: effectiveUserId,
-      claimedAt: cleanProfile.updatedAt,
-    }, { merge: true });
+    await setDoc(
+      doc(serverDb, 'claims', clean),
+      {
+        username: clean,
+        userId: effectiveUserId,
+        claimedAt: cleanProfile.updatedAt,
+      },
+      { merge: true }
+    );
 
     // Remove any stale redirect from this newly claimed handle
     await deleteDoc(doc(serverDb, 'redirects', clean)).catch(() => {});
@@ -362,7 +479,9 @@ export async function firebaseSaveProfile(
     if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
       const mirrorRef = doc(serverDb, 'users', effectiveUserId);
       await setDoc(mirrorRef, cleanProfile, { merge: true });
-      await updateDoc(mirrorRef, nestedOverwritePayload).catch(() => {});
+      if (Object.keys(nestedOverwritePayload).length > 1) {
+        await updateDoc(mirrorRef, nestedOverwritePayload).catch(() => {});
+      }
     }
   } catch (err) {
     console.warn('[FirebaseServer] Background saveProfile notice:', err);
@@ -378,7 +497,7 @@ export async function firebaseSaveBlocks(
   userId?: string
 ): Promise<void> {
   if (!serverDb || !username || !Array.isArray(blocks)) return;
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
   const effectiveUserId = userId || 'owner';
 
   try {

@@ -252,6 +252,6 @@ export function mergeProfileForSave(
       incoming.appearance !== undefined
         ? incoming.appearance
         : (prev.appearance ?? null),
-    updatedAt: new Date().toISOString(),
+    updatedAt: incoming.updatedAt || new Date().toISOString(),
   };
 }

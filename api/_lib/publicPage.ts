@@ -65,113 +65,82 @@ export async function loadPublicPage(
   username: string
 ): Promise<PublicPageServerData | null> {
   if (!username) return null;
-  const clean = username.toLowerCase().trim();
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
 
-  // 1. Check Azure SQL / Server database first
+  // 1. Check Azure SQL / Server database & Firebase Cloud database in parallel, choosing freshest by updatedAt
   try {
-    const dbProf = await dbGetProfile(clean);
-    if (dbProf && dbProf.username) {
-      const status = dbProf.status || (dbProf.isPublished === false ? 'unpublished' : 'active');
+    const [dbProf, fbProf] = await Promise.all([
+      dbGetProfile(clean).catch(() => null),
+      Promise.race([
+        firebaseGetProfile(clean).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4500)),
+      ]),
+    ]);
+
+    let chosen: any = dbProf;
+    if (!chosen && fbProf) {
+      // Preserve active rename redirect precedence if username is unclaimed locally
+      const activeRedirect = await dbGetRedirectTarget(clean).catch(() => null);
+      if (activeRedirect) {
+        return null;
+      }
+      chosen = fbProf;
+    } else if (chosen && fbProf && (fbProf.updatedAt || '') > (chosen.updatedAt || '')) {
+      chosen = { ...chosen, ...fbProf };
+    }
+
+    if (chosen && chosen.username) {
+      const status = chosen.status || (chosen.isPublished === false ? 'unpublished' : 'active');
       if (status === 'deleted' || status === 'suspended') {
         return null;
       }
-      const isOwnerProfile = isPrivilegedEmailServer(dbProf.primaryEmail);
+      const isOwnerProfile = isPrivilegedEmailServer(chosen.primaryEmail);
       const effectivePlan = resolveEffectivePlan({
-        email: dbProf.primaryEmail,
-        storedPlan: dbProf.plan,
-        isProFlag: dbProf.isPro,
-        createdAt: dbProf.createdAt || dbProf.claimedAt || null,
-        subscription: dbProf.subscription || null,
+        email: chosen.primaryEmail,
+        storedPlan: chosen.plan,
+        isProFlag: chosen.isPro,
+        createdAt: chosen.createdAt || chosen.claimedAt || null,
+        subscription: chosen.subscription || null,
       });
       const isPro = effectivePlan.isPro;
       return {
-        username: dbProf.username.toLowerCase(),
-        displayName: dbProf.displayName || `@${dbProf.username}`,
-        bio: dbProf.bio || null,
-        avatarUrl: isAllowedAvatarHost(dbProf.avatarUrl) ? dbProf.avatarUrl : null,
-        avatarType: dbProf.avatarType,
-        avatarId: dbProf.avatarId || null,
-        vibeId: dbProf.vibeId || 'clean',
-        buttonShape: dbProf.buttonShape || null,
-        hideFromSearch: Boolean(dbProf.hideFromSearch),
-        hideFooter: Boolean(dbProf.hideFooter && isPro),
-        isPublished: dbProf.isPublished !== false,
+        username: chosen.username.toLowerCase(),
+        displayName: chosen.displayName || `@${chosen.username}`,
+        bio: chosen.bio || null,
+        avatarUrl: isAllowedAvatarHost(chosen.avatarUrl) ? chosen.avatarUrl : null,
+        avatarType: chosen.avatarType,
+        avatarId: chosen.avatarId || null,
+        vibeId: chosen.vibeId || 'clean',
+        buttonShape: chosen.buttonShape || null,
+        hideFromSearch: Boolean(chosen.hideFromSearch),
+        hideFooter: Boolean(chosen.hideFooter && isPro),
+        isPublished: chosen.isPublished !== false,
         plan: isPro ? 'pro' : 'free',
         isPro,
         isVerified: isPro,
         isOwnerProfile,
         status,
-        updatedAt: dbProf.updatedAt || null,
-        customSeoTitle: dbProf.customSeoTitle || null,
-        customSeoDescription: dbProf.customSeoDescription || null,
-        socials: (dbProf.socials && typeof dbProf.socials === 'object') ? dbProf.socials : {},
-        socialsPosition: dbProf.socialsPosition || 'top',
-        whatsappNumber: dbProf.whatsappNumber || null,
-        background: dbProf.background || null,
-        fontSettings: dbProf.fontSettings || null,
-        buttonColors: dbProf.buttonColors || null,
-        layoutSettings: dbProf.layoutSettings || null,
-        businessCard: dbProf.businessCard || null,
-        appearance: dbProf.appearance || null,
+        updatedAt: chosen.updatedAt || null,
+        customSeoTitle: chosen.customSeoTitle || null,
+        customSeoDescription: chosen.customSeoDescription || null,
+        socials: (chosen.socials && typeof chosen.socials === 'object') ? chosen.socials : {},
+        socialsPosition: chosen.socialsPosition || 'top',
+        whatsappNumber: chosen.whatsappNumber || null,
+        background: chosen.background || null,
+        fontSettings: chosen.fontSettings || null,
+        buttonColors: chosen.buttonColors || null,
+        layoutSettings: chosen.layoutSettings || null,
+        businessCard: chosen.businessCard || null,
+        appearance: chosen.appearance || null,
       };
     }
   } catch {}
 
-  // If this handle was explicitly renamed and remains unclaimed locally, preserve redirect precedence
+  // Preserve active rename redirect if no profile resolved
   try {
     const activeRedirect = await dbGetRedirectTarget(clean);
     if (activeRedirect) {
       return null;
-    }
-  } catch {}
-
-  // 1.5 Check Firebase Cloud database
-  try {
-    const fbProf = await firebaseGetProfile(clean);
-    if (fbProf && fbProf.username) {
-      const status = fbProf.status || (fbProf.isPublished === false ? 'unpublished' : 'active');
-      if (status === 'deleted' || status === 'suspended') {
-        return null;
-      }
-      const isOwnerProfile = isPrivilegedEmailServer(fbProf.primaryEmail);
-      const effectivePlan = resolveEffectivePlan({
-        email: fbProf.primaryEmail,
-        storedPlan: fbProf.plan,
-        isProFlag: fbProf.isPro,
-        createdAt: fbProf.createdAt || fbProf.claimedAt || null,
-        subscription: fbProf.subscription || null,
-      });
-      const isPro = effectivePlan.isPro;
-      return {
-        username: fbProf.username.toLowerCase(),
-        displayName: fbProf.displayName || `@${fbProf.username}`,
-        bio: fbProf.bio || null,
-        avatarUrl: isAllowedAvatarHost(fbProf.avatarUrl) ? fbProf.avatarUrl : null,
-        avatarType: fbProf.avatarType,
-        avatarId: fbProf.avatarId || null,
-        vibeId: fbProf.vibeId || 'clean',
-        buttonShape: fbProf.buttonShape || null,
-        hideFromSearch: Boolean(fbProf.hideFromSearch),
-        hideFooter: Boolean(fbProf.hideFooter && isPro),
-        isPublished: fbProf.isPublished !== false,
-        plan: isPro ? 'pro' : 'free',
-        isPro,
-        isVerified: isPro,
-        isOwnerProfile,
-        status,
-        updatedAt: fbProf.updatedAt || null,
-        customSeoTitle: fbProf.customSeoTitle || null,
-        customSeoDescription: fbProf.customSeoDescription || null,
-        socials: (fbProf.socials && typeof fbProf.socials === 'object') ? fbProf.socials : {},
-        socialsPosition: fbProf.socialsPosition || 'top',
-        whatsappNumber: fbProf.whatsappNumber || null,
-        background: fbProf.background || null,
-        fontSettings: fbProf.fontSettings || null,
-        buttonColors: fbProf.buttonColors || null,
-        layoutSettings: fbProf.layoutSettings || null,
-        businessCard: fbProf.businessCard || null,
-        appearance: fbProf.appearance || null,
-      };
     }
   } catch {}
 

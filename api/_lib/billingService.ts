@@ -7,7 +7,11 @@ import {
   dbUpdateUserBilling,
   dbVerifyOwnership,
 } from './azureSql.ts';
-import { firebaseSaveProfile } from './firebaseServer.ts';
+import {
+  firebaseGetProfile,
+  firebaseGetProfileByUserId,
+  firebaseSaveProfile,
+} from './firebaseServer.ts';
 import { PRICING_CONFIG, type PaymentCurrency, type PlanPeriod } from './razorpay.ts';
 import { isPrivilegedEmailServer } from './usernames.ts';
 import {
@@ -153,17 +157,28 @@ async function resolveProfileByIdentifiers(params: {
   if (cleanUname) {
     const byName = await dbGetProfile(cleanUname).catch(() => null);
     if (byName) return byName;
+    const fbByName = await Promise.race([
+      firebaseGetProfile(cleanUname).catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+    ]);
+    if (fbByName) return fbByName;
   }
   const cleanUid = (params.userId || '').trim();
   const cleanEmail = (params.email || '').toLowerCase().trim() || null;
   if (cleanUid || cleanEmail) {
-    return await dbGetProfileByUserId(cleanUid, cleanEmail).catch(() => null);
+    const byUid = await dbGetProfileByUserId(cleanUid, cleanEmail).catch(() => null);
+    if (byUid) return byUid;
+    return await Promise.race([
+      firebaseGetProfileByUserId(cleanUid, cleanEmail).catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+    ]);
   }
   return null;
 }
 
 async function syncProfileRecord(existing: any, nextPlan: 'free' | 'pro', subscription: SubscriptionRecord | null) {
-  await dbSaveProfile({
+  const saveRes = await dbSaveProfile({
+    ...existing,
     userId: existing.userId || 'owner',
     username: existing.username,
     primaryEmail: existing.primaryEmail || null,
@@ -173,7 +188,7 @@ async function syncProfileRecord(existing: any, nextPlan: 'free' | 'pro', subscr
   await Promise.race([
     firebaseSaveProfile(
       existing.username,
-      { ...existing, plan: nextPlan, subscription },
+      saveRes?.profile || { ...existing, plan: nextPlan, subscription },
       existing.userId
     ).catch(() => {}),
     new Promise((resolve) => setTimeout(resolve, 1500)),
@@ -1478,7 +1493,7 @@ export async function getVerifiedInvoice(params: {
 
 export async function adminInspectBilling(username: string, nowMs: number = Date.now()) {
   const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
-  const profile = await dbGetProfile(clean).catch(() => null);
+  const profile = await resolveProfileByIdentifiers({ username: clean });
   if (!profile) {
     return { ok: false as const, status: 404, error: 'profile_not_found' };
   }
@@ -1511,7 +1526,7 @@ export async function adminReconcileBilling(params: {
   const nowMs = params.nowMs ?? Date.now();
   const nowIso = new Date(nowMs).toISOString();
   const clean = (params.username || '').replace(/^@+/, '').toLowerCase().trim();
-  const existing = await dbGetProfile(clean).catch(() => null);
+  const existing = await resolveProfileByIdentifiers({ username: clean });
   if (!existing) {
     return { ok: false as const, status: 404, error: 'profile_not_found' };
   }

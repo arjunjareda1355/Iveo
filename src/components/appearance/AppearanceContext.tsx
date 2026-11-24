@@ -81,7 +81,7 @@ interface AppearanceContextValue {
   showAppliedSnackbar: (message?: string) => void;
   loadThemes: () => Promise<void>;
   saveTheme: (name: string) => Promise<{ ok: boolean; error?: string }>;
-  applyTheme: (theme: ThemePreset) => void;
+  applyTheme: (theme: ThemePreset) => Promise<{ ok: boolean; error?: string }>;
   renameTheme: (id: string, name: string) => Promise<{ ok: boolean; error?: string }>;
   deleteTheme: (id: string) => Promise<{ ok: boolean; error?: string }>;
   saveScrollPos: (pathname: string, scrollY: number) => void;
@@ -165,18 +165,35 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const snackbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
   const sessionInitIdRef = useRef<string | null>(null);
+  const hasLocalEditsRef = useRef<boolean>(false);
+  const hydratedUpdatedAtRef = useRef<string | null>(null);
 
-  // Re-sync draft if user switches account cleanly
+  // Re-sync draft if user switches account OR async session finishes initial hydration before any local edit
   useEffect(() => {
     const key = session.username || session.userId || 'owner';
+    const nextStamp = session.updatedAt || session.appearance?.updatedAt || null;
     if (sessionInitIdRef.current !== key) {
       sessionInitIdRef.current = key;
+      hasLocalEditsRef.current = false;
+      hydratedUpdatedAtRef.current = nextStamp;
       setDraft(initialAppearance);
       lastCommittedRef.current = initialAppearance;
       setUndoStack([]);
       setRedoStack([]);
+      return;
     }
-  }, [session.username, session.userId, initialAppearance]);
+    if (
+      session.isLoaded &&
+      !hasLocalEditsRef.current &&
+      !debounceSaveTimerRef.current &&
+      nextStamp &&
+      nextStamp !== hydratedUpdatedAtRef.current
+    ) {
+      hydratedUpdatedAtRef.current = nextStamp;
+      setDraft(initialAppearance);
+      lastCommittedRef.current = initialAppearance;
+    }
+  }, [session.username, session.userId, session.isLoaded, session.updatedAt, session.appearance, initialAppearance]);
 
   const trackEvent = useCallback((event: string, payload?: Record<string, unknown>) => {
     if (typeof window === 'undefined') return;
@@ -203,6 +220,50 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, durationMs);
   }, []);
 
+  const syncAppearanceToClientMirrors = useCallback(
+    (committed: Appearance, confirmedUpdatedAt: string) => {
+      const mirror = appearanceToLegacyMirror(committed, session.layoutSettings);
+      const syncFields: Record<string, any> = {
+        vibeId: committed.vibeId as VibeId,
+        buttonShape: mirror.buttonShape,
+        buttonColors: mirror.buttonColors,
+        fontSettings: mirror.fontSettings,
+        layoutSettings: mirror.layoutSettings,
+        appearance: committed,
+        updatedAt: confirmedUpdatedAt,
+      };
+      const cleanUser = (session.username || '').replace(/^@+/, '').toLowerCase().trim();
+      if (typeof window !== 'undefined' && cleanUser) {
+        try {
+          const raw = localStorage.getItem(`iveo_profile_${cleanUser}`) || '{}';
+          const parsed = JSON.parse(raw);
+          localStorage.setItem(
+            `iveo_profile_${cleanUser}`,
+            JSON.stringify({ ...parsed, ...syncFields })
+          );
+        } catch {}
+        try {
+          window.dispatchEvent(
+            new CustomEvent('iveo-server-profile-sync', { detail: syncFields })
+          );
+          window.dispatchEvent(
+            new CustomEvent('iveo_profile_sync', {
+              detail: { username: cleanUser, type: 'profile', updatedAt: confirmedUpdatedAt },
+            })
+          );
+        } catch {}
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            const ch = new BroadcastChannel('iveo_profile_sync');
+            ch.postMessage({ username: cleanUser, type: 'profile', updatedAt: confirmedUpdatedAt });
+            ch.close();
+          }
+        } catch {}
+      }
+    },
+    [session.username, session.layoutSettings]
+  );
+
   const persistAppearanceNow = useCallback(
     async (targetAppearance: Appearance) => {
       const mirror = appearanceToLegacyMirror(targetAppearance, session.layoutSettings);
@@ -213,17 +274,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       setSaveStatus('saving');
       try {
-        // Optimistically sync legacy mirror + appearance to session hook (handles localStorage + Firestore + BroadcastChannel)
-        await session.updatePreferences({
-          vibeId: targetAppearance.vibeId as VibeId,
-          buttonShape: mirror.buttonShape,
-          buttonColors: mirror.buttonColors,
-          fontSettings: mirror.fontSettings,
-          layoutSettings: mirror.layoutSettings,
-          appearance: stamped,
-        });
-
-        // If authenticated (non-demo), also PATCH /api/appearance for server-side history, validation & Pro enforcement
+        // If authenticated (non-demo), PATCH /api/appearance is the single authoritative server save (avoids self-409 races)
         if (!isDemo && session.userId && session.username) {
           const res = await fetch('/api/appearance', {
             method: 'PATCH',
@@ -242,8 +293,17 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           if (res.status === 402) {
             const body = await res.json().catch(() => ({}));
-            const prevSafe = cloneAppearance(lastCommittedRef.current);
-            setDraft(prevSafe);
+            if (body?.partialApplied && body?.appearance) {
+              const partialCommitted = cloneAppearance(body.appearance);
+              const partialStamp = body.updatedAt || partialCommitted.updatedAt || stamped.updatedAt!;
+              lastCommittedRef.current = partialCommitted;
+              hydratedUpdatedAtRef.current = partialStamp;
+              setDraft(partialCommitted);
+              syncAppearanceToClientMirrors(partialCommitted, partialStamp);
+            } else {
+              const prevSafe = cloneAppearance(lastCommittedRef.current);
+              setDraft(prevSafe);
+            }
             setSaveStatus('idle');
             trackEvent('pro_gate_hit', { fields: body.fields || [] });
             openUpgrade();
@@ -252,18 +312,38 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           if (res.status === 409) {
             const body = await res.json().catch(() => ({}));
-            const latest = body?.appearance || body?.latest;
-            if (latest) {
-              const merged = {
-                ...latest,
-                ...stamped,
-                updatedAt: latest.updatedAt || stamped.updatedAt,
-              };
-              lastCommittedRef.current = cloneAppearance(merged);
-              setDraft(merged);
-              setSaveStatus('saved');
-              return;
+            const serverStamp = body?.updatedAt || body?.appearance?.updatedAt;
+            // Retry once with the fresh server updatedAt so the user's explicit edit still persists cleanly
+            const retryRes = await fetch('/api/appearance', {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': session.userId,
+                'x-iveo-username': session.username,
+                ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+              },
+              body: JSON.stringify({
+                username: session.username,
+                patch: stamped,
+                ifUpdatedAt: serverStamp || undefined,
+              }),
+            });
+            if (!retryRes.ok) {
+              const latest = body?.appearance || body?.latest;
+              if (latest) {
+                lastCommittedRef.current = cloneAppearance(latest);
+                setDraft(cloneAppearance(latest));
+              }
+              throw new Error(`HTTP_${retryRes.status}`);
             }
+            const retryJson = await retryRes.json().catch(() => null);
+            const committedRetry = cloneAppearance(retryJson?.appearance || stamped);
+            const confirmedRetryStamp = retryJson?.updatedAt || committedRetry.updatedAt || stamped.updatedAt!;
+            lastCommittedRef.current = committedRetry;
+            hydratedUpdatedAtRef.current = confirmedRetryStamp;
+            syncAppearanceToClientMirrors(committedRetry, confirmedRetryStamp);
+            setSaveStatus('saved');
+            return;
           }
 
           if (!res.ok) {
@@ -271,13 +351,22 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
 
           const json = await res.json().catch(() => null);
-          if (json?.appearance) {
-            lastCommittedRef.current = cloneAppearance(json.appearance);
-          } else {
-            lastCommittedRef.current = cloneAppearance(stamped);
-          }
+          const committed = cloneAppearance(json?.appearance || stamped);
+          const confirmedUpdatedAt = json?.updatedAt || committed.updatedAt || stamped.updatedAt!;
+          lastCommittedRef.current = committed;
+          hydratedUpdatedAtRef.current = confirmedUpdatedAt;
+          syncAppearanceToClientMirrors(committed, confirmedUpdatedAt);
         } else {
+          await session.updatePreferences({
+            vibeId: targetAppearance.vibeId as VibeId,
+            buttonShape: mirror.buttonShape,
+            buttonColors: mirror.buttonColors,
+            fontSettings: mirror.fontSettings,
+            layoutSettings: mirror.layoutSettings,
+            appearance: stamped,
+          });
           lastCommittedRef.current = cloneAppearance(stamped);
+          hydratedUpdatedAtRef.current = stamped.updatedAt || null;
         }
 
         setSaveStatus('saved');
@@ -285,7 +374,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setSaveStatus('error');
       }
     },
-    [session, isDemo, openUpgrade, trackEvent]
+    [session, isDemo, openUpgrade, trackEvent, syncAppearanceToClientMirrors]
   );
 
   const scheduleAutosave = useCallback(
@@ -469,6 +558,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
+      hasLocalEditsRef.current = true;
       setDraft(finalNext);
       scheduleAutosave(finalNext);
 
@@ -773,6 +863,8 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return { ok: false, error: session.isPro ? 'Maximum 10 themes reached.' : 'Free plan supports 1 saved theme.' };
       }
 
+      await flushSave();
+
       if (isDemo || !session.userId || !session.username) {
         const created: ThemePreset = {
           id: `theme-${Date.now()}`,
@@ -802,7 +894,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           return { ok: false, error: 'Upgrade to Pro for up to 10 saved themes.' };
         }
         const json = await res.json().catch(() => ({}));
-        if (!res.ok) return { ok: false, error: json.error || 'Could not save theme.' };
+        if (!res.ok) return { ok: false, error: json.message || json.error || 'Could not save theme.' };
         const nextList = Array.isArray(json.themes) ? json.themes : [json.theme, ...themes];
         setThemes(nextList);
         persistLocalThemes(nextList);
@@ -811,17 +903,73 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return { ok: false, error: 'Network error.' };
       }
     },
-    [session.isPro, session.userId, session.username, session.primaryEmail, themes, isDemo, openUpgrade, persistLocalThemes]
+    [session.isPro, session.userId, session.username, session.primaryEmail, themes, isDemo, openUpgrade, persistLocalThemes, flushSave]
   );
 
   const applyTheme = useCallback(
-    (theme: ThemePreset) => {
-      applyPatch(() => cloneAppearance(theme.data), {
-        snackbarMessage: `Applied "${theme.name}"`,
-        showUndo: true,
+    async (theme: ThemePreset): Promise<{ ok: boolean; error?: string }> => {
+      if (debounceSaveTimerRef.current) {
+        clearTimeout(debounceSaveTimerRef.current);
+        debounceSaveTimerRef.current = null;
+      }
+      hasLocalEditsRef.current = true;
+      const prev = cloneAppearance(draftRef.current);
+      const target = cloneAppearance(theme.data);
+      setUndoStack((u) => [...u, prev].slice(-20));
+      setRedoStack([]);
+      setDraft(target);
+      setSaveStatus('saving');
+
+      if (!isDemo && session.userId && session.username && !theme.id.startsWith('theme-')) {
+        try {
+          const res = await fetch(
+            `/api/appearance/themes/${encodeURIComponent(theme.id)}/apply?username=${encodeURIComponent(session.username)}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': session.userId,
+                'x-iveo-username': session.username,
+                ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+              },
+              body: JSON.stringify({ username: session.username }),
+            }
+          );
+          if (res.ok) {
+            const json = await res.json().catch(() => null);
+            const committed = cloneAppearance(json?.appearance || target);
+            const confirmedUpdatedAt = json?.updatedAt || committed.updatedAt || new Date().toISOString();
+            lastCommittedRef.current = committed;
+            hydratedUpdatedAtRef.current = confirmedUpdatedAt;
+            setDraft(committed);
+            syncAppearanceToClientMirrors(committed, confirmedUpdatedAt);
+            setSaveStatus('saved');
+            presentSnackbar({
+              message: `Applied "${theme.name}"`,
+              actionLabel: 'Undo',
+              onAction: () => void undo(),
+            });
+            return { ok: true };
+          }
+          if (res.status !== 404) {
+            const errJson = await res.json().catch(() => ({}));
+            setSaveStatus('error');
+            return { ok: false, error: errJson.message || errJson.error || 'Could not apply theme.' };
+          }
+        } catch {
+          // Fall through to PATCH /api/appearance
+        }
+      }
+
+      await persistAppearanceNow(target);
+      presentSnackbar({
+        message: `Applied "${theme.name}"`,
+        actionLabel: 'Undo',
+        onAction: () => void undo(),
       });
+      return { ok: true };
     },
-    [applyPatch]
+    [isDemo, session.userId, session.username, session.primaryEmail, persistAppearanceNow, syncAppearanceToClientMirrors, presentSnackbar, undo]
   );
 
   const renameTheme = useCallback(

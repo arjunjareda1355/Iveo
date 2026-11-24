@@ -24,6 +24,7 @@ import {
   dbRecordAnalyticsEvent,
   dbGetAnalytics,
   dbGetRedirectTarget,
+  dbWriteAppearanceState,
 } from './azureSql.ts';
 import { normalizeAnalyticsSource } from '../../src/lib/analytics/sources.ts';
 import { detectDevice } from '../../src/lib/analytics/device.ts';
@@ -53,6 +54,7 @@ import {
   firebaseSaveContact,
   firebaseSaveRedirect,
   firebaseReleaseUsername,
+  firebaseSaveAppearanceState,
 } from './firebaseServer.ts';
 import { fetchBuyMeACoffeeProfile } from './buymeacoffee.ts';
 import {
@@ -329,26 +331,21 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       deletedBlockIds: new Set<string>(),
     }));
     const shouldTryFirebaseBlocks =
-      !syncMeta.blocksInitialized && (cameFromFirebase || !allBlocks || allBlocks.length === 0);
-    if (shouldTryFirebaseBlocks && !fbProf?.blocksInitialized) {
+      cameFromFirebase ||
+      (!syncMeta.blocksInitialized && (!allBlocks || allBlocks.length === 0));
+    if (shouldTryFirebaseBlocks) {
       const fbBlocks = await withTimeout(firebaseGetBlocks(clean, profile.userId), [] as any[]);
       const filteredFb = (fbBlocks || []).filter(
-        (b) => !syncMeta.deletedBlockIds.has(String(b?.id || ''))
+        (b) => cameFromFirebase || !syncMeta.deletedBlockIds.has(String(b?.id || ''))
       );
-      if (filteredFb.length > 0 && (!allBlocks || allBlocks.length === 0 || cameFromFirebase)) {
+      if (cameFromFirebase && (filteredFb.length > 0 || fbProf?.blocksInitialized)) {
+        allBlocks = filteredFb;
+        dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
+      } else if (filteredFb.length > 0 && (!allBlocks || allBlocks.length === 0)) {
         allBlocks = filteredFb;
         if (!dbBlocksInitial || dbBlocksInitial.length === 0) {
           dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
         }
-      }
-    } else if (shouldTryFirebaseBlocks && fbProf?.blocksInitialized && (!allBlocks || allBlocks.length === 0)) {
-      const fbBlocks = await withTimeout(firebaseGetBlocks(clean, profile.userId), [] as any[]);
-      const filteredFb = (fbBlocks || []).filter(
-        (b) => !syncMeta.deletedBlockIds.has(String(b?.id || ''))
-      );
-      if (filteredFb.length > 0) {
-        allBlocks = filteredFb;
-        dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
       }
     }
     const protectedIdsSet = new Set(await dbGetProtectedLinkIds(clean).catch(() => []));
@@ -738,12 +735,18 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     }
 
     const savedAt = saveResult?.updatedAt || new Date().toISOString();
+    const firebasePayload = saveResult?.profile || {
+      ...body,
+      primaryEmail: resolvedEmail,
+      plan: resolvedPlan,
+      updatedAt: savedAt,
+    };
 
     // Bounded await sync to Firebase Cloud Database so immediate page loads stay consistent
     await withTimeout(
       firebaseSaveProfile(
         username,
-        { ...body, primaryEmail: resolvedEmail, plan: resolvedPlan, updatedAt: savedAt },
+        firebasePayload,
         body.userId || req.headers['x-user-id'] as string || 'owner'
       ),
       undefined
@@ -842,6 +845,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       buttonColors: existing?.buttonColors ?? null,
       businessCard: existing?.businessCard ?? null,
       layoutSettings: existing?.layoutSettings ?? null,
+      appearance: existing?.appearance ?? null,
     };
     await dbSaveProfile(updatedAvatarProfile);
     await withTimeout(
@@ -2208,27 +2212,74 @@ export async function handleSeoAdminModerateBackground(req: ExpressReq, res: Exp
   }
 
   try {
-    const existing = await dbGetProfile(username);
+    let existing = await dbGetProfile(username);
+    if (!existing) {
+      existing = await withTimeout(firebaseGetProfile(username), null);
+    }
     if (!existing) {
       return res.status(404).json({ ok: false, error: 'profile_not_found' });
     }
     deleteUserUploadedBackgrounds(username);
-    await dbSaveProfile({
+    const updatedAt = new Date().toISOString();
+    const resetBg = { ...DEFAULT_BACKGROUND_CONFIG };
+    const nextAppearance =
+      existing.appearance && existing.appearance.schemaVersion === 2
+        ? {
+            ...existing.appearance,
+            background: { type: 'solid', color: '#FFFFFF' },
+            updatedAt,
+          }
+        : existing.appearance ?? null;
+
+    if (nextAppearance) {
+      await dbWriteAppearanceState(username, (cur) => ({
+        nextProfile: {
+          ...(cur.profile || existing),
+          background: resetBg,
+          appearance: nextAppearance,
+          updatedAt,
+        },
+        result: true,
+      }));
+    }
+
+    const saveRes = await dbSaveProfile({
       userId: existing.userId || 'owner',
       username,
       primaryEmail: existing.primaryEmail,
-      background: { ...DEFAULT_BACKGROUND_CONFIG },
+      background: resetBg,
+      ...(nextAppearance !== null ? { appearance: nextAppearance } : {}),
+      updatedAt,
     });
-    await Promise.race([
-      firebaseSaveProfile(
-        username,
-        { ...existing, background: { ...DEFAULT_BACKGROUND_CONFIG } },
-        existing.userId
-      ).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
+
+    await Promise.all([
+      withTimeout(
+        firebaseSaveProfile(
+          username,
+          saveRes?.profile || {
+            ...existing,
+            background: resetBg,
+            ...(nextAppearance !== null ? { appearance: nextAppearance } : {}),
+            updatedAt,
+          },
+          existing.userId
+        ),
+        undefined
+      ),
+      nextAppearance
+        ? withTimeout(
+            firebaseSaveAppearanceState(
+              username,
+              { appearance: nextAppearance },
+              existing.userId
+            ),
+            undefined
+          )
+        : Promise.resolve(),
     ]);
+
     invalidatePublicPageCache(username);
-    return res.status(200).json({ ok: true, username, background: { ...DEFAULT_BACKGROUND_CONFIG } });
+    return res.status(200).json({ ok: true, username, background: resetBg });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'moderate_failed', message: err?.message });
   }

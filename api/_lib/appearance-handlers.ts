@@ -687,7 +687,7 @@ async function persistAppearanceUpdate(
   nextAppearance: Appearance,
   nextHistory?: { undoStack: HistorySnapshot[]; redoStack: HistorySnapshot[]; lastCoalesceKey?: string | null; lastCoalesceAt?: number },
   nextThemes?: ThemePreset[]
-): Promise<{ updatedAt: string; themes: ThemePreset[]; history: { undoCount: number; redoCount: number } }> {
+): Promise<{ updatedAt: string; themes: ThemePreset[]; profile?: any; history: { undoCount: number; redoCount: number } }> {
   const updatedAt = nextAppearance.updatedAt || new Date().toISOString();
   const normalizedAppearance: Appearance = { ...nextAppearance, schemaVersion: 2, updatedAt };
   const legacy = appearanceToLegacyMirror(normalizedAppearance, actor.profile.layoutSettings);
@@ -713,6 +713,7 @@ async function persistAppearanceUpdate(
       result: {
         updatedAt,
         themes: finalThemes as ThemePreset[],
+        profile: nextProf,
         history: {
           undoCount: Array.isArray(finalHistory?.undoStack) ? finalHistory.undoStack.length : 0,
           redoCount: Array.isArray(finalHistory?.redoStack) ? finalHistory.redoStack.length : 0,
@@ -721,31 +722,30 @@ async function persistAppearanceUpdate(
     };
   });
 
+  const savedProfileRes = await dbSaveProfile({
+    userId: actor.userId,
+    username: actor.username,
+    primaryEmail: actor.email,
+    vibeId: normalizedAppearance.vibeId,
+    buttonShape: legacy.buttonShape,
+    buttonColors: legacy.buttonColors,
+    fontSettings: legacy.fontSettings,
+    layoutSettings: legacy.layoutSettings,
+    appearance: normalizedAppearance,
+    updatedAt,
+  }).catch(() => null);
+
+  const fullProfileForFirebase = savedProfileRes?.profile || {
+    ...persisted.profile,
+    primaryEmail: actor.email || persisted.profile?.primaryEmail || null,
+    updatedAt,
+  };
+
   await Promise.all([
-    dbSaveProfile({
-      userId: actor.userId,
-      username: actor.username,
-      primaryEmail: actor.email,
-      vibeId: normalizedAppearance.vibeId,
-      buttonShape: legacy.buttonShape,
-      buttonColors: legacy.buttonColors,
-      fontSettings: legacy.fontSettings,
-      layoutSettings: legacy.layoutSettings,
-      appearance: normalizedAppearance,
-      updatedAt,
-    }).catch(() => {}),
     withTimeout(
       firebaseSaveProfile(
         actor.username,
-        {
-          vibeId: normalizedAppearance.vibeId,
-          buttonShape: legacy.buttonShape,
-          buttonColors: legacy.buttonColors,
-          fontSettings: legacy.fontSettings,
-          layoutSettings: legacy.layoutSettings,
-          appearance: normalizedAppearance,
-          updatedAt,
-        },
+        fullProfileForFirebase,
         actor.userId
       ),
       undefined
@@ -1118,10 +1118,19 @@ export async function handleCreateTheme(req: ExpressReq, res: ExpressRes) {
     });
   }
 
-  const currentAppearance = migrateLegacyProfileToAppearanceV2({
+  const baseAppearance = migrateLegacyProfileToAppearanceV2({
     ...(state.profile || actor.profile),
     onboardingComplete: true,
   });
+
+  let currentAppearance = baseAppearance;
+  if (req.body?.appearance && typeof req.body.appearance === 'object') {
+    const validated = validateAndMergeAppearancePatch(baseAppearance, req.body.appearance, actor.isPro);
+    if (!validated.ok) {
+      return res.status(validated.status).json({ error: validated.error, message: validated.message });
+    }
+    currentAppearance = validated.nextAppearance;
+  }
 
   const newTheme: ThemePreset = {
     id: `theme_${crypto.randomUUID().slice(0, 12)}`,

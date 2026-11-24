@@ -119,7 +119,15 @@ export function isOwnerEmail(email: string | null | undefined): boolean {
   const clean = email.trim().toLowerCase();
   if (!clean) return false;
   if (/^[^@\s]+@iveo\.site$/i.test(clean)) return true;
-  return OWNER_EMAILS.some((owner) => owner.toLowerCase() === clean);
+  if (OWNER_EMAILS.some((owner) => owner.toLowerCase() === clean)) return true;
+  try {
+    const envRaw = (import.meta as any)?.env?.VITE_OWNER_EMAILS;
+    if (typeof envRaw === 'string' && envRaw.trim()) {
+      const extra = envRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      if (extra.includes(clean)) return true;
+    }
+  } catch {}
+  return false;
 }
 
 export function canUseReservedUsername(email: string | null | undefined): boolean {

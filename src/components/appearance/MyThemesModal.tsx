@@ -25,6 +25,7 @@ export const MyThemesModal: React.FC<MyThemesModalProps> = ({ isOpen, onClose })
 
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -54,8 +55,15 @@ export const MyThemesModal: React.FC<MyThemesModalProps> = ({ isOpen, onClose })
     }
   };
 
-  const handleApply = (t: ThemePreset) => {
-    applyTheme(t);
+  const handleApply = async (t: ThemePreset) => {
+    setError(null);
+    setApplyingId(t.id);
+    const res = await applyTheme(t);
+    setApplyingId(null);
+    if (!res.ok) {
+      setError(res.error || 'Could not apply theme.');
+      return;
+    }
     onClose();
   };
 
@@ -187,10 +195,11 @@ export const MyThemesModal: React.FC<MyThemesModalProps> = ({ isOpen, onClose })
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleApply(t)}
-                        className="h-9 px-3 rounded-xl bg-ink text-white text-[12px] font-semibold cursor-pointer hover:bg-ink-2"
+                        disabled={applyingId === t.id}
+                        onClick={() => void handleApply(t)}
+                        className="h-9 px-3 rounded-xl bg-ink text-white text-[12px] font-semibold cursor-pointer hover:bg-ink-2 disabled:opacity-50"
                       >
-                        Apply
+                        {applyingId === t.id ? 'Applying...' : 'Apply'}
                       </button>
                       <button
                         type="button"

@@ -31,6 +31,11 @@ function broadcastProfileSync(username: string | null | undefined, type: 'profil
   const clean = String(username).replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return;
   try {
+    window.dispatchEvent(
+      new CustomEvent('iveo_profile_sync', { detail: { username: clean, type, updatedAt } })
+    );
+  } catch {}
+  try {
     if (typeof BroadcastChannel !== 'undefined') {
       const ch = new BroadcastChannel('iveo_profile_sync');
       ch.postMessage({ username: clean, type, updatedAt });
@@ -881,8 +886,16 @@ function useClerkSession(): IveoSession {
                     : (accumulated.hideIvioFooter !== undefined ? Boolean(accumulated.hideIvioFooter) : (latest.hideFooter ?? hideFooter)),
               };
               const confirmedUpdatedAt = (await syncToServer(syncPayload)) || optimisticUpdatedAt;
+              latestSnapshotRef.current = {
+                ...(latestSnapshotRef.current || {}),
+                updatedAt: confirmedUpdatedAt,
+              };
+              setServerProfile((prev: any) =>
+                prev ? { ...prev, updatedAt: confirmedUpdatedAt } : prev
+              );
               await syncProfileToFirebase(targetUsername || currentUser.id, {
                 ...syncPayload,
+                userId: currentUser.id,
                 updatedAt: confirmedUpdatedAt,
               }).catch(() => {});
 

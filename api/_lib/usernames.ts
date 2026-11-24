@@ -86,7 +86,13 @@ export function isPrivilegedEmailServer(email: string | null | undefined): boole
   const clean = email.trim().toLowerCase();
   if (!clean) return false;
   if (/^[^@\s]+@iveo\.site$/i.test(clean)) return true;
-  return OWNER_EMAILS_LIST.includes(clean);
+  if (OWNER_EMAILS_LIST.includes(clean)) return true;
+  const envRaw = typeof process !== 'undefined' ? process.env?.IVEO_OWNER_EMAILS : undefined;
+  if (envRaw) {
+    const extra = envRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (extra.includes(clean)) return true;
+  }
+  return false;
 }
 
 const SYSTEM_AT_PREFIXES = new Set(['@vite', '@react-refresh', '@fs', '@id']);

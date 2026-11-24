@@ -818,6 +818,7 @@ export async function dbClaimUsername(
           buttonColors: profileData?.buttonColors || null,
           businessCard: profileData?.businessCard || null,
           layoutSettings: profileData?.layoutSettings || null,
+          appearanceV2: profileData?.appearance || null,
         },
       }));
       insReq.input('plan', sql.NVarChar(32), effectivePlan);
@@ -986,6 +987,7 @@ export async function dbClaimUsername(
       buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (basePrev?.buttonColors || null),
       businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (basePrev?.businessCard || null),
       layoutSettings: profileData?.layoutSettings !== undefined ? profileData.layoutSettings : (basePrev?.layoutSettings || null),
+      appearance: profileData?.appearance !== undefined ? profileData.appearance : (basePrev?.appearance ?? null),
       claimedAt: basePrev?.claimedAt || fallbackCreatedAt,
       updatedAt: new Date().toISOString(),
     };
@@ -1177,7 +1179,7 @@ export async function dbSaveProfile(profile: {
   layoutSettings?: any;
   appearance?: any;
   updatedAt?: string;
-}): Promise<{ ok: boolean; error?: string; updatedAt?: string }> {
+}): Promise<{ ok: boolean; error?: string; updatedAt?: string; profile?: any }> {
   const cleanUsername = profile.username.replace(/^@+/, '').toLowerCase().trim();
 
   // Ownership verification check
@@ -1259,7 +1261,7 @@ export async function dbSaveProfile(profile: {
           INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
           VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
       `);
-      return { ok: true, updatedAt: merged.updatedAt };
+      return { ok: true, updatedAt: merged.updatedAt, profile: merged };
     } catch {
       // Fall through to server store fallback
     }
@@ -1284,7 +1286,7 @@ export async function dbSaveProfile(profile: {
         writeUserIndex(userIndex);
       }
     }
-    return { ok: true, updatedAt: nowIso };
+    return { ok: true, updatedAt: nowIso, profile: record.profile };
   });
 }
 
@@ -1478,6 +1480,10 @@ export async function dbSaveBlocks(
         `);
       }
 
+      const touchReq = new sql.Request(transaction);
+      touchReq.input('username', sql.NVarChar(64), clean);
+      await touchReq.query('UPDATE iveo_profiles SET updated_at = SYSUTCDATETIME() WHERE username = @username').catch(() => {});
+
       await transaction.commit();
       await withUserLock(clean, () => {
         const record = readUserRecord(clean);
@@ -1494,6 +1500,9 @@ export async function dbSaveBlocks(
           isActive: b.isActive !== false,
           isArchived: Boolean(b.isArchived),
         }));
+        if (record.profile) {
+          record.profile = { ...record.profile, updatedAt: new Date().toISOString() };
+        }
         writeUserRecord(clean, record);
       });
       return { ok: true };
