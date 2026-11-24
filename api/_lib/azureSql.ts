@@ -1959,6 +1959,10 @@ export async function dbDeleteAccount(
     if (fs.existsSync(bgUserDir)) {
       fs.rmSync(bgUserDir, { recursive: true, force: true });
     }
+    const cardBannersDir = path.join(dataDir, 'card-banners', sanitizeUserFileKey(clean));
+    if (fs.existsSync(cardBannersDir)) {
+      fs.rmSync(cardBannersDir, { recursive: true, force: true });
+    }
   } catch {}
 
   return { ok: true };

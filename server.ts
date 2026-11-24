@@ -306,6 +306,7 @@ async function startServer() {
   // 4. Azure SQL & Backend Persistence Routes
   const dbHandlers = await import('./api/_lib/db-handlers.ts');
   const appearanceHandlers = await import('./api/_lib/appearance-handlers.ts');
+  const cardBannerHandlers = await import('./api/_lib/cardBannerUpload.ts');
   const dataHandlerModule = await import('./api/data.ts');
   app.all('/api/data', (req, res) => dataHandlerModule.default(req, res));
   app.get('/api/db/readiness', dbHandlers.handleDbReadiness);
@@ -324,6 +325,9 @@ async function startServer() {
   app.patch('/api/appearance/themes/:id', appearanceHandlers.handleRenameTheme);
   app.delete('/api/appearance/themes/:id', appearanceHandlers.handleDeleteTheme);
   app.post('/api/appearance/background-image', appearanceHandlers.handleUploadAppearanceBgImage);
+  app.post('/api/cards/banner', cardBannerHandlers.handleUploadCardBanner);
+  app.delete('/api/cards/banner', cardBannerHandlers.handleDeleteCardBanner);
+  app.get('/api/cards/banner/:username/:file', cardBannerHandlers.handleServeCardBanner);
   app.post('/api/avatar', dbHandlers.handleUploadAvatar);
   app.get('/api/avatar/:username', dbHandlers.handleServeAvatar);
   app.post('/api/background/upload', dbHandlers.handleUploadBackground);

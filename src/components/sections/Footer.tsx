@@ -101,12 +101,12 @@ export const Footer: React.FC = () => {
                 </a>
               </li>
               <li>
-                <Link
-                  to="/discover"
+                <a
+                  href="https://discover.iveo.site/"
                   className="text-ink-2 hover:text-ink hover:underline underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-ink"
                 >
                   Discover creators
-                </Link>
+                </a>
               </li>
               <li>
                 <a

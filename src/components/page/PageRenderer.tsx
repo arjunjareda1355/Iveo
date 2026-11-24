@@ -709,6 +709,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 surfaceStyle={buttonSurfaceStyle}
                 pageCardLook={layout.cardLook}
                 background={profile?.background}
+                userAvatarUrl={profile?.avatarUrl ?? persona.avatarUrl ?? null}
+                userDisplayName={displayName}
               />
               </div>
             );

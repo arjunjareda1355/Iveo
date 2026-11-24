@@ -1,12 +1,103 @@
 {
   "lastSitemapPingAt": null,
   "lastSitemapPingResult": null,
-  "lastIndexNowAt": "2026-11-24T07:57:09.554Z",
+  "lastIndexNowAt": "2026-11-24T08:40:02.178Z",
   "lastIndexNowUrls": [
-    "https://iveo.site/@prouser"
+    "https://iveo.site/@tmpbanner1"
   ],
-  "lastIndexNowStatus": "not_configured",
+  "lastIndexNowStatus": "indexnow_err_422",
   "recentEvents": [
+    {
+      "at": "2026-11-24T08:40:02.178Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmpbanner1",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:40:01.988Z",
+      "action": "profile_updated",
+      "target": "tmpbanner1",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-24T08:39:26.962Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmpbanner1",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:39:26.767Z",
+      "action": "profile_updated",
+      "target": "tmpbanner1",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-24T08:38:48.930Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmpbanner1",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:38:48.792Z",
+      "action": "profile_updated",
+      "target": "tmpbanner1",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-24T08:38:11.515Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmpbanner1",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:38:11.311Z",
+      "action": "profile_updated",
+      "target": "tmpbanner1",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-24T08:37:26.903Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmp-banner-verify",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:37:26.765Z",
+      "action": "profile_updated",
+      "target": "tmp-banner-verify",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-24T08:37:11.859Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmp_banner_verify",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:37:11.685Z",
+      "action": "profile_updated",
+      "target": "tmp_banner_verify",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-24T08:36:36.722Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@tmp_banner_verify",
+      "status": "indexnow_err_422",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-24T08:36:36.576Z",
+      "action": "profile_updated",
+      "target": "tmp_banner_verify",
+      "status": "sitemap_invalidated"
+    },
     {
       "at": "2026-11-24T07:57:09.554Z",
       "action": "indexnow_ping",
@@ -172,97 +263,6 @@
     },
     {
       "at": "2026-11-24T07:57:09.510Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.507Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.506Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.503Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.502Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.499Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.499Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.497Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.496Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.492Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.492Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.488Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.488Z",
-      "action": "profile_updated",
-      "target": "prouser",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-24T07:57:09.484Z",
-      "action": "indexnow_ping",
-      "target": "https://iveo.site/@prouser",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-24T07:57:09.484Z",
       "action": "profile_updated",
       "target": "prouser",
       "status": "sitemap_invalidated"

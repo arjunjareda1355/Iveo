@@ -73,6 +73,19 @@ export type CardLookStyle =
   | 'with_posts';
 export type EmbedLookStyle = CardLookStyle | 'signature' | 'spotlight' | 'minimal' | 'theme';
 
+export type BannerSource = 'auto' | 'upload' | 'color';
+
+export interface CardBannerConfig {
+  source?: BannerSource;
+  imageUrl?: string | null;
+  smallImageUrl?: string | null;
+  color?: string | null;
+  focalX?: number;
+  focalY?: number;
+  zoom?: number;
+  dim?: number;
+}
+
 export interface EmbedMetaData {
   provider: EmbedProvider;
   subtype?: string | null;
@@ -81,6 +94,7 @@ export interface EmbedMetaData {
   description?: string | null;
   avatarUrl?: string | null;
   coverUrl?: string | null;
+  banner?: CardBannerConfig | null;
   badgeText?: string | null;
   statsLabel?: string | null;
   stats?: Array<{ key: string; value: string }>;

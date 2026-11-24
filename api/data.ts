@@ -57,6 +57,11 @@ import {
   handleDeleteTheme,
   handleUploadAppearanceBgImage,
 } from './_lib/appearance-handlers.ts';
+import {
+  handleUploadCardBanner,
+  handleServeCardBanner,
+  handleDeleteCardBanner,
+} from './_lib/cardBannerUpload.ts';
 import { getCanonicalSiteOrigin } from './_lib/env.ts';
 import {
   buildLlmsTxt,
@@ -122,6 +127,10 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleUploadAvatar(req, res);
     case 'background-upload':
       return handleUploadBackground(req, res);
+    case 'card-banner':
+      if (method === 'POST') return handleUploadCardBanner(req, res);
+      if (method === 'DELETE') return handleDeleteCardBanner(req, res);
+      return handleServeCardBanner(req, res);
     case 'blocks':
       return method === 'POST' ? handleSaveBlocks(req, res) : handleGetBlocks(req, res);
     case 'contacts':

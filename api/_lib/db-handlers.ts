@@ -33,6 +33,11 @@ import {
   resolveBackgroundFilePath,
   deleteUserUploadedBackgrounds,
 } from './backgroundUpload.ts';
+import { cleanupUnreferencedUserCardBanners } from './cardBannerUpload.ts';
+import {
+  collectReferencedCardBannerUrls,
+  sanitizeEmbedMetaBannerForSave,
+} from '../../src/lib/cardBanner.ts';
 import {
   DEFAULT_BACKGROUND_CONFIG,
   parseBackgroundConfig,
@@ -1029,16 +1034,36 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
+  const sanitizedBlocks = blocks.map((b: any) => {
+    if (!b || typeof b !== 'object' || !b.embedMeta) return b;
+    const explicitLook =
+      typeof b.embedMeta.lookStyle === 'string' && b.embedMeta.lookStyle
+        ? b.embedMeta.lookStyle
+        : null;
+    return {
+      ...b,
+      embedMeta: sanitizeEmbedMetaBannerForSave(b.embedMeta, explicitLook, {
+        allowDataUrl: false,
+      }),
+    };
+  });
+
   try {
-    const result = await dbSaveBlocks(username, blocks, userId || undefined, primaryEmail);
+    const prevBlocks = await dbGetBlocks(username).catch(() => []);
+    const prevBannerUrls = Array.from(collectReferencedCardBannerUrls(prevBlocks));
+
+    const result = await dbSaveBlocks(username, sanitizedBlocks, userId || undefined, primaryEmail);
     if (result && !result.ok) {
       if (result.error === 'unauthorized') {
         return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to edit this page.' });
       }
       return res.status(400).json({ error: result.error });
     }
+    try {
+      cleanupUnreferencedUserCardBanners(username, sanitizedBlocks, prevBannerUrls);
+    } catch {}
     // Bounded-await sync to Firebase Cloud Database so deletions & edits never leave ghost items
-    await withTimeout(firebaseSaveBlocks(username, blocks, userId || undefined), undefined);
+    await withTimeout(firebaseSaveBlocks(username, sanitizedBlocks, userId || undefined), undefined);
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
 

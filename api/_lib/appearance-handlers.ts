@@ -20,6 +20,7 @@ import {
 import { invalidatePublicPageCache } from './db-handlers.ts';
 import { notifyProfileSeoChanged } from './seoService.ts';
 import { getBackgroundsBaseDir } from './backgroundUpload.ts';
+import { inspectAndSanitizeRasterBuffer } from './imageSanitizer.ts';
 import { isPrivilegedEmailServer } from './usernames.ts';
 import { resolveEffectivePlan } from '../../src/lib/plan.ts';
 import {
@@ -1272,130 +1273,6 @@ export async function handleDeleteTheme(req: ExpressReq, res: ExpressRes) {
 const MAX_APPEARANCE_IMAGE_BYTES = 8 * 1024 * 1024;
 const MIN_SHORT_SIDE_PX = 1080;
 
-function parsePngDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (buf.byteLength < 24) return null;
-  if (buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47) return null;
-  const width = buf.readUInt32BE(16);
-  const height = buf.readUInt32BE(20);
-  return width > 0 && height > 0 ? { width, height } : null;
-}
-
-function stripPngMetadata(buf: Buffer): Buffer {
-  // Keep critical chunks (IHDR, PLTE, IDAT, IEND, sRGB, gAMA, cHRM, tRNS); strip eXIf, tEXt, zTXt, iTXt, tIME
-  const keepTypes = new Set(['IHDR', 'PLTE', 'IDAT', 'IEND', 'sRGB', 'gAMA', 'cHRM', 'tRNS']);
-  const chunks: Buffer[] = [buf.subarray(0, 8)];
-  let offset = 8;
-  while (offset + 12 <= buf.byteLength) {
-    const len = buf.readUInt32BE(offset);
-    const type = buf.toString('ascii', offset + 4, offset + 8);
-    const total = 12 + len;
-    if (offset + total > buf.byteLength) break;
-    if (keepTypes.has(type)) {
-      chunks.push(buf.subarray(offset, offset + total));
-    }
-    offset += total;
-    if (type === 'IEND') break;
-  }
-  return chunks.length > 1 ? Buffer.concat(chunks) : buf;
-}
-
-function parseJpegDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (buf.byteLength < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
-  let offset = 2;
-  while (offset + 4 <= buf.byteLength) {
-    if (buf[offset] !== 0xff) {
-      offset += 1;
-      continue;
-    }
-    const marker = buf[offset + 1];
-    if (marker === 0xd9 || marker === 0xda) break; // EOI / SOS
-    if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd8)) {
-      offset += 2;
-      continue;
-    }
-    if (offset + 4 > buf.byteLength) break;
-    const segLen = buf.readUInt16BE(offset + 2);
-    // SOF markers (baseline, progressive, etc.)
-    if (
-      (marker >= 0xc0 && marker <= 0xc3) ||
-      (marker >= 0xc5 && marker <= 0xc7) ||
-      (marker >= 0xc9 && marker <= 0xcb) ||
-      (marker >= 0xcd && marker <= 0xcf)
-    ) {
-      if (offset + 9 <= buf.byteLength) {
-        const height = buf.readUInt16BE(offset + 5);
-        const width = buf.readUInt16BE(offset + 7);
-        if (width > 0 && height > 0) return { width, height };
-      }
-    }
-    offset += 2 + segLen;
-  }
-  return null;
-}
-
-function stripJpegExif(buf: Buffer): Buffer {
-  if (buf.byteLength < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return buf;
-  const parts: Buffer[] = [buf.subarray(0, 2)];
-  let offset = 2;
-  while (offset + 2 <= buf.byteLength) {
-    if (buf[offset] !== 0xff) {
-      parts.push(buf.subarray(offset));
-      break;
-    }
-    const marker = buf[offset + 1];
-    if (marker === 0xda) {
-      // Start of Scan: copy rest of image entropy data verbatim
-      parts.push(buf.subarray(offset));
-      break;
-    }
-    if (marker === 0xd9) {
-      parts.push(buf.subarray(offset, offset + 2));
-      break;
-    }
-    if (offset + 4 > buf.byteLength) {
-      parts.push(buf.subarray(offset));
-      break;
-    }
-    const segLen = buf.readUInt16BE(offset + 2);
-    const segEnd = Math.min(buf.byteLength, offset + 2 + segLen);
-    // Strip APP1..APP15 (EXIF/XMP/IPTC) and COM comments; preserve APP0 JFIF & APP2 ICC profile
-    const isStrippableApp = (marker >= 0xe1 && marker <= 0xef && marker !== 0xe2) || marker === 0xfe;
-    if (!isStrippableApp) {
-      parts.push(buf.subarray(offset, segEnd));
-    }
-    offset = segEnd;
-  }
-  return Buffer.concat(parts);
-}
-
-function parseWebpDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (
-    buf.byteLength < 30 ||
-    buf.toString('ascii', 0, 4) !== 'RIFF' ||
-    buf.toString('ascii', 8, 12) !== 'WEBP'
-  ) {
-    return null;
-  }
-  const chunk = buf.toString('ascii', 12, 16);
-  if (chunk === 'VP8 ' && buf.byteLength >= 30) {
-    const width = buf.readUInt16LE(26) & 0x3fff;
-    const height = buf.readUInt16LE(28) & 0x3fff;
-    return width > 0 && height > 0 ? { width, height } : null;
-  }
-  if (chunk === 'VP8L' && buf.byteLength >= 25) {
-    const bits = buf.readUInt32LE(21);
-    const width = (bits & 0x3fff) + 1;
-    const height = ((bits >> 14) & 0x3fff) + 1;
-    return { width, height };
-  }
-  if (chunk === 'VP8X' && buf.byteLength >= 30) {
-    const width = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16));
-    const height = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16));
-    return { width, height };
-  }
-  return null;
-}
-
 /**
  * POST /api/appearance/background-image
  * Pro-only background photo upload (JPG/PNG/WebP <= 8MB, short side >= 1080px, EXIF stripped).
@@ -1430,43 +1307,21 @@ export async function handleUploadAppearanceBgImage(req: ExpressReq, res: Expres
   }
 
   const rawBuf = Buffer.from(match[2].replace(/\s+/g, ''), 'base64');
-  if (rawBuf.byteLength === 0) {
-    return res.status(400).json({ error: 'empty_image', message: 'Image file is empty.' });
-  }
-  if (rawBuf.byteLength > MAX_APPEARANCE_IMAGE_BYTES) {
-    return res.status(413).json({
-      error: 'file_too_large_max_8mb',
-      message: 'Image must be 8 MB or smaller.',
+  const validated = inspectAndSanitizeRasterBuffer(rawBuf, {
+    maxBytes: MAX_APPEARANCE_IMAGE_BYTES,
+    rejectAnimatedWebp: false,
+  });
+  if (!validated.ok) {
+    const code = validated.code === 'file_too_large' ? 'file_too_large_max_8mb' : validated.code;
+    return res.status(validated.status).json({
+      error: code,
+      message: validated.message,
     });
   }
 
-  let ext: 'png' | 'jpg' | 'webp' | null = null;
-  let dims: { width: number; height: number } | null = null;
-  let cleanedBuf: Buffer = rawBuf;
-
-  if (rawBuf[0] === 0x89 && rawBuf[1] === 0x50 && rawBuf[2] === 0x4e && rawBuf[3] === 0x47) {
-    ext = 'png';
-    dims = parsePngDimensions(rawBuf);
-    cleanedBuf = stripPngMetadata(rawBuf);
-  } else if (rawBuf[0] === 0xff && rawBuf[1] === 0xd8 && rawBuf[2] === 0xff) {
-    ext = 'jpg';
-    dims = parseJpegDimensions(rawBuf);
-    cleanedBuf = stripJpegExif(rawBuf);
-  } else if (
-    rawBuf.byteLength >= 12 &&
-    rawBuf.toString('ascii', 0, 4) === 'RIFF' &&
-    rawBuf.toString('ascii', 8, 12) === 'WEBP'
-  ) {
-    ext = 'webp';
-    dims = parseWebpDimensions(rawBuf);
-  }
-
-  if (!ext || !dims) {
-    return res.status(415).json({
-      error: 'corrupted_or_unsupported_image',
-      message: 'Could not read image dimensions. Upload a valid JPG, PNG, or WebP file.',
-    });
-  }
+  const ext = validated.info.format;
+  const dims = { width: validated.info.width, height: validated.info.height };
+  const cleanedBuf = validated.info.sanitizedBuffer;
 
   if (Math.min(dims.width, dims.height) < MIN_SHORT_SIDE_PX) {
     return res.status(422).json({

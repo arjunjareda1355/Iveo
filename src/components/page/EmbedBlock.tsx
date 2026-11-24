@@ -18,6 +18,7 @@ import {
   resolveButtonControlRadius,
 } from '../../lib/preferences';
 import { normalizeEmbedLookStyle } from '../../lib/embedLooks';
+import { BannerLookCard } from './BannerLookCard';
 import {
   getProviderDefinition,
   getProviderKindDefinition,
@@ -54,6 +55,8 @@ export interface EmbedBlockProps {
   surfaceStyle?: React.CSSProperties;
   pageCardLook?: CardLookStyle;
   background?: BackgroundConfig | null;
+  userAvatarUrl?: string | null;
+  userDisplayName?: string | null;
 }
 
 export const DiscordGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
@@ -238,6 +241,8 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
   surfaceStyle,
   pageCardLook = 'match_page',
   background,
+  userAvatarUrl,
+  userDisplayName,
 }) => {
   const { tokens } = vibe;
   const meta = block.embedMeta;
@@ -960,112 +965,32 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
   // ---------- LOOK 3: BANNER (LK-6) ----------
   if (look === 'banner') {
-    const canUseWideArtworkBanner =
-      isItemArtwork &&
-      !providerDef.restrictions?.noArtworkBanner &&
-      Boolean(meta?.coverUrl) &&
-      !coverError;
-    const bannerGradient = `linear-gradient(135deg, ${normalizeHexColor(rawChosenAccent) || providerDef.brandColor} 0%, ${darkenHex(normalizeHexColor(rawChosenAccent) || providerDef.brandColor, 0.36)} 100%)`;
-
     const bannerContent = (
-      <div
-        className="w-full overflow-hidden flex flex-col text-left transition-all duration-150"
-        style={cardContainerStyle}
-      >
-        {/* 72px Top Banner */}
-        <div
-          className="w-full relative overflow-hidden shrink-0"
-          style={{
-            height: `${Math.round(72 * scale)}px`,
-            background: canUseWideArtworkBanner ? undefined : bannerGradient,
-          }}
-        >
-          {canUseWideArtworkBanner && meta?.coverUrl && (
-            <>
-              <img
-                src={meta.coverUrl}
-                alt=""
-                aria-hidden="true"
-                onError={() => setCoverError(true)}
-                className="w-full h-full object-cover block"
-              />
-              <div className="absolute inset-0 bg-black/30 pointer-events-none" aria-hidden="true" />
-            </>
-          )}
-
-          {showPlatformLabel && (
-            <div className="absolute top-2.5 left-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-[8px] bg-black/40 text-white text-[12px] font-medium leading-none">
-              <ProviderGlyph provider={provider} size={14} />
-              <span>{providerDef.name}</span>
-            </div>
-          )}
-        </div>
-
-        <div
-          className="w-full flex flex-col"
-          style={{
-            padding: `${showPicture ? Math.round(8 * scale) : Math.round(14 * scale)}px ${Math.round(16 * scale)}px ${Math.round(16 * scale)}px`,
-          }}
-        >
-          {showPicture && (
-            <div style={{ marginTop: `${Math.round(-36 * scale)}px`, marginBottom: `${Math.round(8 * scale)}px` }}>
-              {renderPicture(Math.round(56 * scale), resolvedSurfaceHex)}
-            </div>
-          )}
-
-          <div
-            dir="auto"
-            title={rawTitle}
-            className="font-semibold leading-[22px] line-clamp-2 break-words"
-            style={{ fontSize: `${Math.max(14, Math.round(16 * scale))}px`, color: textPrimary }}
-          >
-            {rawTitle}
-          </div>
-
-          {rawSubtitle && (
-            <div
-              dir="auto"
-              className="truncate leading-[20px] mt-1"
-              style={{
-                fontSize: `${Math.max(12, Math.round(14 * scale))}px`,
-                color: textMuted,
-                fontFamily: provider === 'github' ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
-              }}
-            >
-              {rawSubtitle}
-            </div>
-          )}
-
-          {rawSummary && (
-            <p
-              dir="auto"
-              className="line-clamp-2 leading-[20px] mt-2 break-words"
-              style={{ fontSize: `${Math.max(12, Math.round(14 * scale))}px`, color: textMuted }}
-            >
-              {rawSummary}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-3 mt-3">
-            <div className="min-w-0 flex items-center gap-2">
-              {isSpotify ? (
-                <SpotifyBrandLogo surfaceHex={resolvedSurfaceHex} textColor={textPrimary} />
-              ) : statsLabel ? (
-                <span
-                  className="truncate leading-[18px]"
-                  style={{ fontSize: `${Math.max(11, Math.round(13 * scale))}px`, color: textMuted }}
-                >
-                  {statsLabel}
-                </span>
-              ) : (
-                <span />
-              )}
-            </div>
-
-            {renderCtaButton(false)}
-          </div>
-        </div>
-      </div>
+      <BannerLookCard
+        provider={provider}
+        providerName={providerDef.name}
+        brandColor={providerDef.brandColor}
+        meta={meta}
+        title={rawTitle}
+        subtitle={rawSubtitle}
+        summary={rawSummary}
+        statsLabel={statsLabel}
+        showPicture={showPicture}
+        showPlatformLabel={showPlatformLabel}
+        isItemArtwork={isItemArtwork}
+        isSpotify={isSpotify}
+        userAvatarUrl={userAvatarUrl}
+        userDisplayName={userDisplayName}
+        cardContainerStyle={cardContainerStyle}
+        resolvedSurfaceHex={resolvedSurfaceHex}
+        textPrimary={textPrimary}
+        textMuted={textMuted}
+        rawChosenAccent={rawChosenAccent}
+        scale={scale}
+        platformGlyph={<ProviderGlyph provider={provider} size={Math.max(10, Math.round(12 * scale))} />}
+        spotifyLogo={<SpotifyBrandLogo surfaceHex={resolvedSurfaceHex} textColor={textPrimary} />}
+        ctaButton={renderCtaButton(false)}
+      />
     );
 
     return embedMode === 'placeholder' ? (
@@ -1076,7 +1001,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
         target="_blank"
         rel="noopener noreferrer"
         onClick={() => onLinkClick?.(block)}
-        className="block w-full hover:scale-[1.01] transition-transform duration-150"
+        className="block w-full hover:scale-[1.01] motion-reduce:hover:scale-100 transition-transform duration-150 motion-reduce:transition-none"
         aria-label={`${rawTitle} — ${ctaText}`}
       >
         {bannerContent}

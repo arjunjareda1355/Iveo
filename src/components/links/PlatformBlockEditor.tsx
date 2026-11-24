@@ -44,6 +44,9 @@ import { SegmentedControl } from '../ui/SegmentedControl';
 import { Toggle } from '../ui/Toggle';
 import { ScheduleSection } from './ScheduleSection';
 import { CardLookTileGrid } from './CardLookTile';
+import { BannerImageControls } from './BannerImageControls';
+import { deleteCardBannersFromServer } from '../../lib/bannerClientImage';
+import { sanitizeEmbedMetaBannerForSave } from '../../lib/cardBanner';
 import { EmbedBlock, ProviderGlyph } from '../page/EmbedBlock';
 
 export interface PlatformEditorSavePayload {
@@ -237,9 +240,12 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const [isDirty, setIsDirty] = useState(false);
   const [oauthAvailability, setOauthAvailability] = useState<Record<string, boolean> | null>(null);
 
+  const [isBannerUploading, setIsBannerUploading] = useState(false);
+
   const linkInputRef = useRef<HTMLInputElement | null>(null);
   const lastResolvedUrlRef = useRef<string>(block?.url || '');
   const lookupSeqRef = useRef(0);
+  const uncommittedBannerUrlsRef = useRef<Set<string>>(new Set());
 
   // Sync state whenever editor opens or target block changes
   useEffect(() => {
@@ -258,6 +264,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     setUrlError(null);
     setMismatchHint(null);
     setSaveError(null);
+    setIsBannerUploading(false);
+    uncommittedBannerUrlsRef.current.clear();
     setIsDirty(!block && Boolean(init.url));
     lastResolvedUrlRef.current = block?.url || '';
 
@@ -293,7 +301,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         if (isDirty && !confirmDiscard) {
           setConfirmDiscard(true);
         } else {
-          onClose();
+          cleanupUncommittedAndClose();
         }
       }
     };
@@ -302,7 +310,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       document.body.style.overflow = prevOverflow;
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [isOpen, isDirty, confirmDiscard, onClose]);
+  }, [isOpen, isDirty, confirmDiscard]);
 
   const providerDef = getProviderDefinition(provider);
   const detectedCurrent = useMemo(
@@ -749,6 +757,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     Boolean(detectedCurrent) &&
     !urlError &&
     !isSaving &&
+    !isBannerUploading &&
     (!isEditing || isDirty);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -780,7 +789,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         }
       : undefined;
 
-    const finalMeta: EmbedMetaData = {
+    const rawFinalMeta: EmbedMetaData = {
       ...meta,
       provider,
       subtype: activeSubtype,
@@ -796,6 +805,13 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
           ? cleanOverride
           : undefined,
     };
+
+    const finalMeta: EmbedMetaData =
+      (sanitizeEmbedMetaBannerForSave(
+        rawFinalMeta,
+        displayAs === 'card' ? effectiveLook : 'player',
+        { allowDataUrl: !session.userId }
+      ) as EmbedMetaData) || rawFinalMeta;
 
     const youtubeData: YouTubeData | undefined =
       block?.kind === 'youtube'
@@ -821,6 +837,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         youtubeData,
         schedule: { startAt, endAt },
       });
+      uncommittedBannerUrlsRef.current.clear();
       setIsDirty(false);
     } catch (err: any) {
       setSaveError(err?.message || "Couldn't save changes. Try again.");
@@ -829,11 +846,29 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     }
   };
 
+  const cleanupUncommittedAndClose = () => {
+    const urlsToDelete = Array.from(uncommittedBannerUrlsRef.current).filter(
+      (u) =>
+        u !== block?.embedMeta?.banner?.imageUrl &&
+        u !== block?.embedMeta?.banner?.smallImageUrl
+    );
+    if (urlsToDelete.length > 0) {
+      void deleteCardBannersFromServer({
+        urls: urlsToDelete,
+        username: session.username,
+        userId: session.userId,
+        primaryEmail: session.primaryEmail,
+      });
+    }
+    uncommittedBannerUrlsRef.current.clear();
+    onClose();
+  };
+
   const requestClose = () => {
     if (isDirty && !confirmDiscard) {
       setConfirmDiscard(true);
     } else {
-      onClose();
+      cleanupUncommittedAndClose();
     }
   };
 
@@ -860,6 +895,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
           fontFamily={getFontCssFamily(session.fontSettings?.buttonFont, activeVibe.fontFamily)}
           pageCardLook={pageCardLook}
           background={session.background}
+          userAvatarUrl={session.imageUrl}
+          userDisplayName={session.displayName}
           surfaceStyle={{
             backgroundColor: effectiveTokens.buttonBg,
             color: effectiveTokens.buttonText,
@@ -939,7 +976,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
               >
                 Keep editing
               </Button>
-              <Button type="button" variant="destructive" size="sm" onClick={onClose}>
+              <Button type="button" variant="destructive" size="sm" onClick={cleanupUncommittedAndClose}>
                 Discard
               </Button>
             </div>
@@ -1236,6 +1273,50 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                     <p className="text-[12px] text-muted">
                       {providerDef.restrictions.restrictionReason}.
                     </p>
+                  )}
+
+                  {effectiveLook === 'banner' && (
+                    <BannerImageControls
+                      banner={meta.banner}
+                      onChangeBanner={(nextBanner) => updateMeta({ banner: nextBanner })}
+                      onUploadingChange={setIsBannerUploading}
+                      onTrackUncommittedUrl={(url, smallUrl) => {
+                        if (url) uncommittedBannerUrlsRef.current.add(url);
+                        if (smallUrl) uncommittedBannerUrlsRef.current.add(smallUrl);
+                      }}
+                      onDeleteServerUrls={(urls) => {
+                        urls.forEach((u) => uncommittedBannerUrlsRef.current.delete(u));
+                        const toDeleteNow = urls.filter(
+                          (u) =>
+                            u !== block?.embedMeta?.banner?.imageUrl &&
+                            u !== block?.embedMeta?.banner?.smallImageUrl
+                        );
+                        if (toDeleteNow.length > 0) {
+                          void deleteCardBannersFromServer({
+                            urls: toDeleteNow,
+                            username: session.username,
+                            userId: session.userId,
+                            primaryEmail: session.primaryEmail,
+                          });
+                        }
+                      }}
+                      username={session.username}
+                      userId={session.userId}
+                      primaryEmail={session.primaryEmail}
+                      provider={provider}
+                      providerName={providerDef.name}
+                      brandColor={providerDef.brandColor}
+                      meta={meta}
+                      title={titleInput.trim() || meta.override?.title?.trim() || meta.title || kindDef.label}
+                      subtitle={meta.override?.subtitle?.trim() || meta.handle || meta.subtitle || null}
+                      userAvatarUrl={session.imageUrl}
+                      userDisplayName={session.displayName}
+                      cardSurfaceHex={effectiveTokens.buttonBg}
+                      cardTextColor={effectiveTokens.buttonText}
+                      cardMutedColor={effectiveTokens.muted}
+                      cardBorderColor={effectiveTokens.buttonBorder || 'rgba(128,128,128,0.22)'}
+                      platformGlyph={<ProviderGlyph provider={provider} size={12} />}
+                    />
                   )}
                 </section>
               ) : (
