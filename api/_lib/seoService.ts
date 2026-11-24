@@ -34,9 +34,11 @@ export interface SeoUnifiedProfile {
 
 const SYNTHETIC_TEST_HANDLE_PATTERNS: RegExp[] = [
   /^(test|demo)([_-].*|\d+)?$/i,
+  /^(free|pro)user\d*$/i,
+  /^tmp[_-]?banner/i,
   /^old-\d+$/i,
   /^seo-rename-(old|new)-\d+$/i,
-  /^(verifytemp|themeverify)\d+$/i,
+  /^(verifytemp|themeverify|verif|renm)\d+$/i,
 ];
 
 export function isSyntheticTestHandle(username: string | null | undefined): boolean {

@@ -1,5 +1,5 @@
-import type { BannerSource, CardBannerConfig, EmbedMetaData } from '../data/types';
-import { darkenHex, ensureContrastText, hexWithAlpha, isLightHexColor, normalizeHexColor } from './colors';
+import type { BannerSource, CardBannerConfig, EmbedMetaData } from '../data/types.ts';
+import { darkenHex, ensureContrastText, hexWithAlpha, isLightHexColor, normalizeHexColor } from './colors.ts';
 
 export const DEFAULT_CARD_BANNER_CONFIG: Required<CardBannerConfig> = {
   source: 'auto',
