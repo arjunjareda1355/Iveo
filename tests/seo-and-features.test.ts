@@ -527,11 +527,10 @@ test('New card look presets, profile embed styles, and distinct VIBES preview li
 });
 
 test('Discover SSR HTML includes crawlable directory heading and canonical pagination semantics', async () => {
-  const res = await buildDiscoverSsrHtml('https://iveo.site', 1);
-  assert.match(res.html, /<main id="iveo-ssr-discover">/);
-  assert.match(res.html, /Discover Creators on Iveo/);
-  assert.equal(res.page, 1);
-  assert.ok(res.totalPages >= 1);
+  const discoverHtml = await buildDiscoverSsrHtml('https://iveo.site', 1);
+  assert.match(discoverHtml, /<main id="iveo-ssr-discover"/);
+  assert.match(discoverHtml, /Discover Creators on Iveo/);
+  assert.match(discoverHtml, /Back to Iveo home/);
 });
 
 test('Dynamic OG endpoint generates valid 1200x630 PNG image bytes', async () => {

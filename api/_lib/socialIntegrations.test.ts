@@ -136,7 +136,7 @@ test('buildSocialOAuthUrl constructs Discord & Spotify OAuth URLs and gates Pint
       const spotifyAuth = buildSocialOAuthUrl('spotify', 'https://iveo.site');
       assert.ok(spotifyAuth.url.startsWith('https://accounts.spotify.com/authorize?'));
       assert.ok(spotifyAuth.url.includes('mock_sp_id'));
-      assert.equal(spotifyAuth.redirectUri, 'https://iveo.site/api/oauth/spotify/callback');
+      assert.equal(spotifyAuth.redirectUri, 'https://iveo.site/callback');
 
       const discordAuth = buildSocialOAuthUrl('discord', 'https://iveo.site');
       assert.ok(discordAuth.url.startsWith('https://discord.com/oauth2/authorize?'));

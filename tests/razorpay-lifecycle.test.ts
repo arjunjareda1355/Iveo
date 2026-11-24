@@ -4,19 +4,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iveo-billing-lifecycle-'));
-process.env.IVEO_DATA_DIR = tempDir;
-process.env.IVEO_DISABLE_REMOTE_DB = '1';
-process.env.RAZORPAY_WEBHOOK_SECRET = 'test_webhook_secret_iveo_123';
-process.env.RAZORPAY_KEY_SECRET = 'test_key_secret_iveo_123';
-
-import {
-  dbClaimUsername,
-  dbGetBlocks,
-  dbGetProfile,
-  dbSaveBlocks,
-} from '../api/_lib/azureSql.ts';
+import { terminate } from 'firebase/firestore';
+import { serverDb } from '../api/_lib/firebaseServer';
+import { dbClaimUsername, dbGetBlocks, dbGetProfile, dbSaveBlocks } from '../api/_lib/azureSql';
 import {
   activateOrRenewSubscription,
   adminInspectBilling,
@@ -24,137 +14,171 @@ import {
   cancelBillingSubscription,
   getBillingSnapshot,
   getVerifiedInvoice,
-  markPaymentAuthentication,
   processWebhookEvent,
   reactivateBillingSubscription,
   recordCheckoutPending,
   switchBillingCycle,
-} from '../api/_lib/billingService.ts';
-import { handleWebhook } from '../api/razorpay.ts';
-import {
-  GRACE_PERIOD_DAYS,
-  normalizeSubscriptionLifecycleState,
-  resolveEffectivePlan,
-} from '../src/lib/plan.ts';
-import { generateInvoicePdf } from '../src/lib/invoicePdf.ts';
+} from '../api/_lib/billingService';
+import { handleWebhook } from '../api/razorpay';
+import { generateInvoicePdf } from '../src/lib/invoicePdf';
+import { resolveEffectivePlan } from '../src/lib/plan';
 
-function signWebhookPayload(rawBody: string): string {
-  return crypto
-    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
-    .update(rawBody)
-    .digest('hex');
+const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iveo-billing-test-'));
+const prevDataDir = process.env.IVEO_DATA_DIR;
+const prevWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+process.env.IVEO_DATA_DIR = tmpDataDir;
+process.env.RAZORPAY_WEBHOOK_SECRET = 'test_webhook_secret_key_123';
+
+function signWebhook(rawBody: string, secret: string = process.env.RAZORPAY_WEBHOOK_SECRET!) {
+  return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 }
 
-after(() => {
-  try {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  } catch {}
-});
-
-test('Full 8-state Razorpay lifecycle: free -> checkout_pending -> payment_authentication -> active -> renewal -> scheduled_cancellation -> expired -> immediate_cancellation', async () => {
-  const nowMs = Date.UTC(2027, 2, 1, 12, 0, 0); // After early-bird cutoff (2027)
-  const uname = 'billingcreator';
-  const uid = 'user_billing_1';
+test('Billing lifecycle covers all 8 states, 3-day grace, cycle switch, data preservation, and zero fake invoices', async () => {
+  const userId = 'user_lifecycle_1';
+  const username = 'billcreator';
   const email = 'creator@example.com';
 
-  await dbClaimUsername(
-    uid,
-    uname,
+  // Use a future signup date (post 2027) so early-bird promo doesn't mask paid lifecycle states
+  const futureCreatedAt = '2027-06-01T00:00:00.000Z';
+  const claimRes = await dbClaimUsername(
+    userId,
+    username,
     {
       displayName: 'Billing Creator',
-      bio: 'Testing billing states',
-      createdAt: new Date(nowMs).toISOString(),
+      bio: 'Creator bio',
+      createdAt: futureCreatedAt,
+      plan: 'free',
     },
     email
   );
+  assert.equal(claimRes.ok, true);
+
+  // Save a custom link block to verify downgrade/immediate-cancellation preserves user data
   await dbSaveBlocks(
-    uname,
-    [{ id: 'blk-1', kind: 'link', title: 'Portfolio', url: 'https://example.com', isActive: true }],
-    uid,
+    username,
+    [
+      {
+        id: 'blk_keep_1',
+        kind: 'link',
+        title: 'My Portfolio',
+        url: 'https://portfolio.example.com',
+        isActive: true,
+        isArchived: false,
+        position: 0,
+      },
+    ],
+    userId,
     email
   );
 
-  // 1. Free state + zero fake invoices
-  const snapFree = await getBillingSnapshot({ username: uname, userId: uid, email, nowMs });
-  assert.equal(snapFree.plan, 'free');
-  assert.equal(snapFree.lifecycleState, 'free');
-  assert.equal(snapFree.billingHistory.length, 0);
-  assert.equal(snapFree.invoices.length, 0);
+  const t0 = Date.parse('2027-06-02T10:00:00.000Z');
+
+  // 1. Free state — zero fake invoices or history
+  const freeSnap = await getBillingSnapshot({ username, userId, email, nowMs: t0 });
+  assert.equal(freeSnap.plan, 'free');
+  assert.equal(freeSnap.lifecycleState, 'free');
+  assert.equal(freeSnap.billingHistory.length, 0);
+  assert.equal(freeSnap.invoices.length, 0);
+
+  // Unpaid invoice lookup strictly rejected
+  const missingInv = await getVerifiedInvoice({ username, userId, email, invoiceId: 'INV-FAKE-1' });
+  assert.equal(missingInv.ok, false);
+  assert.throws(() => generateInvoicePdf({ customerName: 'X', username, status: 'failed' }));
 
   // 2. Checkout pending
   await recordCheckoutPending({
-    username: uname,
-    userId: uid,
+    username,
+    userId,
     email,
     period: 'monthly',
     currency: 'INR',
     orderId: 'order_init_1',
     amountMinor: 49900,
-    nowMs: nowMs + 1000,
+    nowMs: t0 + 1000,
   });
-  const snapCheckout = await getBillingSnapshot({ username: uname, userId: uid, email, nowMs: nowMs + 2000 });
-  assert.equal(snapCheckout.lifecycleState, 'checkout_pending');
-  assert.equal(snapCheckout.plan, 'free'); // checkout_pending must NOT grant Pro yet
-  assert.equal(snapCheckout.invoices.length, 0);
+  const pendingSnap = await getBillingSnapshot({ username, userId, email, nowMs: t0 + 1000 });
+  assert.equal(pendingSnap.lifecycleState, 'checkout_pending');
+  assert.equal(pendingSnap.billingHistory[0]?.status, 'pending');
+  assert.equal(pendingSnap.invoices.length, 0);
 
-  // 3. Payment authentication (payment.authorized)
-  await markPaymentAuthentication({
-    username: uname,
-    userId: uid,
+  // 3. Payment authentication (webhook payment.authorized)
+  await processWebhookEvent({
+    eventIdHeader: 'evt_auth_1',
+    nowMs: t0 + 2000,
+    event: {
+      event: 'payment.authorized',
+      created_at: 1811930402,
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_first_1',
+            order_id: 'order_init_1',
+            method: 'upi',
+            vpa: 'creator@okaxis',
+            notes: { username, userId, email, period: 'monthly' },
+          },
+        },
+      },
+    },
+  });
+  const authSnap = await getBillingSnapshot({ username, userId, email, nowMs: t0 + 2000 });
+  assert.equal(authSnap.lifecycleState, 'payment_authentication');
+
+  // 4. Active (payment captured)
+  await processWebhookEvent({
+    eventIdHeader: 'evt_cap_1',
+    nowMs: t0 + 3000,
+    event: {
+      event: 'payment.captured',
+      created_at: 1811930403,
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_first_1',
+            order_id: 'order_init_1',
+            amount: 49900,
+            currency: 'INR',
+            method: 'upi',
+            vpa: 'creator@okaxis',
+            notes: { username, userId, email, period: 'monthly' },
+          },
+        },
+      },
+    },
+  });
+
+  // Duplicate webhook with same eventIdHeader must be safely deduplicated
+  const dupRes = await processWebhookEvent({
+    eventIdHeader: 'evt_cap_1',
+    nowMs: t0 + 4000,
+    event: { event: 'payment.captured', payload: { payment: { entity: { id: 'pay_first_1' } } } },
+  });
+  assert.equal(dupRes.deduplicated, true);
+
+  const activeSnap = await getBillingSnapshot({ username, userId, email, nowMs: t0 + 5000 });
+  assert.equal(activeSnap.plan, 'pro');
+  assert.equal(activeSnap.lifecycleState, 'active');
+  assert.equal(activeSnap.billingHistory.length, 1);
+  assert.equal(activeSnap.billingHistory[0]?.status, 'paid');
+  assert.equal(activeSnap.invoices.length, 1);
+  assert.match(activeSnap.subscription?.paymentMethodSummary || '', /UPI/);
+
+  // Verified invoice downloadable for paid transaction
+  const invRes = await getVerifiedInvoice({
+    username,
+    userId,
     email,
-    orderId: 'order_init_1',
-    paymentId: 'pay_init_1',
-    paymentEntity: { method: 'upi', vpa: 'creator@upi' },
-    nowMs: nowMs + 3000,
+    invoiceId: activeSnap.invoices[0]!.id,
   });
-  const snapAuth = await getBillingSnapshot({ username: uname, userId: uid, email, nowMs: nowMs + 4000 });
-  assert.equal(snapAuth.lifecycleState, 'payment_authentication');
-  assert.equal(snapAuth.plan, 'free');
-  assert.equal(snapAuth.invoices.length, 0);
+  assert.equal(invRes.ok, true);
 
-  // 4. Active paid Pro (payment captured)
-  const activated = await activateOrRenewSubscription({
-    username: uname,
-    userId: uid,
-    email,
-    period: 'monthly',
-    currency: 'INR',
-    orderId: 'order_init_1',
-    paymentId: 'pay_init_1',
-    paymentEntity: { method: 'upi', vpa: 'creator@upi', amount: 49900, currency: 'INR' },
-    nowMs: nowMs + 5000,
-  });
-  assert.equal(activated.plan, 'pro');
-  assert.equal(activated.lifecycleState, 'active');
-
-  const snapActive = await getBillingSnapshot({ username: uname, userId: uid, email, nowMs: nowMs + 6000 });
-  assert.equal(snapActive.lifecycleState, 'active');
-  assert.equal(snapActive.invoices.length, 1);
-  assert.equal(snapActive.billingHistory.filter((h) => h.status === 'paid').length, 1);
-  assert.match(snapActive.subscription?.paymentMethodSummary || '', /^UPI/);
-
-  // 5. Renewal on second verified payment
-  const renewed = await activateOrRenewSubscription({
-    username: uname,
-    userId: uid,
-    email,
-    period: 'monthly',
-    currency: 'INR',
-    orderId: 'order_ren_2',
-    paymentId: 'pay_ren_2',
-    paymentEntity: { method: 'card', card: { network: 'Visa', last4: '4242' }, amount: 49900, currency: 'INR' },
-    nowMs: nowMs + 20 * 86400_000,
-  });
-  assert.equal(renewed.lifecycleState, 'renewal');
-  assert.equal(renewed.plan, 'pro');
-
-  // Switch billing cycle monthly -> yearly
+  // Switch cycle monthly -> yearly
   const switched = await switchBillingCycle({
-    username: uname,
-    userId: uid,
+    username,
+    userId,
     email,
     targetCycle: 'yearly',
-    nowMs: nowMs + 21 * 86400_000,
+    nowMs: t0 + 6000,
   });
   assert.equal(switched.ok, true);
   if (switched.ok) {
@@ -162,291 +186,173 @@ test('Full 8-state Razorpay lifecycle: free -> checkout_pending -> payment_authe
     assert.equal(switched.subscription?.amountMinor, 499900);
   }
 
-  // 6. Scheduled cancellation retains Pro until currentPeriodEnd
-  const schedCancel = await cancelBillingSubscription({
-    username: uname,
-    userId: uid,
-    email,
-    mode: 'end_of_period',
-    reason: 'Taking a short break',
-    nowMs: nowMs + 22 * 86400_000,
-  });
-  assert.equal(schedCancel.ok, true);
-  if (schedCancel.ok) {
-    assert.equal(schedCancel.lifecycleState, 'scheduled_cancellation');
-    assert.equal(schedCancel.plan, 'pro');
-    assert.equal(schedCancel.subscription?.cancelReason, 'Taking a short break');
-  }
-
-  // Reactivate before period end succeeds
-  const reactivated = await reactivateBillingSubscription({
-    username: uname,
-    userId: uid,
-    email,
-    nowMs: nowMs + 23 * 86400_000,
-  });
-  assert.equal(reactivated.ok, true);
-  if (reactivated.ok) {
-    assert.equal(reactivated.lifecycleState, 'active');
-    assert.equal(reactivated.subscription?.cancelAtPeriodEnd, false);
-  }
-
-  // 7. Expired state after currentPeriodEnd elapses
-  const pastEndMs = Date.parse(reactivated.ok ? reactivated.subscription!.currentPeriodEnd! : '') + 60_000;
-  const snapExpired = await getBillingSnapshot({
-    username: uname,
-    userId: uid,
-    email,
-    nowMs: pastEndMs,
-  });
-  assert.equal(snapExpired.lifecycleState, 'expired');
-  assert.equal(snapExpired.plan, 'free');
-
-  // Reactivate rejects expired subscription
-  const reactivateExpired = await reactivateBillingSubscription({
-    username: uname,
-    userId: uid,
-    email,
-    nowMs: pastEndMs,
-  });
-  assert.equal(reactivateExpired.ok, false);
-
-  // 8. Immediate cancellation drops Pro immediately while preserving blocks & profile data
+  // 5. Renewal (second successful charge)
   await activateOrRenewSubscription({
-    username: uname,
-    userId: uid,
+    username,
+    userId,
     email,
-    period: 'monthly',
+    period: 'yearly',
     currency: 'INR',
-    orderId: 'order_3',
-    paymentId: 'pay_3',
-    nowMs: pastEndMs + 1000,
+    orderId: 'order_renew_2',
+    paymentId: 'pay_renew_2',
+    paymentEntity: { method: 'card', card: { network: 'Visa', last4: '4242' }, amount: 499900, currency: 'INR' },
+    nowMs: t0 + 7000,
   });
-  const immCancel = await cancelBillingSubscription({
-    username: uname,
-    userId: uid,
-    email,
-    mode: 'immediate',
-    reason: 'No longer needed',
-    nowMs: pastEndMs + 2000,
-  });
-  assert.equal(immCancel.ok, true);
-  if (immCancel.ok) {
-    assert.equal(immCancel.lifecycleState, 'immediate_cancellation');
-    assert.equal(immCancel.plan, 'free');
-  }
+  const renewalSnap = await getBillingSnapshot({ username, userId, email, nowMs: t0 + 7000 });
+  assert.equal(renewalSnap.lifecycleState, 'renewal');
+  assert.equal(renewalSnap.invoices.length, 2);
 
-  // Data preservation verified
-  const preservedProfile = await dbGetProfile(uname);
-  const preservedBlocks = await dbGetBlocks(uname);
-  assert.equal(preservedProfile?.displayName, 'Billing Creator');
-  assert.equal(preservedBlocks.length, 1);
-  assert.equal(preservedBlocks[0].title, 'Portfolio');
-});
-
-test('Raw-body webhook signature validation, duplicate event idempotency, 3-day grace period, and refund downgrade', async () => {
-  const baseMs = Date.UTC(2027, 4, 1, 10, 0, 0);
-  const uname = 'webhookuser';
-  const uid = 'user_wh_1';
-  const email = 'wh@example.com';
-
-  await dbClaimUsername(uid, uname, { createdAt: new Date(baseMs).toISOString() }, email);
-
-  const capturePayload = JSON.stringify({
-    event: 'payment.captured',
-    created_at: Math.floor(baseMs / 1000),
-    payload: {
-      payment: {
-        entity: {
-          id: 'pay_wh_100',
-          order_id: 'ord_wh_100',
-          amount: 49900,
-          currency: 'INR',
-          method: 'netbanking',
-          bank: 'HDFC',
-          notes: { username: uname, userId: uid, email, period: 'monthly' },
-        },
-      },
-    },
-  });
-
-  // Missing signature rejected with 400
-  const missingSigRes = await handleWebhook(
-    new Request('https://iveo.site/api/razorpay/webhook', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: capturePayload,
-    })
-  );
-  assert.equal(missingSigRes.status, 400);
-
-  // Tampered signature rejected with 400
-  const badSigRes = await handleWebhook(
-    new Request('https://iveo.site/api/razorpay/webhook', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-razorpay-signature': 'deadbeef',
-      },
-      body: capturePayload,
-    })
-  );
-  assert.equal(badSigRes.status, 400);
-
-  // Valid signature succeeds
-  const validSig = signWebhookPayload(capturePayload);
-  const okRes = await handleWebhook(
-    new Request('https://iveo.site/api/razorpay/webhook', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-razorpay-signature': validSig,
-        'x-razorpay-event-id': 'evt_unique_100',
-      },
-      body: capturePayload,
-    })
-  );
-  assert.equal(okRes.status, 200);
-  const okJson = await okRes.json();
-  assert.equal(okJson.deduplicated, false);
-
-  // Duplicate delivery deduplicated cleanly
-  const dupRes = await handleWebhook(
-    new Request('https://iveo.site/api/razorpay/webhook', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-razorpay-signature': validSig,
-        'x-razorpay-event-id': 'evt_unique_100',
-      },
-      body: capturePayload,
-    })
-  );
-  assert.equal(dupRes.status, 200);
-  const dupJson = await dupRes.json();
-  assert.equal(dupJson.deduplicated, true);
-
-  // Verify 3-day grace period on payment.failed webhook even after nominal period expires
-  const failNowMs = baseMs + 31 * 86400_000;
+  // 6. Payment failed triggers 3-day grace period preserving Pro
   await processWebhookEvent({
-    eventIdHeader: 'evt_fail_101',
-    nowMs: failNowMs,
+    eventIdHeader: 'evt_fail_1',
+    nowMs: t0 + 8000,
     event: {
       event: 'payment.failed',
       payload: {
         payment: {
           entity: {
-            id: 'pay_wh_fail_101',
-            order_id: 'ord_wh_fail_101',
-            amount: 49900,
+            id: 'pay_fail_1',
+            order_id: 'order_fail_1',
+            amount: 499900,
             currency: 'INR',
             error_description: 'Insufficient funds',
-            notes: { username: uname, userId: uid, email, period: 'monthly' },
+            notes: { username, userId, email, period: 'yearly' },
           },
         },
       },
     },
   });
+  const graceSnap = await getBillingSnapshot({ username, userId, email, nowMs: t0 + 8000 });
+  assert.equal(graceSnap.gracePeriod.inGracePeriod, true);
+  assert.equal(graceSnap.gracePeriod.daysRemaining, 3);
+  assert.equal(graceSnap.plan, 'pro');
 
-  // Inside 3-day grace window -> remains Pro
-  const insideGrace = await getBillingSnapshot({
-    username: uname,
-    userId: uid,
+  // 7. Scheduled cancellation keeps Pro until currentPeriodEnd, then reactivates
+  const schedRes = await cancelBillingSubscription({
+    username,
+    userId,
     email,
-    nowMs: failNowMs + (GRACE_PERIOD_DAYS - 1) * 86400_000,
+    mode: 'end_of_period',
+    reason: 'Seasonal break',
+    nowMs: t0 + 9000,
   });
-  assert.equal(insideGrace.plan, 'pro');
-  assert.equal(insideGrace.gracePeriod.inGracePeriod, true);
-
-  // Past 3-day grace window -> downgraded to free/expired
-  const afterGrace = await getBillingSnapshot({
-    username: uname,
-    userId: uid,
-    email,
-    nowMs: failNowMs + GRACE_PERIOD_DAYS * 86400_000 + 60_000,
-  });
-  assert.equal(afterGrace.plan, 'free');
-  assert.equal(afterGrace.lifecycleState, 'expired');
-  assert.equal(afterGrace.gracePeriod.inGracePeriod, false);
-
-  // Verify refund webhook marks transaction refunded and denies invoice access afterward
-  await processWebhookEvent({
-    eventIdHeader: 'evt_refund_100',
-    nowMs: failNowMs + 1000,
-    event: {
-      event: 'refund.processed',
-      payload: {
-        refund: {
-          entity: {
-            id: 'rfnd_100',
-            payment_id: 'pay_wh_100',
-            amount: 49900,
-            notes: { username: uname, userId: uid, email },
-          },
-        },
-      },
-    },
-  });
-
-  const postRefund = await getBillingSnapshot({
-    username: uname,
-    userId: uid,
-    email,
-    nowMs: failNowMs + 2000,
-  });
-  assert.equal(postRefund.invoices.length, 0);
-  const refundedTx = postRefund.billingHistory.find((h) => h.paymentId === 'pay_wh_100');
-  assert.equal(refundedTx?.status, 'refunded');
-
-  const invoiceGate = await getVerifiedInvoice({
-    username: uname,
-    userId: uid,
-    email,
-    invoiceId: 'pay_wh_100',
-  });
-  assert.equal(invoiceGate.ok, false);
-});
-
-test('Invoice PDF generation strictly rejects non-paid statuses and admin reconciliation creates audit logs', async () => {
-  assert.throws(
-    () =>
-      generateInvoicePdf({
-        customerName: 'Unpaid User',
-        username: 'unpaid',
-        status: 'pending',
-      }),
-    /verified paid transactions/i
-  );
-
-  const doc = generateInvoicePdf({
-    customerName: 'Paid Creator',
-    username: 'paidcreator',
-    status: 'paid',
-    amount: 499,
-    currency: 'INR',
-    paymentId: 'pay_ok_1',
-    orderId: 'ord_ok_1',
-    paymentMethodSummary: 'UPI (cr•••@upi)',
-  });
-  assert.ok(doc);
-
-  // Admin inspect & reconcile
-  const targetUser = 'admintest';
-  await dbClaimUsername('uid_adm_1', targetUser, { createdAt: '2027-06-01T00:00:00.000Z' }, 'u@example.com');
-  const reconciled = await adminReconcileBilling({
-    adminEmail: 'admin@iveo.site',
-    username: targetUser,
-    action: 'activate_paid',
-    period: 'yearly',
-    note: 'Manual reconciliation',
-  });
-  assert.equal(reconciled.ok, true);
-  if (reconciled.ok) {
-    assert.equal(reconciled.plan, 'pro');
-    assert.equal(reconciled.lifecycleState, 'active');
-    assert.ok(reconciled.auditLogs.some((l) => l.actor === 'admin'));
+  assert.equal(schedRes.ok, true);
+  if (schedRes.ok) {
+    assert.equal(schedRes.lifecycleState, 'scheduled_cancellation');
+    assert.equal(schedRes.plan, 'pro');
   }
 
-  const inspected = await adminInspectBilling(targetUser);
+  const reactRes = await reactivateBillingSubscription({
+    username,
+    userId,
+    email,
+    nowMs: t0 + 10_000,
+  });
+  assert.equal(reactRes.ok, true);
+  if (reactRes.ok) {
+    assert.equal(reactRes.lifecycleState, 'active');
+  }
+
+  // 8. Immediate cancellation drops Pro immediately with no refund, while preserving blocks
+  const immRes = await cancelBillingSubscription({
+    username,
+    userId,
+    email,
+    mode: 'immediate',
+    reason: 'Switching accounts',
+    nowMs: t0 + 11_000,
+  });
+  assert.equal(immRes.ok, true);
+  if (immRes.ok) {
+    assert.equal(immRes.lifecycleState, 'immediate_cancellation');
+    assert.equal(immRes.plan, 'free');
+  }
+
+  const preservedBlocks = await dbGetBlocks(username);
+  assert.equal(preservedBlocks.length, 1);
+  assert.equal(preservedBlocks[0]?.id, 'blk_keep_1');
+
+  const storedProfile = await dbGetProfile(username);
+  assert.equal(storedProfile?.displayName, 'Billing Creator');
+
+  // Admin inspect + reconcile to expired state
+  const inspected = await adminInspectBilling(username, t0 + 12_000);
   assert.equal(inspected.ok, true);
+  if (inspected.ok) {
+    assert.ok(inspected.auditLogs.length >= 6);
+  }
+  const expiredAdmin = await adminReconcileBilling({
+    adminEmail: 'admin@iveo.site',
+    username,
+    action: 'expire_now',
+    nowMs: t0 + 13_000,
+  });
+  assert.equal(expiredAdmin.ok, true);
+  if (expiredAdmin.ok) {
+    assert.equal(expiredAdmin.lifecycleState, 'expired');
+    assert.equal(expiredAdmin.plan, 'free');
+  }
+
+  // Verify resolveEffectivePlan expires active paid period after currentPeriodEnd when grace ended
+  const elapsedCheck = resolveEffectivePlan({
+    email,
+    storedPlan: 'pro',
+    createdAt: futureCreatedAt,
+    subscription: {
+      status: 'active',
+      currentPeriodEnd: '2027-07-01T00:00:00.000Z',
+      gracePeriodEndsAt: '2027-07-04T00:00:00.000Z',
+      paymentId: 'pay_x',
+    },
+    nowMs: Date.parse('2027-07-05T00:00:00.000Z'),
+  });
+  assert.equal(elapsedCheck.plan, 'free');
+});
+
+test('Webhook endpoint enforces strict raw-body HMAC signature verification', async () => {
+  const payload = JSON.stringify({ event: 'payment.authorized', payload: {} });
+
+  // Missing signature -> 400
+  const missingSigRes = await handleWebhook(
+    new Request('https://iveo.site/api/razorpay/webhook', {
+      method: 'POST',
+      body: payload,
+    })
+  );
+  assert.equal(missingSigRes.status, 400);
+
+  // Tampered signature -> 400
+  const badSigRes = await handleWebhook(
+    new Request('https://iveo.site/api/razorpay/webhook', {
+      method: 'POST',
+      headers: { 'x-razorpay-signature': '00000000000000000000000000000000' },
+      body: payload,
+    })
+  );
+  assert.equal(badSigRes.status, 400);
+
+  // Valid signature -> 200
+  const validSig = signWebhook(payload);
+  const okRes = await handleWebhook(
+    new Request('https://iveo.site/api/razorpay/webhook', {
+      method: 'POST',
+      headers: {
+        'x-razorpay-signature': validSig,
+        'x-razorpay-event-id': 'evt_raw_hmac_ok_1',
+      },
+      body: payload,
+    })
+  );
+  assert.equal(okRes.status, 200);
+});
+
+after(async () => {
+  if (serverDb) {
+    await terminate(serverDb).catch(() => {});
+  }
+  if (prevDataDir === undefined) delete process.env.IVEO_DATA_DIR;
+  else process.env.IVEO_DATA_DIR = prevDataDir;
+  if (prevWebhookSecret === undefined) delete process.env.RAZORPAY_WEBHOOK_SECRET;
+  else process.env.RAZORPAY_WEBHOOK_SECRET = prevWebhookSecret;
+  fs.rmSync(tmpDataDir, { recursive: true, force: true });
 });

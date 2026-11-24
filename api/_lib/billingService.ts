@@ -925,15 +925,15 @@ export async function switchBillingCycle(params: {
     return store;
   });
 
+  const snapshot = await getBillingSnapshot({
+    username: existing.username,
+    userId: params.userId || existing.userId,
+    email: params.email || existing.primaryEmail,
+    nowMs,
+  });
   return {
-    ok: true as const,
-    status: 200,
-    ...(await getBillingSnapshot({
-      username: existing.username,
-      userId: params.userId || existing.userId,
-      email: params.email || existing.primaryEmail,
-      nowMs,
-    })),
+    ...snapshot,
+    status: 200 as const,
   };
 }
 
@@ -1061,15 +1061,15 @@ export async function cancelBillingSubscription(params: {
     return store;
   });
 
+  const snapshot = await getBillingSnapshot({
+    username: existing.username,
+    userId: params.userId || existing.userId,
+    email: params.email || existing.primaryEmail,
+    nowMs,
+  });
   return {
-    ok: true as const,
-    status: 200,
-    ...(await getBillingSnapshot({
-      username: existing.username,
-      userId: params.userId || existing.userId,
-      email: params.email || existing.primaryEmail,
-      nowMs,
-    })),
+    ...snapshot,
+    status: 200 as const,
   };
 }
 
@@ -1166,15 +1166,15 @@ export async function reactivateBillingSubscription(params: {
     return store;
   });
 
+  const snapshot = await getBillingSnapshot({
+    username: existing.username,
+    userId: params.userId || existing.userId,
+    email: params.email || existing.primaryEmail,
+    nowMs,
+  });
   return {
-    ok: true as const,
-    status: 200,
-    ...(await getBillingSnapshot({
-      username: existing.username,
-      userId: params.userId || existing.userId,
-      email: params.email || existing.primaryEmail,
-      nowMs,
-    })),
+    ...snapshot,
+    status: 200 as const,
   };
 }
 
@@ -1346,7 +1346,7 @@ export async function getBillingSnapshot(params: {
   if (!profile) {
     const fallback = resolveEffectivePlan({ email: params.email, nowMs });
     return {
-      ok: true,
+      ok: true as const,
       username: null,
       plan: fallback.plan,
       isPro: fallback.isPro,
@@ -1401,7 +1401,7 @@ export async function getBillingSnapshot(params: {
   );
 
   return {
-    ok: true,
+    ok: true as const,
     username: profile.username,
     plan: resolved.plan,
     isPro: resolved.isPro,
@@ -1491,11 +1491,10 @@ export async function adminInspectBilling(username: string, nowMs: number = Date
     nowMs,
   });
   return {
-    ok: true as const,
-    status: 200,
+    ...snapshot,
+    status: 200 as const,
     primaryEmail: profile.primaryEmail || null,
     displayName: profile.displayName || profile.username,
-    ...snapshot,
   };
 }
 

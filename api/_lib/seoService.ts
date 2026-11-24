@@ -579,9 +579,9 @@ export async function buildProfileSeoPayload(
     <meta name="twitter:title" content="${escapeHtml(pageTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(pageDescription)}" />
     <meta name="twitter:image" content="${escapeHtml(ogImg)}" />
-    <script type="application/ld+json">${safeJsonLd(profilePageJsonLd)}</script>${
+    <script id="iveo-profile-jsonld" type="application/ld+json">${safeJsonLd(profilePageJsonLd)}</script>${
     linkListJsonLd
-      ? `\n    <script type="application/ld+json">${safeJsonLd(linkListJsonLd)}</script>`
+      ? `\n    <script id="iveo-profile-links-jsonld" type="application/ld+json">${safeJsonLd(linkListJsonLd)}</script>`
       : ''
   }
     <script id="iveo-ssr-bootstrap" type="application/json">${safeJsonLd(ssrBootstrapPayload)}</script>`;

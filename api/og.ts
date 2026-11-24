@@ -1,9 +1,73 @@
-import { ImageResponse } from '@vercel/og';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import satori from 'satori';
+import { initWasm, Resvg } from '@resvg/resvg-wasm';
 import { getSiteOrigin } from './_lib/env.ts';
 import { normalizeUsername } from './_lib/usernames.ts';
 import { loadPublicPage, isAllowedAvatarHost } from './_lib/publicPage.ts';
 import { getServerVibe } from './_lib/vibes.ts';
 import { truncate } from './_lib/html.ts';
+
+const OG_WIDTH = 1200;
+const OG_HEIGHT = 630;
+const OG_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800';
+
+let resvgInitPromise: Promise<void> | null = null;
+let cachedFontBuffer: ArrayBuffer | null = null;
+
+function resolveAssetPath(pkgSpecifier: string, fallbackRelativePath: string): string {
+  try {
+    const req = createRequire(import.meta.url);
+    return req.resolve(pkgSpecifier);
+  } catch {
+    return path.resolve(process.cwd(), 'node_modules', fallbackRelativePath);
+  }
+}
+
+async function ensureOgRendererReady(): Promise<ArrayBuffer> {
+  if (!resvgInitPromise) {
+    resvgInitPromise = (async () => {
+      const wasmPath = resolveAssetPath('@resvg/resvg-wasm/index_bg.wasm', '@resvg/resvg-wasm/index_bg.wasm');
+      const wasmBytes = fs.readFileSync(wasmPath);
+      await initWasm(wasmBytes);
+    })().catch((err) => {
+      resvgInitPromise = null;
+      throw err;
+    });
+  }
+  await resvgInitPromise;
+
+  if (!cachedFontBuffer) {
+    const fontPath = resolveAssetPath('@vercel/og/dist/Geist-Regular.ttf', '@vercel/og/dist/Geist-Regular.ttf');
+    const buf = fs.readFileSync(fontPath);
+    cachedFontBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  }
+  return cachedFontBuffer;
+}
+
+async function renderElementToPngResponse(rootElement: any): Promise<Response> {
+  const fontData = await ensureOgRendererReady();
+  const svg = await satori(rootElement, {
+    width: OG_WIDTH,
+    height: OG_HEIGHT,
+    fonts: [
+      { name: 'Geist', data: fontData, weight: 400, style: 'normal' },
+      { name: 'Geist', data: fontData, weight: 700, style: 'normal' },
+    ],
+  });
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: 'width', value: OG_WIDTH },
+  });
+  const pngBytes = resvg.render().asPng();
+  return new Response(Buffer.from(pngBytes), {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': OG_CACHE_CONTROL,
+    },
+  });
+}
 
 // Strip emojis and check if string contains only Latin script, numbers, punctuation, spaces, math/currency symbols
 function isRenderableLatin(text: string): boolean {
@@ -72,58 +136,52 @@ async function fetchAvatarAsDataUrl(avatarUrl: string | null, username?: string)
   }
 }
 
-function renderGenericCard() {
+function renderGenericCard(): Promise<Response> {
   const rootElement: any = {
     type: 'div',
     key: null,
     props: {
-        style: {
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          height: '100%',
-          backgroundColor: '#FAFAFA',
-          padding: '48px',
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#FAFAFA',
+        padding: '48px',
+        fontFamily: 'Geist',
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 168,
+              fontWeight: 700,
+              color: '#0A0A0A',
+              letterSpacing: -6,
+              lineHeight: 1,
+            },
+            children: 'iveo',
+          },
         },
-        children: [
-          {
-            type: 'div',
-            props: {
-              style: {
-                fontSize: 168,
-                fontWeight: 700,
-                color: '#0A0A0A',
-                letterSpacing: -6,
-                lineHeight: 1,
-              },
-              children: 'iveo',
+        {
+          type: 'div',
+          props: {
+            style: {
+              fontSize: 44,
+              color: '#666666',
+              marginTop: 24,
+              lineHeight: 1.2,
             },
+            children: 'One link for everything you create.',
           },
-          {
-            type: 'div',
-            props: {
-              style: {
-                fontSize: 44,
-                color: '#666666',
-                marginTop: 24,
-                lineHeight: 1.2,
-              },
-              children: 'One link for everything you create.',
-            },
-          },
-        ],
-      },
-    };
-    return new ImageResponse(rootElement, {
-      width: 1200,
-      height: 630,
-      headers: {
-        'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
-      },
-    }
-  );
+        },
+      ],
+    },
+  };
+  return renderElementToPngResponse(rootElement);
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -254,6 +312,7 @@ export async function GET(request: Request): Promise<Response> {
             height: '100%',
             backgroundColor: vibe.bg,
             padding: '72px',
+            fontFamily: 'Geist',
           },
           children: [
             // Top Block
@@ -324,17 +383,9 @@ export async function GET(request: Request): Promise<Response> {
         },
       };
 
-    return new ImageResponse(rootElement, {
-      width: 1200,
-        height: 630,
-        headers: {
-          'Cache-Control':
-            'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
-        },
-      }
-    );
+    return await renderElementToPngResponse(rootElement);
   } catch {
-    return renderGenericCard();
+    return await renderGenericCard();
   }
 }
 
