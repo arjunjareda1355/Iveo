@@ -117,6 +117,14 @@ function detectHandleForProvider(
       return makeResult('pinterest', 'profile', `https://www.pinterest.com/${handle}/`, handle);
     case 'linktree':
       return makeResult('linktree', 'profile', `https://linktr.ee/${handle}`, handle);
+    case 'twitch':
+      return makeResult('twitch', 'profile', `https://www.twitch.tv/${handle.toLowerCase()}`, handle.toLowerCase(), {
+        embedSrc: `https://player.twitch.tv/?channel=${encodeURIComponent(handle.toLowerCase())}&autoplay=false`,
+        aspect: '16/9',
+        defaultDisplayAs: 'card',
+      });
+    case 'snapchat':
+      return makeResult('snapchat', 'profile', `https://www.snapchat.com/add/${handle}`, handle);
     case 'discord':
       if (/^\d{15,22}$/.test(handle)) {
         return makeResult('discord', 'user', `https://discord.com/users/${handle}`, handle);
@@ -413,6 +421,120 @@ export function detectProviderUrl(
     }
   }
 
-  // 15. Fallback: any valid web URL becomes Generic link
+  // 15. Twitch (channels, VODs/videos, clips)
+  if (rawHost === 'clips.twitch.tv') {
+    const slug = parts[0] === 'embed' ? url.searchParams.get('clip') || '' : parts[0] || '';
+    if (!slug || !/^[A-Za-z0-9_-]+$/.test(slug)) return null;
+    return makeResult('twitch', 'clip', `https://clips.twitch.tv/${slug}`, slug, {
+      embedSrc: `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&autoplay=false`,
+      aspect: '16/9',
+      defaultDisplayAs: 'player',
+    });
+  }
+  if (host === 'twitch.tv') {
+    if (parts[0] === 'videos' && parts[1] && /^\d+$/.test(parts[1])) {
+      const videoId = parts[1];
+      return makeResult('twitch', 'video', `https://www.twitch.tv/videos/${videoId}`, videoId, {
+        embedSrc: `https://player.twitch.tv/?video=${encodeURIComponent(videoId)}&autoplay=false`,
+        aspect: '16/9',
+        defaultDisplayAs: 'player',
+      });
+    }
+    if (parts[0] && parts[1] === 'clip' && parts[2] && /^[A-Za-z0-9_-]+$/.test(parts[2])) {
+      const channel = parts[0].toLowerCase();
+      const slug = parts[2];
+      return makeResult('twitch', 'clip', `https://www.twitch.tv/${channel}/clip/${slug}`, slug, {
+        embedSrc: `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&autoplay=false`,
+        aspect: '16/9',
+        defaultDisplayAs: 'player',
+      });
+    }
+    const reserved = new Set([
+      'directory',
+      'downloads',
+      'jobs',
+      'p',
+      'settings',
+      'subscriptions',
+      'inventory',
+      'wallet',
+      'turbo',
+      'videos',
+      'search',
+      'login',
+      'signup',
+      'friends',
+      'messages',
+      'store',
+      'moderator',
+      'popout',
+    ]);
+    const channelRaw = (parts[0] || '').replace(/^@+/, '').toLowerCase();
+    if (!channelRaw || reserved.has(channelRaw) || !/^[a-z0-9_]{2,32}$/.test(channelRaw)) {
+      return null;
+    }
+    return makeResult('twitch', 'profile', `https://www.twitch.tv/${channelRaw}`, channelRaw, {
+      embedSrc: `https://player.twitch.tv/?channel=${encodeURIComponent(channelRaw)}&autoplay=false`,
+      aspect: '16/9',
+      defaultDisplayAs: 'card',
+    });
+  }
+
+  // 16. Snapchat (profiles, spotlights, stories, t.snapchat.com shortlinks)
+  if (rawHost === 't.snapchat.com') {
+    const code = (parts[0] || '').trim();
+    if (!code) return null;
+    return makeResult('snapchat', 'profile', `https://t.snapchat.com/${code}`, code, {
+      isShortLink: true,
+    });
+  }
+  if (rawHost === 'story.snapchat.com') {
+    const slug = parts[0] === 's' && parts[1] ? parts[1] : parts[0] || '';
+    if (!slug) return null;
+    return makeResult('snapchat', 'story', `https://story.snapchat.com/s/${slug}`, slug);
+  }
+  if (host === 'snapchat.com') {
+    if (parts[0] === 'add' && parts[1]) {
+      const username = parts[1].replace(/^@+/, '');
+      if (!/^[A-Za-z0-9._-]{2,64}$/.test(username)) return null;
+      return makeResult('snapchat', 'profile', `https://www.snapchat.com/add/${username}`, username);
+    }
+    if (parts[0] === 'spotlight' && parts[1]) {
+      const id = parts[1];
+      return makeResult('snapchat', 'spotlight', `https://www.snapchat.com/spotlight/${id}`, id);
+    }
+    if (parts[0] === 'p' && parts[1]) {
+      const idPath = parts.slice(1, 3).join('/');
+      return makeResult('snapchat', 'spotlight', `https://www.snapchat.com/p/${idPath}`, idPath);
+    }
+    if ((parts[0] === 's' || parts[0] === 'stories') && parts[1]) {
+      return makeResult('snapchat', 'story', `https://www.snapchat.com/${parts[0]}/${parts[1]}`, parts[1]);
+    }
+    const reserved = new Set([
+      'add',
+      'p',
+      's',
+      'spotlight',
+      'lens',
+      'explore',
+      'discover',
+      'scan',
+      'download',
+      'privacy',
+      'terms',
+      'support',
+      'creators',
+      'business',
+      'safety',
+      'stories',
+    ]);
+    const rawUser = (parts[0] || '').replace(/^@+/, '');
+    if (rawUser && !reserved.has(rawUser.toLowerCase()) && /^[A-Za-z0-9._-]{2,64}$/.test(rawUser)) {
+      return makeResult('snapchat', 'profile', `https://www.snapchat.com/add/${rawUser}`, rawUser);
+    }
+    return null;
+  }
+
+  // Fallback: any valid web URL becomes Generic link
   return makeResult('generic', 'link', url.toString(), rawHost.replace(/^www\./, ''));
 }

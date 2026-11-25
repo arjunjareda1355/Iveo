@@ -1,8 +1,271 @@
 {
   "lastSitemapPingAt": null,
   "lastSitemapPingResult": null,
-  "lastIndexNowAt": null,
-  "lastIndexNowUrls": [],
-  "lastIndexNowStatus": null,
-  "recentEvents": []
+  "lastIndexNowAt": "2026-11-25T06:26:50.112Z",
+  "lastIndexNowUrls": [
+    "https://iveo.site/@synccreator"
+  ],
+  "lastIndexNowStatus": "not_configured",
+  "recentEvents": [
+    {
+      "at": "2026-11-25T06:26:50.113Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:26:50.112Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:26:50.005Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:26:50.004Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:26:50.001Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:26:50.000Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:26:49.990Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:26:49.989Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:26:49.976Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:26:49.974Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:16:12.087Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:16:12.086Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:16:11.964Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:16:11.902Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:16:11.898Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:16:11.897Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:16:11.883Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:16:11.882Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:16:11.870Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:16:11.869Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:14:25.416Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:14:25.415Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:14:25.356Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:14:25.356Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:14:25.352Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:14:25.352Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:14:25.340Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:14:25.339Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:14:25.329Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:14:25.328Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:13:11.732Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:13:11.731Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:13:11.677Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:13:11.677Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:13:11.673Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:13:11.673Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:13:11.663Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:13:11.663Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-25T06:13:11.654Z",
+      "action": "indexnow_ping",
+      "target": "https://iveo.site/@synccreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-25T06:13:11.654Z",
+      "action": "profile_updated",
+      "target": "synccreator",
+      "status": "sitemap_invalidated"
+    }
+  ]
 }

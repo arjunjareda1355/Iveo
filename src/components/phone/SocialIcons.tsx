@@ -7,7 +7,6 @@ import {
   Mail,
   Globe,
   Music2,
-  Tv,
 } from 'lucide-react';
 
 export interface SocialIconProps {
@@ -41,7 +40,8 @@ export const SUPPORTED_SOCIAL_PLATFORMS: SocialPlatformConfig[] = [
   { id: 'spotify', name: 'Spotify', placeholder: 'open.spotify.com/... or artist ID' },
   { id: 'patreon', name: 'Patreon', placeholder: 'URL, @username, or username' },
   { id: 'substack', name: 'Substack', placeholder: 'username.substack.com or @username' },
-  { id: 'twitch', name: 'Twitch', placeholder: 'URL, @username, or username' },
+  { id: 'twitch', name: 'Twitch', placeholder: 'twitch.tv/channel or username' },
+  { id: 'snapchat', name: 'Snapchat', placeholder: 'snapchat.com/add/username or username' },
   { id: 'mail', name: 'Email', placeholder: 'you@example.com' },
   { id: 'website', name: 'Website', placeholder: 'https://yoursite.com' },
 ];
@@ -156,7 +156,26 @@ export const GlobeIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'curre
 );
 
 export const TwitchIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'currentColor', className }) => (
-  <Tv size={size} color={color} strokeWidth={1.5} className={className} />
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} className={className} aria-hidden="true">
+    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
+  </svg>
+);
+
+export const SnapchatIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'currentColor', className }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M12 3c-3.1 0-5.2 2.2-5.2 5.4 0 .7.1 1.4.2 2.1-.6.1-1.3.3-1.4.8-.1.6.6 1 .9 1.2-.4 1.5-1.6 2.8-3.4 3.4-.3.1-.5.4-.4.7.1.3.6.7 1.8 1 .3.1.4.3.5.7.1.4.3.6.7.6.4 0 .9-.2 1.7-.2.9 0 1.6.4 2.4 1 .7.5 1.4.9 2.2.9s1.5-.4 2.2-.9c.8-.6 1.5-1 2.4-1 .8 0 1.3.2 1.7.2.4 0 .6-.2.7-.6.1-.4.2-.6.5-.7 1.2-.3 1.7-.7 1.8-1 .1-.3-.1-.6-.4-.7-1.8-.6-3-1.9-3.4-3.4.3-.2 1-.6.9-1.2-.1-.5-.8-.7-1.4-.8.1-.7.2-1.4.2-2.1C17.2 5.2 15.1 3 12 3z" />
+  </svg>
 );
 
 export const FacebookSocialIcon: React.FC<SocialIconProps> = ({ size = 18, color = 'currentColor', className }) => (
@@ -236,6 +255,8 @@ export const SocialIcon: React.FC<SocialIconProps & { platform: string }> = ({
       return <MailIcon size={size} color={color} className={className} />;
     case 'twitch':
       return <TwitchIcon size={size} color={color} className={className} />;
+    case 'snapchat':
+      return <SnapchatIcon size={size} color={color} className={className} />;
     case 'website':
     case 'globe':
     case 'web':

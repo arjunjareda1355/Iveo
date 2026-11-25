@@ -38,7 +38,9 @@ import {
   FacebookSocialIcon,
   LinktreeSocialIcon,
   PinterestSocialIcon,
+  SnapchatIcon,
   ThreadsSocialIcon,
+  TwitchIcon,
   XIcon,
 } from '../phone/SocialIcons';
 
@@ -73,6 +75,12 @@ export const ThreadsGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
 );
 export const PinterestGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <PinterestSocialIcon size={size} />
+);
+export const TwitchGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <TwitchIcon size={size} />
+);
+export const SnapchatGlyph: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <SnapchatIcon size={size} />
 );
 
 /**
@@ -154,6 +162,10 @@ export const ProviderGlyph: React.FC<{ provider: string; size?: number }> = ({
       return <LinktreeSocialIcon size={Math.max(12, size - 1)} />;
     case 'bluesky':
       return <BlueskySocialIcon size={Math.max(12, size - 1)} />;
+    case 'twitch':
+      return <TwitchIcon size={Math.max(12, size - 1)} />;
+    case 'snapchat':
+      return <SnapchatIcon size={Math.max(12, size - 1)} />;
     default:
       return <Globe size={size} strokeWidth={1.7} />;
   }
@@ -221,6 +233,29 @@ function buildAutoplayEmbedUrl(embedSrc: string, provider: string): string {
       next += `&origin=${encodeURIComponent(window.location.origin)}`;
     }
     return next;
+  }
+  if (provider === 'twitch') {
+    try {
+      const u = new URL(embedSrc);
+      u.searchParams.set('autoplay', 'true');
+      if (typeof window !== 'undefined' && window.location?.hostname) {
+        u.searchParams.delete('parent');
+        u.searchParams.append('parent', window.location.hostname);
+        if (typeof document !== 'undefined' && document.referrer) {
+          try {
+            const refHost = new URL(document.referrer).hostname;
+            if (refHost && refHost !== window.location.hostname) {
+              u.searchParams.append('parent', refHost);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return u.toString();
+    } catch {
+      return embedSrc;
+    }
   }
   if (provider === 'soundcloud') {
     return embedSrc.replace('auto_play=false', 'auto_play=true');
@@ -448,7 +483,7 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
 
     const scaledHeight = basePlayerHeight ? Math.round(basePlayerHeight * scale) : undefined;
     const aspectRatio =
-      provider === 'youtube'
+      provider === 'youtube' || provider === 'twitch'
         ? '16 / 9'
         : strictParsed?.aspect || (smartDetected?.aspect === '16/9' ? '16 / 9' : undefined);
 

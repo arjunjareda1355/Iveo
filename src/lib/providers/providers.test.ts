@@ -10,16 +10,19 @@ import {
 import { cleanUrlTracking, detectProviderUrl } from './detect.ts';
 
 describe('provider registry completeness (AK-1, PV-1..PV-12)', () => {
-  it('registers all 13 social/player providers plus generic link fallback', () => {
+  it('registers all 15 social/player providers plus generic link fallback', () => {
     const platforms = listPlatformProviders();
-    assert.equal(platforms.length, 13);
+    assert.equal(platforms.length, 15);
     assert.ok(PROVIDER_REGISTRY.bluesky, 'Bluesky proof-of-architecture provider is registered');
+    assert.ok(PROVIDER_REGISTRY.twitch, 'Twitch provider is registered');
+    assert.ok(PROVIDER_REGISTRY.snapchat, 'Snapchat provider is registered');
     assert.ok(PROVIDER_REGISTRY.generic, 'Generic web link fallback is registered');
     assert.equal(PROVIDER_REGISTRY.spotify.supportsOAuth, false);
     assert.equal(PROVIDER_REGISTRY.spotify.restrictions?.noArtworkBanner, true);
     assert.equal(PROVIDER_REGISTRY.spotify.restrictions?.unmodifiedArtwork, true);
     assert.equal(PROVIDER_REGISTRY.pinterest.supportsOAuth, false);
     assert.equal(PROVIDER_REGISTRY.discord.supportsOAuth, true);
+    assert.equal(PROVIDER_REGISTRY.snapchat.supportsOAuth, true);
   });
 
   it('resolves unknown provider or kind safely to defaults', () => {
@@ -136,5 +139,63 @@ describe('cleanUrlTracking & detectProviderUrl', () => {
     const generic = detectProviderUrl('https://minimal.gallery/some-site?utm_source=twitter');
     assert.equal(generic?.provider, 'generic');
     assert.equal(generic?.canonicalUrl, 'https://minimal.gallery/some-site');
+  });
+
+  it('detects Twitch channels, videos, clips, and bare handles', () => {
+    const channel = detectProviderUrl('https://www.twitch.tv/Shroud');
+    assert.equal(channel?.provider, 'twitch');
+    assert.equal(channel?.subtype, 'profile');
+    assert.equal(channel?.canonicalUrl, 'https://www.twitch.tv/shroud');
+    assert.equal(channel?.defaultDisplayAs, 'card');
+    assert.ok(channel?.embedSrc?.includes('player.twitch.tv/?channel=shroud'));
+
+    const vod = detectProviderUrl('https://www.twitch.tv/videos/214567890');
+    assert.equal(vod?.provider, 'twitch');
+    assert.equal(vod?.subtype, 'video');
+    assert.equal(vod?.identifier, '214567890');
+    assert.equal(vod?.defaultDisplayAs, 'player');
+    assert.ok(vod?.embedSrc?.includes('player.twitch.tv/?video=214567890'));
+
+    const clipShort = detectProviderUrl('https://clips.twitch.tv/FunClipSlug');
+    assert.equal(clipShort?.provider, 'twitch');
+    assert.equal(clipShort?.subtype, 'clip');
+    assert.equal(clipShort?.identifier, 'FunClipSlug');
+    assert.equal(clipShort?.defaultDisplayAs, 'player');
+
+    const clipLong = detectProviderUrl('https://www.twitch.tv/ninja/clip/AwesomePlay123');
+    assert.equal(clipLong?.provider, 'twitch');
+    assert.equal(clipLong?.subtype, 'clip');
+    assert.equal(clipLong?.identifier, 'AwesomePlay123');
+
+    const handle = detectProviderUrl('@pokimane', 'twitch');
+    assert.equal(handle?.provider, 'twitch');
+    assert.equal(handle?.canonicalUrl, 'https://www.twitch.tv/pokimane');
+  });
+
+  it('detects Snapchat profiles, spotlights, stories, shortlinks, and bare handles', () => {
+    const prof = detectProviderUrl('https://www.snapchat.com/add/arjun.creator');
+    assert.equal(prof?.provider, 'snapchat');
+    assert.equal(prof?.subtype, 'profile');
+    assert.equal(prof?.canonicalUrl, 'https://www.snapchat.com/add/arjun.creator');
+
+    const spotlight = detectProviderUrl('https://www.snapchat.com/spotlight/W7_EDlXWTBiXAEEniNoMPwAAYaG9wcm9q');
+    assert.equal(spotlight?.provider, 'snapchat');
+    assert.equal(spotlight?.subtype, 'spotlight');
+
+    const postP = detectProviderUrl('https://www.snapchat.com/p/abc123/def456');
+    assert.equal(postP?.provider, 'snapchat');
+    assert.equal(postP?.subtype, 'spotlight');
+
+    const story = detectProviderUrl('https://story.snapchat.com/s/creator_story');
+    assert.equal(story?.provider, 'snapchat');
+    assert.equal(story?.subtype, 'story');
+
+    const shortLink = detectProviderUrl('https://t.snapchat.com/abcd1234');
+    assert.equal(shortLink?.provider, 'snapchat');
+    assert.equal(shortLink?.isShortLink, true);
+
+    const handle = detectProviderUrl('@snapcreator', 'snapchat');
+    assert.equal(handle?.provider, 'snapchat');
+    assert.equal(handle?.canonicalUrl, 'https://www.snapchat.com/add/snapcreator');
   });
 });

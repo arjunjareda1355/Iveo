@@ -35,6 +35,8 @@ describe('embedLooks & unified 5-look design system', () => {
     'soundcloud',
     'linktree',
     'bluesky',
+    'twitch',
+    'snapchat',
   ];
 
   it('exposes the 7 canonical card looks consistently across providers', () => {
@@ -92,6 +94,8 @@ describe('embedLooks & unified 5-look design system', () => {
     assert.equal(isSocialEmbedProvider('pinterest'), true);
     assert.equal(isSocialEmbedProvider('linktree'), true);
     assert.equal(isSocialEmbedProvider('bluesky'), true);
+    assert.equal(isSocialEmbedProvider('twitch'), true);
+    assert.equal(isSocialEmbedProvider('snapchat'), true);
 
     assert.equal(isSocialEmbedProvider('youtube'), false);
     assert.equal(isSocialEmbedProvider('spotify'), false);
@@ -120,14 +124,18 @@ describe('embedLooks & unified 5-look design system', () => {
     assert.equal(getDefaultEmbedCtaLabel('youtube', 'channel'), 'Subscribe');
     assert.equal(getDefaultEmbedCtaLabel('spotify', 'track'), 'Listen on Spotify');
     assert.equal(getDefaultEmbedCtaLabel('soundcloud', 'track'), 'Listen on SoundCloud');
+    assert.equal(getDefaultEmbedCtaLabel('twitch', 'profile'), 'Follow');
+    assert.equal(getDefaultEmbedCtaLabel('twitch', 'clip'), 'Watch clip');
+    assert.equal(getDefaultEmbedCtaLabel('snapchat', 'profile'), 'Add');
+    assert.equal(getDefaultEmbedCtaLabel('snapchat', 'spotlight'), 'Watch');
   });
 
-  it('enforces WCAG AA contrast across all 12 vibes x 7 looks x 13 platform providers', () => {
+  it('enforces WCAG AA contrast across all 12 vibes x 7 looks x 15 platform providers', () => {
     const platformDefs = listPlatformProviders();
     const looks: CardLookStyle[] = CARD_LOOK_OPTIONS.map((o) => o.id);
     assert.equal(VIBES.length, 12);
     assert.equal(looks.length, 7);
-    assert.equal(platformDefs.length, 13);
+    assert.equal(platformDefs.length, 15);
 
     for (const vibe of VIBES) {
       const { tokens } = vibe;

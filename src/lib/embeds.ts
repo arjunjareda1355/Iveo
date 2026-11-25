@@ -637,5 +637,185 @@ export function parseEmbedUrl(input: string): ParsedEmbed | null {
     return null;
   }
 
+  // 14. Twitch channel, video, or clip
+  if (host === 'clips.twitch.tv') {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const slug = segments[0] === 'embed' ? parsed.searchParams.get('clip') || '' : segments[0] || '';
+    if (slug && /^[A-Za-z0-9_-]+$/.test(slug)) {
+      return {
+        provider: 'twitch',
+        canonicalUrl: `https://clips.twitch.tv/${slug}`,
+        embedSrc: `https://clips.twitch.tv/embed?clip=${encodeURIComponent(slug)}&autoplay=false`,
+        label: 'Twitch clip',
+        height: null,
+        aspect: '16 / 9',
+        identifier: slug,
+        subtype: 'clip',
+      };
+    }
+    return null;
+  }
+  if (['twitch.tv', 'www.twitch.tv', 'm.twitch.tv'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments[0] === 'videos' && segments[1] && /^\d+$/.test(segments[1])) {
+      return {
+        provider: 'twitch',
+        canonicalUrl: `https://www.twitch.tv/videos/${segments[1]}`,
+        embedSrc: `https://player.twitch.tv/?video=${encodeURIComponent(segments[1])}&autoplay=false`,
+        label: 'Twitch video',
+        height: null,
+        aspect: '16 / 9',
+        identifier: segments[1],
+        subtype: 'video',
+      };
+    }
+    if (segments[0] && segments[1] === 'clip' && segments[2] && /^[A-Za-z0-9_-]+$/.test(segments[2])) {
+      const channel = segments[0].toLowerCase();
+      return {
+        provider: 'twitch',
+        canonicalUrl: `https://www.twitch.tv/${channel}/clip/${segments[2]}`,
+        embedSrc: `https://clips.twitch.tv/embed?clip=${encodeURIComponent(segments[2])}&autoplay=false`,
+        label: 'Twitch clip',
+        height: null,
+        aspect: '16 / 9',
+        identifier: segments[2],
+        subtype: 'clip',
+      };
+    }
+    const ignored = new Set([
+      'directory', 'downloads', 'jobs', 'p', 'settings', 'subscriptions',
+      'inventory', 'wallet', 'turbo', 'videos', 'search', 'login', 'signup',
+      'friends', 'messages', 'store', 'moderator', 'popout',
+    ]);
+    const channel = (segments[0] || '').replace(/^@+/, '').toLowerCase();
+    if (channel && !ignored.has(channel) && /^[a-z0-9_]{2,32}$/.test(channel)) {
+      return {
+        provider: 'twitch',
+        canonicalUrl: `https://www.twitch.tv/${channel}`,
+        embedSrc: `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&autoplay=false`,
+        label: 'Twitch channel',
+        height: null,
+        aspect: '16 / 9',
+        identifier: channel,
+        subtype: 'profile',
+      };
+    }
+    return null;
+  }
+
+  // 15. Snapchat profile, spotlight, story, or short link
+  if (host === 't.snapchat.com') {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments[0] && SAFE_SEGMENT_REGEX.test(segments[0])) {
+      const canonicalUrl = `https://t.snapchat.com/${segments[0]}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat profile',
+        height: null,
+        aspect: null,
+        identifier: segments[0],
+        subtype: 'profile',
+      };
+    }
+    return null;
+  }
+  if (host === 'story.snapchat.com') {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const slug = segments[0] === 's' && segments[1] ? segments[1] : segments[0] || '';
+    if (slug && SAFE_SEGMENT_REGEX.test(slug)) {
+      const canonicalUrl = `https://story.snapchat.com/s/${slug}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat Story',
+        height: null,
+        aspect: null,
+        identifier: slug,
+        subtype: 'story',
+      };
+    }
+    return null;
+  }
+  if (['snapchat.com', 'www.snapchat.com'].includes(host)) {
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments[0] === 'add' && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const user = segments[1].replace(/^@+/, '');
+      const canonicalUrl = `https://www.snapchat.com/add/${user}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat profile',
+        height: null,
+        aspect: null,
+        identifier: user,
+        subtype: 'profile',
+      };
+    }
+    if (segments[0] === 'spotlight' && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const canonicalUrl = `https://www.snapchat.com/spotlight/${segments[1]}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat Spotlight',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: 'spotlight',
+      };
+    }
+    if (segments[0] === 'p' && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const idPath = segments.slice(1, 3).filter((s) => SAFE_SEGMENT_REGEX.test(s)).join('/');
+      const canonicalUrl = `https://www.snapchat.com/p/${idPath}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat Spotlight',
+        height: null,
+        aspect: null,
+        identifier: idPath,
+        subtype: 'spotlight',
+      };
+    }
+    if ((segments[0] === 's' || segments[0] === 'stories') && segments[1] && SAFE_SEGMENT_REGEX.test(segments[1])) {
+      const canonicalUrl = `https://www.snapchat.com/${segments[0]}/${segments[1]}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat Story',
+        height: null,
+        aspect: null,
+        identifier: segments[1],
+        subtype: 'story',
+      };
+    }
+    const ignored = new Set([
+      'add', 'p', 's', 'spotlight', 'lens', 'explore', 'discover',
+      'scan', 'download', 'privacy', 'terms', 'support', 'creators',
+      'business', 'safety', 'stories',
+    ]);
+    const user = (segments[0] || '').replace(/^@+/, '');
+    if (user && !ignored.has(user.toLowerCase()) && SAFE_SEGMENT_REGEX.test(user)) {
+      const canonicalUrl = `https://www.snapchat.com/add/${user}`;
+      return {
+        provider: 'snapchat',
+        canonicalUrl,
+        embedSrc: canonicalUrl,
+        label: 'Snapchat profile',
+        height: null,
+        aspect: null,
+        identifier: user,
+        subtype: 'profile',
+      };
+    }
+    return null;
+  }
+
   return null;
 }

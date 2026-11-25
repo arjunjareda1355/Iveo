@@ -70,7 +70,8 @@ export function inferLinkIconKind(rawUrl: string | null | undefined): FallbackLi
     domain === 'youtube.com' ||
     domain === 'youtu.be' ||
     domain === 'vimeo.com' ||
-    domain === 'twitch.tv'
+    domain === 'twitch.tv' ||
+    domain === 'clips.twitch.tv'
   ) {
     return 'video';
   }
@@ -175,8 +176,12 @@ export function detectPlatformFromUrl(
   if (host === 'pin.it' || host === 'pinterest.com' || host.endsWith('.pinterest.com')) {
     return { id: 'pinterest', name: 'Pinterest', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };
   }
-  if (host === 'twitch.tv') {
+  if (host === 'twitch.tv' || host === 'clips.twitch.tv') {
     return { id: 'twitch', name: 'Twitch', handle: firstSeg || null };
+  }
+  if (host === 'snapchat.com' || host === 't.snapchat.com' || host === 'story.snapchat.com') {
+    const snapHandle = firstSeg === 'add' && segs[1] ? decodeURIComponent(segs[1]) : firstSeg;
+    return { id: 'snapchat', name: 'Snapchat', handle: snapHandle ? `@${snapHandle.replace(/^@/, '')}` : null };
   }
   if (host === 't.me' || host === 'telegram.me' || host === 'telegram.org') {
     return { id: 'telegram', name: 'Telegram', handle: firstSeg ? `@${firstSeg.replace(/^@/, '')}` : null };

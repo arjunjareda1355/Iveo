@@ -51,6 +51,7 @@ export const LinkFaviconOrFallback: React.FC<LinkFaviconOrFallbackProps> = ({
       'discord',
       'tiktok',
       'twitch',
+      'snapchat',
       'telegram',
       'whatsapp',
       'mail',

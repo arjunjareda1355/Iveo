@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  detectPlatformFromUrl,
   extractDomainForFavicon,
   getFaviconUrl,
   inferLinkIconKind,
@@ -37,7 +38,26 @@ test('inferLinkIconKind maps URLs to appropriate fallback icon kinds', () => {
   assert.equal(inferLinkIconKind('https://github.com/vercel'), 'code');
   assert.equal(inferLinkIconKind('https://open.spotify.com/track/1'), 'music');
   assert.equal(inferLinkIconKind('https://youtu.be/abc'), 'video');
+  assert.equal(inferLinkIconKind('https://clips.twitch.tv/ClipSlug'), 'video');
   assert.equal(inferLinkIconKind('https://creator.gumroad.com/l/kit'), 'shop');
   assert.equal(inferLinkIconKind('https://example.com'), 'globe');
   assert.equal(inferLinkIconKind(''), 'link');
+});
+
+test('detectPlatformFromUrl identifies Twitch and Snapchat handles cleanly', () => {
+  assert.deepEqual(detectPlatformFromUrl('https://twitch.tv/shroud'), {
+    id: 'twitch',
+    name: 'Twitch',
+    handle: 'shroud',
+  });
+  assert.deepEqual(detectPlatformFromUrl('https://www.snapchat.com/add/arjun.creator'), {
+    id: 'snapchat',
+    name: 'Snapchat',
+    handle: '@arjun.creator',
+  });
+  assert.deepEqual(detectPlatformFromUrl('https://t.snapchat.com/abc123'), {
+    id: 'snapchat',
+    name: 'Snapchat',
+    handle: '@abc123',
+  });
 });

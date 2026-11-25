@@ -9,7 +9,8 @@ export type SocialOAuthProvider =
   | 'facebook'
   | 'threads'
   | 'spotify'
-  | 'pinterest';
+  | 'pinterest'
+  | 'snapchat';
 
 export interface ProviderCredentials {
   clientId: string;
@@ -24,6 +25,8 @@ export interface ServerConfig {
   googleClientId: string;
   googleClientSecret: string;
   githubToken: string;
+  twitchClientId: string;
+  twitchAccessToken: string;
   pinterestAppId: string;
   pinterestAppSecret: string;
   pinterestAccessToken: string;
@@ -59,6 +62,8 @@ export function getServerConfig(): ServerConfig {
     googleClientId: trim(env.GOOGLE_CLIENT_ID),
     googleClientSecret: trim(env.GOOGLE_CLIENT_SECRET),
     githubToken: trim(env.GITHUB_TOKEN),
+    twitchClientId: trim(env.TWITCH_CLIENT_ID),
+    twitchAccessToken: trim(env.TWITCH_ACCESS_TOKEN),
     pinterestAppId,
     pinterestAppSecret,
     pinterestAccessToken: trim(env.PINTEREST_ACCESS_TOKEN),
@@ -104,6 +109,10 @@ export function getServerConfig(): ServerConfig {
         clientId: pinterestAppId,
         clientSecret: pinterestAppSecret,
       },
+      snapchat: {
+        clientId: trim(env.SNAPCHAT_CLIENT_ID),
+        clientSecret: trim(env.SNAPCHAT_CLIENT_SECRET),
+      },
     },
   };
 }
@@ -114,6 +123,7 @@ export function getKnownSecretValues(): string[] {
     cfg.youtubeApiKey,
     cfg.googleClientSecret,
     cfg.githubToken,
+    cfg.twitchAccessToken,
     cfg.pinterestAppSecret,
     cfg.pinterestAccessToken,
     cfg.razorpayKeySecret,
@@ -162,6 +172,9 @@ export function validateServerConfig(): ServerConfigValidation {
   }
   if (!cfg.githubToken) {
     warnings.push('GITHUB_TOKEN not set; GitHub API uses unauthenticated public rate limit.');
+  }
+  if (!cfg.twitchAccessToken) {
+    warnings.push('TWITCH_ACCESS_TOKEN not set; Twitch lookups will fall back to public metadata.');
   }
   if (cfg.pinterestOAuthEnabled && (!cfg.pinterestAppId || !cfg.pinterestAppSecret)) {
     missingRequired.push(

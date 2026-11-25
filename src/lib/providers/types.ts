@@ -11,6 +11,8 @@ export type ProviderId =
   | 'spotify'
   | 'pinterest'
   | 'soundcloud'
+  | 'twitch'
+  | 'snapchat'
   | 'bluesky'
   | 'generic';
 

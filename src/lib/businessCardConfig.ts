@@ -527,6 +527,7 @@ const PRIORITY_SOCIAL_ORDER = [
   'mail',
   'spotify',
   'twitch',
+  'snapchat',
   'patreon',
   'substack',
 ];
@@ -547,6 +548,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   mail: 'Email',
   spotify: 'Spotify',
   twitch: 'Twitch',
+  snapchat: 'Snapchat',
   patreon: 'Patreon',
   substack: 'Substack',
 };
@@ -576,7 +578,7 @@ export function formatSocialHandleLabel(platform: string, rawVal: string): strin
         const handleSeg = segs.find((s) => s.startsWith('@')) || last;
         return handleSeg.startsWith('@') ? handleSeg : `@${handleSeg}`;
       }
-      if (['instagram', 'x', 'twitter', 'tiktok', 'threads'].includes(platform)) {
+      if (['instagram', 'x', 'twitter', 'tiktok', 'threads', 'snapchat'].includes(platform)) {
         return last.startsWith('@') ? last : `@${last}`;
       }
       return last;

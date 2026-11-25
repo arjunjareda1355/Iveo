@@ -33,6 +33,10 @@ let spotifyRateLimitedUntil = 0;
 let spotifyWebApiFailures = 0;
 let spotifyCircuitOpenUntil = 0;
 
+// Twitch Client-Id resolution cache (resolved once via oauth2/validate if TWITCH_CLIENT_ID is omitted)
+let cachedTwitchClient: { token: string; clientId: string; expiresAt: number } | null = null;
+let twitchValidateInFlight: Promise<string | null> | null = null;
+
 // Telemetry rolling window (15 min)
 const telemetryEvents: Array<{ provider: string; status: number; ok: boolean; latencyMs: number; at: number }> = [];
 const TELEMETRY_WINDOW_MS = 15 * 60 * 1000;
@@ -65,6 +69,8 @@ export function resetSpotifyClientStateForTests(): void {
   spotifyRateLimitedUntil = 0;
   spotifyWebApiFailures = 0;
   spotifyCircuitOpenUntil = 0;
+  cachedTwitchClient = null;
+  twitchValidateInFlight = null;
   embedCache.clear();
   lookupRateMap.clear();
   refreshCooldownMap.clear();
@@ -94,7 +100,8 @@ export function isValidSocialOAuthProvider(value: string): value is SocialOAuthP
     value === 'facebook' ||
     value === 'threads' ||
     value === 'spotify' ||
-    value === 'pinterest'
+    value === 'pinterest' ||
+    value === 'snapchat'
   );
 }
 
@@ -112,6 +119,7 @@ export function getOAuthAvailability(): Record<SocialOAuthProvider | 'youtube', 
     threads: Boolean(cfg.oauth.threads.clientId && cfg.oauth.threads.clientSecret),
     spotify: Boolean(cfg.oauth.spotify.clientId && cfg.oauth.spotify.clientSecret),
     pinterest: Boolean(cfg.pinterestOAuthEnabled && cfg.oauth.pinterest.clientId && cfg.oauth.pinterest.clientSecret),
+    snapchat: Boolean(cfg.oauth.snapchat.clientId && cfg.oauth.snapchat.clientSecret),
   };
 }
 
@@ -147,7 +155,11 @@ export function checkBlockRefreshCooldown(blockId: string): { allowed: boolean; 
 
 function getCacheTtlWithJitter(provider: EmbedProvider): number {
   const base =
-    provider === 'youtube' || provider === 'github' || provider === 'x' || provider === 'discord'
+    provider === 'youtube' ||
+    provider === 'github' ||
+    provider === 'x' ||
+    provider === 'discord' ||
+    provider === 'twitch'
       ? STATS_CACHE_TTL_MS
       : METADATA_CACHE_TTL_MS;
   const jitter = 0.9 + Math.random() * 0.2;
@@ -491,6 +503,24 @@ export function buildSocialOAuthUrl(
     });
     return {
       url: `https://www.pinterest.com/oauth/?${params.toString()}`,
+      redirectUri,
+    };
+  }
+
+  if (provider === 'snapchat') {
+    const params = new URLSearchParams({
+      client_id: creds.clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: [
+        'https://auth.snapchat.com/oauth2/api/user.display_name',
+        'https://auth.snapchat.com/oauth2/api/user.bitmoji.avatar',
+        'https://auth.snapchat.com/oauth2/api/user.external_id',
+      ].join(' '),
+      state: statePayload,
+    });
+    return {
+      url: `https://accounts.snapchat.com/accounts/oauth2/auth?${params.toString()}`,
       redirectUri,
     };
   }
@@ -1058,6 +1088,68 @@ export async function exchangeSocialOAuthCode(
     return readPinterestProfileWithToken(String(tokenJson.access_token), true);
   }
 
+  if (provider === 'snapchat') {
+    const basicAuth = Buffer.from(`${creds.clientId}:${creds.clientSecret}`, 'utf8').toString('base64');
+    const tokenRes = await fetch('https://accounts.snapchat.com/accounts/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${basicAuth}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+      }).toString(),
+      signal: AbortSignal.timeout(6500),
+    });
+    const tokenJson: any = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokenJson?.access_token) {
+      throw new Error(redactSecrets(tokenJson?.error_description || tokenJson?.error || 'Snapchat connection failed.'));
+    }
+
+    const meRes = await fetch('https://kit.snapchat.com/v1/me', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenJson.access_token}`,
+      },
+      body: JSON.stringify({
+        query: '{ me { displayName externalId bitmoji { avatar } } }',
+      }),
+      signal: AbortSignal.timeout(5500),
+    });
+    const meJson: any = await meRes.json().catch(() => null);
+    const me = meJson?.data?.me;
+    if (!meRes.ok || !me) {
+      throw new Error('Could not read Snapchat profile details.');
+    }
+
+    const displayName = (typeof me.displayName === 'string' && me.displayName.trim()) || 'Snapchat';
+    const avatarUrl =
+      typeof me.bitmoji?.avatar === 'string' && /^https?:\/\//i.test(me.bitmoji.avatar)
+        ? me.bitmoji.avatar
+        : null;
+
+    return {
+      provider: 'snapchat',
+      url: 'https://www.snapchat.com/',
+      title: displayName,
+      embedMeta: {
+        provider: 'snapchat',
+        subtype: 'profile',
+        title: displayName,
+        subtitle: 'Snapchat',
+        description: null,
+        avatarUrl,
+        badgeText: 'Snapchat',
+        statsLabel: null,
+        connectedViaOAuth: true,
+        fetchedAt: new Date().toISOString(),
+      },
+    };
+  }
+
   // X (Twitter)
   const pkceEntry = nonce ? pkceStore.get(nonce) : undefined;
   if (nonce) pkceStore.delete(nonce);
@@ -1490,7 +1582,8 @@ export async function fetchSocialEmbedMetadata(
     parsedHost === 'pin.it' ||
     parsedHost === 'lnkd.in' ||
     parsedHost === 'youtu.be' ||
-    parsedHost === 'on.soundcloud.com'
+    parsedHost === 'on.soundcloud.com' ||
+    parsedHost === 't.snapchat.com'
   ) {
     try {
       const expanded = await expandShortUrlSafe(parsed.canonicalUrl, 3);
@@ -2102,6 +2195,278 @@ export async function fetchSocialEmbedMetadata(
     };
     setCachedEmbed(parsed.canonicalUrl, parsed, meta, meta.title || fallbackTitle);
     return { parsed, embedMeta: meta, suggestedTitle: meta.title || fallbackTitle };
+  }
+
+  // 13. Twitch — Helix API (channel, VOD/video, clip) using TWITCH_ACCESS_TOKEN (+ auto-validated Client-Id) + OG fallback
+  if (provider === 'twitch') {
+    const cfg = getServerConfig();
+    const token = cfg.twitchAccessToken;
+    if (token && parsed.identifier) {
+      let clientId: string | null = cfg.twitchClientId || null;
+      if (!clientId) {
+        if (
+          cachedTwitchClient &&
+          cachedTwitchClient.token === token &&
+          cachedTwitchClient.expiresAt > Date.now()
+        ) {
+          clientId = cachedTwitchClient.clientId;
+        } else if (twitchValidateInFlight) {
+          clientId = await twitchValidateInFlight;
+        } else {
+          twitchValidateInFlight = (async () => {
+            try {
+              const vRes = await fetch('https://id.twitch.tv/oauth2/validate', {
+                headers: { Authorization: `OAuth ${token}` },
+                signal: AbortSignal.timeout(4000),
+              });
+              if (vRes.ok) {
+                const vJson: any = await vRes.json().catch(() => null);
+                const resolvedId = typeof vJson?.client_id === 'string' ? vJson.client_id.trim() : '';
+                if (resolvedId) {
+                  cachedTwitchClient = {
+                    token,
+                    clientId: resolvedId,
+                    expiresAt: Date.now() + 60 * 60 * 1000,
+                  };
+                  return resolvedId;
+                }
+              }
+            } catch {}
+            return null;
+          })().finally(() => {
+            twitchValidateInFlight = null;
+          });
+          clientId = await twitchValidateInFlight;
+        }
+      }
+
+      if (clientId) {
+        const helixHeaders = {
+          Authorization: `Bearer ${token}`,
+          'Client-Id': clientId,
+          'User-Agent': 'iveo-embed/1.0',
+        };
+        const started = Date.now();
+        try {
+          if (parsed.subtype === 'video') {
+            const vidRes = await fetch(
+              `https://api.twitch.tv/helix/videos?id=${encodeURIComponent(parsed.identifier)}`,
+              { headers: helixHeaders, signal: AbortSignal.timeout(4500) }
+            );
+            recordProviderTelemetry('twitch', vidRes.status, vidRes.ok, Date.now() - started);
+            if (vidRes.ok) {
+              const vidJson: any = await vidRes.json().catch(() => null);
+              const video = vidJson?.data?.[0];
+              if (video) {
+                let avatarUrl: string | null = null;
+                if (video.user_id) {
+                  try {
+                    const uRes = await fetch(
+                      `https://api.twitch.tv/helix/users?id=${encodeURIComponent(String(video.user_id))}`,
+                      { headers: helixHeaders, signal: AbortSignal.timeout(3500) }
+                    );
+                    if (uRes.ok) {
+                      const uJson: any = await uRes.json().catch(() => null);
+                      avatarUrl = uJson?.data?.[0]?.profile_image_url || null;
+                    }
+                  } catch {}
+                }
+                const thumb = typeof video.thumbnail_url === 'string'
+                  ? video.thumbnail_url.replace(/%\{width\}|\{width\}/g, '640').replace(/%\{height\}|\{height\}/g, '360')
+                  : null;
+                const statsParts: string[] = [];
+                if (typeof video.view_count === 'number') statsParts.push(`${video.view_count.toLocaleString()} views`);
+                if (typeof video.duration === 'string' && video.duration) statsParts.push(video.duration);
+                const meta: EmbedMetaData = {
+                  provider: 'twitch',
+                  subtype: 'video',
+                  title: video.title || `Twitch video`,
+                  subtitle: video.user_login ? `@${video.user_login}` : video.user_name || parsed.canonicalUrl,
+                  description: video.description || null,
+                  avatarUrl: avatarUrl || thumb,
+                  coverUrl: thumb,
+                  statsLabel: statsParts.join(' · ') || null,
+                  handle: video.user_login ? `@${video.user_login}` : null,
+                  badgeText: 'Twitch',
+                  source: 'api',
+                  fetchedAt: nowIso,
+                };
+                setCachedEmbed(parsed.canonicalUrl, parsed, meta, meta.title || 'Twitch video');
+                return { parsed, embedMeta: meta, suggestedTitle: meta.title || 'Twitch video' };
+              }
+            }
+          } else if (parsed.subtype === 'clip') {
+            const clipRes = await fetch(
+              `https://api.twitch.tv/helix/clips?id=${encodeURIComponent(parsed.identifier)}`,
+              { headers: helixHeaders, signal: AbortSignal.timeout(4500) }
+            );
+            recordProviderTelemetry('twitch', clipRes.status, clipRes.ok, Date.now() - started);
+            if (clipRes.ok) {
+              const clipJson: any = await clipRes.json().catch(() => null);
+              const clip = clipJson?.data?.[0];
+              if (clip) {
+                let avatarUrl: string | null = null;
+                if (clip.broadcaster_id) {
+                  try {
+                    const uRes = await fetch(
+                      `https://api.twitch.tv/helix/users?id=${encodeURIComponent(String(clip.broadcaster_id))}`,
+                      { headers: helixHeaders, signal: AbortSignal.timeout(3500) }
+                    );
+                    if (uRes.ok) {
+                      const uJson: any = await uRes.json().catch(() => null);
+                      avatarUrl = uJson?.data?.[0]?.profile_image_url || null;
+                    }
+                  } catch {}
+                }
+                const statsLabel =
+                  typeof clip.view_count === 'number' && clip.view_count >= 0
+                    ? `${clip.view_count.toLocaleString()} views`
+                    : null;
+                const meta: EmbedMetaData = {
+                  provider: 'twitch',
+                  subtype: 'clip',
+                  title: clip.title || 'Twitch clip',
+                  subtitle: clip.broadcaster_name ? `${clip.broadcaster_name} · Clip` : 'Twitch clip',
+                  description: clip.creator_name ? `Clipped by ${clip.creator_name}` : null,
+                  avatarUrl: avatarUrl || clip.thumbnail_url || null,
+                  coverUrl: clip.thumbnail_url || null,
+                  statsLabel,
+                  handle: clip.broadcaster_name || null,
+                  badgeText: 'Twitch',
+                  source: 'api',
+                  fetchedAt: nowIso,
+                };
+                setCachedEmbed(parsed.canonicalUrl, parsed, meta, meta.title || 'Twitch clip');
+                return { parsed, embedMeta: meta, suggestedTitle: meta.title || 'Twitch clip' };
+              }
+            }
+          } else {
+            const login = parsed.identifier.toLowerCase();
+            const [usersRes, streamsRes] = await Promise.all([
+              fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`, {
+                headers: helixHeaders,
+                signal: AbortSignal.timeout(4500),
+              }),
+              fetch(`https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(login)}`, {
+                headers: helixHeaders,
+                signal: AbortSignal.timeout(4500),
+              }).catch(() => null),
+            ]);
+            recordProviderTelemetry('twitch', usersRes.status, usersRes.ok, Date.now() - started);
+            if (usersRes.ok) {
+              const usersJson: any = await usersRes.json().catch(() => null);
+              const user = usersJson?.data?.[0];
+              const streamsJson: any = streamsRes && streamsRes.ok ? await streamsRes.json().catch(() => null) : null;
+              const stream = streamsJson?.data?.[0];
+              if (user) {
+                const liveThumb =
+                  typeof stream?.thumbnail_url === 'string'
+                    ? stream.thumbnail_url.replace(/\{width\}/g, '640').replace(/\{height\}/g, '360')
+                    : null;
+                const isLive = Boolean(stream && stream.type === 'live');
+                const viewerCount = typeof stream?.viewer_count === 'number' ? stream.viewer_count : null;
+                const statsLabel = isLive
+                  ? viewerCount != null
+                    ? `Live · ${viewerCount.toLocaleString()} viewers`
+                    : 'Live now'
+                  : user.broadcaster_type === 'partner'
+                    ? 'Twitch Partner'
+                    : user.broadcaster_type === 'affiliate'
+                      ? 'Twitch Affiliate'
+                      : null;
+                const meta: EmbedMetaData = {
+                  provider: 'twitch',
+                  subtype: 'profile',
+                  title: user.display_name || user.login || login,
+                  subtitle: stream?.game_name ? `@${user.login} · ${stream.game_name}` : `@${user.login}`,
+                  description: stream?.title || user.description || null,
+                  avatarUrl: user.profile_image_url || null,
+                  coverUrl: liveThumb || user.offline_image_url || null,
+                  statsLabel,
+                  stats: isLive
+                    ? [
+                        { key: 'Status', value: 'Live' },
+                        ...(viewerCount != null
+                          ? [{ key: 'Viewers', value: viewerCount.toLocaleString() }]
+                          : []),
+                      ]
+                    : undefined,
+                  handle: `@${user.login}`,
+                  badgeText: 'Twitch',
+                  source: 'api',
+                  fetchedAt: nowIso,
+                };
+                setCachedEmbed(parsed.canonicalUrl, parsed, meta, meta.title || `@${user.login}`);
+                return { parsed, embedMeta: meta, suggestedTitle: meta.title || `@${user.login}` };
+              }
+            }
+          }
+        } catch {
+          recordProviderTelemetry('twitch', 0, false, Date.now() - started);
+        }
+      }
+    }
+
+    const og = await fetchOpenGraphMetadata(parsed.canonicalUrl);
+    const handle = parsed.subtype === 'profile' && parsed.identifier ? `@${parsed.identifier}` : null;
+    const ogTitleClean = og?.title ? og.title.replace(/\s*[|\-–]\s*Twitch$/i, '').trim() : '';
+    const fallbackTitle =
+      parsed.subtype === 'video'
+        ? 'Twitch video'
+        : parsed.subtype === 'clip'
+          ? 'Twitch clip'
+          : handle || 'Twitch';
+    const resolvedTitle =
+      ogTitleClean && !/^twitch$/i.test(ogTitleClean) ? ogTitleClean : fallbackTitle;
+    const meta: EmbedMetaData = {
+      provider: 'twitch',
+      subtype: parsed.subtype || 'profile',
+      title: resolvedTitle,
+      subtitle: handle || parsed.canonicalUrl.replace(/^https?:\/\/(www\.)?/, ''),
+      description: og?.description || null,
+      avatarUrl: og?.image || null,
+      coverUrl: og?.image || null,
+      badgeText: 'Twitch',
+      handle,
+      source: og ? 'opengraph' : 'manual',
+      fetchedAt: nowIso,
+    };
+    setCachedEmbed(parsed.canonicalUrl, parsed, meta, resolvedTitle);
+    return { parsed, embedMeta: meta, suggestedTitle: resolvedTitle };
+  }
+
+  // 14. Snapchat — SSRF-safe OpenGraph unfurl + clean handle/Spotlight/Story fallback
+  if (provider === 'snapchat') {
+    const og = await fetchOpenGraphMetadata(parsed.canonicalUrl);
+    const isMedia = parsed.subtype === 'spotlight' || parsed.subtype === 'story';
+    const handle =
+      !isMedia && parsed.identifier ? `@${parsed.identifier.replace(/^@+/, '')}` : null;
+    const ogTitleClean = og?.title
+      ? og.title.replace(/\s*[|\-–]\s*Snapchat$/i, '').replace(/\s+on\s+Snapchat$/i, '').trim()
+      : '';
+    const fallbackTitle =
+      parsed.subtype === 'spotlight'
+        ? 'Snapchat Spotlight'
+        : parsed.subtype === 'story'
+          ? 'Snapchat Story'
+          : handle || 'Snapchat';
+    const resolvedTitle =
+      ogTitleClean && !/^snapchat$/i.test(ogTitleClean) ? ogTitleClean : fallbackTitle;
+    const meta: EmbedMetaData = {
+      provider: 'snapchat',
+      subtype: parsed.subtype || 'profile',
+      title: resolvedTitle,
+      subtitle: handle || parsed.canonicalUrl.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''),
+      description: og?.description || null,
+      avatarUrl: og?.image || null,
+      coverUrl: isMedia ? og?.image || null : null,
+      badgeText: 'Snapchat',
+      handle,
+      source: og ? 'opengraph' : 'manual',
+      fetchedAt: nowIso,
+    };
+    setCachedEmbed(parsed.canonicalUrl, parsed, meta, resolvedTitle);
+    return { parsed, embedMeta: meta, suggestedTitle: resolvedTitle };
   }
 
   return null;

@@ -354,3 +354,137 @@ test('parseYouTubeInput supports channels, @handles, videos, Shorts, and playlis
   assert.equal(shorts?.kind, 'video');
   assert.equal(shorts?.value, 'dQw4w9WgXcQ');
 });
+
+test('Twitch Helix lookup auto-resolves Client-Id via oauth2/validate, fetches live stream/VOD metadata, and redacts token', async () => {
+  resetSpotifyClientStateForTests();
+  const realFetch = globalThis.fetch;
+  const mockTwitchToken = 'mock_twitch_oauth_token_for_unit_test';
+
+  await withTempEnv(
+    {
+      TWITCH_ACCESS_TOKEN: mockTwitchToken,
+      TWITCH_CLIENT_ID: '',
+    },
+    async () => {
+      const redacted = redactSecrets(`Twitch upstream error using ${mockTwitchToken}`);
+      assert.equal(redacted.includes(mockTwitchToken), false);
+
+      let validateCalls = 0;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const headers = new Headers(init?.headers || {});
+        if (url.includes('id.twitch.tv/oauth2/validate')) {
+          validateCalls += 1;
+          assert.equal(headers.get('Authorization'), `OAuth ${mockTwitchToken}`);
+          return new Response(JSON.stringify({ client_id: 'mock_twitch_client_id' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('api.twitch.tv/helix/users?login=shroud')) {
+          assert.equal(headers.get('Client-Id'), 'mock_twitch_client_id');
+          assert.equal(headers.get('Authorization'), `Bearer ${mockTwitchToken}`);
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  id: '37402112',
+                  login: 'shroud',
+                  display_name: 'shroud',
+                  description: 'FPS streamer and creator.',
+                  broadcaster_type: 'partner',
+                  profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/shroud.png',
+                  offline_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/shroud-offline.png',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (url.includes('api.twitch.tv/helix/streams?user_login=shroud')) {
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: 'live',
+                  game_name: 'VALORANT',
+                  title: 'Ranked grind',
+                  viewer_count: 18420,
+                  thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_shroud-{width}x{height}.jpg',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (url.includes('api.twitch.tv/helix/videos?id=214567890')) {
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  id: '214567890',
+                  user_id: '37402112',
+                  user_login: 'shroud',
+                  user_name: 'shroud',
+                  title: 'Highlights VOD',
+                  description: 'Full match VOD',
+                  view_count: 4200,
+                  duration: '2h15m',
+                  thumbnail_url: 'https://static-cdn.jtvnw.net/vods/%{width}x%{height}.jpg',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (url.includes('api.twitch.tv/helix/users?id=37402112')) {
+          return new Response(
+            JSON.stringify({
+              data: [{ id: '37402112', profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/shroud.png' }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response('Not found', { status: 404 });
+      }) as typeof fetch;
+
+      try {
+        const channel = await fetchSocialEmbedMetadata('https://twitch.tv/shroud');
+        assert.equal(channel?.parsed.provider, 'twitch');
+        assert.equal(channel?.embedMeta.title, 'shroud');
+        assert.equal(channel?.embedMeta.statsLabel, 'Live · 18,420 viewers');
+        assert.equal(channel?.embedMeta.coverUrl, 'https://static-cdn.jtvnw.net/previews-ttv/live_user_shroud-640x360.jpg');
+
+        const vod = await fetchSocialEmbedMetadata('https://www.twitch.tv/videos/214567890');
+        assert.equal(vod?.parsed.subtype, 'video');
+        assert.equal(vod?.embedMeta.title, 'Highlights VOD');
+        assert.equal(vod?.embedMeta.coverUrl, 'https://static-cdn.jtvnw.net/vods/640x360.jpg');
+        assert.equal(validateCalls, 1, 'oauth2/validate Client-Id should be cached across requests');
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+  );
+});
+
+test('Snapchat OAuth URL construction and client secret redaction', () => {
+  assert.equal(isValidSocialOAuthProvider('snapchat'), true);
+  const mockSnapSecret = 'mock_snapchat_secret_value_for_unit_test';
+
+  withTempEnv(
+    {
+      SNAPCHAT_CLIENT_ID: 'mock_snap_client_id',
+      SNAPCHAT_CLIENT_SECRET: mockSnapSecret,
+    },
+    () => {
+      const snapAuth = buildSocialOAuthUrl('snapchat', 'https://iveo.site');
+      assert.ok(snapAuth.url.startsWith('https://accounts.snapchat.com/accounts/oauth2/auth?'));
+      assert.ok(snapAuth.url.includes('mock_snap_client_id'));
+      assert.equal(snapAuth.redirectUri, 'https://iveo.site/api/oauth/snapchat/callback');
+
+      const redacted = redactSecrets(`Snapchat token failure: ${mockSnapSecret}`);
+      assert.equal(redacted.includes(mockSnapSecret), false);
+    }
+  );
+});
+

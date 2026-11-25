@@ -59,6 +59,8 @@ export type EmbedProvider =
   | 'facebook'
   | 'threads'
   | 'pinterest'
+  | 'twitch'
+  | 'snapchat'
   | 'linktree'
   | 'bluesky'
   | 'generic';

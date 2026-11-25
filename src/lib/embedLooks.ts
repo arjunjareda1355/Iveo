@@ -95,6 +95,8 @@ export function isSocialEmbedProvider(
     provider === 'facebook' ||
     provider === 'threads' ||
     provider === 'pinterest' ||
+    provider === 'twitch' ||
+    provider === 'snapchat' ||
     provider === 'linktree' ||
     provider === 'bluesky'
   );

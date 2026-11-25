@@ -249,7 +249,7 @@ export const BannerLookCard: React.FC<BannerLookCardProps> = ({
                 width: `${metrics.platformTileSize}px`,
                 height: `${metrics.platformTileSize}px`,
                 borderRadius: `${Math.max(3, Math.round(4 * scale))}px`,
-                color: brandColor,
+                color: brandColor.toUpperCase() === '#FFFC00' ? '#0A0A0A' : brandColor,
               }}
               aria-hidden="true"
             >

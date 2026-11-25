@@ -94,7 +94,9 @@ function deriveInitialFromBlock(
       meta: {
         provider,
         subtype,
-        displayAs: kindDef.capabilities.player ? def.defaultDisplayMode : 'card',
+        displayAs:
+          detected?.defaultDisplayAs ||
+          (kindDef.capabilities.player ? def.defaultDisplayMode : 'card'),
         playerSize: def.defaultPlayerSize || 'standard',
         showAvatar: true,
         showDescription: true,
@@ -942,8 +944,14 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
             <div
               className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0"
               style={{
-                backgroundColor: `${providerDef.brandColor}16`,
-                color: providerDef.brandColor === '#000000' ? '#0A0A0A' : providerDef.brandColor,
+                backgroundColor:
+                  providerDef.brandColor === '#FFFC00'
+                    ? 'rgba(255, 252, 0, 0.35)'
+                    : `${providerDef.brandColor}16`,
+                color:
+                  providerDef.brandColor === '#000000' || providerDef.brandColor === '#FFFC00'
+                    ? '#0A0A0A'
+                    : providerDef.brandColor,
               }}
             >
               <ProviderGlyph provider={provider} size={18} />
@@ -1588,7 +1596,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
               <div className="sticky top-0 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between text-[12px] font-medium text-muted px-0.5">
                   <span>Live preview</span>
-                  <span>{activeLookOption.label}</span>
+                  <span>{displayAs === 'player' ? 'Player' : activeLookOption.label}</span>
                 </div>
                 {previewStageContent}
               </div>

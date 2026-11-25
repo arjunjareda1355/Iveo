@@ -131,7 +131,11 @@ export const ProfilesTab: React.FC = () => {
             {connectedBlocks.map((block) => {
               const pKey = getBlockProvider(block);
               const def = getProviderDefinition(pKey);
-              const iconColor = def.brandColor === '#000000' ? '#0A0A0A' : def.brandColor;
+              const iconColor =
+                def.brandColor === '#000000' || def.brandColor === '#FFFC00'
+                  ? '#0A0A0A'
+                  : def.brandColor;
+              const tileBg = def.brandColor === '#FFFC00' ? 'rgba(255, 252, 0, 0.35)' : `${iconColor}14`;
               const isConfirmDelete = confirmDeleteId === block.id;
               const effectiveLook = normalizeEmbedLookStyle(
                 block.embedMeta?.lookStyle || pageCardLook,
@@ -146,7 +150,7 @@ export const ProfilesTab: React.FC = () => {
                       <div
                         className="w-10 h-10 rounded-[12px] flex items-center justify-center shrink-0"
                         style={{
-                          backgroundColor: `${iconColor}14`,
+                          backgroundColor: tileBg,
                           color: iconColor,
                         }}
                       >
@@ -241,7 +245,11 @@ export const ProfilesTab: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {catalogProviders.map((def) => {
             const existingCount = countByPlatform[def.id] || 0;
-            const iconColor = def.brandColor === '#000000' ? '#0A0A0A' : def.brandColor;
+            const iconColor =
+              def.brandColor === '#000000' || def.brandColor === '#FFFC00'
+                ? '#0A0A0A'
+                : def.brandColor;
+            const tileBg = def.brandColor === '#FFFC00' ? 'rgba(255, 252, 0, 0.35)' : `${iconColor}14`;
             const defaultKind = def.kinds[def.defaultKind];
 
             return (
@@ -250,7 +258,7 @@ export const ProfilesTab: React.FC = () => {
                   <div
                     className="w-10 h-10 rounded-[12px] flex items-center justify-center shrink-0"
                     style={{
-                      backgroundColor: `${iconColor}14`,
+                      backgroundColor: tileBg,
                       color: iconColor,
                     }}
                   >

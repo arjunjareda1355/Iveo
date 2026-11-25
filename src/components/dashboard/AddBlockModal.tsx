@@ -35,6 +35,8 @@ import {
   FacebookGlyph,
   ThreadsGlyph,
   PinterestGlyph,
+  TwitchGlyph,
+  SnapchatGlyph,
 } from '../page/EmbedBlock';
 import { BlueskySocialIcon, LinktreeSocialIcon } from '../phone/SocialIcons';
 import { detectProviderUrl } from '../../lib/providers';
@@ -55,6 +57,8 @@ export type FeatureType =
   | 'embed_facebook'
   | 'embed_threads'
   | 'embed_pinterest'
+  | 'embed_twitch'
+  | 'embed_snapchat'
   | 'embed_bluesky'
   | 'bluesky'
   | 'embed_linktree'
@@ -202,6 +206,24 @@ const FEATURES: FeatureOption[] = [
     icon: PinterestGlyph,
     iconBg: 'bg-rose-50',
     iconColor: 'text-[#E60023]',
+  },
+  {
+    id: 'embed_twitch',
+    title: 'Twitch channel or clip',
+    description: 'Showcase your Twitch stream, channel card, VOD, or clip',
+    category: 'players',
+    icon: TwitchGlyph,
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-[#9146FF]',
+  },
+  {
+    id: 'embed_snapchat',
+    title: 'Snapchat card',
+    description: 'Share your Snapchat profile, Spotlight post, or Story',
+    category: 'social',
+    icon: SnapchatGlyph,
+    iconBg: 'bg-amber-50',
+    iconColor: 'text-amber-900',
   },
   {
     id: 'youtube',
@@ -453,7 +475,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
                 setPasteUrl(e.target.value);
                 if (pasteError) setPasteError(null);
               }}
-              placeholder="Paste any YouTube, Spotify, X, Instagram, Pinterest, or web link..."
+              placeholder="Paste any YouTube, Twitch, Snapchat, Spotify, X, Instagram, or web link..."
               className="flex-1 min-w-0 h-11 px-3.5 bg-surface border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
             />
             <Button type="submit" variant="primary" size="md" className="shrink-0 gap-1">
@@ -477,7 +499,7 @@ export const AddBlockModal: React.FC<AddBlockModalProps> = ({
             />
             <input
               type="text"
-              placeholder="Search blocks (spotify, pinterest, bluesky, discord, youtube)..."
+              placeholder="Search blocks (twitch, snapchat, spotify, pinterest, youtube)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-11 pl-9 pr-3 bg-surface-2 border border-border rounded-[12px] text-[14px] text-ink placeholder:text-muted/70 focus-visible:outline-2 focus-visible:outline-ink"
