@@ -1,0 +1,1027 @@
+
+
+================================================================
+// FILE: design-brain/README.md
+================================================================
+# Iveo Design Brain
+
+Curated, rule-based theme generator for Appearance → "Surprise me", the idea rows, and the refresh icons.
+Zero dependencies. Plain TypeScript. Copy the folder to `/lib/design-brain/`.
+
+## Files
+| File | Purpose |
+|---|---|
+| util.ts | colour maths, WCAG contrast, seeded RNG |
+| data-palettes.ts / data-vibes.ts / data-fonts.ts / data-styles.ts | **All the design knowledge. Edit these to add palettes, vibes, font trios, button recipes, layouts.** |
+| build.ts | turns a palette into background / buttons / layout values |
+| rules.ts | HARD rules (never broken) + SOFT score 0-100 |
+| generator.ts | generateTheme, suggestSection, regenerate, repair, locks |
+| api.ts | handleSurprise / handleSuggestions / handleRegenerate (framework-agnostic) |
+| adapter.ts | **the only file to edit to match your DB schema** |
+| selftest.ts, preview.ts | 1000-theme test, 24-theme visual grid |
+
+## Wire-up (3 steps)
+1. Edit `adapter.ts` so `toIveoAppearance()` returns your saved-appearance shape (and the reverse when loading `current`).
+2. Expose routes, e.g. Next.js:
+   ```ts
+   // app/api/appearance/surprise/route.ts
+   import { handleSurprise } from '@/lib/design-brain/api';
+   export async function GET(req: Request) {
+     const q = Object.fromEntries(new URL(req.url).searchParams);
+     const ctx = await buildContextFromUser(); // { plan, photoColors, bio, linkTypes, current, locked }
+     const r = handleSurprise(q, ctx); return Response.json(r.body, { status: r.status });
+   }
+   ```
+   Same pattern for `/suggestions?section=` (handleSuggestions) and POST `/regenerate` (handleRegenerate).
+3. Frontend: "Surprise me" → GET surprise, apply `theme` through your existing setters. Idea cards render
+   `name`, `tagline`, `badge`+`ratio`, `dots`; clicking one merges `suggestion.patch` into the current theme.
+   Keep the last 20 `signatures` client-side and send them as `recent` on refresh.
+
+## Context you pass in (all optional)
+`plan` free|pro · `mood` · `useCase` · `photoColors` (hex[] from "From your photo") · `bio` · `linkTypes` (e.g. ["spotify","github"]) ·
+`current` (user's theme) · `locked` ({vibe, background, typography, buttons, layout}).
+
+## Guarantees (verified by selftest.ts)
+0 contrast failures, 0 forbidden pairings, no display fonts for bio/buttons, ≤3 fonts, neon only on dark, neumorphic only on calm light,
+glass only on gradient-like, busy backgrounds force solid/glass buttons, free users never get pro items,
+locked sections come back unchanged, same seed = same theme (store `meta.seed` to share/undo).
+
+## Adding combinations
+New palette → one object in data-palettes.ts, link it from a vibe's `palettes`. New font pairing → one row in TRIOS.
+Then run selftest; it re-checks palette contrast and every rule across 1000 generated themes.
+
+
+================================================================
+// FILE: design-brain/util.ts
+================================================================
+// util.ts: colour maths + seeded RNG (no dependencies)
+
+export type Hex = string;
+
+export function hexToRgb(h: Hex): [number, number, number] {
+  const s = h.replace('#', '');
+  const n = parseInt(s.length === 3 ? s.split('').map(c => c + c).join('') : s, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+export function rgbToHex(r: number, g: number, b: number): Hex {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return ('#' + c(r) + c(g) + c(b)).toUpperCase();
+}
+export function luminance(h: Hex): number {
+  const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const [r, g, b] = hexToRgb(h);
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+export function contrast(a: Hex, b: Hex): number {
+  const la = luminance(a), lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+export function isDark(h: Hex): boolean { return luminance(h) < 0.25; }
+export function badge(ratio: number): 'AAA' | 'AA' | 'AA Large' | 'Fail' {
+  return ratio >= 7 ? 'AAA' : ratio >= 4.5 ? 'AA' : ratio >= 3 ? 'AA Large' : 'Fail';
+}
+/** Best readable text colour for a background: tries preferred first, then near-black/white. */
+export function readableOn(bg: Hex, preferred?: Hex, min = 4.5): Hex {
+  if (preferred && contrast(bg, preferred) >= min) return preferred;
+  const dark = '#0B0A0A', light = '#FFFFFF';
+  return contrast(bg, dark) >= contrast(bg, light) ? dark : light;
+}
+
+export function rgbToHsl(h: Hex): [number, number, number] {
+  let [r, g, b] = hexToRgb(h).map(v => v / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let hh = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    hh = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    hh *= 60;
+  }
+  return [hh, s * 100, l * 100];
+}
+export function hslToHex(h: number, s: number, l: number): Hex {
+  h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(100, s)) / 100; l = Math.max(0, Math.min(100, l)) / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return rgbToHex(f(0) * 255, f(8) * 255, f(4) * 255);
+}
+/** Safe small hue/lightness nudge: creates variety without breaking the palette. */
+export function shift(h: Hex, dHue: number, dSat = 0, dLight = 0): Hex {
+  const [hh, s, l] = rgbToHsl(h);
+  return hslToHex(hh + dHue, s + dSat, l + dLight);
+}
+export function mix(a: Hex, b: Hex, t: number): Hex {
+  const A = hexToRgb(a), B = hexToRgb(b);
+  return rgbToHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
+}
+
+// ---------- seeded RNG (mulberry32) ----------
+export function hashSeed(s: string | number): number {
+  const str = String(s); let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  return (h ^ (h >>> 16)) >>> 0;
+}
+export class RNG {
+  private a: number;
+  constructor(seed: string | number) { this.a = hashSeed(seed) || 1; }
+  next(): number {
+    let t = (this.a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  int(min: number, max: number) { return Math.floor(this.next() * (max - min + 1)) + min; }
+  range(min: number, max: number) { return min + this.next() * (max - min); }
+  pick<T>(arr: readonly T[]): T { return arr[Math.floor(this.next() * arr.length)]; }
+  /** weighted pick: weights[i] >= 0 */
+  weighted<T>(arr: readonly T[], weights: number[]): T {
+    const total = weights.reduce((a, b) => a + Math.max(0, b), 0);
+    if (total <= 0) return this.pick(arr);
+    let r = this.next() * total;
+    for (let i = 0; i < arr.length; i++) { r -= Math.max(0, weights[i]); if (r <= 0) return arr[i]; }
+    return arr[arr.length - 1];
+  }
+  chance(p: number) { return this.next() < p; }
+}
+
+
+================================================================
+// FILE: design-brain/data-palettes.ts
+================================================================
+// data-palettes.ts: curated palettes. Edit freely; the self-test re-checks contrast.
+import type { Hex } from './util';
+
+export type Mood = 'calm' | 'bold' | 'luxe' | 'playful' | 'futuristic' | 'editorial' | 'minimal'
+  | 'warm' | 'cool' | 'nature' | 'retro' | 'creator' | 'business';
+export type UseCase = 'creator' | 'musician' | 'business' | 'student' | 'developer' | 'artist' | 'influencer';
+
+export interface Palette {
+  id: string; name: string; mode: 'light' | 'dark';
+  bg: Hex; bg2: Hex;            // page background + a companion tone for gradients
+  surface: Hex; text: Hex; muted: Hex;
+  accent: Hex; accent2: Hex;
+  moods: Mood[]; useCases: UseCase[]; pro?: boolean;
+}
+
+export const PALETTES: Palette[] = [
+  { id: 'burgundy-velvet', name: 'Burgundy Velvet', mode: 'dark', bg: '#2A0C14', bg2: '#4A1624', surface: '#3A121D', text: '#FAECEE', muted: '#C9A3AB', accent: '#D4AF37', accent2: '#F5D98B', moods: ['luxe', 'editorial', 'warm'], useCases: ['artist', 'creator', 'musician'] },
+  { id: 'oat-milk', name: 'Oat Milk', mode: 'light', bg: '#F3EEE3', bg2: '#E8DFCF', surface: '#FBF8F1', text: '#2A2118', muted: '#6E6253', accent: '#8A6A4A', accent2: '#C9A98A', moods: ['calm', 'warm', 'editorial', 'minimal'], useCases: ['creator', 'student', 'artist'] },
+  { id: 'porcelain', name: 'Porcelain', mode: 'light', bg: '#FAFAF8', bg2: '#EEF1F6', surface: '#FFFFFF', text: '#111111', muted: '#5A5F6B', accent: '#2F5BD8', accent2: '#8FA9F0', moods: ['minimal', 'calm', 'business', 'cool'], useCases: ['business', 'student', 'developer'] },
+  { id: 'celadon', name: 'Celadon', mode: 'light', bg: '#E6F0E9', bg2: '#CFE3D6', surface: '#F4FAF6', text: '#16301F', muted: '#4F6B58', accent: '#2E6B4A', accent2: '#7FB89A', moods: ['calm', 'nature', 'minimal'], useCases: ['creator', 'student', 'influencer'] },
+  { id: 'rose-quartz', name: 'Rose Quartz', mode: 'light', bg: '#FFD9CC', bg2: '#FFB8C6', surface: '#FFF1EC', text: '#3A1620', muted: '#7D4A57', accent: '#B83A5E', accent2: '#F08BA3', moods: ['warm', 'playful', 'editorial'], useCases: ['influencer', 'creator', 'artist'] },
+  { id: 'obsidian', name: 'Obsidian', mode: 'dark', bg: '#0A0A0A', bg2: '#1A1A1A', surface: '#161616', text: '#F5F5F5', muted: '#A3A3A3', accent: '#FFFFFF', accent2: '#8B8B8B', moods: ['bold', 'minimal', 'futuristic', 'business'], useCases: ['developer', 'business', 'musician', 'creator'] },
+  { id: 'midnight-blue', name: 'Midnight Blue', mode: 'dark', bg: '#0A1128', bg2: '#16224A', surface: '#111B3A', text: '#EAF0FF', muted: '#9FB0D8', accent: '#5B8CFF', accent2: '#9CC0FF', moods: ['cool', 'futuristic', 'business', 'calm'], useCases: ['developer', 'business', 'student'] },
+  { id: 'onyx-gold', name: 'Onyx Gold', mode: 'dark', bg: '#0F0D08', bg2: '#2A2210', surface: '#1B1710', text: '#F7F0DC', muted: '#BDB08A', accent: '#D4AF37', accent2: '#F2D675', moods: ['luxe', 'bold', 'editorial'], useCases: ['business', 'artist', 'musician', 'influencer'] },
+  { id: 'terracotta', name: 'Terracotta', mode: 'dark', bg: '#3B1A10', bg2: '#6A2E1B', surface: '#4A2216', text: '#FFF1E8', muted: '#E0B9A5', accent: '#F2A365', accent2: '#FFD2A8', moods: ['warm', 'retro', 'bold'], useCases: ['artist', 'creator', 'musician'] },
+  { id: 'forest', name: 'Forest', mode: 'dark', bg: '#0E2018', bg2: '#1C3B2C', surface: '#142C21', text: '#E8F5EC', muted: '#9CC1A9', accent: '#6FCF97', accent2: '#B6EBC9', moods: ['nature', 'calm', 'cool'], useCases: ['creator', 'student', 'influencer'] },
+  { id: 'lavender-haze', name: 'Lavender Haze', mode: 'light', bg: '#EFE8FB', bg2: '#DCCFF5', surface: '#F9F5FF', text: '#2A1A4A', muted: '#66568A', accent: '#6B42D8', accent2: '#B49AF0', moods: ['playful', 'calm', 'creator'], useCases: ['influencer', 'creator', 'artist'] },
+  { id: 'peach-fizz', name: 'Peach Fizz', mode: 'light', bg: '#FFE2D1', bg2: '#FFC4D0', surface: '#FFF4EC', text: '#3B1E14', muted: '#80523F', accent: '#E8553A', accent2: '#FF9E80', moods: ['playful', 'warm', 'creator'], useCases: ['influencer', 'creator', 'student'] },
+  { id: 'mint-tint', name: 'Mint Tint', mode: 'light', bg: '#E7F5EE', bg2: '#C8EEDB', surface: '#F6FCF9', text: '#0F2B21', muted: '#436556', accent: '#0F9D6E', accent2: '#6FD6B0', moods: ['calm', 'minimal', 'nature', 'playful'], useCases: ['student', 'creator', 'business'] },
+  { id: 'ocean-teal', name: 'Ocean Teal', mode: 'dark', bg: '#06232B', bg2: '#0B4651', surface: '#0A323B', text: '#E6FBFF', muted: '#97C5CE', accent: '#1FD1C2', accent2: '#8CF0E6', moods: ['cool', 'futuristic', 'calm'], useCases: ['developer', 'creator', 'business'] },
+  { id: 'neon-cyber', name: 'Neon Cyber', mode: 'dark', bg: '#0B0620', bg2: '#2A0E55', surface: '#150B33', text: '#F4ECFF', muted: '#B3A1DB', accent: '#00F0FF', accent2: '#FF2E97', moods: ['futuristic', 'bold', 'playful'], useCases: ['developer', 'musician', 'creator'] },
+  { id: 'sunset', name: 'Sunset', mode: 'dark', bg: '#2B0F2E', bg2: '#7A2A3E', surface: '#3A1640', text: '#FFF0E6', muted: '#E6B8B0', accent: '#FF9A5A', accent2: '#FFD27A', moods: ['warm', 'bold', 'playful', 'retro'], useCases: ['musician', 'influencer', 'artist'] },
+  { id: 'monochrome-light', name: 'Monochrome Light', mode: 'light', bg: '#F5F5F5', bg2: '#E4E4E4', surface: '#FFFFFF', text: '#141414', muted: '#5C5C5C', accent: '#141414', accent2: '#7A7A7A', moods: ['minimal', 'business', 'editorial'], useCases: ['business', 'developer', 'artist', 'student'] },
+  { id: 'graphite', name: 'Graphite', mode: 'dark', bg: '#161616', bg2: '#262626', surface: '#202020', text: '#F0F0F0', muted: '#A0A0A0', accent: '#E5E5E5', accent2: '#9A9A9A', moods: ['minimal', 'business', 'bold'], useCases: ['developer', 'business', 'creator'] },
+  { id: 'sand-dune', name: 'Sand Dune', mode: 'light', bg: '#F1E3C8', bg2: '#E2C99A', surface: '#FAF1DE', text: '#33260F', muted: '#756143', accent: '#B5651D', accent2: '#E0A860', moods: ['warm', 'retro', 'editorial'], useCases: ['artist', 'creator', 'musician'] },
+  { id: 'plum-night', name: 'Plum Night', mode: 'dark', bg: '#1D0A2B', bg2: '#3F1559', surface: '#2A1040', text: '#F6EAFF', muted: '#BFA3D9', accent: '#E08BFF', accent2: '#F6C6FF', moods: ['luxe', 'playful', 'futuristic'], useCases: ['musician', 'influencer', 'artist'] },
+  { id: 'sky-linen', name: 'Sky Linen', mode: 'light', bg: '#EAF3FF', bg2: '#D5E6FA', surface: '#F7FAFF', text: '#0E1B33', muted: '#4D607F', accent: '#1F6FEB', accent2: '#7FB0F7', moods: ['cool', 'calm', 'business', 'minimal'], useCases: ['business', 'student', 'developer'] },
+  { id: 'citrus-pop', name: 'Citrus Pop', mode: 'light', bg: '#FFF3B0', bg2: '#FFD97A', surface: '#FFFBE0', text: '#2B2200', muted: '#6E5E1B', accent: '#E85D04', accent2: '#FFB703', moods: ['playful', 'bold', 'retro'], useCases: ['influencer', 'creator', 'student'] },
+];
+
+
+================================================================
+// FILE: design-brain/data-vibes.ts
+================================================================
+// data-vibes.ts: named vibes. Each links to palettes that suit it (affinities).
+import type { Mood, UseCase } from './data-palettes';
+
+export interface Vibe { id: string; name: string; tagline: string; moods: Mood[]; palettes: string[]; useCases: UseCase[]; pro?: boolean; }
+
+export const VIBES: Vibe[] = [
+  { id: 'burgundy-library', name: 'Burgundy Library', tagline: 'Editorial & Luxe', moods: ['editorial', 'luxe', 'warm'], palettes: ['burgundy-velvet'], useCases: ['artist', 'creator', 'musician'] },
+  { id: 'porcelain', name: 'Porcelain', tagline: 'Quiet, bright and sharp', moods: ['minimal', 'calm', 'business'], palettes: ['porcelain', 'monochrome-light', 'sky-linen'], useCases: ['business', 'developer', 'student'] },
+  { id: 'oat-milk', name: 'Oat Milk', tagline: 'Warm paper, soft serif voice', moods: ['calm', 'warm', 'editorial'], palettes: ['oat-milk', 'sand-dune'], useCases: ['creator', 'artist', 'student'] },
+  { id: 'dawn-mist', name: 'Dawn Mist', tagline: 'Fresh morning air', moods: ['calm', 'cool', 'minimal'], palettes: ['sky-linen', 'porcelain', 'mint-tint'], useCases: ['student', 'business', 'creator'] },
+  { id: 'celadon', name: 'Celadon', tagline: 'Soft green calm', moods: ['calm', 'nature', 'minimal'], palettes: ['celadon', 'mint-tint'], useCases: ['creator', 'influencer', 'student'] },
+  { id: 'rose-quartz', name: 'Rose Quartz', tagline: 'Blush tones, editorial warmth', moods: ['warm', 'editorial', 'playful'], palettes: ['rose-quartz', 'peach-fizz'], useCases: ['influencer', 'creator', 'artist'] },
+  { id: 'obsidian', name: 'Obsidian', tagline: 'Pure black, pure focus', moods: ['bold', 'minimal', 'business'], palettes: ['obsidian', 'graphite'], useCases: ['developer', 'business', 'creator', 'musician'] },
+  { id: 'eclipse', name: 'Eclipse', tagline: 'Deep night, cool light', moods: ['cool', 'futuristic', 'business'], palettes: ['midnight-blue', 'graphite'], useCases: ['developer', 'business'] },
+  { id: 'onyx-gold', name: 'Onyx Gold', tagline: 'Black tie, gold thread', moods: ['luxe', 'bold', 'editorial'], palettes: ['onyx-gold'], useCases: ['business', 'artist', 'musician', 'influencer'] },
+  { id: 'terracotta-sun', name: 'Terracotta Sun', tagline: 'Baked clay, golden hour', moods: ['warm', 'retro', 'bold'], palettes: ['terracotta', 'sand-dune', 'sunset'], useCases: ['artist', 'musician', 'creator'] },
+  { id: 'deep-forest', name: 'Deep Forest', tagline: 'Moss, shade and stillness', moods: ['nature', 'calm', 'cool'], palettes: ['forest', 'celadon'], useCases: ['creator', 'student'] },
+  { id: 'lavender-haze', name: 'Lavender Haze', tagline: 'Dreamy and soft', moods: ['playful', 'calm', 'creator'], palettes: ['lavender-haze', 'plum-night'], useCases: ['influencer', 'artist', 'creator'] },
+  { id: 'peach-fizz', name: 'Peach Fizz', tagline: 'Sweet, bright, social', moods: ['playful', 'warm', 'creator'], palettes: ['peach-fizz', 'rose-quartz', 'citrus-pop'], useCases: ['influencer', 'creator', 'student'] },
+  { id: 'ocean-deep', name: 'Ocean Deep', tagline: 'Teal tides after dark', moods: ['cool', 'futuristic', 'calm'], palettes: ['ocean-teal', 'midnight-blue'], useCases: ['developer', 'creator', 'business'] },
+  { id: 'neon-nights', name: 'Neon Nights', tagline: 'City lights, loud and live', moods: ['futuristic', 'bold', 'playful'], palettes: ['neon-cyber', 'plum-night'], useCases: ['musician', 'developer', 'creator'], pro: false },
+  { id: 'golden-hour', name: 'Golden Hour', tagline: 'Warm glow, soft landing', moods: ['warm', 'bold', 'playful'], palettes: ['sunset', 'terracotta'], useCases: ['musician', 'influencer', 'artist'] },
+  { id: 'paper-press', name: 'Paper Press', tagline: 'Ink on cream, editorial hairlines', moods: ['editorial', 'minimal', 'warm'], palettes: ['oat-milk', 'monochrome-light', 'sand-dune'], useCases: ['artist', 'creator', 'business'] },
+  { id: 'midnight-plum', name: 'Midnight Plum', tagline: 'Velvet violet, late-night luxe', moods: ['luxe', 'playful', 'futuristic'], palettes: ['plum-night'], useCases: ['musician', 'influencer', 'artist'] },
+  { id: 'citrus-pop', name: 'Citrus Pop', tagline: 'Zesty, loud, friendly', moods: ['playful', 'bold', 'retro'], palettes: ['citrus-pop', 'peach-fizz'], useCases: ['influencer', 'student', 'creator'] },
+  { id: 'studio-mono', name: 'Studio Mono', tagline: 'Black, white, nothing extra', moods: ['minimal', 'business', 'editorial'], palettes: ['monochrome-light', 'graphite', 'obsidian'], useCases: ['business', 'developer', 'artist'] },
+];
+
+
+================================================================
+// FILE: design-brain/data-fonts.ts
+================================================================
+// data-fonts.ts: fonts available in the picker + proven trios (name / bio / buttons)
+import type { Mood } from './data-palettes';
+
+export type FontCat = 'sans' | 'serif' | 'display' | 'mono' | 'script' | 'rounded';
+export interface Font { name: string; cat: FontCat; moods: Mood[]; displayOnly?: boolean; }
+
+export const FONTS: Font[] = [
+  { name: 'Inter', cat: 'sans', moods: ['minimal', 'business', 'calm'] },
+  { name: 'Geist', cat: 'sans', moods: ['minimal', 'futuristic', 'business'] },
+  { name: 'DM Sans', cat: 'sans', moods: ['minimal', 'calm', 'creator'] },
+  { name: 'Plus Jakarta Sans', cat: 'sans', moods: ['creator', 'business', 'playful'] },
+  { name: 'Space Grotesk', cat: 'sans', moods: ['futuristic', 'bold', 'creator'] },
+  { name: 'Merriweather', cat: 'serif', moods: ['editorial', 'warm', 'business'] },
+  { name: 'Geist Mono', cat: 'mono', moods: ['futuristic', 'minimal'] },
+  { name: 'JetBrains Mono', cat: 'mono', moods: ['futuristic', 'bold'] },
+  { name: 'Fraunces', cat: 'serif', moods: ['warm', 'editorial', 'playful', 'retro'], displayOnly: true },
+  { name: 'Instrument Serif', cat: 'serif', moods: ['editorial', 'luxe', 'minimal'], displayOnly: true },
+  { name: 'Playfair Display', cat: 'serif', moods: ['luxe', 'editorial'], displayOnly: true },
+  { name: 'Cormorant Garamond', cat: 'serif', moods: ['luxe', 'editorial', 'calm'], displayOnly: true },
+  { name: 'Bricolage Grotesque', cat: 'display', moods: ['playful', 'bold', 'creator'], displayOnly: true },
+  { name: 'Outfit', cat: 'sans', moods: ['playful', 'minimal', 'creator'] },
+  { name: 'Syne', cat: 'display', moods: ['bold', 'futuristic', 'playful'], displayOnly: true },
+  { name: 'Lora', cat: 'serif', moods: ['editorial', 'warm', 'calm'] },
+  { name: 'Oswald', cat: 'display', moods: ['bold', 'retro'], displayOnly: true },
+  { name: 'EB Garamond', cat: 'serif', moods: ['luxe', 'editorial', 'calm'] },
+  { name: 'Tenor Sans', cat: 'sans', moods: ['luxe', 'editorial', 'minimal'] },
+];
+
+export interface FontTrio { name: string; bio: string; buttons: string; moods: Mood[]; score: number; }
+
+// Proven pairings. Name font may be display; bio + buttons must be non-display, non-script.
+export const TRIOS: FontTrio[] = [
+  { name: 'Cormorant Garamond', bio: 'EB Garamond', buttons: 'Tenor Sans', moods: ['luxe', 'editorial', 'calm'], score: 96 },
+  { name: 'Playfair Display', bio: 'Inter', buttons: 'Inter', moods: ['luxe', 'editorial', 'business'], score: 94 },
+  { name: 'Instrument Serif', bio: 'Geist', buttons: 'Geist', moods: ['editorial', 'minimal', 'luxe'], score: 95 },
+  { name: 'Fraunces', bio: 'DM Sans', buttons: 'DM Sans', moods: ['warm', 'editorial', 'playful'], score: 92 },
+  { name: 'Fraunces', bio: 'Lora', buttons: 'Plus Jakarta Sans', moods: ['warm', 'retro', 'editorial'], score: 88 },
+  { name: 'Bricolage Grotesque', bio: 'Inter', buttons: 'Outfit', moods: ['playful', 'creator', 'bold'], score: 91 },
+  { name: 'Syne', bio: 'DM Sans', buttons: 'Space Grotesk', moods: ['bold', 'futuristic', 'playful'], score: 89 },
+  { name: 'Space Grotesk', bio: 'Inter', buttons: 'Space Grotesk', moods: ['futuristic', 'creator', 'bold'], score: 90 },
+  { name: 'JetBrains Mono', bio: 'Geist', buttons: 'Geist Mono', moods: ['futuristic', 'minimal'], score: 87 },
+  { name: 'Geist', bio: 'Geist', buttons: 'Geist', moods: ['minimal', 'business', 'calm'], score: 93 },
+  { name: 'Inter', bio: 'Inter', buttons: 'Inter', moods: ['minimal', 'business', 'calm'], score: 90 },
+  { name: 'Plus Jakarta Sans', bio: 'DM Sans', buttons: 'Plus Jakarta Sans', moods: ['creator', 'business', 'playful'], score: 90 },
+  { name: 'Oswald', bio: 'Merriweather', buttons: 'Inter', moods: ['bold', 'retro'], score: 86 },
+  { name: 'Lora', bio: 'Lora', buttons: 'DM Sans', moods: ['editorial', 'warm', 'calm'], score: 88 },
+  { name: 'Merriweather', bio: 'Inter', buttons: 'Inter', moods: ['editorial', 'business', 'warm'], score: 85 },
+  { name: 'Outfit', bio: 'DM Sans', buttons: 'Outfit', moods: ['playful', 'minimal', 'creator'], score: 89 },
+  { name: 'Playfair Display', bio: 'EB Garamond', buttons: 'Tenor Sans', moods: ['luxe', 'editorial'], score: 93 },
+  { name: 'Cormorant Garamond', bio: 'Inter', buttons: 'DM Sans', moods: ['luxe', 'calm', 'minimal'], score: 91 },
+];
+
+
+================================================================
+// FILE: design-brain/data-styles.ts
+================================================================
+// data-styles.ts: backgrounds, button recipes, layout options (names match the Appearance UI)
+import type { Mood, UseCase } from './data-palettes';
+
+// ---------- BACKGROUND KINDS ----------
+export type BgKind = 'solid' | 'tonal' | 'soft-gradient' | 'gradient' | 'mesh' | 'aurora' | 'glass' | 'grain' | 'pattern' | 'animated';
+export interface BgRecipe {
+  kind: BgKind; label: string; moods: Mood[]; weight: number;
+  busy: boolean;          // busy => buttons forced to solid/glass
+  gradientLike: boolean;  // gradient/mesh/aurora/glass/image style
+  pro?: boolean;
+}
+export const BG_RECIPES: BgRecipe[] = [
+  { kind: 'solid', label: 'Solid & Tonal', moods: ['minimal', 'calm', 'business', 'luxe', 'editorial'], weight: 3, busy: false, gradientLike: false },
+  { kind: 'tonal', label: 'Solid & Tonal', moods: ['calm', 'warm', 'editorial', 'luxe'], weight: 3, busy: false, gradientLike: false },
+  { kind: 'soft-gradient', label: 'Soft Gradient', moods: ['calm', 'warm', 'luxe', 'editorial', 'playful', 'cool'], weight: 4, busy: false, gradientLike: true },
+  { kind: 'gradient', label: 'Gradient', moods: ['bold', 'playful', 'futuristic', 'warm'], weight: 2, busy: false, gradientLike: true },
+  { kind: 'mesh', label: 'Mesh', moods: ['playful', 'futuristic', 'creator', 'bold'], weight: 2, busy: false, gradientLike: true },
+  { kind: 'aurora', label: 'Aurora', moods: ['futuristic', 'cool', 'luxe', 'nature'], weight: 2, busy: false, gradientLike: true, pro: true },
+  { kind: 'glass', label: 'Glass', moods: ['futuristic', 'minimal', 'cool', 'luxe'], weight: 1.5, busy: false, gradientLike: true, pro: true },
+  { kind: 'grain', label: 'Grain & Texture', moods: ['retro', 'warm', 'editorial', 'calm'], weight: 2, busy: false, gradientLike: false },
+  { kind: 'pattern', label: 'Pattern', moods: ['playful', 'retro', 'bold'], weight: 1, busy: true, gradientLike: false },
+  { kind: 'animated', label: 'Animated', moods: ['futuristic', 'bold', 'playful'], weight: 1, busy: true, gradientLike: true, pro: true },
+];
+
+// ---------- BUTTON RECIPES ----------
+export type Shape = 'square' | 'rounded' | 'pill';
+export type Surface = 'solid' | 'soft-shadow' | 'soft-tint' | 'outline' | 'glass' | '3d-offset'
+  | 'gradient' | 'neon-glow' | 'metallic' | 'neumorphic' | 'underline' | 'sticker';
+export interface SurfaceRecipe {
+  surface: Surface; moods: Mood[]; weight: number;
+  needs?: { darkBg?: boolean; lightBg?: boolean; calmBg?: boolean; gradientBg?: boolean };
+  hero?: boolean;          // counts as a "loud" effect (max 1 per theme)
+  hasOwnEdge?: boolean;    // has border/shadow so low fill contrast is OK
+  allowedOnBusy?: boolean; // ok on pattern/animated backgrounds
+  pro?: boolean;
+}
+export const SURFACES: SurfaceRecipe[] = [
+  { surface: 'solid', moods: ['minimal', 'business', 'bold', 'calm', 'creator'], weight: 4, allowedOnBusy: true },
+  { surface: 'soft-shadow', moods: ['calm', 'minimal', 'warm', 'business'], weight: 3, hasOwnEdge: true },
+  { surface: 'soft-tint', moods: ['calm', 'warm', 'nature', 'playful'], weight: 3, hasOwnEdge: true },
+  { surface: 'outline', moods: ['editorial', 'minimal', 'luxe', 'cool'], weight: 3, hasOwnEdge: true },
+  { surface: 'glass', moods: ['futuristic', 'luxe', 'cool', 'minimal'], weight: 2, needs: { gradientBg: true }, hasOwnEdge: true, allowedOnBusy: true },
+  { surface: '3d-offset', moods: ['playful', 'retro', 'bold'], weight: 2, hero: true, hasOwnEdge: true },
+  { surface: 'gradient', moods: ['bold', 'playful', 'warm', 'creator'], weight: 2, hero: true },
+  { surface: 'neon-glow', moods: ['futuristic', 'bold'], weight: 1.5, needs: { darkBg: true }, hero: true, hasOwnEdge: true },
+  { surface: 'metallic', moods: ['luxe', 'bold'], weight: 1.5, needs: { darkBg: true }, hero: true, pro: true },
+  { surface: 'neumorphic', moods: ['calm', 'minimal'], weight: 1, needs: { lightBg: true, calmBg: true }, hasOwnEdge: true },
+  { surface: 'underline', moods: ['editorial', 'minimal', 'luxe'], weight: 2.5, hasOwnEdge: true },
+  { surface: 'sticker', moods: ['playful', 'retro', 'creator'], weight: 1.5, hero: true, hasOwnEdge: true },
+];
+
+export type Motion = 'none' | 'lift' | 'scale' | 'glow' | 'press';
+export const MOTIONS: { v: Motion; moods: Mood[] }[] = [
+  { v: 'none', moods: ['minimal', 'editorial', 'business'] },
+  { v: 'lift', moods: ['calm', 'warm', 'creator', 'business', 'minimal'] },
+  { v: 'scale', moods: ['playful', 'bold', 'creator'] },
+  { v: 'glow', moods: ['futuristic', 'luxe', 'bold'] },
+  { v: 'press', moods: ['retro', 'playful', 'bold'] },
+];
+
+// ---------- LAYOUT OPTIONS ----------
+export type HeaderStyle = 'centered' | 'editorial' | 'compact-row' | 'hero';
+export type AvatarFrame = 'circle' | 'squircle' | 'rounded' | 'square' | 'hexagon' | 'halo' | 'double-ring' | 'gradient-ring' | 'sticker' | 'none';
+
+export interface Opt<T> { v: T; moods: Mood[]; useCases?: UseCase[]; weight?: number; }
+export const HEADERS: Opt<HeaderStyle>[] = [
+  { v: 'centered', moods: ['calm', 'minimal', 'luxe', 'business', 'warm'], weight: 4 },
+  { v: 'editorial', moods: ['editorial', 'minimal', 'luxe'], useCases: ['artist', 'creator', 'student'], weight: 2 },
+  { v: 'compact-row', moods: ['business', 'minimal', 'futuristic'], useCases: ['developer', 'business'], weight: 2 },
+  { v: 'hero', moods: ['bold', 'playful', 'creator', 'luxe'], useCases: ['musician', 'influencer', 'artist'], weight: 2 },
+];
+export const AVATAR_FRAMES: Opt<AvatarFrame>[] = [
+  { v: 'circle', moods: ['calm', 'minimal', 'business', 'creator'], weight: 3 },
+  { v: 'squircle', moods: ['minimal', 'futuristic', 'playful'], weight: 2 },
+  { v: 'rounded', moods: ['warm', 'playful', 'calm'], weight: 2 },
+  { v: 'square', moods: ['editorial', 'bold', 'retro'], weight: 1.5 },
+  { v: 'hexagon', moods: ['futuristic', 'bold'], useCases: ['developer', 'musician'], weight: 1 },
+  { v: 'halo', moods: ['calm', 'luxe', 'warm'], weight: 2 },
+  { v: 'double-ring', moods: ['luxe', 'editorial', 'warm'], weight: 2.5 },
+  { v: 'gradient-ring', moods: ['playful', 'creator', 'futuristic', 'bold'], useCases: ['influencer', 'musician', 'creator'], weight: 2 },
+  { v: 'sticker', moods: ['playful', 'retro'], weight: 1 },
+  { v: 'none', moods: ['minimal', 'business'], weight: 0.5 },
+];
+export const AVATAR_SIZES = [72, 96, 128, 160] as const;
+export type AvatarGlow = 'none' | 'soft' | 'accent';
+export type LinkLayout = 'stack' | '2-column' | 'chips';
+export type Spacing = 'compact' | 'balanced' | 'airy';
+export type SocialIcons = 'outline' | 'filled' | 'glass';
+export type CardLook = 'match-page' | 'brand' | 'banner' | 'glass' | 'compact' | 'profile-card' | 'with-posts';
+export type Width = 'focused' | 'standard' | 'wide';
+export type Entrance = 'none' | 'fade-up' | 'stagger-scale';
+
+export const CARD_LOOKS: Opt<CardLook>[] = [
+  { v: 'match-page', moods: ['minimal', 'luxe', 'editorial', 'calm', 'business'], weight: 4 },
+  { v: 'brand', moods: ['business', 'creator', 'playful', 'bold'], weight: 2 },
+  { v: 'banner', moods: ['creator', 'bold', 'playful'], useCases: ['musician', 'influencer', 'creator'], weight: 2 },
+  { v: 'glass', moods: ['futuristic', 'luxe', 'cool'], weight: 1.5 },
+  { v: 'compact', moods: ['minimal', 'business', 'calm'], useCases: ['business', 'developer', 'student'], weight: 2 },
+  { v: 'profile-card', moods: ['business', 'creator', 'warm'], weight: 1.5 },
+  { v: 'with-posts', moods: ['creator', 'playful'], useCases: ['influencer', 'creator'], weight: 1 },
+];
+
+
+================================================================
+// FILE: design-brain/types.ts
+================================================================
+// types.ts: the Theme object the brain outputs.
+// NOTE: map this to your existing Appearance schema in adapter.ts (one function).
+import type { Hex } from './util';
+import type { Mood, UseCase } from './data-palettes';
+import type { BgKind, Shape, Surface, Motion, HeaderStyle, AvatarFrame, AvatarGlow, LinkLayout,
+  Spacing, SocialIcons, CardLook, Width, Entrance } from './data-styles';
+
+export interface GradientStop { color: Hex; pos: number }
+export interface Theme {
+  vibe: { id: string; name: string; tagline: string; moods: Mood[] };
+  page: { mode: 'light' | 'dark'; text: Hex; muted: Hex; accent: Hex; accent2: Hex; surface: Hex };
+  background: {
+    kind: BgKind; name: string; color: Hex;               // base colour (always set; worst-case fallback)
+    gradient?: { type: 'linear' | 'radial' | 'conic'; angle: number; stops: GradientStop[] };
+    grain?: number;                                         // 0..1
+  };
+  typography: { name: string; bio: string; buttons: string };
+  buttons: {
+    shape: Shape; surface: Surface; fill: Hex; fillTransparent: boolean; text: Hex; border: Hex;
+    borderWidth: 0 | 1 | 2 | 3 | 4; height: 46 | 56 | 68; shadow: 'none' | 'soft' | 'deep';
+    weight: 400 | 500 | 600 | 700; case: 'normal' | 'upper'; tracking: 'tight' | 'normal' | 'wide'; motion: Motion;
+  };
+  layout: {
+    header: HeaderStyle; avatarFrame: AvatarFrame; avatarSize: 72 | 96 | 128 | 160; avatarGlow: AvatarGlow;
+    linkLayout: LinkLayout; spacing: Spacing; socialIcons: SocialIcons; cardLook: CardLook;
+    width: Width; entrance: Entrance;
+  };
+  meta: {
+    seed: string; name: string; palette: string; moods: Mood[]; score: number; why: string;
+    contrast: { body: number; button: number; badge: 'AAA' | 'AA' | 'AA Large' | 'Fail' };
+    dots: Hex[];                                            // colour dots for suggestion cards
+  };
+}
+export interface Context {
+  seed?: string; mood?: Mood; useCase?: UseCase; plan?: 'free' | 'pro';
+  photoColors?: Hex[]; bio?: string; linkTypes?: string[];
+  locked?: Partial<Record<'vibe' | 'background' | 'typography' | 'buttons' | 'layout', boolean>>;
+  current?: Partial<Theme>;   // the user's current theme, for section suggestions + locks
+}
+
+
+================================================================
+// FILE: design-brain/build.ts
+================================================================
+// build.ts: turn a palette + RNG into concrete background / button / layout values
+import { RNG, mix, shift, contrast, readableOn, isDark, type Hex } from './util';
+import type { Palette, Mood, UseCase } from './data-palettes';
+import { BG_RECIPES, SURFACES, MOTIONS, HEADERS, AVATAR_FRAMES, CARD_LOOKS, AVATAR_SIZES,
+  type BgRecipe, type SurfaceRecipe, type Opt } from './data-styles';
+import type { Theme } from './types';
+
+const ov = (a: readonly string[], b: readonly string[]) => a.filter(x => b.includes(x)).length;
+export const weightBy = <T extends { moods: Mood[]; useCases?: UseCase[]; weight?: number }>(
+  items: readonly T[], moods: Mood[], useCase?: UseCase) =>
+  items.map(i => (i.weight ?? 1) * (0.15 + ov(i.moods, moods)) * (useCase && i.useCases?.includes(useCase) ? 1.8 : 1));
+
+/** Pull a stop toward the base colour until text stays readable on it. */
+function fixStop(c: Hex, base: Hex, text: Hex, min = 4.8): Hex {
+  let out = c;
+  for (let i = 0; i < 6 && contrast(out, text) < min; i++) out = mix(out, base, 0.5);
+  return contrast(out, text) < min ? base : out;
+}
+
+export function buildBackground(p: Palette, moods: Mood[], rng: RNG, plan: 'free' | 'pro'): Theme['background'] {
+  const pool = BG_RECIPES.filter(b => plan === 'pro' || !b.pro);
+  const r: BgRecipe = rng.weighted(pool, weightBy(pool, moods));
+  const bg = p.bg, bg2 = p.bg2, tx = p.text;
+  const angle = rng.int(120, 215), t = rng.range(0.15, 0.4);
+  const st = (c: Hex, pos: number) => ({ color: fixStop(c, bg, tx), pos });
+  const base = { kind: r.kind, name: r.label, color: bg } as Theme['background'];
+  switch (r.kind) {
+    case 'solid': return base;
+    case 'tonal': return { ...base, color: mix(bg, bg2, t) };
+    case 'soft-gradient': return { ...base, gradient: { type: 'linear', angle, stops: [st(bg, 0), st(bg2, 100)] } };
+    case 'gradient': return { ...base, gradient: { type: rng.pick(['linear', 'linear', 'radial'] as const), angle: rng.int(0, 360),
+      stops: [st(bg, 0), st(mix(bg, p.accent, rng.range(0.12, 0.25)), rng.int(40, 60)), st(bg2, 100)] } };
+    case 'mesh': return { ...base, gradient: { type: 'radial', angle: rng.int(0, 360), stops: [
+      st(mix(bg, p.accent, rng.range(0.1, 0.22)), 0), st(bg, 35), st(mix(bg, p.accent2, rng.range(0.08, 0.2)), 70), st(bg2, 100)] } };
+    case 'aurora': return { ...base, gradient: { type: 'linear', angle: rng.int(150, 210), stops: [
+      st(bg, 0), st(mix(bg, p.accent, 0.2), 35), st(mix(bg, p.accent2, 0.16), 65), st(bg2, 100)] } };
+    case 'glass': return { ...base, gradient: { type: 'linear', angle, stops: [st(mix(bg, p.surface, 0.5), 0), st(bg2, 100)] } };
+    case 'grain': return { ...base, color: mix(bg, bg2, t), grain: +rng.range(0.15, 0.45).toFixed(2) };
+    case 'pattern': return { ...base, color: bg, grain: +rng.range(0.05, 0.15).toFixed(2) };
+    case 'animated': return { ...base, gradient: { type: 'linear', angle, stops: [st(bg, 0), st(mix(bg, p.accent, 0.18), 50), st(bg2, 100)] } };
+  }
+}
+
+export function pickSurface(p: Palette, bgk: Theme['background'], moods: Mood[], rng: RNG, plan: 'free' | 'pro'): SurfaceRecipe {
+  const br = BG_RECIPES.find(b => b.kind === bgk.kind)!;
+  const dark = isDark(bgk.color);
+  const ok = SURFACES.filter(s => {
+    if (s.pro && plan === 'free') return false;
+    const n = s.needs;
+    if (n?.darkBg && !dark) return false;
+    if (n?.lightBg && dark) return false;
+    if (n?.calmBg && br.busy) return false;
+    if (n?.gradientBg && !br.gradientLike) return false;
+    if (br.busy && !s.allowedOnBusy) return false;
+    if (s.hero && bgk.kind === 'animated') return false;   // one loud effect only
+    return true;
+  });
+  return rng.weighted(ok, weightBy(ok, moods));
+}
+
+export function buildButtons(p: Palette, bgk: Theme['background'], s: SurfaceRecipe, moods: Mood[], fontCat: string, rng: RNG): Theme['buttons'] {
+  const bg = bgk.color;
+  const transparent = ['outline', 'glass', 'underline', 'neon-glow'].includes(s.surface);
+  let fill: Hex = rng.chance(0.55) ? p.accent : p.text;
+  if (s.surface === 'metallic') fill = p.accent;
+  if (s.surface === 'soft-tint') fill = mix(bg, p.accent, rng.range(0.14, 0.24));
+  if (s.surface === 'neumorphic') fill = bg;
+  if (s.surface === 'sticker' || s.surface === '3d-offset') fill = rng.chance(0.5) ? p.accent2 : p.surface;
+  if (s.surface === 'soft-shadow' || s.surface === 'solid') fill = rng.chance(0.5) ? p.text : p.accent;
+  if (transparent) fill = 'transparent' as Hex;
+  const textBase = transparent ? p.text : readableOn(fill, undefined, 7);
+  let text = transparent ? readableOn(bg, p.text, 7) : textBase;
+  if (s.surface === 'soft-tint' || s.surface === 'neumorphic') text = readableOn(fill, p.text, 7);
+
+  const edge = ({ outline: p.accent, 'neon-glow': p.accent, glass: mix(p.text, bg, 0.6), underline: p.accent,
+    sticker: p.text, '3d-offset': p.text } as Record<string, Hex>)[s.surface] ?? fill;
+  const bw = ({ outline: rng.pick([1, 2]), 'neon-glow': 1, glass: 1, underline: 0, sticker: 2, '3d-offset': 2 } as Record<string, number>)[s.surface] ?? 0;
+  const shape = rng.weighted(['square', 'rounded', 'pill'] as const, [
+    moods.some(m => ['editorial', 'retro', 'bold'].includes(m)) ? 2 : 0.6,
+    2,
+    moods.some(m => ['playful', 'creator', 'calm'].includes(m)) ? 2.2 : 0.8]);
+  const upper = moods.some(m => ['bold', 'futuristic', 'retro'].includes(m)) && rng.chance(0.3);
+  const serif = fontCat === 'serif';
+  return {
+    shape, surface: s.surface, fill, fillTransparent: transparent, text, border: edge as Hex,
+    borderWidth: bw as 0 | 1 | 2 | 3 | 4,
+    height: moods.includes('business') || moods.includes('minimal') ? rng.pick([46, 56] as const) : rng.pick([56, 56, 68] as const),
+    shadow: s.surface === 'soft-shadow' ? 'soft' : s.surface === '3d-offset' ? 'none' : moods.includes('bold') && rng.chance(0.25) ? 'deep' : 'none',
+    weight: serif ? rng.pick([400, 500] as const) : upper ? rng.pick([600, 700] as const) : rng.pick([500, 600] as const),
+    case: upper ? 'upper' : 'normal',
+    tracking: upper ? 'wide' : moods.includes('luxe') ? rng.pick(['normal', 'wide'] as const) : 'normal',
+    motion: rng.weighted(MOTIONS.map(m => m.v), weightBy(MOTIONS.map(m => ({ moods: m.moods })), moods)),
+  };
+}
+
+const pickOpt = <T>(opts: Opt<T>[], moods: Mood[], u: UseCase | undefined, rng: RNG): T =>
+  rng.weighted(opts.map(o => o.v), weightBy(opts, moods, u));
+
+export function buildLayout(p: Palette, bgk: Theme['background'], moods: Mood[], u: UseCase | undefined, hero: boolean, rng: RNG): Theme['layout'] {
+  const header = pickOpt(HEADERS, moods, u, rng);
+  const m = (...x: Mood[]) => moods.some(y => x.includes(y));
+  const gradientish = !!bgk.gradient;
+  return {
+    header,
+    avatarFrame: pickOpt(AVATAR_FRAMES, moods, u, rng),
+    avatarSize: header === 'hero' ? rng.pick([128, 160] as const) : header === 'compact-row' ? rng.pick([72, 96] as const) : rng.pick(AVATAR_SIZES.slice(1, 4)),
+    avatarGlow: hero ? 'none' : m('futuristic', 'playful') && rng.chance(0.35) ? 'accent' : m('calm', 'luxe', 'warm') && rng.chance(0.3) ? 'soft' : 'none',
+    linkLayout: rng.weighted(['stack', '2-column', 'chips'] as const, [7, m('business', 'creator') ? 1.5 : 0.5, m('minimal') ? 1.2 : 0.4]),
+    spacing: m('luxe', 'calm', 'editorial') ? rng.weighted(['balanced', 'airy'] as const, [1, 2]) : m('business', 'minimal') ? rng.weighted(['compact', 'balanced', 'airy'] as const, [1, 2, 1]) : 'balanced',
+    socialIcons: m('futuristic', 'luxe') && gradientish ? 'glass' : m('bold', 'playful') ? 'filled' : 'outline',
+    cardLook: pickOpt(CARD_LOOKS, moods, u, rng),
+    width: rng.weighted(['focused', 'standard', 'wide'] as const, [7, 2.5, 0.5]),
+    entrance: rng.weighted(['none', 'fade-up', 'stagger-scale'] as const, [1.5, 6, m('playful', 'bold') ? 2.5 : 0.8]),
+  };
+}
+export { shift };
+
+
+================================================================
+// FILE: design-brain/rules.ts
+================================================================
+// rules.ts: HARD rules (never break) + SOFT scoring (0..100)
+import { contrast, badge, isDark, luminance } from './util';
+import type { Theme } from './types';
+import { FONTS } from './data-fonts';
+import { SURFACES, BG_RECIPES } from './data-styles';
+
+const fontCat = (n: string) => FONTS.find(f => f.name === n);
+export const bgColors = (t: Theme): string[] =>
+  t.background.gradient ? t.background.gradient.stops.map(s => s.color) : [t.background.color];
+/** worst-case contrast of a colour against every background stop */
+export const worstContrast = (c: string, t: Theme) => Math.min(...bgColors(t).map(b => contrast(b, c)));
+
+export function hardViolations(t: Theme, plan: 'free' | 'pro' = 'free'): string[] {
+  const v: string[] = [];
+  const bg = t.background.kind;
+  const sr = SURFACES.find(s => s.surface === t.buttons.surface)!;
+  const br = BG_RECIPES.find(b => b.kind === bg)!;
+
+  if (worstContrast(t.page.text, t) < 4.5) v.push('page text contrast < 4.5');
+  if (worstContrast(t.page.muted, t) < 3) v.push('muted text contrast < 3');
+
+  const ownFill = !t.buttons.fillTransparent;
+  const btnBg = ownFill ? t.buttons.fill : null;
+  if (btnBg) {
+    if (contrast(btnBg, t.buttons.text) < 4.5) v.push('button text contrast < 4.5');
+    if (worstContrast(btnBg, t) < 1.5 && !sr.hasOwnEdge && t.buttons.borderWidth === 0 && t.buttons.shadow === 'none')
+      v.push('button fill blends with background');
+    if (['gradient', 'metallic'].includes(t.buttons.surface) && contrast(t.page.accent2, t.buttons.text) < 4.5)
+      v.push('gradient button end-colour contrast < 4.5');
+  } else if (worstContrast(t.buttons.text, t) < 4.5) v.push('transparent button text contrast < 4.5');
+  if (['outline', 'neon-glow', 'underline'].includes(t.buttons.surface) && worstContrast(t.buttons.border, t) < 3)
+    v.push('button border not visible (< 3:1)');
+
+  const fams = new Set([t.typography.name, t.typography.bio, t.typography.buttons]);
+  if (fams.size > 3) v.push('>3 font families');
+  for (const f of [t.typography.bio, t.typography.buttons]) {
+    const ft = fontCat(f);
+    if (!ft) v.push('unknown font ' + f);
+    else if (ft.displayOnly || ft.cat === 'script' || ft.cat === 'display') v.push(`display font "${f}" used for body/buttons`);
+  }
+  if (!fontCat(t.typography.name)) v.push('unknown name font');
+
+  const dark = isDark(t.background.color);
+  const n = sr.needs;
+  if (n?.darkBg && !dark) v.push(`${sr.surface} needs dark bg`);
+  if (n?.lightBg && dark) v.push(`${sr.surface} needs light bg`);
+  if (n?.calmBg && br.busy) v.push(`${sr.surface} needs calm bg`);
+  if (n?.gradientBg && !br.gradientLike) v.push(`${sr.surface} needs gradient-like bg`);
+  if (br.busy && !sr.allowedOnBusy) v.push('busy background needs solid/glass buttons');
+
+  if (plan === 'free') {
+    if (br.pro) v.push('pro background for free user');
+    if (sr.pro) v.push('pro button surface for free user');
+  }
+  return v;
+}
+
+const overlap = (a: string[], b: string[]) => a.filter(x => b.includes(x)).length;
+
+/** Soft score, 0..100. */
+export function score(t: Theme, trioScore: number, useCase?: string, harmony = 80): number {
+  const m = t.vibe.moods;
+  const br = BG_RECIPES.find(b => b.kind === t.background.kind)!;
+  const sr = SURFACES.find(s => s.surface === t.buttons.surface)!;
+  const nameF = FONTS.find(f => f.name === t.typography.name)!;
+  const moodHit = (xs: string[]) => Math.min(1, overlap(m, xs) / Math.min(2, m.length));
+  const moodScore = (moodHit(br.moods) + moodHit(sr.moods) + moodHit(nameF.moods)) / 3 * 100;
+  let s = 0.35 * moodScore + 0.25 * trioScore + 0.2 * harmony + 4; // +4 base consistency
+  // consistency bonuses
+  if (m.includes('editorial') && nameF.cat === 'serif') s += 3;
+  if (m.includes('editorial') && ['underline', 'outline'].includes(t.buttons.surface)) s += 2;
+  if (m.includes('futuristic') && ['mono', 'sans', 'display'].includes(nameF.cat)) s += 2;
+  if (useCase) s += 2;
+  // loud-effect penalty: max one hero effect
+  const heroes = (sr.hero ? 1 : 0) + (t.background.kind === 'animated' ? 1 : 0) + (t.layout.avatarGlow === 'accent' ? 0.5 : 0);
+  if (heroes > 1) s -= 12 * (heroes - 1);
+  // readability bonus
+  const cr = contrast(t.page.text, t.background.color);
+  if (cr >= 7) s += 3;
+  return Math.max(0, Math.min(100, Math.round(s)));
+}
+export { badge, luminance };
+
+
+================================================================
+// FILE: design-brain/generator.ts
+================================================================
+// generator.ts: generateTheme() + repair + section suggestions + regenerate
+import { RNG, mix, shift, contrast, badge, rgbToHsl, readableOn, type Hex } from './util';
+import { PALETTES, type Palette, type Mood, type UseCase } from './data-palettes';
+import { VIBES, type Vibe } from './data-vibes';
+import { FONTS, TRIOS } from './data-fonts';
+import { SURFACES } from './data-styles';
+import { buildBackground, pickSurface, buildButtons, buildLayout, weightBy } from './build';
+import { hardViolations, score, worstContrast } from './rules';
+import type { Theme, Context } from './types';
+
+export const MAX_TRIES = 24;
+const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+export type Section = 'vibe' | 'background' | 'typography' | 'buttons' | 'layout';
+const ov = (a: readonly string[], b: readonly string[]) => a.filter(x => b.includes(x)).length;
+const hueOf = (c: Hex) => rgbToHsl(c)[0];
+const hueDist = (a: Hex, b: Hex) => { const d = Math.abs(hueOf(a) - hueOf(b)) % 360; return d > 180 ? 360 - d : d; };
+
+// ---------- smart context ----------
+export function inferFromContext(ctx: Context): { moods: Mood[]; useCase?: UseCase } {
+  const moods: Mood[] = ctx.mood ? [ctx.mood] : [];
+  let useCase = ctx.useCase;
+  const lt = (ctx.linkTypes ?? []).map(x => x.toLowerCase());
+  const has = (...k: string[]) => lt.some(x => k.some(y => x.includes(y)));
+  if (!useCase) {
+    if (has('spotify', 'soundcloud', 'youtube', 'apple-music')) useCase = 'musician';
+    else if (has('github', 'gitlab', 'codepen')) useCase = 'developer';
+    else if (has('linkedin', 'calendly')) useCase = 'business';
+    else if (has('instagram', 'tiktok', 'pinterest')) useCase = 'influencer';
+    else if (has('behance', 'dribbble')) useCase = 'artist';
+  }
+  if (has('shop', 'store', 'gumroad', 'etsy', 'payment', 'coffee')) moods.push('bold');
+  const bio = (ctx.bio ?? '').toLowerCase();
+  if (/student|learn|study/.test(bio)) useCase ??= 'student';
+  if (/design|artist|illustrat|photograph/.test(bio)) useCase ??= 'artist';
+  if (/music|singer|producer|dj|rapper/.test(bio)) useCase ??= 'musician';
+  if (/developer|engineer|code|software/.test(bio)) useCase ??= 'developer';
+  return { moods, useCase };
+}
+
+function harmonyScore(p: Palette): number {
+  const d = hueDist(p.accent, p.accent2);
+  return d < 20 ? 86 : d < 60 ? 92 : d > 150 ? 90 : d > 100 ? 86 : 78;
+}
+
+function anchorPalette(ctx: Context): { palette: Palette; hueDelta: number } | null {
+  const cur = ctx.current;
+  if (!ctx.locked?.vibe || !cur?.vibe) return null;
+  const v = VIBES.find(x => x.id === cur.vibe!.id);
+  const pals = (v ? v.palettes.map(id => PALETTES.find(p => p.id === id)!) : PALETTES).filter(Boolean);
+  const acc = cur.page?.accent;
+  const palette = acc ? [...pals].sort((a, b) => hueDist(a.accent, acc) - hueDist(b.accent, acc))[0] : pals[0];
+  const hueDelta = acc ? ((hueOf(acc) - hueOf(palette.accent) + 540) % 360) - 180 : 0;
+  return { palette, hueDelta };
+}
+
+function pickVibe(rng: RNG, ctx: Context, plan: 'free' | 'pro'): Vibe {
+  const { moods, useCase } = inferFromContext(ctx);
+  const pool = VIBES.filter(v => !v.pro || plan === 'pro');
+  const photo = ctx.photoColors?.[0];
+  const w = pool.map(v => {
+    let x = 1 + ov(v.moods, moods) * 2.5;
+    if (useCase && v.useCases.includes(useCase)) x *= 2;
+    if (photo) { const p = PALETTES.find(q => q.id === v.palettes[0])!; x *= 1 + Math.max(0, 1 - hueDist(p.accent, photo) / 90); }
+    return x;
+  });
+  return rng.weighted(pool, w);
+}
+
+// ---------- repair: makes any theme pass the hard rules where possible ----------
+export function repair(t: Theme): Theme {
+  const bgs = t.background.gradient ? t.background.gradient.stops.map(s => s.color) : [t.background.color];
+  const best = (cands: Hex[], pick: (c: Hex) => number) => cands.reduce((a, b) => (pick(b) > pick(a) ? b : a));
+  const w = (c: Hex) => Math.min(...bgs.map(b => contrast(b, c)));
+  if (w(t.page.text) < 4.5) t.page.text = best([t.page.text, '#FFFFFF', '#0B0A0A'], w);
+  if (w(t.page.muted) < 3) { t.page.muted = mix(t.page.text, t.background.color, 0.3); if (w(t.page.muted) < 3) t.page.muted = t.page.text; }
+  const b = t.buttons, sr = SURFACES.find(s => s.surface === b.surface)!;
+  if (b.fillTransparent) {
+    if (w(b.text) < 4.5) b.text = best([b.text, t.page.text, '#FFFFFF', '#0B0A0A'], w);
+    if (['outline', 'neon-glow', 'underline'].includes(b.surface) && w(b.border) < 3) b.border = best([b.border, t.page.text, t.page.accent], w);
+  } else {
+    if (contrast(b.fill, b.text) < 4.5) b.text = readableOn(b.fill, t.page.text, 4.5);
+    if (['gradient', 'metallic'].includes(b.surface) && contrast(t.page.accent2, b.text) < 4.5)
+      t.page.accent2 = mix(t.page.accent2, b.fill, 0.65);
+    if (w(b.fill) < 1.5 && !sr.hasOwnEdge && b.borderWidth === 0 && b.shadow === 'none') { b.borderWidth = 1; b.border = t.page.text; }
+  }
+  return t;
+}
+
+const LABEL: Record<string, string> = { 'soft-shadow': 'Soft shadow', 'soft-tint': 'Soft tint', '3d-offset': '3D offset', 'neon-glow': 'Neon glow' };
+const cap = (s: string) => (LABEL[s] ?? s.replace(/-/g, ' ')).replace(/^./, c => c.toUpperCase());
+
+function attempt(seed: string, ctx: Context, plan: 'free' | 'pro'): Theme {
+  const rng = new RNG(seed);
+  const { useCase } = inferFromContext(ctx);
+  const anchor = anchorPalette(ctx);
+  const vibe = ctx.locked?.vibe && ctx.current?.vibe ? (VIBES.find(v => v.id === ctx.current!.vibe!.id) ?? pickVibe(rng, ctx, plan)) : pickVibe(rng, ctx, plan);
+  const palId = rng.pick(vibe.palettes);
+  let pal = anchor?.palette ?? PALETTES.find(p => p.id === palId)!;
+  if (plan === 'free' && pal.pro) pal = PALETTES.find(p => !p.pro)!;
+  const dHue = anchor ? anchor.hueDelta : rng.chance(0.65) ? rng.range(-14, 14) : 0;
+  const dL = anchor ? 0 : rng.range(-2.5, 2.5);
+  const P: Palette = { ...pal, bg: shift(pal.bg, dHue, 0, dL), bg2: shift(pal.bg2, dHue, 0, dL), surface: shift(pal.surface, dHue, 0, dL),
+    accent: shift(pal.accent, dHue), accent2: shift(pal.accent2, dHue) };
+  const moods = vibe.moods;
+
+  const background = buildBackground(P, moods, rng, plan);
+  const trio = rng.weighted(TRIOS, TRIOS.map(t => (0.2 + ov(t.moods, moods)) * (t.score / 90) ** 4));
+  const surface = pickSurface(P, background, moods, rng, plan);
+  const fontCat = FONTS.find(f => f.name === trio.buttons)?.cat ?? 'sans';
+  const buttons = buildButtons(P, background, surface, moods, fontCat, rng);
+  const layout = buildLayout(P, background, moods, useCase, !!surface.hero, rng);
+
+  const t: Theme = {
+    vibe: { id: vibe.id, name: vibe.name, tagline: vibe.tagline, moods: vibe.moods },
+    page: { mode: pal.mode, text: P.text, muted: P.muted, accent: P.accent, accent2: P.accent2, surface: P.surface },
+    background, typography: { name: trio.name, bio: trio.bio, buttons: trio.buttons }, buttons, layout,
+    meta: { seed, name: vibe.name, palette: pal.name, moods: vibe.moods, score: 0, why: '', contrast: { body: 0, button: 0, badge: 'Fail' }, dots: [] },
+  };
+  // locks: keep the user's locked sections exactly as they are
+  const L = ctx.locked, C = ctx.current;
+  if (C) {
+    if (L?.vibe && C.vibe && C.page) { t.vibe = C.vibe; t.page = { ...C.page }; }
+    if (L?.background && C.background) t.background = C.background;
+    if (L?.typography && C.typography) t.typography = C.typography;
+    if (L?.buttons && C.buttons) t.buttons = { ...C.buttons };
+    if (L?.layout && C.layout) t.layout = C.layout;
+  }
+  repair(t);
+  return finalize(t, trio.score, useCase, harmonyScore(pal));
+}
+
+function finalize(t: Theme, trioScore: number, useCase: string | undefined, harmony: number): Theme {
+  const body = worstContrast(t.page.text, t);
+  const btn = t.buttons.fillTransparent ? worstContrast(t.buttons.text, t) : contrast(t.buttons.fill, t.buttons.text);
+  t.meta.contrast = { body: +body.toFixed(1), button: +btn.toFixed(1), badge: badge(Math.min(body, btn)) };
+  t.meta.score = score(t, trioScore, useCase, harmony);
+  t.meta.dots = [t.background.color, t.page.accent, t.page.accent2, t.page.text];
+  t.meta.why = `${t.meta.palette} colours with ${t.typography.name} / ${t.typography.bio} and ${cap(t.buttons.surface).toLowerCase()} ${t.buttons.shape} buttons. ` +
+    `Text contrast ${t.meta.contrast.body}:1 (${t.meta.contrast.badge}).`;
+  return t;
+}
+
+// ---------- public API ----------
+const cache = new Map<string, Theme>();
+export function generateTheme(ctx: Context = {}): Theme {
+  const plan = ctx.plan ?? 'free';
+  const base = ctx.seed ?? Math.random().toString(36).slice(2, 10);
+  const cacheable = !ctx.current && !ctx.locked && !ctx.photoColors && !ctx.linkTypes && !ctx.bio;
+  const key = `${base}|${plan}|${ctx.mood ?? ''}|${ctx.useCase ?? ''}`;
+  if (cacheable && cache.has(key)) return clone(cache.get(key)!);
+  let bestT: Theme | null = null;
+  for (let i = 0; i < MAX_TRIES; i++) {
+    const t = attempt(`${base}:${i}`, ctx, plan);
+    if (hardViolations(t, plan).length) continue;
+    if (t.meta.score >= 80) { bestT = t; break; }
+    if (!bestT || t.meta.score > bestT.meta.score) bestT = t;
+  }
+  const out = bestT ?? repair(attempt(`${base}:fallback`, { plan }, plan));
+  out.meta.seed = base;
+  if (cacheable) { cache.set(key, out); if (cache.size > 500) cache.delete(cache.keys().next().value!); }
+  return clone(out);
+}
+
+export const signature = (t: Theme) =>
+  [t.vibe.id, t.background.kind, t.background.color, t.typography.name, t.typography.buttons, t.buttons.surface, t.buttons.shape, t.layout.header, t.layout.avatarFrame].join('|');
+
+export interface Suggestion { id: string; seed: string; section: Section | 'all'; name: string; tagline: string; badge: string; ratio: number; dots: Hex[]; score: number; why: string; patch: Partial<Theme>; }
+
+function toSuggestion(section: Section | 'all', t: Theme): Suggestion {
+  const ratio = Math.min(t.meta.contrast.body, t.meta.contrast.button);
+  const common = { id: `${section}:${t.meta.seed}`, seed: t.meta.seed, section, badge: t.meta.contrast.badge, ratio, dots: t.meta.dots, score: t.meta.score, why: t.meta.why };
+  switch (section) {
+    case 'background': return { ...common, name: `${t.meta.palette} · ${t.background.name}`, tagline: `${t.background.kind.replace(/-/g, ' ')} · ${t.background.gradient ? t.background.gradient.type + ' ' + t.background.gradient.angle + '°' : t.background.color}${t.background.grain ? ' · grain ' + t.background.grain : ''}`, patch: { background: t.background, page: t.page, buttons: t.buttons } };
+    case 'typography': return { ...common, name: `${t.typography.name} · ${t.typography.bio}`, tagline: t.vibe.moods.slice(0, 2).join(' · '), patch: { typography: t.typography, buttons: t.buttons } };
+    case 'buttons': return { ...common, name: `${cap(t.buttons.surface)} · ${cap(t.buttons.shape)}`, tagline: `${t.buttons.fillTransparent ? 'line ' + t.buttons.border : t.buttons.fill} · ${t.buttons.weight}${t.buttons.case === 'upper' ? ' · UPPER' : ''} · ${t.buttons.height}px`, patch: { buttons: t.buttons, page: t.page } };
+    case 'layout': return { ...common, name: `${cap(t.layout.header)} · ${cap(t.layout.spacing)}`, tagline: `${cap(t.layout.avatarFrame)} avatar · ${cap(t.layout.cardLook)} cards · ${t.layout.linkLayout}`, patch: { layout: t.layout } };
+    default: return { ...common, name: t.vibe.name, tagline: t.vibe.tagline, patch: t };
+  }
+}
+
+/** 5-8 ideas for ONE section, matched to the user's current choices in the other sections. */
+export function suggestSection(section: Section, ctx: Context = {}, count = 6, recent: string[] = []): { items: Suggestion[]; signatures: string[] } {
+  const all: Section[] = ['vibe', 'background', 'typography', 'buttons', 'layout'];
+  const locked = { ...(ctx.locked ?? {}) } as NonNullable<Context['locked']>;
+  if (ctx.current) for (const s of all) if (s !== section && s !== 'vibe') locked[s] = true;
+  if (ctx.current && section !== 'vibe') locked.vibe = true;
+  if (section !== 'vibe' && ctx.current) locked[section] = false;
+  if (section === 'vibe' && ctx.locked?.vibe === undefined) locked.vibe = false;
+  const items: Suggestion[] = [], sigs: string[] = [], seen = new Set(recent), seenVisible = new Set<string>();
+  const base = ctx.seed ?? Math.random().toString(36).slice(2, 8);
+  for (let n = 0; items.length < count && n < count * 16; n++) {
+    const t = generateTheme({ ...ctx, locked, seed: `${base}:${section}:${n}` });
+    const s = toSuggestion(section, t);
+    const vis = s.name + '|' + s.tagline;           // what the user actually sees on the card
+    const sg = vis + '|' + s.dots.join('');
+    if (seen.has(sg) || seenVisible.has(vis)) continue;
+    seen.add(sg); seenVisible.add(vis); sigs.push(sg); items.push(s);
+  }
+  return { items, signatures: sigs };
+}
+
+/** Refresh icon: new seed, never repeats the last 20 shown (client sends them back). */
+export function regenerate(section: Section | 'all', ctx: Context = {}, recent: string[] = []) {
+  const seed = Math.random().toString(36).slice(2, 10);
+  const r = section === 'all'
+    ? { items: Array.from({ length: 6 }, (_, i) => toSuggestion('all', generateTheme({ ...ctx, seed: `${seed}:${i}` }))), signatures: [] as string[] }
+    : suggestSection(section, { ...ctx, seed }, 6, recent.slice(-20));
+  if (section === 'all') r.signatures = r.items.map(s => s.name + '|' + s.tagline + '|' + s.dots.join(''));
+  return r;
+}
+
+
+================================================================
+// FILE: design-brain/api.ts
+================================================================
+// api.ts: framework-agnostic handlers. Wire them to Express / Next.js / Hono / Cloud Functions.
+import { generateTheme, suggestSection, regenerate, type Section } from './generator';
+import type { Context } from './types';
+import type { Mood, UseCase } from './data-palettes';
+
+const SECTIONS: Section[] = ['vibe', 'background', 'typography', 'buttons', 'layout'];
+const ok = (data: unknown) => ({ status: 200, body: data });
+const bad = (msg: string) => ({ status: 400, body: { error: msg } });
+
+/** GET /api/appearance/surprise?mood=&useCase=&seed=   (ctx comes from the logged-in user's profile) */
+export function handleSurprise(q: { mood?: string; useCase?: string; seed?: string }, ctx: Context = {}) {
+  const t = generateTheme({ ...ctx, mood: (q.mood as Mood) || ctx.mood, useCase: (q.useCase as UseCase) || ctx.useCase, seed: q.seed || ctx.seed });
+  return ok({ theme: t });
+}
+/** GET /api/appearance/suggestions?section=vibe|background|typography|buttons|layout */
+export function handleSuggestions(q: { section?: string; seed?: string; count?: string }, ctx: Context = {}) {
+  if (!SECTIONS.includes(q.section as Section)) return bad('section must be one of ' + SECTIONS.join('|'));
+  const count = Math.max(5, Math.min(8, Number(q.count) || 6));
+  return ok(suggestSection(q.section as Section, { ...ctx, seed: q.seed || ctx.seed }, count));
+}
+/** POST /api/appearance/regenerate   body: { section, recent: string[] }  (recent = last 20 signatures shown) */
+export function handleRegenerate(body: { section?: string; recent?: string[] }, ctx: Context = {}) {
+  const s = body.section === 'all' ? 'all' : (body.section as Section);
+  if (s !== 'all' && !SECTIONS.includes(s)) return bad('invalid section');
+  return ok(regenerate(s, ctx, body.recent ?? []));
+}
+
+
+================================================================
+// FILE: design-brain/adapter.ts
+================================================================
+// adapter.ts: the ONLY file you edit to match your existing Appearance schema.
+// Brain output (Theme) -> your saved appearance object, and patch merging for "apply this idea".
+import type { Theme } from './types';
+
+export function applyPatch(current: Theme, patch: Partial<Theme>): Theme {
+  return { ...current, ...patch, page: { ...current.page, ...(patch.page ?? {}) } } as Theme;
+}
+
+/** TODO: rename keys to match your Firestore/DB appearance document. Values are already in your UI's vocabulary. */
+export function toIveoAppearance(t: Theme) {
+  return {
+    vibe: { id: t.vibe.id, name: t.vibe.name, tagline: t.vibe.tagline },
+    background: t.background,          // { kind, color, gradient?, grain? }
+    typography: t.typography,          // { name, bio, buttons } font family names
+    buttons: t.buttons,                // shape, surface, fill, text, border, height, weight, case, tracking, motion...
+    layout: t.layout,                  // header, avatarFrame, avatarSize, avatarGlow, linkLayout, spacing, socialIcons, cardLook, width, entrance
+    textColors: { text: t.page.text, muted: t.page.muted, accent: t.page.accent },
+    meta: { seed: t.meta.seed, score: t.meta.score },   // store the seed so the exact theme can be regenerated/shared/undone
+  };
+}
+
+
+================================================================
+// FILE: design-brain/selftest.ts
+================================================================
+import { generateTheme, suggestSection, regenerate, signature, type Section } from './generator';
+import { hardViolations } from './rules';
+import { PALETTES } from './data-palettes';
+import { contrast } from './util';
+import { FONTS, TRIOS } from './data-fonts';
+import { VIBES } from './data-vibes';
+import type { Mood, UseCase } from './data-palettes';
+
+let fails = 0; const fail = (m: string) => { fails++; console.log('FAIL:', m); };
+
+// data sanity
+for (const p of PALETTES) if (contrast(p.bg, p.text) < 7) fail(`palette ${p.id} text/bg ${contrast(p.bg, p.text).toFixed(1)}`); 
+for (const p of PALETTES) if (contrast(p.bg2, p.text) < 4.5) fail(`palette ${p.id} text/bg2 ${contrast(p.bg2, p.text).toFixed(1)}`);
+for (const t of TRIOS) for (const f of [t.name, t.bio, t.buttons]) if (!FONTS.find(x => x.name === f)) fail('unknown font ' + f);
+for (const v of VIBES) for (const id of v.palettes) if (!PALETTES.find(p => p.id === id)) fail(`vibe ${v.id} -> missing palette ${id}`);
+
+// 1000 themes
+const moods: (Mood | undefined)[] = [undefined, 'calm', 'bold', 'luxe', 'playful', 'futuristic', 'editorial', 'minimal', 'warm', 'cool', 'nature', 'retro'];
+const uses: (UseCase | undefined)[] = [undefined, 'creator', 'musician', 'business', 'student', 'developer', 'artist', 'influencer'];
+const sigs = new Set<string>(); let low = 0, sum = 0; const byBadge: Record<string, number> = {}; const surf: Record<string, number> = {}; const bgk: Record<string, number> = {};
+const t0 = Date.now();
+for (let i = 0; i < 1000; i++) {
+  const plan = i % 2 ? 'pro' : 'free';
+  const t = generateTheme({ seed: 'test' + i, plan, mood: moods[i % moods.length], useCase: uses[i % uses.length] });
+  const v = hardViolations(t, plan); if (v.length) fail(`#${i} ${t.vibe.name}: ${v.join('; ')}`);
+  if (t.meta.score < 80) low++; sum += t.meta.score; sigs.add(signature(t));
+  byBadge[t.meta.contrast.badge] = (byBadge[t.meta.contrast.badge] ?? 0) + 1;
+  surf[t.buttons.surface] = (surf[t.buttons.surface] ?? 0) + 1; bgk[t.background.kind] = (bgk[t.background.kind] ?? 0) + 1;
+}
+console.log(`1000 themes in ${Date.now() - t0}ms | avg score ${(sum / 1000).toFixed(1)} | <80: ${low} | unique signatures: ${sigs.size}`);
+console.log('badges', byBadge); console.log('surfaces', surf); console.log('backgrounds', bgk);
+
+// determinism
+const a = JSON.stringify(generateTheme({ seed: 'same', plan: 'pro' })), b = JSON.stringify(generateTheme({ seed: 'same', plan: 'pro' }));
+if (a !== b) fail('same seed gave different themes');
+
+// free plan never gets pro stuff
+for (let i = 0; i < 300; i++) { const t = generateTheme({ seed: 'f' + i, plan: 'free' });
+  if (['aurora', 'glass', 'animated'].includes(t.background.kind) || t.buttons.surface === 'metallic') fail('pro leak ' + i); }
+
+// locks: locked sections must come back byte-identical
+const cur = generateTheme({ seed: 'current', plan: 'pro' });
+for (const sec of ['typography', 'layout', 'buttons', 'background'] as const) {
+  const locked = { [sec]: true };
+  for (let i = 0; i < 20; i++) {
+    const t = generateTheme({ seed: 'lk' + i, plan: 'pro', current: cur, locked });
+    if (JSON.stringify(t[sec]) !== JSON.stringify(cur[sec])) fail(`lock ${sec} changed (#${i})`);
+  }
+}
+// section suggestions
+for (const sec of ['vibe', 'background', 'typography', 'buttons', 'layout'] as Section[]) {
+  const r = suggestSection(sec, { seed: 's1', plan: 'pro', current: cur }, 6);
+  if (r.items.length < 5) fail(`${sec}: only ${r.items.length} suggestions`);
+  const names = new Set(r.items.map(x => x.name + '|' + x.tagline)); if (names.size !== r.items.length) fail(`${sec}: duplicates`);
+  // applying patch to current must still pass hard rules
+  for (const s of r.items) { const merged = { ...cur, ...s.patch, page: { ...cur.page, ...(s.patch.page ?? {}) } } as typeof cur;
+    const v = hardViolations(merged, 'pro'); if (v.length) fail(`${sec} patch breaks rules: ${v.join('; ')}`); }
+  if (sec !== 'vibe' && sec !== 'background' && r.items.some(x => x.patch.vibe)) fail(`${sec} changed vibe`);
+}
+// regenerate: no repeats vs last 20
+let recent: string[] = []; let rep = 0;
+for (let i = 0; i < 6; i++) { const r = regenerate('background', { plan: 'pro', current: cur }, recent); for (const s of r.signatures) { if (recent.slice(-20).includes(s)) rep++; } recent = recent.concat(r.signatures); }
+if (rep) fail(`regenerate repeated ${rep} items within last 20`);
+
+console.log(fails ? `\n${fails} FAILURES` : '\nALL CHECKS PASSED');
+const ex = generateTheme({ seed: 'demo', plan: 'free', mood: 'luxe' });
+console.log('\nExample:', ex.meta.name, '·', ex.vibe.tagline, '| score', ex.meta.score, '\n', ex.meta.why);
+process.exit(fails ? 1 : 0);
+
+
+================================================================
+// FILE: design-brain/preview.ts
+================================================================
+// preview.ts: renders N generated themes to a static HTML grid (dev page). Run: node preview.js > preview.html
+import { generateTheme } from './generator';
+import type { Theme } from './types';
+
+const bgCss = (t: Theme) => {
+  const g = t.background.gradient;
+  if (!g) return t.background.color;
+  const stops = g.stops.map(s => `${s.color} ${s.pos}%`).join(',');
+  return g.type === 'linear' ? `linear-gradient(${g.angle}deg,${stops})` : g.type === 'radial' ? `radial-gradient(circle at 30% 20%,${stops})` : `conic-gradient(from ${g.angle}deg,${stops})`;
+};
+const radius = (s: string) => (s === 'pill' ? 999 : s === 'rounded' ? 14 : 2);
+function btn(t: Theme, label: string) {
+  const b = t.buttons, r = radius(b.shape); const tr = b.fillTransparent;
+  const base = `font-family:'${t.typography.buttons}';font-weight:${b.weight};letter-spacing:${b.tracking === 'wide' ? '.08em' : b.tracking === 'tight' ? '-.01em' : '0'};text-transform:${b.case === 'upper' ? 'uppercase' : 'none'};height:${Math.round(b.height * .62)}px;border-radius:${r}px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;font-size:13px;color:${b.text};`;
+  let st = '';
+  switch (b.surface) {
+    case 'outline': st = `background:transparent;border:${b.borderWidth}px solid ${b.border}`; break;
+    case 'underline': st = `background:transparent;border-bottom:1.5px solid ${b.border};border-radius:0`; break;
+    case 'glass': st = `background:rgba(255,255,255,.12);border:1px solid ${b.border};backdrop-filter:blur(8px)`; break;
+    case 'neon-glow': st = `background:transparent;border:1px solid ${b.border};box-shadow:0 0 14px ${b.border}`; break;
+    case 'gradient': st = `background:linear-gradient(90deg,${b.fill},${t.page.accent2})`; break;
+    case 'metallic': st = `background:linear-gradient(110deg,${b.fill},${t.page.accent2},${b.fill})`; break;
+    case '3d-offset': st = `background:${b.fill};border:2px solid ${b.border};box-shadow:3px 3px 0 ${b.border}`; break;
+    case 'sticker': st = `background:${b.fill};border:2px solid ${b.border};transform:rotate(-1deg)`; break;
+    case 'neumorphic': st = `background:${b.fill};box-shadow:4px 4px 8px rgba(0,0,0,.15),-4px -4px 8px rgba(255,255,255,.6)`; break;
+    case 'soft-shadow': st = `background:${b.fill};box-shadow:0 6px 16px rgba(0,0,0,.25)`; break;
+    default: st = `background:${b.fill};${b.borderWidth ? `border:${b.borderWidth}px solid ${b.border}` : ''}`;
+  }
+  return `<div style="${base}${st}">${label}</div>`;
+}
+const card = (t: Theme) => `<div style="width:230px;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.15)">
+<div style="background:${bgCss(t)};padding:18px 14px;color:${t.page.text}">
+<div style="width:46px;height:46px;border-radius:${t.layout.avatarFrame === 'square' ? 3 : 50}%;background:${t.page.accent};margin:0 auto 8px;${t.layout.avatarFrame.includes('ring') ? `outline:2px solid ${t.page.text};outline-offset:2px` : ''}"></div>
+<div style="font:600 18px '${t.typography.name}';text-align:center">Arjun Bharti Mina</div>
+<div style="font:12px '${t.typography.bio}';text-align:center;color:${t.page.muted};margin:3px 0 12px">Just a student. Explore projects &amp; links.</div>
+${btn(t, 'Listen on Spotify')}${btn(t, 'Folded Page')}${btn(t, 'Support with a Coffee')}</div>
+<div style="font:11px system-ui;padding:6px 10px;background:#fff;color:#333">${t.vibe.name} · ${t.meta.score} · ${t.meta.contrast.badge} · ${t.buttons.surface}/${t.background.kind}</div></div>`;
+
+const fonts = ['Cormorant Garamond', 'EB Garamond', 'Tenor Sans', 'Playfair Display', 'Inter', 'Instrument Serif', 'Geist', 'Fraunces', 'DM Sans', 'Lora', 'Plus Jakarta Sans', 'Bricolage Grotesque', 'Outfit', 'Syne', 'Space Grotesk', 'JetBrains Mono', 'Oswald', 'Merriweather'];
+const link = `https://fonts.googleapis.com/css2?${fonts.map(f => 'family=' + f.replace(/ /g, '+')).join('&')}&display=swap`;
+const themes = Array.from({ length: 24 }, (_, i) => generateTheme({ seed: 'dev' + i, plan: 'pro' }));
+console.log(`<!doctype html><meta charset=utf-8><link href="${link}" rel=stylesheet><body style="margin:0;padding:16px;background:#eee;display:flex;flex-wrap:wrap;gap:14px">${themes.map(card).join('')}`);
