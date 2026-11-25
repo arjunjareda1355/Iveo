@@ -404,6 +404,17 @@ const DashboardContent: React.FC = () => {
 
 export const DashboardPage: React.FC = () => {
   const session = useIvioSession();
+  const isDemo =
+    typeof window !== 'undefined' &&
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('demo') === '1' || params.get('autostart') === '1';
+    })();
+
+  if (!session.isLoaded && !isDemo) {
+    return null;
+  }
+
   const userId = session.username || 'owner';
 
   return (

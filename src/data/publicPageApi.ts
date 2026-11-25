@@ -226,7 +226,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       const cleanBlocksSnap = await getDocs(collection(db, 'users', clean, 'blocks'));
       if (!cleanBlocksSnap.empty) {
         rawBlocks = cleanBlocksSnap.docs.map((d) => d.data());
-      } else {
+      } else if (fbData.blocksInitialized !== true) {
         const altKey = blockOwnerKey !== clean ? blockOwnerKey : (fbData.userId && fbData.userId !== clean ? String(fbData.userId) : '');
         if (altKey && altKey !== 'owner') {
           const uidBlocksSnap = await getDocs(collection(db, 'users', altKey, 'blocks'));

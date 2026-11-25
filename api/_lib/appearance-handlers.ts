@@ -789,8 +789,14 @@ export async function handleGetAppearance(req: ExpressReq, res: ExpressRes) {
   ]);
 
   const prof = localState.profile || actor.profile;
-  const rawAppearance =
-    prof?.appearance?.schemaVersion === 2
+  const localUpdatedAt = prof?.updatedAt || '';
+  const fbUpdatedAt = (fbState as any)?.updatedAt || '';
+  const useFbAppearance =
+    fbState?.appearance?.schemaVersion === 2 &&
+    (prof?.appearance?.schemaVersion !== 2 || fbUpdatedAt > localUpdatedAt);
+  const rawAppearance = useFbAppearance
+    ? fbState!.appearance
+    : prof?.appearance?.schemaVersion === 2
       ? prof.appearance
       : fbState?.appearance?.schemaVersion === 2
         ? fbState.appearance
@@ -810,7 +816,10 @@ export async function handleGetAppearance(req: ExpressReq, res: ExpressRes) {
   const resolved = resolveTokens(appearance, { isPro: actor.isPro });
   const warnings = computeAppearanceWarnings(resolved, appearance);
   const themes = (localState.themes?.length ? localState.themes : fbState?.themes) || [];
-  const history = localState.history || fbState?.history || { undoStack: [], redoStack: [] };
+  const history =
+    (localState.history?.undoStack?.length || localState.history?.redoStack?.length)
+      ? localState.history
+      : fbState?.history || localState.history || { undoStack: [], redoStack: [] };
 
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   return res.status(200).json({
@@ -1076,10 +1085,18 @@ export async function handleListThemes(req: ExpressReq, res: ExpressRes) {
     return res.status(actor.status).json({ error: actor.error, message: actor.message });
   }
   const state = await dbReadAppearanceState(actor.username);
+  let themes = state.themes || [];
+  if (themes.length === 0) {
+    const fbState = await withTimeout(firebaseGetAppearanceState(actor.username), null);
+    if (fbState?.themes && fbState.themes.length > 0) {
+      themes = fbState.themes;
+      await dbWriteAppearanceState(actor.username, () => ({ nextThemes: themes, result: true })).catch(() => {});
+    }
+  }
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   return res.status(200).json({
     ok: true,
-    themes: state.themes || [],
+    themes,
     limit: THEME_LIMITS[actor.isPro ? 'pro' : 'free'],
   });
 }
@@ -1172,7 +1189,13 @@ export async function handleRenameTheme(req: ExpressReq, res: ExpressRes) {
   }
 
   const state = await dbReadAppearanceState(actor.username);
-  const themes: ThemePreset[] = Array.isArray(state.themes) ? [...state.themes] : [];
+  let themes: ThemePreset[] = Array.isArray(state.themes) ? [...state.themes] : [];
+  if (themes.length === 0) {
+    const fbState = await withTimeout(firebaseGetAppearanceState(actor.username), null);
+    if (fbState?.themes && fbState.themes.length > 0) {
+      themes = [...fbState.themes];
+    }
+  }
   const idx = themes.findIndex((t) => t.id === id);
   if (idx === -1) {
     return res.status(404).json({ error: 'theme_not_found', message: 'Theme not found.' });
@@ -1198,7 +1221,15 @@ export async function handleApplyTheme(req: ExpressReq, res: ExpressRes) {
   }
   const id = String(req.params?.id || req.query?.id || '').trim();
   const state = await dbReadAppearanceState(actor.username);
-  const theme = (state.themes || []).find((t: ThemePreset) => t.id === id);
+  let availableThemes = Array.isArray(state.themes) ? state.themes : [];
+  if (availableThemes.length === 0) {
+    const fbState = await withTimeout(firebaseGetAppearanceState(actor.username), null);
+    if (fbState?.themes && fbState.themes.length > 0) {
+      availableThemes = fbState.themes;
+      await dbWriteAppearanceState(actor.username, () => ({ nextThemes: availableThemes, result: true })).catch(() => {});
+    }
+  }
+  const theme = availableThemes.find((t: ThemePreset) => t.id === id);
   if (!theme) {
     return res.status(404).json({ error: 'theme_not_found', message: 'Theme not found.' });
   }
@@ -1251,7 +1282,13 @@ export async function handleDeleteTheme(req: ExpressReq, res: ExpressRes) {
   }
   const id = String(req.params?.id || req.query?.id || '').trim();
   const state = await dbReadAppearanceState(actor.username);
-  const existing = Array.isArray(state.themes) ? state.themes : [];
+  let existing = Array.isArray(state.themes) ? state.themes : [];
+  if (existing.length === 0) {
+    const fbState = await withTimeout(firebaseGetAppearanceState(actor.username), null);
+    if (fbState?.themes && fbState.themes.length > 0) {
+      existing = fbState.themes;
+    }
+  }
   const nextThemes = existing.filter((t: ThemePreset) => t.id !== id);
   if (nextThemes.length === existing.length) {
     return res.status(404).json({ error: 'theme_not_found', message: 'Theme not found.' });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth, useUser, useClerk } from '@clerk/react';
 import { HAS_CLERK_KEY } from '../lib/env';
 import { VibeId } from '../lib/vibes';
@@ -22,7 +22,6 @@ import {
   type SubscriptionRecord,
 } from '../lib/plan';
 import { getSubdomainFromHostname } from '../lib/site';
-import { syncProfileToFirebase } from '../lib/firebaseSync';
 import type { Appearance } from '../lib/appearance/types';
 import { migrateLegacyProfileToAppearanceV2 } from '../lib/appearance/migrate';
 
@@ -158,9 +157,11 @@ function useClerkSession(): IveoSession {
   const syncQueueRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSyncDoneRef = useRef(false);
   const pendingPatchRef = useRef<Record<string, any>>({});
+  const pendingClerkPatchRef = useRef<Record<string, any>>({});
   const pendingWaitersRef = useRef<Array<{ resolve: () => void; reject: (err: unknown) => void }>>([]);
   const inFlightSyncRef = useRef<Promise<void>>(Promise.resolve());
   const latestSnapshotRef = useRef<Record<string, any>>({});
+  const flushSyncRef = useRef<(() => void) | null>(null);
 
   const refreshServerProfile = useCallback(async () => {
     if (!activeUser?.id) return;
@@ -188,6 +189,17 @@ function useClerkSession(): IveoSession {
     };
     window.addEventListener('iveo-server-profile-sync', onSync);
     return () => window.removeEventListener('iveo-server-profile-sync', onSync);
+  }, []);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      flushSyncRef.current?.();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      flushSyncRef.current?.();
+    };
   }, []);
 
   // Fetch claimed profile from database (with 5s timeout & direct Firestore fallback) whenever activeUser loads
@@ -463,12 +475,14 @@ function useClerkSession(): IveoSession {
     isPro,
     hideFooter,
     meta,
+    ...pendingPatchRef.current,
   };
 
-  const syncToServer = async (payload: Record<string, unknown>): Promise<string | null> => {
+  const syncToServer = async (payload: Record<string, unknown>, keepalive = false): Promise<string | null> => {
     if (!activeUser?.id) return null;
     const res = await fetch('/api/profile', {
       method: 'POST',
+      keepalive,
       headers: {
         'Content-Type': 'application/json',
         'x-user-id': activeUser.id,
@@ -714,7 +728,7 @@ function useClerkSession(): IveoSession {
     const { plan: _ignoredPlan, ...safePatch } = patch as any;
     const optimisticUpdatedAt = new Date().toISOString();
 
-    // 1. Synchronously merge into accumulated patch & latest snapshot so rapid clicks never lose prior edits
+    // 1. Synchronously merge into accumulated delta patch & snapshot so rapid clicks never lose prior edits
     pendingPatchRef.current = {
       ...pendingPatchRef.current,
       ...safePatch,
@@ -741,33 +755,31 @@ function useClerkSession(): IveoSession {
       );
     }
 
-    const baseMeta = (
-      currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
-        ? currentUser.unsafeMetadata
-        : {}
-    ) as Record<string, unknown>;
-    const mergedMeta = {
-      ...baseMeta,
-      ...pendingPatchRef.current,
+    // Keep Clerk unsafeMetadata well under its 8KB limit
+    const sanitizeForClerk = (rawObj: Record<string, any>): Record<string, unknown> => {
+      const cleaned: Record<string, unknown> = { ...rawObj };
+      delete cleaned.avatarData;
+      delete cleaned.appearance;
+      if (typeof cleaned.avatarUrl === 'string' && cleaned.avatarUrl.startsWith('data:')) {
+        delete cleaned.avatarUrl;
+      }
+      if (cleaned.background && typeof cleaned.background === 'object') {
+        const bgObj = cleaned.background as Record<string, any>;
+        cleaned.background = {
+          type: bgObj.type,
+          presetId: bgObj.presetId,
+          ...(typeof bgObj.value === 'string' && !bgObj.value.startsWith('data:') && bgObj.value.length <= 240
+            ? { value: bgObj.value }
+            : {}),
+        };
+      }
+      return cleaned;
     };
-
-    // Keep Clerk unsafeMetadata well under its 8KB limit (strip binary data URLs, appearance JSON & large background values; full config lives in DB/Firebase)
-    const clerkMerged: Record<string, unknown> = { ...mergedMeta };
-    delete clerkMerged.avatarData;
-    delete clerkMerged.appearance;
-    if (typeof clerkMerged.avatarUrl === 'string' && clerkMerged.avatarUrl.startsWith('data:')) {
-      delete clerkMerged.avatarUrl;
-    }
-    if (clerkMerged.background && typeof clerkMerged.background === 'object') {
-      const bgObj = clerkMerged.background as Record<string, any>;
-      clerkMerged.background = {
-        type: bgObj.type,
-        presetId: bgObj.presetId,
-        ...(typeof bgObj.value === 'string' && !bgObj.value.startsWith('data:') && bgObj.value.length <= 240
-          ? { value: bgObj.value }
-          : {}),
-      };
-    }
+    pendingClerkPatchRef.current = {
+      ...pendingClerkPatchRef.current,
+      ...sanitizeForClerk(safePatch),
+      updatedAt: optimisticUpdatedAt,
+    };
 
     if (safePatch.onboardingComplete) {
       try {
@@ -785,9 +797,11 @@ function useClerkSession(): IveoSession {
     const nextAppearance = mergedSnap.appearance !== undefined ? mergedSnap.appearance : rawAppearance;
 
     const nextHideFooter =
-      mergedMeta.hideIveoFooter !== undefined
-        ? Boolean(mergedMeta.hideIveoFooter)
-        : (mergedMeta.hideIvioFooter !== undefined ? Boolean(mergedMeta.hideIvioFooter) : mergedSnap.hideFooter);
+      safePatch.hideIveoFooter !== undefined
+        ? Boolean(safePatch.hideIveoFooter)
+        : (safePatch.hideIvioFooter !== undefined
+            ? Boolean(safePatch.hideIvioFooter)
+            : (mergedSnap.hideFooter ?? hideFooter));
 
     if (activeUsername) {
       try {
@@ -827,98 +841,117 @@ function useClerkSession(): IveoSession {
       } catch {}
     }
 
+    const executeFlush = (keepalive = false) => {
+      if (syncQueueRef.current) {
+        clearTimeout(syncQueueRef.current);
+        syncQueueRef.current = null;
+      }
+      const accumulated = { ...pendingPatchRef.current };
+      const clerkDelta = { ...pendingClerkPatchRef.current };
+      const waiters = pendingWaitersRef.current;
+      if (Object.keys(accumulated).length === 0 && waiters.length === 0) {
+        return;
+      }
+      pendingPatchRef.current = {};
+      pendingClerkPatchRef.current = {};
+      pendingWaitersRef.current = [];
+
+      const latest = latestSnapshotRef.current || {};
+      const targetUsername = latest.username || username;
+      const baseClerkMeta = (
+        currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object'
+          ? currentUser.unsafeMetadata
+          : {}
+      ) as Record<string, unknown>;
+      const clerkSnapshot = {
+        ...baseClerkMeta,
+        ...clerkDelta,
+      };
+
+      const runSync = async () => {
+        try {
+          await currentUser
+            .update({ unsafeMetadata: clerkSnapshot })
+            .catch((metaErr) => console.warn('Clerk metadata update note:', metaErr));
+
+          if (targetUsername) {
+            const deltaPayload: Record<string, unknown> = {
+              username: targetUsername,
+              createdAt: createdAtIso,
+              primaryEmail,
+              plan: isPro ? 'pro' : plan,
+            };
+            const copyIfPresent = (key: string, destKey = key) => {
+              if (accumulated[key] !== undefined) {
+                deltaPayload[destKey] = accumulated[key];
+              }
+            };
+            copyIfPresent('displayName');
+            copyIfPresent('bio');
+            copyIfPresent('avatarUrl');
+            copyIfPresent('avatarType');
+            copyIfPresent('avatarId');
+            copyIfPresent('vibeId');
+            copyIfPresent('buttonShape');
+            copyIfPresent('socials');
+            copyIfPresent('socialsPosition');
+            copyIfPresent('background');
+            copyIfPresent('googleAnalyticsId');
+            copyIfPresent('metaPixelId');
+            copyIfPresent('whatsappNumber');
+            copyIfPresent('customSeoTitle');
+            copyIfPresent('customSeoDescription');
+            copyIfPresent('fontSettings');
+            copyIfPresent('buttonColors');
+            copyIfPresent('layoutSettings');
+            copyIfPresent('businessCard');
+            copyIfPresent('appearance');
+            copyIfPresent('status');
+            copyIfPresent('isPublished');
+            copyIfPresent('hideFromSearch');
+            if (accumulated.hideIveoFooter !== undefined || accumulated.hideIvioFooter !== undefined) {
+              deltaPayload.hideFooter = Boolean(accumulated.hideIveoFooter ?? accumulated.hideIvioFooter);
+            }
+
+            const confirmedUpdatedAt = (await syncToServer(deltaPayload, keepalive)) || optimisticUpdatedAt;
+            latestSnapshotRef.current = {
+              ...(latestSnapshotRef.current || {}),
+              updatedAt: confirmedUpdatedAt,
+            };
+            setServerProfile((prev: any) =>
+              prev ? { ...prev, updatedAt: confirmedUpdatedAt } : prev
+            );
+
+            try {
+              const rawLocal = localStorage.getItem(`iveo_profile_${targetUsername}`) || '{}';
+              const parsedLocal = JSON.parse(rawLocal);
+              localStorage.setItem(
+                `iveo_profile_${targetUsername}`,
+                JSON.stringify({ ...parsedLocal, updatedAt: confirmedUpdatedAt })
+              );
+            } catch {}
+
+            broadcastProfileSync(targetUsername, 'profile', confirmedUpdatedAt);
+          }
+
+          waiters.forEach((w) => w.resolve());
+        } catch (err) {
+          waiters.forEach((w) => w.reject(err));
+        }
+      };
+
+      inFlightSyncRef.current = inFlightSyncRef.current.then(runSync, runSync);
+    };
+
+    flushSyncRef.current = () => executeFlush(true);
+
     // Coalesce rapid updates (60ms debounce) with strict FIFO async serialization and real awaited completion
     return new Promise<void>((resolve, reject) => {
       pendingWaitersRef.current.push({ resolve, reject });
-
       if (syncQueueRef.current) {
         clearTimeout(syncQueueRef.current);
       }
-      syncQueueRef.current = setTimeout(() => {
-        syncQueueRef.current = null;
-        const latest = latestSnapshotRef.current || {};
-        const accumulated = { ...pendingPatchRef.current };
-        const waiters = pendingWaitersRef.current;
-        pendingPatchRef.current = {};
-        pendingWaitersRef.current = [];
-
-        const targetUsername = latest.username || username;
-        const clerkSnapshot = {
-          ...((currentUser.unsafeMetadata && typeof currentUser.unsafeMetadata === 'object' ? currentUser.unsafeMetadata : {}) as Record<string, unknown>),
-          ...clerkMerged,
-        };
-
-        const runSync = async () => {
-          try {
-            await currentUser
-              .update({ unsafeMetadata: clerkSnapshot })
-              .catch((metaErr) => console.warn('Clerk metadata update note:', metaErr));
-
-            if (targetUsername) {
-              const syncPayload: Record<string, unknown> = {
-                username: targetUsername,
-                displayName: latest.displayName ?? displayName,
-                bio: latest.bio ?? bio,
-                avatarUrl: latest.avatarUrl !== undefined ? latest.avatarUrl : (latest.imageUrl ?? imageUrl),
-                avatarType: latest.avatarType || (latest.avatarId ? 'default' : (latest.avatarUrl ? 'uploaded' : 'default')),
-                avatarId: latest.avatarId || null,
-                vibeId: latest.vibeId || preferences.vibeId,
-                buttonShape: latest.buttonShape !== undefined ? latest.buttonShape : buttonShape,
-                socials: latest.socials !== undefined ? latest.socials : socials,
-                socialsPosition: (latest.socialsPosition as any) || socialsPosition || 'top',
-                background: latest.background !== undefined ? latest.background : effectiveBackground,
-                googleAnalyticsId: latest.googleAnalyticsId !== undefined ? latest.googleAnalyticsId : googleAnalyticsId,
-                metaPixelId: latest.metaPixelId !== undefined ? latest.metaPixelId : metaPixelId,
-                whatsappNumber: latest.whatsappNumber !== undefined ? latest.whatsappNumber : whatsappNumber,
-                customSeoTitle: latest.customSeoTitle !== undefined ? latest.customSeoTitle : customSeoTitle,
-                customSeoDescription: latest.customSeoDescription !== undefined ? latest.customSeoDescription : customSeoDescription,
-                fontSettings: latest.fontSettings !== undefined ? latest.fontSettings : fontSettings,
-                buttonColors: latest.buttonColors !== undefined ? latest.buttonColors : buttonColors,
-                layoutSettings: latest.layoutSettings !== undefined ? latest.layoutSettings : layoutSettings,
-                businessCard: latest.businessCard !== undefined ? latest.businessCard : businessCard,
-                ...(latest.appearance !== undefined ? { appearance: latest.appearance } : {}),
-                createdAt: createdAtIso,
-                primaryEmail,
-                plan: isPro ? 'pro' : plan,
-                hideFooter:
-                  accumulated.hideIveoFooter !== undefined
-                    ? Boolean(accumulated.hideIveoFooter)
-                    : (accumulated.hideIvioFooter !== undefined ? Boolean(accumulated.hideIvioFooter) : (latest.hideFooter ?? hideFooter)),
-              };
-              const confirmedUpdatedAt = (await syncToServer(syncPayload)) || optimisticUpdatedAt;
-              latestSnapshotRef.current = {
-                ...(latestSnapshotRef.current || {}),
-                updatedAt: confirmedUpdatedAt,
-              };
-              setServerProfile((prev: any) =>
-                prev ? { ...prev, updatedAt: confirmedUpdatedAt } : prev
-              );
-              await syncProfileToFirebase(targetUsername || currentUser.id, {
-                ...syncPayload,
-                userId: currentUser.id,
-                updatedAt: confirmedUpdatedAt,
-              }).catch(() => {});
-
-              try {
-                const rawLocal = localStorage.getItem(`iveo_profile_${targetUsername}`) || '{}';
-                const parsedLocal = JSON.parse(rawLocal);
-                localStorage.setItem(
-                  `iveo_profile_${targetUsername}`,
-                  JSON.stringify({ ...parsedLocal, updatedAt: confirmedUpdatedAt })
-                );
-              } catch {}
-
-              broadcastProfileSync(targetUsername, 'profile', confirmedUpdatedAt);
-            }
-
-            waiters.forEach((w) => w.resolve());
-          } catch (err) {
-            waiters.forEach((w) => w.reject(err));
-          }
-        };
-
-        inFlightSyncRef.current = inFlightSyncRef.current.then(runSync, runSync);
-      }, 60);
+      syncQueueRef.current = setTimeout(() => executeFlush(false), 60);
     });
   };
 
@@ -1223,7 +1256,22 @@ function useDemoSession(): IveoSession {
   };
 }
 
-export function useIveoSession(): IveoSession {
+const IveoSessionContext = createContext<IveoSession | null>(null);
+
+const DemoSessionProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const session = useDemoSession();
+  return React.createElement(IveoSessionContext.Provider, { value: session }, children);
+};
+
+const ClerkSessionProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const session = useClerkSession();
+  return React.createElement(IveoSessionContext.Provider, { value: session }, children);
+};
+
+const FallbackSessionProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+  React.createElement(IveoSessionContext.Provider, { value: FALLBACK_SESSION }, children);
+
+export const IveoSessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isDemo =
     typeof window !== 'undefined' &&
     (() => {
@@ -1231,6 +1279,29 @@ export function useIveoSession(): IveoSession {
       return params.get('demo') === '1' || params.get('autostart') === '1';
     })();
 
+  if (isDemo) {
+    return React.createElement(DemoSessionProviderInner, null, children);
+  }
+  if (HAS_CLERK_KEY) {
+    return React.createElement(ClerkSessionProviderInner, null, children);
+  }
+  return React.createElement(FallbackSessionProviderInner, null, children);
+};
+
+export function useIveoSession(): IveoSession {
+  const ctx = useContext(IveoSessionContext);
+  if (ctx) {
+    return ctx;
+  }
+
+  const isDemo =
+    typeof window !== 'undefined' &&
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('demo') === '1' || params.get('autostart') === '1';
+    })();
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const demoSession = useDemoSession();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const clerkSession = HAS_CLERK_KEY ? useClerkSession() : FALLBACK_SESSION;

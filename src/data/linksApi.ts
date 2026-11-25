@@ -88,12 +88,14 @@ export interface UpdateBlockInput {
   position?: number;
 }
 
-// Memory / LocalStorage store fallback for when Supabase credentials are not connected
 function getLocalBlocks(userId: string): Block[] {
+  const cleanId = (userId || 'owner').trim().toLowerCase();
   try {
     const raw =
       localStorage.getItem(`iveo_blocks_${userId}`) ||
-      localStorage.getItem(`ivio_blocks_${userId}`);
+      localStorage.getItem(`iveo_blocks_${cleanId}`) ||
+      localStorage.getItem(`ivio_blocks_${userId}`) ||
+      localStorage.getItem(`ivio_blocks_${cleanId}`);
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
@@ -111,50 +113,64 @@ export async function syncBlocksToServer(
   auth?: BlockAuthContext
 ): Promise<void> {
   if (auth?.isDemo) return;
-  const clean = (userId || '').trim().toLowerCase();
+  const clean = (userId || '').replace(/^@+/, '').trim().toLowerCase();
   if (!clean) return;
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (auth?.ownerUserId) headers['x-user-id'] = auth.ownerUserId;
   if (auth?.primaryEmail) headers['x-user-email'] = auth.primaryEmail;
 
-  try {
-    const res = await fetch('/api/blocks', {
-      method: 'POST',
-      headers,
-      keepalive: true,
-      body: JSON.stringify({
-        username: clean,
-        blocks,
-        userId: auth?.ownerUserId || undefined,
-        primaryEmail: auth?.primaryEmail || undefined,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`sync_failed_${res.status}`);
-    }
+  const res = await fetch('/api/blocks', {
+    method: 'POST',
+    headers,
+    keepalive: true,
+    body: JSON.stringify({
+      username: clean,
+      blocks,
+      userId: auth?.ownerUserId || undefined,
+      primaryEmail: auth?.primaryEmail || undefined,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`sync_failed_${res.status}`);
+  }
 
-    // If current username in localStorage is different from userId (e.g. user set their handle), sync for that handle as well
+  // If userId was still 'owner' while username existed in localStorage, mirror once
+  try {
     const currentUsername = localStorage.getItem('iveo_current_username');
-    if (currentUsername && currentUsername.toLowerCase() !== clean && clean === 'owner') {
-      await fetch('/api/blocks', {
+    const cleanCurrent = currentUsername ? currentUsername.replace(/^@+/, '').toLowerCase().trim() : '';
+    if (cleanCurrent && cleanCurrent !== clean && clean === 'owner') {
+      const mirrorRes = await fetch('/api/blocks', {
         method: 'POST',
         headers,
         keepalive: true,
         body: JSON.stringify({
-          username: currentUsername.toLowerCase(),
+          username: cleanCurrent,
           blocks,
           userId: auth?.ownerUserId || undefined,
           primaryEmail: auth?.primaryEmail || undefined,
         }),
       });
+      if (!mirrorRes.ok) {
+        throw new Error(`sync_failed_${mirrorRes.status}`);
+      }
     }
   } catch (err) {
-    throw err;
+    if (err instanceof Error && err.message.startsWith('sync_failed_')) {
+      throw err;
+    }
   }
 }
 
+interface PendingDebouncedSync {
+  userId: string;
+  blocks: Block[];
+  auth?: BlockAuthContext;
+  waiters: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
+}
+
 const blockSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingBlockSyncs = new Map<string, PendingDebouncedSync>();
 const blockSyncChains = new Map<string, Promise<void>>();
 
 function persistLocalStorageBlocks(userId: string, blocks: Block[]): void {
@@ -189,6 +205,49 @@ function notifyBlockSync(userId: string) {
   } catch {}
 }
 
+function enqueueServerBlockWrite(
+  key: string,
+  userId: string,
+  blocks: Block[],
+  auth?: BlockAuthContext
+): Promise<void> {
+  const prevChain = blockSyncChains.get(key) || Promise.resolve();
+  const nextChain = prevChain
+    .catch(() => {})
+    .then(() => syncBlocksToServer(userId, blocks, auth))
+    .then(() => notifyBlockSync(userId));
+  blockSyncChains.set(key, nextChain.catch(() => {}));
+  return nextChain;
+}
+
+export async function flushPendingBlockSync(
+  userId: string,
+  authOverride?: BlockAuthContext
+): Promise<void> {
+  const key = (userId || 'owner').trim().toLowerCase();
+  const timer = blockSyncTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    blockSyncTimers.delete(key);
+  }
+  const pending = pendingBlockSyncs.get(key);
+  if (!pending) return;
+  pendingBlockSyncs.delete(key);
+  const resolvedAuth = authOverride || pending.auth;
+  if (resolvedAuth?.isDemo) {
+    notifyBlockSync(pending.userId);
+    pending.waiters.forEach((w) => w.resolve());
+    return;
+  }
+  try {
+    await enqueueServerBlockWrite(key, pending.userId, pending.blocks, resolvedAuth);
+    pending.waiters.forEach((w) => w.resolve());
+  } catch (err) {
+    pending.waiters.forEach((w) => w.reject(err));
+    throw err;
+  }
+}
+
 export async function flushSaveLocalBlocks(
   userId: string,
   blocks: Block[],
@@ -205,13 +264,13 @@ export async function flushSaveLocalBlocks(
     clearTimeout(prevTimer);
     blockSyncTimers.delete(key);
   }
-  const prevChain = blockSyncChains.get(key) || Promise.resolve();
-  const nextChain = prevChain
-    .catch(() => {})
-    .then(() => syncBlocksToServer(userId, blocks, auth))
-    .then(() => notifyBlockSync(userId));
-  blockSyncChains.set(key, nextChain.catch(() => {}));
-  await nextChain;
+  const prevPending = pendingBlockSyncs.get(key);
+  if (prevPending) {
+    pendingBlockSyncs.delete(key);
+    // Superseded by newer full snapshot flush
+    prevPending.waiters.forEach((w) => w.resolve());
+  }
+  await enqueueServerBlockWrite(key, userId, blocks, auth);
 }
 
 export async function saveLocalBlocks(
@@ -226,26 +285,44 @@ export async function saveLocalBlocks(
   }
   const key = (userId || 'owner').trim().toLowerCase();
   const prevTimer = blockSyncTimers.get(key);
-  if (prevTimer) clearTimeout(prevTimer);
-  blockSyncTimers.set(
-    key,
-    setTimeout(() => {
-      blockSyncTimers.delete(key);
-      const latestBlocks = getLocalBlocks(userId);
-      const prevChain = blockSyncChains.get(key) || Promise.resolve();
-      const nextChain = prevChain
-        .catch(() => {})
-        .then(() => syncBlocksToServer(userId, latestBlocks, auth))
-        .then(() => notifyBlockSync(userId))
-        .catch(() => {});
-      blockSyncChains.set(key, nextChain);
-    }, 80)
-  );
+  if (prevTimer) {
+    clearTimeout(prevTimer);
+    blockSyncTimers.delete(key);
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const existing = pendingBlockSyncs.get(key);
+    const waiters = existing ? [...existing.waiters, { resolve, reject }] : [{ resolve, reject }];
+    pendingBlockSyncs.set(key, {
+      userId,
+      blocks,
+      auth,
+      waiters,
+    });
+
+    blockSyncTimers.set(
+      key,
+      setTimeout(() => {
+        blockSyncTimers.delete(key);
+        const latest = pendingBlockSyncs.get(key);
+        if (!latest) return;
+        pendingBlockSyncs.delete(key);
+        enqueueServerBlockWrite(key, latest.userId, latest.blocks, latest.auth)
+          .then(() => {
+            latest.waiters.forEach((w) => w.resolve());
+          })
+          .catch((err) => {
+            latest.waiters.forEach((w) => w.reject(err));
+          });
+      }, 80)
+    );
+  });
 }
 
 export async function seedStarterLinks(
   userId: string,
-  links: Array<{ title: string; url: string }>
+  links: Array<{ title: string; url: string }>,
+  auth?: BlockAuthContext
 ): Promise<void> {
   const existing = getLocalBlocks(userId);
   const newBlocks: Block[] = links
@@ -267,7 +344,7 @@ export async function seedStarterLinks(
       isArchived: false,
     }));
   const updated = [...existing, ...newBlocks];
-  await saveLocalBlocks(userId, updated);
+  await flushSaveLocalBlocks(userId, updated, auth);
 }
 
 export async function listMyBlocks(
@@ -288,7 +365,7 @@ export async function listMyBlocks(
   // 1. Query server database first (Azure SQL / Server store / Firebase fallback)
   try {
     const res = await apiFetch(`/api/blocks?username=${encodeURIComponent(cleanId)}&_t=${Date.now()}`, {
-      cache: 'no-cache',
+      cache: 'no-store',
       silent: true,
       headers: {
         ...(auth?.ownerUserId ? { 'x-user-id': auth.ownerUserId } : {}),
@@ -299,10 +376,7 @@ export async function listMyBlocks(
       const data = await res.json();
       const blocksArray = Array.isArray(data) ? data : (Array.isArray(data?.blocks) ? data.blocks : null);
       if (Array.isArray(blocksArray)) {
-        try {
-          localStorage.setItem(`iveo_blocks_${cleanId}`, JSON.stringify(blocksArray));
-          localStorage.setItem(`iveo_blocks_${userId}`, JSON.stringify(blocksArray));
-        } catch {}
+        persistLocalStorageBlocks(userId, blocksArray);
         return blocksArray.map((b: any) => ({
           ...b,
           thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
@@ -316,18 +390,13 @@ export async function listMyBlocks(
   // 2. Local fallback when server is unreachable
   if (!rawSupabaseUrl) {
     const local = getLocalBlocks(cleanId);
-
-    if (local.length > 0) {
-      syncBlocksToServer(cleanId, local, auth).catch(() => {});
-    }
-
     return local.map((b) => ({
       ...b,
       thumbnailUrl: b.thumbnailUrl || storagePublicUrl(b.thumbnailPath),
     }));
   }
 
-    const response = await fetch(
+  const response = await fetch(
     `${rawSupabaseUrl}/rest/v1/links?user_id=eq.${encodeURIComponent(
       userId
     )}&select=id,kind,title,url,icon,thumbnail_path,layout,embed_provider,signup_config,start_at,end_at,is_active,is_archived,position&order=position.asc,created_at.asc`,
@@ -375,7 +444,8 @@ export async function createBlock(
   token: string | null,
   userId: string,
   input: CreateBlockInput,
-  auth?: BlockAuthContext
+  auth?: BlockAuthContext,
+  currentBlocks?: Block[]
 ): Promise<Block> {
   const newBlock: Block = {
     id: crypto.randomUUID(),
@@ -411,11 +481,13 @@ export async function createBlock(
   };
 
   if (!rawSupabaseUrl) {
-    const list = getLocalBlocks(userId);
-    const updated = [{ ...newBlock, position: 0 }, ...list].map((item, idx) => ({
-      ...item,
-      position: idx,
-    }));
+    const list = Array.isArray(currentBlocks) ? currentBlocks : getLocalBlocks(userId);
+    const updated = [{ ...newBlock, position: 0 }, ...list.filter((b) => b.id !== newBlock.id)].map(
+      (item, idx) => ({
+        ...item,
+        position: idx,
+      })
+    );
     await flushSaveLocalBlocks(userId, updated, auth);
     return { ...newBlock, position: 0 };
   }
@@ -488,10 +560,11 @@ export async function updateBlock(
   userId: string,
   blockId: string,
   input: UpdateBlockInput,
-  auth?: BlockAuthContext
+  auth?: BlockAuthContext,
+  currentBlocks?: Block[]
 ): Promise<void> {
   if (!rawSupabaseUrl) {
-    const list = getLocalBlocks(userId);
+    const list = Array.isArray(currentBlocks) ? currentBlocks : getLocalBlocks(userId);
     const updated = list.map((b) => (b.id === blockId ? { ...b, ...input } : b));
     if (input.isArchived !== undefined || input.isActive !== undefined) {
       await flushSaveLocalBlocks(userId, updated, auth);
@@ -539,23 +612,32 @@ export async function setBlockImage(
   userId: string,
   blockId: string,
   input: { thumbnailPath: string | null; layout: BlockLayout; thumbnailUrl?: string | null },
-  auth?: BlockAuthContext
+  auth?: BlockAuthContext,
+  currentBlocks?: Block[]
 ): Promise<void> {
-  await updateBlock(token, userId, blockId, {
-    thumbnailPath: input.thumbnailPath,
-    thumbnailUrl: input.thumbnailUrl,
-    layout: input.layout,
-  }, auth);
+  await updateBlock(
+    token,
+    userId,
+    blockId,
+    {
+      thumbnailPath: input.thumbnailPath,
+      thumbnailUrl: input.thumbnailUrl,
+      layout: input.layout,
+    },
+    auth,
+    currentBlocks
+  );
 }
 
 export async function deleteBlock(
   token: string | null,
   userId: string,
   blockId: string,
-  auth?: BlockAuthContext
+  auth?: BlockAuthContext,
+  currentBlocks?: Block[]
 ): Promise<void> {
   if (!rawSupabaseUrl) {
-    const list = getLocalBlocks(userId);
+    const list = Array.isArray(currentBlocks) ? currentBlocks : getLocalBlocks(userId);
     await flushSaveLocalBlocks(
       userId,
       list.filter((b) => b.id !== blockId),

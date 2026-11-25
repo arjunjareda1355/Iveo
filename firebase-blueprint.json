@@ -2,19 +2,22 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User profile settings, appearance vibe, and branding configuration",
+      "description": "User profile settings, appearance vibe, socials, SEO settings, and branding configuration",
       "type": "object",
       "properties": {
         "userId": { "type": "string", "maxLength": 128 },
-        "username": { "type": "string", "maxLength": 32 },
-        "displayName": { "type": "string", "maxLength": 80 },
-        "bio": { "type": "string", "maxLength": 300 },
+        "username": { "type": "string", "maxLength": 64 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "bio": { "type": "string", "maxLength": 500 },
         "avatarUrl": { "type": "string", "maxLength": 2048 },
         "avatarData": { "type": "string", "maxLength": 350000 },
         "avatarType": { "type": "string", "enum": ["default", "uploaded"] },
         "avatarId": { "type": "string", "maxLength": 64 },
         "vibeId": { "type": "string", "maxLength": 32 },
         "buttonShape": { "type": "string", "enum": ["square", "rounded", "pill"] },
+        "socials": { "type": "object" },
+        "socialsPosition": { "type": "string", "enum": ["top", "bottom", "both"] },
+        "primaryEmail": { "type": "string", "maxLength": 320 },
         "fontSettings": { "type": "object" },
         "buttonColors": { "type": "object" },
         "layoutSettings": { "type": "object" },
@@ -22,10 +25,21 @@
         "businessCard": { "type": "object" },
         "appearance": { "type": "object" },
         "plan": { "type": "string", "enum": ["free", "pro"] },
-        "updatedAt": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "subscription": { "type": "object" },
+        "status": { "type": "string", "maxLength": 32 },
+        "isPublished": { "type": "boolean" },
+        "hideFooter": { "type": "boolean" },
+        "hideFromSearch": { "type": "boolean" },
+        "googleAnalyticsId": { "type": "string", "maxLength": 64 },
+        "metaPixelId": { "type": "string", "maxLength": 64 },
+        "whatsappNumber": { "type": "string", "maxLength": 32 },
+        "customSeoTitle": { "type": "string", "maxLength": 160 },
+        "customSeoDescription": { "type": "string", "maxLength": 320 },
+        "blocksInitialized": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
       },
-      "required": ["userId", "username"]
+      "required": ["username"]
     },
     "PageBlock": {
       "title": "PageBlock",
@@ -34,15 +48,21 @@
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
         "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
         "kind": { "type": "string", "maxLength": 32 },
-        "title": { "type": "string", "maxLength": 120 },
+        "title": { "type": "string", "maxLength": 256 },
         "url": { "type": "string", "maxLength": 2048 },
-        "isActive": { "type": "boolean" },
-        "order": { "type": "number" },
-        "layout": { "type": "string", "maxLength": 32 },
+        "icon": { "type": "string", "maxLength": 128 },
+        "thumbnailPath": { "type": "string", "maxLength": 512 },
         "thumbnailUrl": { "type": "string", "maxLength": 2048 },
-        "animation": { "type": "string", "maxLength": 32 },
-        "badge": { "type": "string", "maxLength": 40 },
+        "layout": { "type": "string", "maxLength": 32 },
+        "embedProvider": { "type": "string", "maxLength": 32 },
+        "embedMeta": { "type": "object" },
+        "signup": { "type": "object" },
+        "tipJar": { "type": "object" },
+        "coffee": { "type": "object" },
+        "faq": { "type": "object" },
+        "vcard": { "type": "object" },
         "youtube": { "type": "object" },
         "product": { "type": "object" },
         "booking": { "type": "object" },
@@ -50,11 +70,18 @@
         "promo": { "type": "object" },
         "location": { "type": "object" },
         "download": { "type": "object" },
+        "bluesky": { "type": "object" },
+        "animation": { "type": "string", "maxLength": 32 },
+        "badge": { "type": "string", "maxLength": 40 },
+        "position": { "type": "number" },
+        "order": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "isArchived": { "type": "boolean" },
         "isProtected": { "type": "boolean" },
-        "startAt": { "type": "string" },
-        "endAt": { "type": "string" },
-        "updatedAt": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "startAt": { "type": "string", "maxLength": 64 },
+        "endAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "userId", "kind", "title"]
     },
@@ -65,9 +92,14 @@
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
         "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
+        "linkId": { "type": "string", "maxLength": 128 },
         "email": { "type": "string", "maxLength": 320 },
         "phone": { "type": "string", "maxLength": 32 },
-        "createdAt": { "type": "string" }
+        "consentText": { "type": "string", "maxLength": 500 },
+        "source": { "type": "string", "maxLength": 120 },
+        "formTitle": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "userId"]
     },
@@ -78,10 +110,11 @@
       "properties": {
         "blockId": { "type": "string", "maxLength": 128 },
         "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
         "count": { "type": "number" },
-        "updatedAt": { "type": "string" }
+        "updatedAt": { "type": "string", "maxLength": 64 }
       },
-      "required": ["blockId", "userId", "count"]
+      "required": ["blockId", "count"]
     },
     "AnalyticsEvent": {
       "title": "AnalyticsEvent",
@@ -106,9 +139,11 @@
       "properties": {
         "username": { "type": "string", "maxLength": 64 },
         "userId": { "type": "string", "maxLength": 128 },
-        "claimedAt": { "type": "string" }
+        "status": { "type": "string", "maxLength": 32 },
+        "claimedAt": { "type": "string", "maxLength": 64 },
+        "releasedAt": { "type": "string", "maxLength": 64 }
       },
-      "required": ["username", "userId"]
+      "required": ["username"]
     },
     "RedirectRecord": {
       "title": "RedirectRecord",

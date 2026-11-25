@@ -8,15 +8,21 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string
+        && id.size() > 0
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9._:\\-]+$')
+        && !id.matches('.*\\.\\..*');
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isValidClaim(data) {
+      return data.keys().hasAll(['username'])
+        && data.keys().hasOnly(['username', 'userId', 'status', 'claimedAt', 'releasedAt'])
+        && data.username is string && data.username.size() > 0 && data.username.size() <= 64
+        && (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128))
+        && (!('status' in data) || data.status == null || (data.status is string && data.status.size() <= 32))
+        && (!('claimedAt' in data) || data.claimedAt == null || (data.claimedAt is string && data.claimedAt.size() <= 64))
+        && (!('releasedAt' in data) || data.releasedAt == null || (data.releasedAt is string && data.releasedAt.size() <= 64));
     }
 
     function isValidRedirect(data) {
@@ -25,6 +31,52 @@ service cloud.firestore {
         && data.from is string && data.from.size() > 0 && data.from.size() <= 64
         && data.to is string && data.to.size() > 0 && data.to.size() <= 64
         && data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    function isValidUserProfile(data) {
+      return (
+          ('username' in data && data.username is string && data.username.size() > 0 && data.username.size() <= 64)
+          || ('blocksInitialized' in data && data.blocksInitialized is bool)
+        )
+        && (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128))
+        && (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 128))
+        && (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 500))
+        && (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 2048))
+        && (!('avatarData' in data) || data.avatarData == null || (data.avatarData is string && data.avatarData.size() <= 350000))
+        && (!('primaryEmail' in data) || data.primaryEmail == null || (data.primaryEmail is string && data.primaryEmail.size() <= 320))
+        && (!('customSeoTitle' in data) || data.customSeoTitle == null || (data.customSeoTitle is string && data.customSeoTitle.size() <= 160))
+        && (!('customSeoDescription' in data) || data.customSeoDescription == null || (data.customSeoDescription is string && data.customSeoDescription.size() <= 320))
+        && (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidBlock(data) {
+      return data.keys().hasAll(['id', 'kind'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.kind is string && data.kind.size() > 0 && data.kind.size() <= 32
+        && (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128))
+        && (!('username' in data) || data.username == null || (data.username is string && data.username.size() <= 64))
+        && (!('title' in data) || data.title == null || (data.title is string && data.title.size() <= 256))
+        && (!('url' in data) || data.url == null || (data.url is string && data.url.size() <= 2048))
+        && (!('thumbnailUrl' in data) || data.thumbnailUrl == null || (data.thumbnailUrl is string && data.thumbnailUrl.size() <= 2048))
+        && (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidContact(data) {
+      return data.keys().hasAll(['id'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && (!('username' in data) || data.username == null || (data.username is string && data.username.size() <= 64))
+        && (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 320))
+        && (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 32))
+        && (!('createdAt' in data) || data.createdAt == null || (data.createdAt is string && data.createdAt.size() <= 64));
+    }
+
+    function isValidClick(data) {
+      return data.keys().hasAll(['blockId', 'count'])
+        && data.blockId is string && data.blockId.size() > 0 && data.blockId.size() <= 128
+        && data.count is number && data.count >= 0
+        && (!('username' in data) || data.username == null || (data.username is string && data.username.size() <= 64))
+        && (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128))
+        && (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
     function isValidAnalyticsEvent(data) {
@@ -40,12 +92,21 @@ service cloud.firestore {
         && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64;
     }
 
-    // Claims Registry (for fast atomic check and cross-instance claim checks)
+    function isValidAppearance(data) {
+      return data.keys().hasAll(['username', 'userId', 'updatedAt'])
+        && data.keys().hasOnly(['username', 'userId', 'appearance', 'history', 'themes', 'updatedAt'])
+        && data.username is string && data.username.size() > 0 && data.username.size() <= 64
+        && data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128
+        && data.updatedAt is string && data.updatedAt.size() <= 64
+        && (!('themes' in data) || data.themes is list && data.themes.size() <= 20);
+    }
+
+    // Claims Registry
     match /claims/{username} {
       allow get: if isValidId(username);
       allow list: if true;
-      allow create, update: if isValidId(username);
-      allow delete: if isValidId(username) && isSignedIn();
+      allow create, update: if isValidId(username) && isValidClaim(request.resource.data);
+      allow delete: if isValidId(username);
     }
 
     // Handle rename redirects
@@ -59,44 +120,42 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isValidId(userId);
       allow list: if true;
-      allow create, update: if isValidId(userId);
-      allow delete: if isValidId(userId) && (isOwner(userId) || isSignedIn());
+      allow create, update: if isValidId(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if isValidId(userId);
 
       // Page Blocks
       match /blocks/{blockId} {
         allow get: if isValidId(userId) && isValidId(blockId);
         allow list: if isValidId(userId);
-        allow create, update, delete: if isValidId(userId) && isValidId(blockId);
+        allow create, update: if isValidId(userId) && isValidId(blockId) && isValidBlock(request.resource.data);
+        allow delete: if isValidId(userId) && isValidId(blockId);
       }
 
       // Collected Contacts
       match /contacts/{contactId} {
-        allow get, list, delete: if isValidId(userId);
-        allow create: if isValidId(userId) && isValidId(contactId);
-        allow update: if false;
+        allow get, list: if isValidId(userId);
+        allow create, update: if isValidId(userId) && isValidId(contactId) && isValidContact(request.resource.data);
+        allow delete: if isValidId(userId) && isValidId(contactId);
       }
 
       // Click Analytics Counters
       match /clicks/{clickId} {
         allow get, list: if isValidId(userId);
-        allow create, update: if isValidId(userId) && isValidId(clickId);
-        allow delete: if isValidId(userId);
+        allow create, update: if isValidId(userId) && isValidId(clickId) && isValidClick(request.resource.data);
+        allow delete: if isValidId(userId) && isValidId(clickId);
       }
 
       // Raw Analytics Events
       match /analytics/{eventId} {
         allow get, list: if isValidId(userId);
         allow create, update: if isValidId(userId) && isValidId(eventId) && isValidAnalyticsEvent(request.resource.data);
-        allow delete: if isValidId(userId);
+        allow delete: if isValidId(userId) && isValidId(eventId);
       }
 
-      // Structured Appearance v2 state & history
+      // Structured Appearance v2 state, history & saved themes
       match /appearance/{docId} {
         allow get, list: if isValidId(userId);
-        allow create, update: if isValidId(userId) && docId == 'v2'
-          && request.resource.data.keys().hasAll(['username', 'userId', 'updatedAt'])
-          && request.resource.data.username is string
-          && request.resource.data.userId is string;
+        allow create, update: if isValidId(userId) && docId == 'v2' && isValidAppearance(request.resource.data);
         allow delete: if isValidId(userId) && docId == 'v2';
       }
     }

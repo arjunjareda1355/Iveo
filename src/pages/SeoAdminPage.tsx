@@ -43,9 +43,18 @@ interface SeoHealthReport {
   };
   searchEngines: {
     gscConfigured: boolean;
+    gscHasEnv?: boolean;
+    gscError?: string | null;
     gscSiteUrl?: string;
     bingConfigured: boolean;
     indexNowConfigured: boolean;
+    googleSearchConsole?: {
+      configured: boolean;
+      hasEnv?: boolean;
+      error?: string | null;
+      serviceAccountEmail?: string | null;
+      propertyUrl?: string;
+    };
     recentSubmissions?: Array<{
       engine: string;
       status: string;
@@ -616,11 +625,14 @@ export const SeoAdminPage: React.FC = () => {
                           <span className="font-semibold text-ink block">
                             Google Search Console Status:
                           </span>
-                          <span className="text-muted">
-                            {gscResult.configured
-                              ? `${gscResult.verdict || gscResult.coverageState || 'Inspected'}${gscResult.lastCrawlTime ? ` · Last crawl: ${gscResult.lastCrawlTime}` : ''}`
-                              : gscResult.message ||
-                                'GSC Service Account not configured in server environment (local validation active).'}
+                          <span className={gscResult.configured && !gscResult.ok ? 'text-red-600' : 'text-muted'}>
+                            {!gscResult.configured
+                              ? gscResult.error ||
+                                gscResult.message ||
+                                'GSC Service Account not configured in server environment (local validation active).'
+                              : gscResult.ok
+                                ? `${gscResult.verdict || gscResult.coverageState || 'Inspected'}${gscResult.coverageState && gscResult.verdict ? ` (${gscResult.coverageState})` : ''}${gscResult.lastCrawlTime ? ` · Last crawl: ${gscResult.lastCrawlTime}` : ''}`
+                                : gscResult.error || 'Google Search Console inspection failed'}
                           </span>
                         </div>
                       )}
@@ -638,15 +650,30 @@ export const SeoAdminPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-col gap-2.5 text-[13px]">
-                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-2 border border-border">
-                      <span className="font-medium text-ink">Google Search Console Sitemap API</span>
-                      <span
-                        className={`text-[12px] font-mono shrink-0 ${
-                          report.searchEngines.gscConfigured ? 'text-emerald-700' : 'text-muted'
-                        }`}
-                      >
-                        {report.searchEngines.gscConfigured ? 'Connected' : 'Ready (Env Needed)'}
-                      </span>
+                    <div className="flex flex-col gap-1 p-3 rounded-xl bg-surface-2 border border-border">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium text-ink">Google Search Console Sitemap API</span>
+                        <span
+                          className={`text-[12px] font-mono shrink-0 ${
+                            report.searchEngines.gscConfigured
+                              ? 'text-emerald-700'
+                              : report.searchEngines.gscError
+                                ? 'text-red-600'
+                                : 'text-muted'
+                          }`}
+                        >
+                          {report.searchEngines.gscConfigured
+                            ? 'Connected'
+                            : report.searchEngines.gscError
+                              ? 'Config Error'
+                              : 'Ready (Env Needed)'}
+                        </span>
+                      </div>
+                      {report.searchEngines.gscError && (
+                        <span className="text-[11px] text-red-600 leading-snug">
+                          {report.searchEngines.gscError}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-2 border border-border">

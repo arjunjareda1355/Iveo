@@ -14,6 +14,7 @@ const {
   dbGetProfile,
   dbSaveProfile,
   dbSaveBlocks,
+  dbGetBlockSyncMeta,
   dbWriteAppearanceState,
 } = await import('./azureSql.ts');
 const { loadPublicPage } = await import('./publicPage.ts');
@@ -21,11 +22,18 @@ const {
   handleGetAppearance,
   handlePatchAppearance,
   handleCreateTheme,
+  handleRenameTheme,
+  handleDeleteTheme,
   handleApplyTheme,
   resetAppearanceRateLimitForTests,
 } = await import('./appearance-handlers.ts');
 const { adminInspectBilling, adminReconcileBilling } = await import('./billingService.ts');
-const { handleSeoAdminModerateBackground } = await import('./db-handlers.ts');
+const {
+  handleGetBlocks,
+  handleGetPublicPage,
+  handleSaveProfile,
+  handleSeoAdminModerateBackground,
+} = await import('./db-handlers.ts');
 
 function createMockRes() {
   const headers: Record<string, string> = {};
@@ -354,5 +362,110 @@ describe('Sync, Owner SEO/Billing, and Theme Save/Apply Fixes', () => {
     const afterMod = await dbGetProfile('synccreator');
     assert.equal(afterMod?.appearance?.background?.type, 'solid');
     assert.equal(afterMod?.appearance?.background?.color, '#FFFFFF');
+  });
+
+  it('deleting all blocks records blocksInitialized and deletedBlockIds so blocks stay empty', async () => {
+    await dbSaveBlocks('synccreator', [
+      {
+        id: 'blk-delete-me',
+        userId: 'user-sync-1',
+        kind: 'link',
+        title: 'Temporary Link',
+        url: 'https://example.com',
+        isActive: true,
+        isArchived: false,
+        position: 0,
+      },
+    ]);
+
+    await dbSaveBlocks('synccreator', []);
+    const meta = await dbGetBlockSyncMeta('synccreator');
+    assert.equal(meta.blocksInitialized, true);
+    assert.equal(meta.deletedBlockIds.has('blk-delete-me'), true);
+
+    const blocksRes = createMockRes();
+    await handleGetBlocks(makeReq({ query: { username: 'synccreator' } }), blocksRes);
+    assert.equal(blocksRes.state.statusCode, 200);
+    assert.deepEqual(blocksRes.state.body, []);
+
+    const pubRes = createMockRes();
+    await handleGetPublicPage(makeReq({ query: { u: 'synccreator', _t: '1' } }), pubRes);
+    assert.equal(pubRes.state.statusCode, 200);
+    assert.deepEqual(pubRes.state.body.links, []);
+  });
+
+  it('delta POST /api/profile update preserves newer Appearance v2 and renames/deletes saved themes', async () => {
+    const h = { 'x-user-id': 'user-sync-1', 'x-user-email': 'sync@example.com' };
+
+    const patchRes = createMockRes();
+    await handlePatchAppearance(
+      makeReq({
+        headers: h,
+        body: {
+          username: 'synccreator',
+          patch: {
+            vibeId: 'obsidian',
+            background: { type: 'solid', color: '#09090B' },
+          },
+        },
+      }),
+      patchRes
+    );
+    assert.equal(patchRes.state.statusCode, 200);
+
+    // Send a delta profile update containing only bio & socials (omitting appearance)
+    const profRes = createMockRes();
+    await handleSaveProfile(
+      makeReq({
+        headers: h,
+        body: {
+          userId: 'user-sync-1',
+          username: 'synccreator',
+          bio: 'Updated creator bio',
+          socials: { github: 'https://github.com/synccreator' },
+        },
+      }),
+      profRes
+    );
+    assert.equal(profRes.state.statusCode, 200);
+
+    const afterProfileSave = await dbGetProfile('synccreator');
+    assert.equal(afterProfileSave?.bio, 'Updated creator bio');
+    assert.equal(afterProfileSave?.appearance?.background?.color, '#09090B');
+    assert.equal(afterProfileSave?.vibeId, 'obsidian');
+
+    // Create, rename, then delete a theme
+    const createRes = createMockRes();
+    await handleCreateTheme(
+      makeReq({ headers: h, body: { username: 'synccreator', name: 'Draft One' } }),
+      createRes
+    );
+    assert.equal(createRes.state.statusCode, 201);
+    const themeId = createRes.state.body.theme.id;
+
+    const renameRes = createMockRes();
+    await handleRenameTheme(
+      makeReq({
+        headers: h,
+        params: { id: themeId },
+        query: { username: 'synccreator' },
+        body: { name: 'Renamed Theme' },
+      }),
+      renameRes
+    );
+    assert.equal(renameRes.state.statusCode, 200);
+    assert.equal(renameRes.state.body.theme.name, 'Renamed Theme');
+
+    const delRes = createMockRes();
+    await handleDeleteTheme(
+      makeReq({
+        headers: h,
+        params: { id: themeId },
+        query: { username: 'synccreator' },
+      }),
+      delRes
+    );
+    assert.equal(delRes.state.statusCode, 200);
+    assert.equal(delRes.state.body.themes.length, 0);
   });
 });

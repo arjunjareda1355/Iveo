@@ -264,6 +264,54 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [session.username, session.layoutSettings]
   );
 
+  // Authoritative server appearance + saved themes hydration on session ready
+  useEffect(() => {
+    if (isDemo || !session.isLoaded || !session.userId || !session.username) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/appearance?username=${encodeURIComponent(session.username!)}&_t=${Date.now()}`,
+          {
+            cache: 'no-store',
+            headers: {
+              'x-user-id': session.userId!,
+              'x-iveo-username': session.username!,
+              ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+            },
+          }
+        );
+        if (!res.ok || cancelled) return;
+        const json = await res.json().catch(() => null);
+        if (!json?.ok || cancelled) return;
+
+        if (Array.isArray(json.themes)) {
+          setThemes(json.themes);
+          try {
+            localStorage.setItem(`iveo_themes_${session.username || 'owner'}`, JSON.stringify(json.themes));
+          } catch {}
+        }
+
+        if (json.appearance && !hasLocalEditsRef.current && !debounceSaveTimerRef.current) {
+          const serverStamp = String(json.updatedAt || json.appearance.updatedAt || '');
+          const localStamp = String(hydratedUpdatedAtRef.current || '');
+          if (!localStamp || (serverStamp && serverStamp > localStamp)) {
+            const committed = cloneAppearance(json.appearance);
+            hydratedUpdatedAtRef.current = serverStamp || null;
+            lastCommittedRef.current = committed;
+            setDraft(committed);
+            if (serverStamp) {
+              syncAppearanceToClientMirrors(committed, serverStamp);
+            }
+          }
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo, session.isLoaded, session.userId, session.username, session.primaryEmail, syncAppearanceToClientMirrors]);
+
   const persistAppearanceNow = useCallback(
     async (targetAppearance: Appearance) => {
       const mirror = appearanceToLegacyMirror(targetAppearance, session.layoutSettings);
@@ -834,13 +882,17 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (isDemo || !session.userId || !session.username) return;
     setThemesLoading(true);
     try {
-      const res = await fetch(`/api/appearance/themes?username=${encodeURIComponent(session.username)}`, {
-        headers: {
-          'x-user-id': session.userId,
-          'x-iveo-username': session.username,
-          ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-        },
-      });
+      const res = await fetch(
+        `/api/appearance/themes?username=${encodeURIComponent(session.username)}&_t=${Date.now()}`,
+        {
+          cache: 'no-store',
+          headers: {
+            'x-user-id': session.userId,
+            'x-iveo-username': session.username,
+            ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+          },
+        }
+      );
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.themes)) {

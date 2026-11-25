@@ -343,7 +343,7 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       const filteredFb = (fbBlocks || []).filter(
         (b) => cameFromFirebase || !syncMeta.deletedBlockIds.has(String(b?.id || ''))
       );
-      if (cameFromFirebase && (filteredFb.length > 0 || fbProf?.blocksInitialized)) {
+      if (cameFromFirebase && (filteredFb.length > 0 || (fbProf?.blocksInitialized && (!dbBlocksInitial || dbBlocksInitial.length === 0)))) {
         allBlocks = filteredFb;
         dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
       } else if (filteredFb.length > 0 && (!allBlocks || allBlocks.length === 0)) {

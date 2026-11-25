@@ -30,15 +30,49 @@ export function getSiteOrigin(request?: Request): string {
   return 'https://iveo.site';
 }
 
+export function getGscSiteUrl(): string | undefined {
+  const raw = process.env.GSC_SITE_URL?.trim().replace(/^['"]|['"]$/g, '');
+  if (!raw) return undefined;
+  if (/^sc-domain:/i.test(raw)) {
+    const domain = raw.slice('sc-domain:'.length).replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase().trim();
+    return domain ? `sc-domain:${domain}` : undefined;
+  }
+  try {
+    const u = new URL(raw);
+    if (u.protocol === 'https:' || u.protocol === 'http:') {
+      return `${u.protocol}//${u.host}/`;
+    }
+  } catch {}
+  return undefined;
+}
+
 export function getCanonicalSiteOrigin(): string {
-  const explicit = process.env.GSC_SITE_URL?.trim() || process.env.VITE_SITE_ORIGIN?.trim();
-  if (explicit) {
+  const explicitOrigin = process.env.VITE_SITE_ORIGIN?.trim() || process.env.APP_URL?.trim();
+  const gscSite = getGscSiteUrl();
+
+  if (explicitOrigin) {
     try {
-      const u = new URL(explicit);
+      const u = new URL(explicitOrigin);
       if ((u.protocol === 'https:' || u.protocol === 'http:') && !u.host.includes('localhost')) {
         return `${u.protocol}//${u.host}`;
       }
     } catch {}
+  }
+
+  if (gscSite) {
+    if (gscSite.startsWith('sc-domain:')) {
+      const domain = gscSite.slice('sc-domain:'.length);
+      if (domain && !domain.includes('localhost')) {
+        return `https://${domain}`;
+      }
+    } else {
+      try {
+        const u = new URL(gscSite);
+        if ((u.protocol === 'https:' || u.protocol === 'http:') && !u.host.includes('localhost')) {
+          return `${u.protocol}//${u.host}`;
+        }
+      } catch {}
+    }
   }
   return 'https://iveo.site';
 }

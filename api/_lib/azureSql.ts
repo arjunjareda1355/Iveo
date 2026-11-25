@@ -847,14 +847,67 @@ export async function dbClaimUsername(
 
       await transaction.commit();
 
+      // Synchronize isolated per-user store so appearance/block meta stays consistent with SQL
+      await withUserLock(clean, () => {
+        const rec = readUserRecord(clean);
+        rec.profile = {
+          ...(rec.profile || {}),
+          userId,
+          username: clean,
+          displayName: profileData?.displayName || rec.profile?.displayName || clean,
+          bio: profileData?.bio !== undefined ? profileData.bio : (rec.profile?.bio || ''),
+          avatarUrl: profileData?.avatarUrl !== undefined ? profileData.avatarUrl : (rec.profile?.avatarUrl || null),
+          avatarType: profileData?.avatarType || rec.profile?.avatarType || (profileData?.avatarId ? 'default' : (profileData?.avatarUrl ? 'uploaded' : 'default')),
+          avatarId: profileData?.avatarId !== undefined ? profileData.avatarId : (rec.profile?.avatarId || null),
+          vibeId: profileData?.vibeId || rec.profile?.vibeId || 'clean',
+          buttonShape: profileData?.buttonShape !== undefined ? profileData.buttonShape : (rec.profile?.buttonShape ?? 'rounded'),
+          socials: profileData?.socials || rec.profile?.socials || {},
+          socialsPosition: profileData?.socialsPosition || rec.profile?.socialsPosition || 'top',
+          primaryEmail: primaryEmail || rec.profile?.primaryEmail || null,
+          plan: effectivePlan,
+          createdAt: claimCreatedAt,
+          subscription: profileData?.subscription ?? rec.profile?.subscription ?? null,
+          status: profileData?.status || rec.profile?.status || 'active',
+          isPublished: profileData?.isPublished ?? rec.profile?.isPublished ?? true,
+          hideFooter: Boolean(profileData?.hideFooter ?? rec.profile?.hideFooter),
+          hideFromSearch: Boolean(profileData?.hideFromSearch ?? rec.profile?.hideFromSearch),
+          background: profileData?.background !== undefined ? profileData.background : (rec.profile?.background || null),
+          googleAnalyticsId: profileData?.googleAnalyticsId !== undefined ? profileData.googleAnalyticsId : (rec.profile?.googleAnalyticsId || null),
+          metaPixelId: profileData?.metaPixelId !== undefined ? profileData.metaPixelId : (rec.profile?.metaPixelId || null),
+          whatsappNumber: profileData?.whatsappNumber !== undefined ? profileData.whatsappNumber : (rec.profile?.whatsappNumber || null),
+          customSeoTitle: profileData?.customSeoTitle !== undefined ? profileData.customSeoTitle : (rec.profile?.customSeoTitle || null),
+          customSeoDescription: profileData?.customSeoDescription !== undefined ? profileData.customSeoDescription : (rec.profile?.customSeoDescription || null),
+          fontSettings: profileData?.fontSettings !== undefined ? profileData.fontSettings : (rec.profile?.fontSettings || null),
+          buttonColors: profileData?.buttonColors !== undefined ? profileData.buttonColors : (rec.profile?.buttonColors || null),
+          businessCard: profileData?.businessCard !== undefined ? profileData.businessCard : (rec.profile?.businessCard || null),
+          layoutSettings: profileData?.layoutSettings !== undefined ? profileData.layoutSettings : (rec.profile?.layoutSettings || null),
+          appearance: profileData?.appearance !== undefined ? profileData.appearance : (rec.profile?.appearance ?? null),
+          updatedAt: new Date().toISOString(),
+        };
+        if (releasedUsername && releasedUsername !== clean) {
+          const oldRec = readUserRecord(releasedUsername);
+          if (oldRec.blocks.length > 0 && rec.blocks.length === 0) {
+            rec.blocks = oldRec.blocks.map((b) => ({ ...b, username: clean }));
+            rec.blocksInitialized = oldRec.blocksInitialized;
+          }
+        }
+        writeUserRecord(clean, rec);
+        const userIndex = readUserIndex();
+        userIndex[userId] = clean;
+        writeUserIndex(userIndex);
+        const claims = readClaimsIndex();
+        claims[clean] = { userId, username: clean, claimedAt: new Date().toISOString() };
+        if (releasedUsername && releasedUsername !== clean) {
+          delete claims[releasedUsername];
+        }
+        writeClaimsIndex(claims);
+      });
+
       // Update isolated per-user redirect & claim maps if old username was released
       const redirects = readRedirectsIndex();
       delete redirects[clean];
       if (releasedUsername && releasedUsername !== clean) {
         redirects[releasedUsername] = { to: clean, updatedAt: new Date().toISOString() };
-        const claims = readClaimsIndex();
-        delete claims[releasedUsername];
-        writeClaimsIndex(claims);
         const oldFile = getUserFilePath(releasedUsername);
         if (fs.existsSync(oldFile)) {
           try { fs.unlinkSync(oldFile); } catch {}
@@ -1261,6 +1314,24 @@ export async function dbSaveProfile(profile: {
           INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
           VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
       `);
+      await withUserLock(cleanUsername, () => {
+        const record = readUserRecord(cleanUsername);
+        const nowIso = merged.updatedAt || new Date().toISOString();
+        record.profile = {
+          ...record.profile,
+          ...merged,
+          username: cleanUsername,
+          updatedAt: nowIso,
+        };
+        writeUserRecord(cleanUsername, record);
+        if (merged.userId && merged.userId !== 'owner') {
+          const userIndex = readUserIndex();
+          if (userIndex[merged.userId] !== cleanUsername) {
+            userIndex[merged.userId] = cleanUsername;
+            writeUserIndex(userIndex);
+          }
+        }
+      });
       return { ok: true, updatedAt: merged.updatedAt, profile: merged };
     } catch {
       // Fall through to server store fallback

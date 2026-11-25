@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ClerkRoot } from './auth/ClerkRoot';
+import { IveoSessionProvider } from './auth/useIvioSession';
 import { ToastProvider } from './components/ui/Toast';
 import { LoaderProvider } from './components/ui/LoaderProvider';
 import { UpgradeDialogProvider } from './components/plan/UpgradeDialogProvider';
@@ -14,13 +15,15 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ErrorBoundaryPage>
         <ClerkRoot>
-          <LoaderProvider>
-            <ToastProvider>
-              <UpgradeDialogProvider>
-                <App />
-              </UpgradeDialogProvider>
-            </ToastProvider>
-          </LoaderProvider>
+          <IveoSessionProvider>
+            <LoaderProvider>
+              <ToastProvider>
+                <UpgradeDialogProvider>
+                  <App />
+                </UpgradeDialogProvider>
+              </ToastProvider>
+            </LoaderProvider>
+          </IveoSessionProvider>
         </ClerkRoot>
       </ErrorBoundaryPage>
     </BrowserRouter>

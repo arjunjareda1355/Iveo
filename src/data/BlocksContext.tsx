@@ -25,15 +25,11 @@ import {
   deleteBlock as apiDeleteBlock,
   setBlockImage as apiSetBlockImage,
   saveOrderedBlocks,
+  flushPendingBlockSync,
 } from './linksApi';
 import { storagePublicUrl } from './storageApi';
 import { useToast } from '../components/ui/Toast';
 import { useUpgradeDialog } from '../components/plan/UpgradeDialogProvider';
-import {
-  syncBlockToFirebase,
-  syncAllBlocksToFirebase,
-  deleteBlockFromFirebase,
-} from '../lib/firebaseSync';
 
 interface BlocksContextValue {
   blocks: Block[];
@@ -78,6 +74,7 @@ export const BlocksProvider: React.FC<{
   const [blocks, setBlocks] = useState<Block[]>([]);
   const blocksRef = useRef<Block[]>([]);
   blocksRef.current = blocks;
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [isLoading, setIsLoading] = useState(true);
   const { showToast } = useToast();
   const { openUpgrade } = useUpgradeDialog();
@@ -90,6 +87,15 @@ export const BlocksProvider: React.FC<{
     () => ({ ownerUserId, primaryEmail, isDemo: isDemoMode }),
     [ownerUserId, primaryEmail, isDemoMode]
   );
+
+  const enqueueMutation = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const run = mutationQueueRef.current.catch(() => {}).then(task);
+    mutationQueueRef.current = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }, []);
 
   const persistPublicBlocksCache = useCallback(
     (nextBlocks: Block[]) => {
@@ -127,686 +133,835 @@ export const BlocksProvider: React.FC<{
     );
   }, []);
 
-  const syncAllTargets = useCallback(
-    async (nextBlocks: Block[]) => {
-      persistPublicBlocksCache(nextBlocks);
-      if (isDemoMode) return;
-      await syncAllBlocksToFirebase(userId, nextBlocks).catch(() => {});
-      if (ownerUserId && ownerUserId !== userId) {
-        await syncAllBlocksToFirebase(ownerUserId, nextBlocks).catch(() => {});
-      }
-    },
-    [userId, ownerUserId, isDemoMode, persistPublicBlocksCache]
-  );
-
-  const syncBlockTargets = useCallback(
-    async (block: Block) => {
-      persistPublicBlocksCache(blocksRef.current);
-      if (isDemoMode) return;
-      await syncBlockToFirebase(userId, block).catch(() => {});
-      if (ownerUserId && ownerUserId !== userId) {
-        await syncBlockToFirebase(ownerUserId, block).catch(() => {});
-      }
-    },
-    [userId, ownerUserId, isDemoMode, persistPublicBlocksCache]
-  );
-
   const fetchBlocks = useCallback(async () => {
     if (!userId) return;
+    setIsLoading(true);
     try {
       const data = await listMyBlocks(token, userId, authCtx);
       blocksRef.current = data;
       setBlocks(data);
       persistPublicBlocksCache(data);
-      if (!isDemoMode) {
-        syncAllTargets(data).catch(() => {});
-      }
     } catch {
       // Ignored
     } finally {
       setIsLoading(false);
     }
-  }, [userId, token, authCtx, isDemoMode, syncAllTargets, persistPublicBlocksCache]);
+  }, [userId, token, authCtx, persistPublicBlocksCache]);
 
   useEffect(() => {
     fetchBlocks();
   }, [fetchBlocks]);
 
-  const addLink = async (title: string, url: string, options?: { thumbnailUrl?: string | null }) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'link',
-        title,
-        url,
-        thumbnailUrl: options?.thumbnailUrl ?? null,
-        layout: 'classic',
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Link added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      if (err instanceof Error && err.message === 'pro_required') {
-        openUpgrade('scheduling');
-      } else {
-        showToast("Couldn't add link. Try again.");
+  useEffect(() => {
+    const flushNow = () => {
+      void flushPendingBlockSync(userId, authCtx).catch(() => {});
+    };
+    window.addEventListener('pagehide', flushNow);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      flushNow();
+    };
+  }, [userId, authCtx]);
+
+  const addLink = (title: string, url: string, options?: { thumbnailUrl?: string | null }) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'link',
+            title,
+            url,
+            thumbnailUrl: options?.thumbnailUrl ?? null,
+            layout: 'classic',
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Link added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        if (err instanceof Error && err.message === 'pro_required') {
+          openUpgrade('scheduling');
+        } else {
+          showToast("Couldn't add link. Try again.");
+        }
+        throw err;
       }
-      throw err;
-    }
-  };
+    });
 
-  const addEmbed = async (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'embed',
-        title: caption,
-        url,
-        embedProvider: provider,
-        embedMeta: embedMeta || null,
-        layout: 'classic',
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Embed added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      if (err instanceof Error && err.message === 'pro_required') {
-        openUpgrade('embeds');
-      } else {
-        showToast("Couldn't add embed. Try again.");
+  const addEmbed = (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'embed',
+            title: caption,
+            url,
+            embedProvider: provider,
+            embedMeta: embedMeta || null,
+            layout: 'classic',
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Embed added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        if (err instanceof Error && err.message === 'pro_required') {
+          openUpgrade('embeds');
+        } else {
+          showToast("Couldn't add embed. Try again.");
+        }
+        throw err;
       }
-      throw err;
-    }
-  };
+    });
 
-  const addSignupForm = async (config: SignupConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'signup',
-        title: config.heading || 'Join my list',
-        position: 0,
-        signup: config,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Signup form added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      if (err instanceof Error && err.message === 'pro_required') {
-        openUpgrade('contact_forms');
-      } else {
-        showToast("Couldn't add signup form. Try again.");
+  const addSignupForm = (config: SignupConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'signup',
+            title: config.heading || 'Join my list',
+            position: 0,
+            signup: config,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Signup form added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        if (err instanceof Error && err.message === 'pro_required') {
+          openUpgrade('contact_forms');
+        } else {
+          showToast("Couldn't add signup form. Try again.");
+        }
+        throw err;
       }
-      throw err;
-    }
-  };
+    });
 
-  const addTipJar = async (config: TipJarConfig, title: string = 'Support My Work') => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'tip_jar',
-        title,
-        position: 0,
-        tipJar: config,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Tip Jar added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add tip jar. Try again.");
-      throw err;
-    }
-  };
+  const addTipJar = (config: TipJarConfig, title: string = 'Support My Work') =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'tip_jar',
+            title,
+            position: 0,
+            tipJar: config,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Tip Jar added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add tip jar. Try again.");
+        throw err;
+      }
+    });
 
-  const addFaq = async (items: FaqItem[], title: string = 'Frequently Asked Questions') => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'faq',
-        title,
-        position: 0,
-        faq: { items },
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('FAQ section added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add FAQ. Try again.");
-      throw err;
-    }
-  };
+  const addFaq = (items: FaqItem[], title: string = 'Frequently Asked Questions') =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'faq',
+            title,
+            position: 0,
+            faq: { items },
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('FAQ section added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add FAQ. Try again.");
+        throw err;
+      }
+    });
 
-  const addVCard = async (config: VCardConfig, title?: string) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'vcard',
-        title: title || config.fullName || 'Save Contact',
-        position: 0,
-        vcard: config,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Contact card added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add contact card. Try again.");
-      throw err;
-    }
-  };
+  const addVCard = (config: VCardConfig, title?: string) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'vcard',
+            title: title || config.fullName || 'Save Contact',
+            position: 0,
+            vcard: config,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Contact card added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add contact card. Try again.");
+        throw err;
+      }
+    });
 
-  const addHeader = async (title: string) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'header',
-        title,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Header added');
-    } catch {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add header. Try again.");
-    }
-  };
+  const addHeader = (title: string) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'header',
+            title,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Header added');
+      } catch {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add header. Try again.");
+      }
+    });
 
-  const addDivider = async () => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'divider',
-        title: '',
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Divider added');
-    } catch {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add divider. Try again.");
-    }
-  };
+  const addDivider = () =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'divider',
+            title: '',
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Divider added');
+      } catch {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add divider. Try again.");
+      }
+    });
 
-  const addCoffee = async (
+  const addCoffee = (
     title: string = 'Buy Me a Coffee',
     url: string = 'https://buymeacoffee.com',
     badge?: string,
     coffee?: CoffeeData | null
-  ) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'coffee',
-        title,
-        url,
-        badge,
-        coffee: coffee || null,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Buy Me a Coffee block added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add coffee block. Try again.");
-      throw err;
-    }
-  };
+  ) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'coffee',
+            title,
+            url,
+            badge,
+            coffee: coffee || null,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Buy Me a Coffee block added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add coffee block. Try again.");
+        throw err;
+      }
+    });
 
-  const addInstagram = async (title: string = 'Instagram', url: string = 'https://instagram.com', badge?: string) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'instagram',
-        title,
-        url,
-        badge,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Instagram showcase added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add Instagram block. Try again.");
-      throw err;
-    }
-  };
+  const addInstagram = (title: string = 'Instagram', url: string = 'https://instagram.com', badge?: string) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'instagram',
+            title,
+            url,
+            badge,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Instagram showcase added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add Instagram block. Try again.");
+        throw err;
+      }
+    });
 
-  const addYouTube = async (
+  const addYouTube = (
     title: string = 'YouTube Channel',
     url: string = 'https://youtube.com',
     badge?: string,
     youtube?: YouTubeData | null
-  ) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'youtube',
-        title,
-        url,
-        badge,
-        youtube: youtube || null,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('YouTube showcase added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add YouTube block. Try again.");
-      throw err;
-    }
-  };
-
-  const addProduct = async (title: string, url: string, product: ProductConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'product',
-        title,
-        url,
-        product,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Product card added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add product card. Try again.");
-      throw err;
-    }
-  };
-
-  const addBooking = async (title: string, url: string, booking: BookingConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'booking',
-        title,
-        url,
-        booking,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Booking card added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add booking card. Try again.");
-      throw err;
-    }
-  };
-
-  const addCountdown = async (title: string, url: string | null, countdown: CountdownConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'countdown',
-        title,
-        url,
-        countdown,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Countdown added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add countdown. Try again.");
-      throw err;
-    }
-  };
-
-  const addPromo = async (title: string, url: string | null, promo: PromoConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'promo',
-        title,
-        url,
-        promo,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Promo code added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add promo code. Try again.");
-      throw err;
-    }
-  };
-
-  const addLocation = async (title: string, url: string, location: LocationConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'location',
-        title,
-        url,
-        location,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Location card added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add location card. Try again.");
-      throw err;
-    }
-  };
-
-  const addDownload = async (title: string, url: string, download: DownloadConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'download',
-        title,
-        url,
-        download,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Download card added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add download card. Try again.");
-      throw err;
-    }
-  };
-
-  const addBluesky = async (title: string, url: string, bluesky: BlueskyConfig) => {
-    const prev = [...blocksRef.current];
-    try {
-      const newBlock = await createBlock(token, userId, {
-        kind: 'bluesky',
-        title,
-        url,
-        bluesky,
-        position: 0,
-      }, authCtx);
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Bluesky block added');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't add Bluesky block. Try again.");
-      throw err;
-    }
-  };
-
-  const updateBlockFields = async (id: string, patch: Partial<Block>) => {
-    const prev = [...blocksRef.current];
-    const next = prev.map((item) => (item.id === id ? { ...item, ...patch } : item));
-    blocksRef.current = next;
-    setBlocks(next);
-
-    try {
-      await updateBlock(token, userId, id, patch, authCtx);
-      const updated = next.find((b) => b.id === id);
-      if (updated) {
-        syncBlockTargets(updated).catch(() => {});
+  ) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'youtube',
+            title,
+            url,
+            badge,
+            youtube: youtube || null,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('YouTube showcase added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add YouTube block. Try again.");
+        throw err;
       }
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      if (err instanceof Error && err.message === 'pro_required') {
-        if (patch.startAt || patch.endAt) openUpgrade('scheduling');
-        else if (patch.embedProvider) openUpgrade('embeds');
-      } else {
-        showToast("Couldn't save changes. Try again.");
-      }
-      throw err;
-    }
-  };
+    });
 
-  const setBlockImage = async (
+  const addProduct = (title: string, url: string, product: ProductConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'product',
+            title,
+            url,
+            product,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Product card added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add product card. Try again.");
+        throw err;
+      }
+    });
+
+  const addBooking = (title: string, url: string, booking: BookingConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'booking',
+            title,
+            url,
+            booking,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Booking card added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add booking card. Try again.");
+        throw err;
+      }
+    });
+
+  const addCountdown = (title: string, url: string | null, countdown: CountdownConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'countdown',
+            title,
+            url,
+            countdown,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Countdown added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add countdown. Try again.");
+        throw err;
+      }
+    });
+
+  const addPromo = (title: string, url: string | null, promo: PromoConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'promo',
+            title,
+            url,
+            promo,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Promo code added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add promo code. Try again.");
+        throw err;
+      }
+    });
+
+  const addLocation = (title: string, url: string, location: LocationConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'location',
+            title,
+            url,
+            location,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Location card added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add location card. Try again.");
+        throw err;
+      }
+    });
+
+  const addDownload = (title: string, url: string, download: DownloadConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'download',
+            title,
+            url,
+            download,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Download card added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add download card. Try again.");
+        throw err;
+      }
+    });
+
+  const addBluesky = (title: string, url: string, bluesky: BlueskyConfig) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: 'bluesky',
+            title,
+            url,
+            bluesky,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Bluesky block added');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't add Bluesky block. Try again.");
+        throw err;
+      }
+    });
+
+  const updateBlockFields = (id: string, patch: Partial<Block>) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      const next = prev.map((item) => (item.id === id ? { ...item, ...patch } : item));
+      blocksRef.current = next;
+      setBlocks(next);
+      persistPublicBlocksCache(next);
+
+      try {
+        await updateBlock(token, userId, id, patch, authCtx, prev);
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        if (err instanceof Error && err.message === 'pro_required') {
+          if (patch.startAt || patch.endAt) openUpgrade('scheduling');
+          else if (patch.embedProvider) openUpgrade('embeds');
+        } else {
+          showToast("Couldn't save changes. Try again.");
+        }
+        throw err;
+      }
+    });
+
+  const setBlockImage = (
     id: string,
     thumbnailPath: string | null,
     layout: BlockLayout,
     thumbnailUrl?: string | null
-  ) => {
-    const finalThumbUrl = thumbnailUrl !== undefined ? thumbnailUrl : (thumbnailPath ? storagePublicUrl(thumbnailPath) : null);
-    const prev = [...blocksRef.current];
-    const next = prev.map((item) =>
-      item.id === id ? { ...item, thumbnailPath, thumbnailUrl: finalThumbUrl, layout } : item
-    );
-    blocksRef.current = next;
-    setBlocks(next);
+  ) =>
+    enqueueMutation(async () => {
+      const finalThumbUrl =
+        thumbnailUrl !== undefined
+          ? thumbnailUrl
+          : thumbnailPath
+            ? storagePublicUrl(thumbnailPath)
+            : null;
+      const prev = [...blocksRef.current];
+      const next = prev.map((item) =>
+        item.id === id ? { ...item, thumbnailPath, thumbnailUrl: finalThumbUrl, layout } : item
+      );
+      blocksRef.current = next;
+      setBlocks(next);
+      persistPublicBlocksCache(next);
 
-    try {
-      await apiSetBlockImage(token, userId, id, {
-        thumbnailPath,
-        layout,
-        thumbnailUrl: finalThumbUrl,
-      }, authCtx);
-      const updated = next.find((b) => b.id === id);
-      if (updated) {
-        syncBlockTargets(updated).catch(() => {});
+      try {
+        await apiSetBlockImage(
+          token,
+          userId,
+          id,
+          {
+            thumbnailPath,
+            layout,
+            thumbnailUrl: finalThumbUrl,
+          },
+          authCtx,
+          prev
+        );
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't save image. Try again.");
+        throw err;
       }
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't save image. Try again.");
-      throw err;
-    }
-  };
-
-  const deleteBlockById = async (id: string) => {
-    const prev = [...blocksRef.current];
-    const target = prev.find((b) => b.id === id);
-    const next = prev.filter((item) => item.id !== id);
-    blocksRef.current = next;
-    setBlocks(next);
-
-    try {
-      await apiDeleteBlock(token, userId, id, authCtx);
-      if (isDemoMode) {
-        persistPublicBlocksCache(next);
-      } else {
-        await Promise.all([
-          deleteBlockFromFirebase(userId, id).catch(() => {}),
-          ownerUserId && ownerUserId !== userId
-            ? deleteBlockFromFirebase(ownerUserId, id).catch(() => {})
-            : Promise.resolve(),
-          syncAllTargets(next).catch(() => {}),
-        ]);
-      }
-      showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
-    } catch {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't delete item. Try again.");
-    }
-  };
-
-  const toggleArchive = async (id: string) => {
-    const prev = [...blocksRef.current];
-    const target = prev.find((b) => b.id === id);
-    if (!target) return;
-    const nextArchived = !target.isArchived;
-    const next = prev.map((item) => (item.id === id ? { ...item, isArchived: nextArchived } : item));
-    blocksRef.current = next;
-    setBlocks(next);
-
-    try {
-      await updateBlock(token, userId, id, { isArchived: nextArchived }, authCtx);
-      syncBlockTargets({ ...target, isArchived: nextArchived }).catch(() => {});
-      const isEmbed = target.kind === 'embed';
-      if (nextArchived) {
-        showToast(isEmbed ? 'Embed archived' : 'Link archived');
-      } else {
-        showToast(isEmbed ? 'Embed restored' : 'Link restored');
-      }
-    } catch {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't update item. Try again.");
-    }
-  };
-
-  const toggleActive = async (id: string) => {
-    const prev = [...blocksRef.current];
-    const target = prev.find((b) => b.id === id);
-    if (!target) return;
-    const nextActive = !target.isActive;
-    const next = prev.map((item) => (item.id === id ? { ...item, isActive: nextActive } : item));
-    blocksRef.current = next;
-    setBlocks(next);
-
-    try {
-      await updateBlock(token, userId, id, { isActive: nextActive }, authCtx);
-      syncBlockTargets({ ...target, isActive: nextActive }).catch(() => {});
-    } catch {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      showToast("Couldn't update item. Try again.");
-    }
-  };
-
-  const reorderBlocks = async (orderedIds: string[]) => {
-    const current = [...blocksRef.current];
-    const idMap = new Map(current.map((b) => [b.id, b]));
-    const reordered: Block[] = [];
-
-    orderedIds.forEach((id, idx) => {
-      const b = idMap.get(id);
-      if (b) reordered.push({ ...b, position: idx });
     });
 
-    // Append unmentioned (e.g. archived) blocks
-    current.forEach((b) => {
-      if (!orderedIds.includes(b.id)) reordered.push(b);
+  const deleteBlockById = (id: string) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      const target = prev.find((b) => b.id === id);
+      const next = prev.filter((item) => item.id !== id).map((item, idx) => ({ ...item, position: idx }));
+      blocksRef.current = next;
+      setBlocks(next);
+      persistPublicBlocksCache(next);
+
+      try {
+        await apiDeleteBlock(token, userId, id, authCtx, prev);
+        showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
+      } catch {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't delete item. Try again.");
+      }
     });
 
-    blocksRef.current = reordered;
-    setBlocks(reordered);
-    await saveOrderedBlocks(token, userId, reordered, authCtx).catch(() => {});
-    syncAllTargets(reordered).catch(() => {});
-  };
+  const toggleArchive = (id: string) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      const target = prev.find((b) => b.id === id);
+      if (!target) return;
+      const nextArchived = !target.isArchived;
+      const next = prev.map((item) => (item.id === id ? { ...item, isArchived: nextArchived } : item));
+      blocksRef.current = next;
+      setBlocks(next);
+      persistPublicBlocksCache(next);
+
+      try {
+        await updateBlock(token, userId, id, { isArchived: nextArchived }, authCtx, prev);
+        const isEmbed = target.kind === 'embed';
+        if (nextArchived) {
+          showToast(isEmbed ? 'Embed archived' : 'Link archived');
+        } else {
+          showToast(isEmbed ? 'Embed restored' : 'Link restored');
+        }
+      } catch {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't update item. Try again.");
+      }
+    });
+
+  const toggleActive = (id: string) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      const target = prev.find((b) => b.id === id);
+      if (!target) return;
+      const nextActive = !target.isActive;
+      const next = prev.map((item) => (item.id === id ? { ...item, isActive: nextActive } : item));
+      blocksRef.current = next;
+      setBlocks(next);
+      persistPublicBlocksCache(next);
+
+      try {
+        await updateBlock(token, userId, id, { isActive: nextActive }, authCtx, prev);
+      } catch {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't update item. Try again.");
+      }
+    });
+
+  const reorderBlocks = (orderedIds: string[]) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      const idMap = new Map(prev.map((b) => [b.id, b]));
+      const reordered: Block[] = [];
+
+      orderedIds.forEach((id, idx) => {
+        const b = idMap.get(id);
+        if (b) reordered.push({ ...b, position: idx });
+      });
+
+      // Append unmentioned (e.g. archived) blocks preserving order indices
+      prev.forEach((b) => {
+        if (!orderedIds.includes(b.id)) {
+          reordered.push({ ...b, position: reordered.length });
+        }
+      });
+
+      blocksRef.current = reordered;
+      setBlocks(reordered);
+      persistPublicBlocksCache(reordered);
+
+      try {
+        await saveOrderedBlocks(token, userId, reordered, authCtx);
+      } catch {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        showToast("Couldn't save order. Try again.");
+      }
+    });
 
   const clearSchedule = async (id: string) => {
     await updateBlockFields(id, { startAt: null, endAt: null });
     showToast('Schedule cleared');
   };
 
-  const duplicateBlock = async (block: Block) => {
-    const prev = [...blocksRef.current];
-    try {
-      const nextTitle = block.title ? `Copy of ${block.title}` : block.kind === 'divider' ? '' : 'Copy';
-      const newBlock = await createBlock(
-        token,
-        userId,
-        {
-          kind: block.kind,
-          title: nextTitle,
-          url: block.url ?? undefined,
-          icon: block.icon ?? undefined,
-          layout: block.layout,
-          embedProvider: block.embedProvider ?? undefined,
-          embedMeta: block.embedMeta ?? undefined,
-          signup: block.signup ?? undefined,
-          tipJar: block.tipJar ?? undefined,
-          faq: block.faq ?? undefined,
-          vcard: block.vcard ?? undefined,
-          coffee: block.coffee ?? undefined,
-          youtube: block.youtube ?? undefined,
-          product: block.product ?? undefined,
-          booking: block.booking ?? undefined,
-          countdown: block.countdown ?? undefined,
-          promo: block.promo ?? undefined,
-          location: block.location ?? undefined,
-          download: block.download ?? undefined,
-          bluesky: block.bluesky ?? undefined,
-          animation: block.animation ?? undefined,
-          badge: block.badge ?? undefined,
-          position: 0,
-        },
-        authCtx
-      );
-      const next = prependNormalizedBlock(blocksRef.current, newBlock);
-      blocksRef.current = next;
-      setBlocks(next);
-      syncAllTargets(next).catch(() => {});
-      showToast('Item duplicated');
-    } catch (err: unknown) {
-      blocksRef.current = prev;
-      setBlocks(prev);
-      if (err instanceof Error && err.message === 'pro_required') {
-        openUpgrade('embeds');
-      } else {
-        showToast("Couldn't duplicate item. Try again.");
+  const duplicateBlock = (block: Block) =>
+    enqueueMutation(async () => {
+      const prev = [...blocksRef.current];
+      try {
+        const nextTitle = block.title ? `Copy of ${block.title}` : block.kind === 'divider' ? '' : 'Copy';
+        const newBlock = await createBlock(
+          token,
+          userId,
+          {
+            kind: block.kind,
+            title: nextTitle,
+            url: block.url ?? undefined,
+            icon: block.icon ?? undefined,
+            layout: block.layout,
+            embedProvider: block.embedProvider ?? undefined,
+            embedMeta: block.embedMeta ?? undefined,
+            signup: block.signup ?? undefined,
+            tipJar: block.tipJar ?? undefined,
+            faq: block.faq ?? undefined,
+            vcard: block.vcard ?? undefined,
+            coffee: block.coffee ?? undefined,
+            youtube: block.youtube ?? undefined,
+            product: block.product ?? undefined,
+            booking: block.booking ?? undefined,
+            countdown: block.countdown ?? undefined,
+            promo: block.promo ?? undefined,
+            location: block.location ?? undefined,
+            download: block.download ?? undefined,
+            bluesky: block.bluesky ?? undefined,
+            animation: block.animation ?? undefined,
+            badge: block.badge ?? undefined,
+            position: 0,
+          },
+          authCtx,
+          prev
+        );
+        const next = prependNormalizedBlock(prev, newBlock);
+        blocksRef.current = next;
+        setBlocks(next);
+        persistPublicBlocksCache(next);
+        showToast('Item duplicated');
+      } catch (err: unknown) {
+        blocksRef.current = prev;
+        setBlocks(prev);
+        persistPublicBlocksCache(prev);
+        if (err instanceof Error && err.message === 'pro_required') {
+          openUpgrade('embeds');
+        } else {
+          showToast("Couldn't duplicate item. Try again.");
+        }
       }
-    }
-  };
+    });
 
   return (
     <BlocksContext.Provider

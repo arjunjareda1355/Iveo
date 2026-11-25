@@ -244,6 +244,12 @@ export async function firebaseGetBlocks(username: string, ownerUserId?: string |
         .sort((a, b) => (a.position ?? a.order ?? 0) - (b.position ?? b.order ?? 0));
     }
 
+    // Respect intentional empty state when user has initialized/emptied their blocks
+    const cleanUserSnap = await getDoc(doc(serverDb, 'users', clean)).catch(() => null);
+    if (cleanUserSnap && cleanUserSnap.exists() && cleanUserSnap.data()?.blocksInitialized === true) {
+      return [];
+    }
+
     // 2. Try under claim userId or explicit ownerUserId
     const candidateUserIds = new Set<string>();
     if (ownerUserId && ownerUserId !== clean && ownerUserId !== 'owner') {
@@ -427,6 +433,9 @@ export async function firebaseSaveProfile(
         profileData.appearance !== undefined
           ? profileData.appearance ?? null
           : existingData.appearance ?? null,
+      ...(profileData.blocksInitialized !== undefined || existingData.blocksInitialized !== undefined
+        ? { blocksInitialized: Boolean(profileData.blocksInitialized ?? existingData.blocksInitialized) }
+        : {}),
       updatedAt: profileData.updatedAt || new Date().toISOString(),
     };
 
@@ -571,11 +580,19 @@ export async function firebaseSaveBlocks(
       });
     }
 
+    const blocksInitTs = new Date().toISOString();
     batch.set(
       doc(serverDb, 'users', clean),
-      { blocksInitialized: true, updatedAt: new Date().toISOString() },
+      { blocksInitialized: true, updatedAt: blocksInitTs },
       { merge: true }
     );
+    if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
+      batch.set(
+        doc(serverDb, 'users', effectiveUserId),
+        { blocksInitialized: true, updatedAt: blocksInitTs },
+        { merge: true }
+      );
+    }
 
     await batch.commit();
   } catch (err) {
