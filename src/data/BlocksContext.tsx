@@ -38,7 +38,13 @@ interface BlocksContextValue {
   addEmbed: (url: string, caption: string, provider: EmbedProvider, embedMeta?: EmbedMetaData | null) => Promise<void>;
   addSignupForm: (config: SignupConfig) => Promise<void>;
   addTipJar: (config: TipJarConfig, title?: string) => Promise<void>;
-  addCoffee: (title?: string, url?: string, badge?: string, coffee?: CoffeeData | null) => Promise<void>;
+  addCoffee: (
+    title?: string,
+    url?: string,
+    badge?: string,
+    coffee?: CoffeeData | null,
+    embedMeta?: EmbedMetaData | null
+  ) => Promise<void>;
   addInstagram: (title?: string, url?: string, badge?: string) => Promise<void>;
   addYouTube: (title?: string, url?: string, badge?: string, youtube?: YouTubeData | null) => Promise<void>;
   addProduct: (title: string, url: string, product: ProductConfig) => Promise<void>;
@@ -420,7 +426,8 @@ export const BlocksProvider: React.FC<{
     title: string = 'Buy Me a Coffee',
     url: string = 'https://buymeacoffee.com',
     badge?: string,
-    coffee?: CoffeeData | null
+    coffee?: CoffeeData | null,
+    embedMeta?: EmbedMetaData | null
   ) =>
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
@@ -434,6 +441,8 @@ export const BlocksProvider: React.FC<{
             url,
             badge,
             coffee: coffee || null,
+            embedProvider: embedMeta ? 'coffee' : null,
+            embedMeta: embedMeta || null,
             position: 0,
           },
           authCtx,

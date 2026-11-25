@@ -98,6 +98,7 @@ export function isSocialEmbedProvider(
     provider === 'twitch' ||
     provider === 'snapchat' ||
     provider === 'linktree' ||
-    provider === 'bluesky'
+    provider === 'bluesky' ||
+    provider === 'coffee'
   );
 }

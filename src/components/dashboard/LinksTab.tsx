@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Link2,
@@ -95,12 +95,13 @@ const FORM_KINDS: BlockKind[] = ['signup', 'faq', 'booking', 'vcard', 'countdown
 const HEADER_KINDS: BlockKind[] = ['header', 'divider'];
 
 function isPlatformBlockKind(kind: BlockKind): boolean {
-  return kind === 'embed' || kind === 'youtube' || kind === 'instagram';
+  return kind === 'embed' || kind === 'youtube' || kind === 'instagram' || kind === 'coffee';
 }
 
 function getPlatformProviderForBlock(block: Block): EmbedProvider {
   if (block.kind === 'youtube') return 'youtube';
   if (block.kind === 'instagram') return 'instagram';
+  if (block.kind === 'coffee') return 'coffee';
   return (block.embedMeta?.provider || block.embedProvider || 'generic') as EmbedProvider;
 }
 
@@ -249,6 +250,8 @@ function getBlockSubtitle(block: Block): string {
 export const LinksTab: React.FC = () => {
   const clickCounts = useClickCounts();
   const { showToast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     blocks,
     isLoading,
@@ -606,6 +609,58 @@ export const LinksTab: React.FC = () => {
     if (!block.url) return;
     setRefreshingBlockId(block.id);
     try {
+      if (block.kind === 'coffee') {
+        const res = await fetch(
+          `/api/integrations/buymeacoffee?url=${encodeURIComponent(block.url)}`
+        );
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.ok && data?.profile) {
+          const p = data.profile;
+          const creatorTitle = p.displayName || p.creatorName || p.slug || block.title;
+          const countNum =
+            typeof p.supporterCount === 'number'
+              ? p.supporterCount
+              : typeof p.supportersCount === 'number'
+                ? p.supportersCount
+                : block.coffee?.supportersCount;
+          await updateBlock(block.id, {
+            coffee: {
+              ...(block.coffee || {}),
+              slug: p.slug || block.coffee?.slug,
+              creatorName: creatorTitle,
+              bio: p.bio || block.coffee?.bio,
+              avatarUrl: p.avatarUrl || block.coffee?.avatarUrl,
+              coverUrl: p.coverUrl || block.coffee?.coverUrl,
+              supportersCount: countNum,
+              supportersLabel: p.supportersLabel || block.coffee?.supportersLabel,
+              fetchedAt: p.fetchedAt || new Date().toISOString(),
+            },
+            embedMeta: {
+              ...(block.embedMeta || { provider: 'coffee' }),
+              provider: 'coffee',
+              title: creatorTitle,
+              handle: p.slug ? `@${String(p.slug).replace(/^@/, '')}` : block.embedMeta?.handle ?? null,
+              subtitle: p.slug ? `buymeacoffee.com/${p.slug}` : block.embedMeta?.subtitle ?? null,
+              description: p.bio ?? block.embedMeta?.description ?? null,
+              avatarUrl: p.avatarUrl ?? block.embedMeta?.avatarUrl ?? null,
+              coverUrl: p.coverUrl ?? block.embedMeta?.coverUrl ?? null,
+              statsLabel:
+                p.supportersLabel ||
+                (typeof countNum === 'number' && countNum > 0
+                  ? `${countNum} supporters`
+                  : block.embedMeta?.statsLabel ?? null),
+              needsAttention: false,
+              failureCount: 0,
+              fetchedAt: p.fetchedAt || new Date().toISOString(),
+            },
+          });
+          showToast('Card refreshed');
+        } else {
+          showToast("Couldn't refresh details right now.");
+        }
+        return;
+      }
+
       const qs = new URLSearchParams({
         url: block.url,
         forceRefresh: '1',
@@ -669,12 +724,26 @@ export const LinksTab: React.FC = () => {
         embedProvider: payload.provider,
         embedMeta: payload.embedMeta,
         ...(payload.youtubeData !== undefined ? { youtube: payload.youtubeData } : {}),
+        ...(payload.coffeeData !== undefined ? { coffee: payload.coffeeData } : {}),
         ...(payload.schedule
           ? { startAt: payload.schedule.startAt, endAt: payload.schedule.endAt }
           : {}),
       });
       setPlatformEditorState({ isOpen: false });
       showToast('Saved');
+      return;
+    }
+
+    if (payload.provider === 'coffee') {
+      await addCoffee(
+        payload.title,
+        payload.url,
+        payload.embedMeta?.subtitle || undefined,
+        payload.coffeeData || null,
+        payload.embedMeta
+      );
+      setPlatformEditorState({ isOpen: false });
+      showToast('Added');
       return;
     }
 
@@ -1293,9 +1362,17 @@ export const LinksTab: React.FC = () => {
               (isLink || isInstagram || isYouTube);
 
             const platformIconColor =
-              platformDef?.brandColor === '#000000'
+              platformDef?.brandColor === '#000000' ||
+              platformDef?.brandColor === '#FFFC00' ||
+              platformDef?.brandColor === '#FFDD00'
                 ? '#0A0A0A'
                 : platformDef?.brandColor || '#0A0A0A';
+            const platformTileBg =
+              platformDef?.brandColor === '#FFFC00'
+                ? 'rgba(255, 252, 0, 0.35)'
+                : platformDef?.brandColor === '#FFDD00'
+                  ? 'rgba(255, 221, 0, 0.35)'
+                  : `${platformIconColor}14`;
 
             return (
               <Card
@@ -1358,7 +1435,7 @@ export const LinksTab: React.FC = () => {
                             style={
                               platformProvider
                                 ? {
-                                    backgroundColor: `${platformIconColor}14`,
+                                    backgroundColor: platformTileBg,
                                     color: platformIconColor,
                                     borderColor: `${platformIconColor}2E`,
                                   }
@@ -2047,7 +2124,11 @@ export const LinksTab: React.FC = () => {
           handleNewLinkUrlChange(canonicalUrl);
         }}
         onSelectFeature={async (type: FeatureType) => {
-          if (type === 'social') {
+          if (type === 'coffee') {
+            const nextParams = new URLSearchParams(location.search);
+            nextParams.set('platform', 'coffee');
+            navigate(`/dashboard/profiles?${nextParams.toString()}`);
+          } else if (type === 'social') {
             setSocialAddTrigger((n) => n + 1);
             setTimeout(() => {
               document

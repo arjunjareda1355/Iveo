@@ -25,6 +25,9 @@ const {
   handleRenameTheme,
   handleDeleteTheme,
   handleApplyTheme,
+  handleSurpriseAppearance,
+  handleAppearanceSuggestions,
+  handleRegenerateAppearance,
   resetAppearanceRateLimitForTests,
 } = await import('./appearance-handlers.ts');
 const { adminInspectBilling, adminReconcileBilling } = await import('./billingService.ts');
@@ -33,6 +36,8 @@ const {
   handleGetPublicPage,
   handleSaveProfile,
   handleSeoAdminModerateBackground,
+  handleOAuthStatus,
+  handleSocialOAuthUrl,
 } = await import('./db-handlers.ts');
 
 function createMockRes() {
@@ -467,5 +472,100 @@ describe('Sync, Owner SEO/Billing, and Theme Save/Apply Fixes', () => {
     );
     assert.equal(delRes.state.statusCode, 200);
     assert.equal(delRes.state.body.themes.length, 0);
+  });
+
+  it('POST /api/appearance/surprise & regenerate respect locks, Pro/Free tier, and unique signatures', async () => {
+    const proHeaders = { 'x-user-id': 'user-sync-1', 'x-user-email': 'sync@example.com' };
+
+    const getRes = createMockRes();
+    await handleGetAppearance(makeReq({ headers: proHeaders, query: { username: 'synccreator' } }), getRes);
+    const current = getRes.state.body.appearance;
+
+    const surpriseRes = createMockRes();
+    await handleSurpriseAppearance(
+      makeReq({
+        headers: proHeaders,
+        body: {
+          username: 'synccreator',
+          current,
+          locks: ['font.name', 'font.bio', 'background'],
+          bio: 'Creative technologist & designer',
+          recent: [],
+        },
+      }),
+      surpriseRes
+    );
+    assert.equal(surpriseRes.state.statusCode, 200);
+    assert.equal(surpriseRes.state.body.ok, true);
+    assert.equal(surpriseRes.state.body.tier, 'pro');
+    assert.ok(surpriseRes.state.body.appearance);
+    assert.ok(surpriseRes.state.body.signature);
+    // Locked typography must preserve current font settings
+    assert.equal(
+      surpriseRes.state.body.appearance.typography.name.family,
+      current.typography.name.family
+    );
+    assert.equal(
+      surpriseRes.state.body.appearance.typography.bio.family,
+      current.typography.bio.family
+    );
+
+    const suggRes = createMockRes();
+    await handleAppearanceSuggestions(
+      makeReq({
+        headers: proHeaders,
+        query: { username: 'synccreator', section: 'vibe', count: '5' },
+      }),
+      suggRes
+    );
+    assert.equal(suggRes.state.statusCode, 200);
+    assert.equal(suggRes.state.body.ok, true);
+    assert.equal(suggRes.state.body.items.length, 5);
+
+    // Unauthenticated demo mode runs strictly as Free tier
+    const freeRes = createMockRes();
+    await handleRegenerateAppearance(
+      makeReq({
+        body: {
+          section: 'all',
+          recent: [],
+        },
+      }),
+      freeRes
+    );
+    assert.equal(freeRes.state.statusCode, 200);
+    assert.equal(freeRes.state.body.tier, 'free');
+    assert.ok(Array.isArray(freeRes.state.body.items) && freeRes.state.body.items.length > 0);
+    for (const item of freeRes.state.body.items) {
+      assert.ok(item.appearance);
+      assert.notEqual(item.appearance.background.type, 'animated');
+    }
+  });
+
+  it('OAuth status and social OAuth URL return clean structured status when server OAuth is unconfigured', async () => {
+    const statusRes = createMockRes();
+    await handleOAuthStatus(makeReq({}), statusRes);
+    assert.equal(statusRes.state.statusCode, 200);
+    assert.equal(statusRes.state.body.ok, true);
+    assert.equal(typeof statusRes.state.body.providers.linkedin, 'boolean');
+
+    const prevId = process.env.LINKEDIN_CLIENT_ID;
+    const prevSecret = process.env.LINKEDIN_CLIENT_SECRET;
+    delete process.env.LINKEDIN_CLIENT_ID;
+    delete process.env.LINKEDIN_CLIENT_SECRET;
+
+    try {
+      const urlRes = createMockRes();
+      await handleSocialOAuthUrl(
+        makeReq({ query: { provider: 'linkedin', origin: 'https://iveo.site' } }),
+        urlRes
+      );
+      assert.equal(urlRes.state.statusCode, 503);
+      assert.equal(urlRes.state.body.ok, false);
+      assert.equal(urlRes.state.body.error, 'oauth_not_configured');
+    } finally {
+      if (prevId !== undefined) process.env.LINKEDIN_CLIENT_ID = prevId;
+      if (prevSecret !== undefined) process.env.LINKEDIN_CLIENT_SECRET = prevSecret;
+    }
   });
 });

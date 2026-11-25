@@ -33,6 +33,7 @@ export interface BannerLookCardProps {
   platformGlyph: React.ReactNode;
   spotifyLogo?: React.ReactNode;
   ctaButton: React.ReactNode;
+  footerContent?: React.ReactNode;
   previewBannerImageOverride?: string | null;
 }
 
@@ -60,6 +61,7 @@ export const BannerLookCard: React.FC<BannerLookCardProps> = ({
   platformGlyph,
   spotifyLogo,
   ctaButton,
+  footerContent,
   previewBannerImageOverride,
 }) => {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -249,7 +251,10 @@ export const BannerLookCard: React.FC<BannerLookCardProps> = ({
                 width: `${metrics.platformTileSize}px`,
                 height: `${metrics.platformTileSize}px`,
                 borderRadius: `${Math.max(3, Math.round(4 * scale))}px`,
-                color: brandColor.toUpperCase() === '#FFFC00' ? '#0A0A0A' : brandColor,
+                color:
+                  brandColor.toUpperCase() === '#FFFC00' || brandColor.toUpperCase() === '#FFDD00'
+                    ? '#0A0A0A'
+                    : brandColor,
               }}
               aria-hidden="true"
             >
@@ -271,7 +276,7 @@ export const BannerLookCard: React.FC<BannerLookCardProps> = ({
         }}
       >
         <div
-          className={`flex items-end gap-3 ${showPicture ? 'justify-between' : 'justify-end'}`}
+          className={`flex flex-wrap items-end gap-x-3 gap-y-2 ${showPicture ? 'justify-between' : 'justify-end'}`}
         >
           {showPicture && (
             <div
@@ -393,6 +398,8 @@ export const BannerLookCard: React.FC<BannerLookCardProps> = ({
             )}
           </div>
         )}
+
+        {footerContent}
       </div>
     </div>
   );

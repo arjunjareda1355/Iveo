@@ -1661,7 +1661,7 @@ export async function handlePinterestTokenProfile(req: ExpressReq, res: ExpressR
  * Reports which OAuth providers have valid credentials configured on the server
  */
 export async function handleOAuthStatus(_req: ExpressReq, res: ExpressRes) {
-  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   return res.status(200).json({
     ok: true,
     providers: getOAuthAvailability(),
@@ -1673,7 +1673,7 @@ export async function handleOAuthStatus(_req: ExpressReq, res: ExpressRes) {
  * Generates authorization URL for creator page card connections (Discord, GitHub, LinkedIn, X, etc.)
  */
 export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
-  const providerRaw = String(req.params.provider || '').toLowerCase().trim();
+  const providerRaw = String(req.params?.provider || req.query?.provider || '').toLowerCase().trim();
   if (!isValidSocialOAuthProvider(providerRaw)) {
     return res.status(400).json({ ok: false, error: 'unsupported_provider' });
   }
@@ -1708,7 +1708,7 @@ export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
  */
 export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes) {
   const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
-  const providerParam = String(req.params.provider || '').toLowerCase().trim();
+  const providerParam = String(req.params?.provider || req.query?.provider || '').toLowerCase().trim();
   const providerRaw = providerParam || extractProviderFromOAuthState(stateParam) || '';
   const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
   const oauthError = typeof req.query.error === 'string' ? req.query.error.trim() : '';
@@ -1774,6 +1774,15 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
     return sendPopupHtml({
       type: 'IVEO_SOCIAL_OAUTH_SUCCESS',
       provider: providerRaw,
+      profile: {
+        displayName: connected.title || connected.embedMeta?.title || null,
+        handle: connected.embedMeta?.handle || connected.embedMeta?.subtitle || null,
+        avatarUrl: connected.embedMeta?.avatarUrl || null,
+        coverUrl: connected.embedMeta?.coverUrl || null,
+        bio: connected.embedMeta?.description || null,
+        statsLabel: connected.embedMeta?.statsLabel || null,
+        url: connected.url || null,
+      },
       embed: {
         ...connected.embedMeta,
         url: connected.url,

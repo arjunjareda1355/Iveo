@@ -8,6 +8,7 @@ import {
   Globe,
   ExternalLink,
   Instagram,
+  Coffee,
 } from 'lucide-react';
 import { CardLookStyle, EmbedProvider, PageBlock, BackgroundConfig } from '../../data/types';
 import { Vibe } from '../../lib/vibes';
@@ -166,6 +167,8 @@ export const ProviderGlyph: React.FC<{ provider: string; size?: number }> = ({
       return <TwitchIcon size={Math.max(12, size - 1)} />;
     case 'snapchat':
       return <SnapchatIcon size={Math.max(12, size - 1)} />;
+    case 'coffee':
+      return <Coffee size={size} strokeWidth={1.8} />;
     default:
       return <Globe size={size} strokeWidth={1.7} />;
   }

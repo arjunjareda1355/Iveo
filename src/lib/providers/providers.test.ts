@@ -10,12 +10,13 @@ import {
 import { cleanUrlTracking, detectProviderUrl } from './detect.ts';
 
 describe('provider registry completeness (AK-1, PV-1..PV-12)', () => {
-  it('registers all 15 social/player providers plus generic link fallback', () => {
+  it('registers all 16 social/player providers plus generic link fallback', () => {
     const platforms = listPlatformProviders();
-    assert.equal(platforms.length, 15);
+    assert.equal(platforms.length, 16);
     assert.ok(PROVIDER_REGISTRY.bluesky, 'Bluesky proof-of-architecture provider is registered');
     assert.ok(PROVIDER_REGISTRY.twitch, 'Twitch provider is registered');
     assert.ok(PROVIDER_REGISTRY.snapchat, 'Snapchat provider is registered');
+    assert.ok(PROVIDER_REGISTRY.coffee, 'Buy Me a Coffee provider is registered');
     assert.ok(PROVIDER_REGISTRY.generic, 'Generic web link fallback is registered');
     assert.equal(PROVIDER_REGISTRY.spotify.supportsOAuth, false);
     assert.equal(PROVIDER_REGISTRY.spotify.restrictions?.noArtworkBanner, true);
@@ -23,6 +24,7 @@ describe('provider registry completeness (AK-1, PV-1..PV-12)', () => {
     assert.equal(PROVIDER_REGISTRY.pinterest.supportsOAuth, false);
     assert.equal(PROVIDER_REGISTRY.discord.supportsOAuth, true);
     assert.equal(PROVIDER_REGISTRY.snapchat.supportsOAuth, true);
+    assert.equal(PROVIDER_REGISTRY.coffee.supportsOAuth, false);
   });
 
   it('resolves unknown provider or kind safely to defaults', () => {
@@ -197,5 +199,20 @@ describe('cleanUrlTracking & detectProviderUrl', () => {
     const handle = detectProviderUrl('@snapcreator', 'snapchat');
     assert.equal(handle?.provider, 'snapchat');
     assert.equal(handle?.canonicalUrl, 'https://www.snapchat.com/add/snapcreator');
+  });
+
+  it('detects Buy Me a Coffee links, shortlinks, and bare handles', () => {
+    const bmc = detectProviderUrl('https://buymeacoffee.com/creativestudio');
+    assert.equal(bmc?.provider, 'coffee');
+    assert.equal(bmc?.subtype, 'profile');
+    assert.equal(bmc?.canonicalUrl, 'https://www.buymeacoffee.com/creativestudio');
+
+    const shortBmc = detectProviderUrl('https://coff.ee/creativestudio');
+    assert.equal(shortBmc?.provider, 'coffee');
+    assert.equal(shortBmc?.canonicalUrl, 'https://www.buymeacoffee.com/creativestudio');
+
+    const bare = detectProviderUrl('@creativestudio', 'coffee');
+    assert.equal(bare?.provider, 'coffee');
+    assert.equal(bare?.canonicalUrl, 'https://www.buymeacoffee.com/creativestudio');
   });
 });

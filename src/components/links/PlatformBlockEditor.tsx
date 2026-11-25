@@ -12,6 +12,7 @@ import {
 import type {
   Block,
   CardLookStyle,
+  CoffeeData,
   EmbedMetaData,
   EmbedProvider,
   PageBlock,
@@ -48,6 +49,7 @@ import { BannerImageControls } from './BannerImageControls';
 import { deleteCardBannersFromServer } from '../../lib/bannerClientImage';
 import { sanitizeEmbedMetaBannerForSave } from '../../lib/cardBanner';
 import { EmbedBlock, ProviderGlyph } from '../page/EmbedBlock';
+import { CoffeeCardBlock } from '../page/CoffeeCardBlock';
 
 export interface PlatformEditorSavePayload {
   url: string;
@@ -55,6 +57,7 @@ export interface PlatformEditorSavePayload {
   provider: EmbedProvider;
   embedMeta: EmbedMetaData;
   youtubeData?: YouTubeData | null;
+  coffeeData?: CoffeeData | null;
   schedule?: { startAt: string | null; endAt: string | null };
 }
 
@@ -78,6 +81,7 @@ function deriveInitialFromBlock(
   url: string;
   title: string;
   meta: EmbedMetaData;
+  coffeeData: CoffeeData | null;
   startAt: string | null;
   endAt: string | null;
 } {
@@ -103,6 +107,7 @@ function deriveInitialFromBlock(
         showStats: kindDef.capabilities.stats,
         showPlatformLabel: true,
       },
+      coffeeData: null,
       startAt: null,
       endAt: null,
     };
@@ -136,6 +141,7 @@ function deriveInitialFromBlock(
         connectedViaOAuth: Boolean(yt?.connectedViaOAuth),
         fetchedAt: yt?.fetchedAt || null,
       },
+      coffeeData: null,
       startAt: block.startAt || null,
       endAt: block.endAt || null,
     };
@@ -160,6 +166,55 @@ function deriveInitialFromBlock(
         showStats: false,
         showPlatformLabel: true,
       },
+      coffeeData: null,
+      startAt: block.startAt || null,
+      endAt: block.endAt || null,
+    };
+  }
+
+  // Buy Me a Coffee card block compatibility (legacy & themed)
+  if (block.kind === 'coffee') {
+    const c = block.coffee;
+    const existingMeta = block.embedMeta;
+    const handle = c?.slug ? `@${c.slug.replace(/^@/, '')}` : existingMeta?.handle || null;
+    const fallbackUrl =
+      block.url ||
+      (c?.slug ? `https://www.buymeacoffee.com/${c.slug}` : 'https://www.buymeacoffee.com');
+    const derivedStats =
+      existingMeta?.statsLabel ??
+      c?.supportersLabel ??
+      (typeof c?.supportersCount === 'number' && c.supportersCount > 0
+        ? `${c.supportersCount} supporters`
+        : null);
+    return {
+      provider: 'coffee',
+      url: fallbackUrl,
+      title: block.title || existingMeta?.title || c?.creatorName || 'Buy Me a Coffee',
+      meta: {
+        ...(existingMeta || { provider: 'coffee' }),
+        provider: 'coffee',
+        subtype: existingMeta?.subtype || 'profile',
+        title: existingMeta?.title || c?.creatorName || block.title || null,
+        handle,
+        subtitle:
+          existingMeta?.subtitle ||
+          block.badge ||
+          (c?.slug ? `buymeacoffee.com/${c.slug}` : null),
+        description: existingMeta?.description || c?.bio || null,
+        avatarUrl: existingMeta?.avatarUrl || c?.avatarUrl || null,
+        coverUrl: existingMeta?.coverUrl || c?.coverUrl || null,
+        statsLabel: derivedStats,
+        ctaLabel: existingMeta?.ctaLabel || c?.buttonLabel || 'Support with a Coffee',
+        displayAs: 'card',
+        lookStyle: existingMeta?.lookStyle
+          ? normalizeEmbedLookStyle(existingMeta.lookStyle, 'match_page')
+          : undefined,
+        showAvatar: existingMeta?.showAvatar ?? true,
+        showDescription: existingMeta?.showDescription ?? true,
+        showStats: existingMeta?.showStats ?? true,
+        showPlatformLabel: existingMeta?.showPlatformLabel ?? true,
+      },
+      coffeeData: c || null,
       startAt: block.startAt || null,
       endAt: block.endAt || null,
     };
@@ -191,6 +246,7 @@ function deriveInitialFromBlock(
       showStats: block.embedMeta?.showStats ?? kindDef.capabilities.stats,
       showPlatformLabel: block.embedMeta?.showPlatformLabel ?? true,
     },
+    coffeeData: block.coffee || null,
     startAt: block.startAt || null,
     endAt: block.endAt || null,
   };
@@ -219,6 +275,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const [titleInput, setTitleInput] = useState(initialState.title);
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(Boolean(initialState.title));
   const [meta, setMeta] = useState<EmbedMetaData>(initialState.meta);
+  const [coffeeData, setCoffeeData] = useState<CoffeeData | null>(initialState.coffeeData);
   const [startAt, setStartAt] = useState<string | null>(initialState.startAt);
   const [endAt, setEndAt] = useState<string | null>(initialState.endAt);
 
@@ -258,6 +315,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     setTitleInput(init.title);
     setTitleManuallyEdited(Boolean(init.title));
     setMeta(init.meta);
+    setCoffeeData(init.coffeeData);
     setStartAt(init.startAt);
     setEndAt(init.endAt);
     setIsMoreOpen(false);
@@ -523,6 +581,83 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     setLookupFailed(false);
 
     try {
+      // Buy Me a Coffee live creator & supporters lookup
+      if (detected.provider === 'coffee' || provider === 'coffee') {
+        const res = await fetch(
+          `/api/integrations/buymeacoffee?url=${encodeURIComponent(detected.canonicalUrl)}`
+        );
+        const data = await res.json().catch(() => null);
+        if (seq !== lookupSeqRef.current) return;
+
+        if (res.ok && data?.ok && data?.profile) {
+          const p = data.profile;
+          lastResolvedUrlRef.current = detected.canonicalUrl;
+          const creatorTitle = p.displayName || p.creatorName || p.slug || 'Buy Me a Coffee';
+          const mappedSupporters = Array.isArray(p.recentSupporters)
+            ? p.recentSupporters.map((s: any, idx: number) => ({
+                id: String(s.id || idx),
+                supporterName: String(s.supporterName || s.name || 'Supporter'),
+                coffees: Number(s.coffees || 1),
+                note: s.note ?? s.message ?? null,
+                createdAt: s.createdAt ?? null,
+              }))
+            : [];
+          const countNum =
+            typeof p.supporterCount === 'number'
+              ? p.supporterCount
+              : typeof p.supportersCount === 'number'
+                ? p.supportersCount
+                : undefined;
+
+          const mergedCoffee: CoffeeData = {
+            ...(coffeeData || {}),
+            slug: p.slug || coffeeData?.slug,
+            creatorName: creatorTitle,
+            bio: p.bio || coffeeData?.bio,
+            avatarUrl: p.avatarUrl || coffeeData?.avatarUrl,
+            coverUrl: p.coverUrl || coffeeData?.coverUrl,
+            coffeePrice: p.coffeePrice || coffeeData?.coffeePrice,
+            supportersCount: countNum ?? coffeeData?.supportersCount,
+            supportersLabel: p.supportersLabel || coffeeData?.supportersLabel,
+            extrasCount: typeof p.extrasCount === 'number' ? p.extrasCount : coffeeData?.extrasCount,
+            recentSupporters: mappedSupporters.length > 0 ? mappedSupporters : coffeeData?.recentSupporters,
+            extras: Array.isArray(p.extras) && p.extras.length > 0 ? p.extras : coffeeData?.extras,
+            buttonLabel: meta.ctaLabel?.trim() || coffeeData?.buttonLabel || 'Support with a Coffee',
+            fetchedAt: p.fetchedAt || new Date().toISOString(),
+          };
+          setCoffeeData(mergedCoffee);
+
+          const statsText =
+            p.supportersLabel ||
+            (typeof countNum === 'number' && countNum > 0 ? `${countNum} supporters` : null);
+
+          setMeta((prev) => ({
+            ...prev,
+            provider: 'coffee',
+            subtype: 'profile',
+            title: creatorTitle,
+            handle: p.slug ? `@${String(p.slug).replace(/^@/, '')}` : prev.handle ?? null,
+            subtitle: p.slug ? `buymeacoffee.com/${p.slug}` : prev.subtitle ?? null,
+            description: p.bio ?? prev.description ?? null,
+            avatarUrl: p.avatarUrl ?? prev.avatarUrl ?? null,
+            coverUrl: p.coverUrl ?? prev.coverUrl ?? null,
+            statsLabel: statsText ?? prev.statsLabel ?? null,
+            source: 'opengraph',
+            needsAttention: false,
+            failureCount: 0,
+            fetchedAt: p.fetchedAt || new Date().toISOString(),
+          }));
+
+          if (!titleManuallyEdited && creatorTitle) {
+            setTitleInput(String(creatorTitle).slice(0, 60));
+          }
+        } else {
+          setLookupFailed(true);
+          setIsMoreOpen(true);
+        }
+        return;
+      }
+
       const qs = new URLSearchParams({ url: detected.canonicalUrl });
       if (force) qs.set('forceRefresh', '1');
       if (block?.id) qs.set('blockId', block.id);
@@ -598,11 +733,12 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   // Debounced live preview block (150ms per ED-4)
   const [previewBlock, setPreviewBlock] = useState<PageBlock>(() => ({
     id: block?.id || 'preview-platform-block',
-    kind: 'embed',
+    kind: provider === 'coffee' ? 'coffee' : 'embed',
     title: titleInput || kindDef.label,
     url: detectedCurrent?.canonicalUrl || urlInput || null,
     embedProvider: provider,
     embedMeta: meta,
+    coffee: provider === 'coffee' ? coffeeData : undefined,
     isActive: true,
     isArchived: false,
   }));
@@ -611,7 +747,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     const timer = setTimeout(() => {
       setPreviewBlock({
         id: block?.id || 'preview-platform-block',
-        kind: 'embed',
+        kind: provider === 'coffee' ? 'coffee' : 'embed',
         title: titleInput.trim() || meta.title || kindDef.label,
         url: detectedCurrent?.canonicalUrl || urlInput.trim() || null,
         embedProvider: provider,
@@ -621,19 +757,89 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
           subtype: activeSubtype,
           displayAs,
         },
+        coffee: provider === 'coffee' ? coffeeData : undefined,
         isActive: true,
         isArchived: false,
       });
     }, 150);
     return () => clearTimeout(timer);
-  }, [block?.id, titleInput, urlInput, detectedCurrent?.canonicalUrl, provider, meta, activeSubtype, displayAs, kindDef.label]);
+  }, [block?.id, titleInput, urlInput, detectedCurrent?.canonicalUrl, provider, meta, coffeeData, activeSubtype, displayAs, kindDef.label]);
 
   if (!isOpen) return null;
 
+  const fallbackConnectByProfileOrHint = async () => {
+    if (provider === 'pinterest') {
+      try {
+        const pinRes = await fetch('/api/integrations/pinterest/me');
+        const pinData = await pinRes.json().catch(() => null);
+        if (pinRes.ok && pinData?.ok && pinData?.profile) {
+          const p = pinData.profile;
+          const profileUrl = p.profileUrl || `https://www.pinterest.com/${p.username || ''}/`;
+          setUrlInput(profileUrl);
+          lastResolvedUrlRef.current = profileUrl;
+          setMeta((prev) => ({
+            ...prev,
+            provider: 'pinterest',
+            subtype: 'profile',
+            title: p.displayName || p.username || prev.title,
+            handle: p.username ? `@${p.username}` : prev.handle,
+            subtitle: p.username ? `@${p.username}` : prev.subtitle,
+            description: p.bio || prev.description,
+            avatarUrl: p.avatarUrl || prev.avatarUrl,
+            statsLabel: p.statsLabel || prev.statsLabel,
+            connectedViaOAuth: true,
+            needsAttention: false,
+            failureCount: 0,
+            fetchedAt: new Date().toISOString(),
+          }));
+          if (!titleManuallyEdited && (p.displayName || p.username)) {
+            setTitleInput(String(p.displayName || p.username).slice(0, 60));
+          }
+          setIsDirty(true);
+          setUrlError(null);
+          setIsConnecting(false);
+          return;
+        }
+      } catch {
+        // Fall through to link sync / prompt
+      }
+    }
+
+    if (urlInput.trim()) {
+      setIsConnecting(false);
+      await runLookup(urlInput.trim(), true);
+      return;
+    }
+
+    setIsConnecting(false);
+    setUrlError(`Enter your ${providerDef.name} profile link or @username above to connect.`);
+    linkInputRef.current?.focus();
+  };
+
   const handleConnectAccount = async () => {
     setSaveError(null);
+    setUrlError(null);
     setIsConnecting(true);
     try {
+      let availability = oauthAvailability;
+      if (!availability) {
+        try {
+          const stRes = await fetch('/api/oauth/status');
+          const stJson = await stRes.json().catch(() => null);
+          if (stRes.ok && stJson?.ok && stJson?.providers && typeof stJson.providers === 'object') {
+            availability = stJson.providers;
+            setOauthAvailability(stJson.providers);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!availability || !availability[provider]) {
+        await fallbackConnectByProfileOrHint();
+        return;
+      }
+
       const endpoint =
         provider === 'youtube'
           ? `/api/oauth/youtube/url?origin=${encodeURIComponent(window.location.origin)}`
@@ -641,6 +847,14 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       const res = await fetch(endpoint);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.url) {
+        if (
+          res.status === 503 ||
+          data?.error === 'oauth_not_configured' ||
+          /not configured/i.test(String(data?.message || ''))
+        ) {
+          await fallbackConnectByProfileOrHint();
+          return;
+        }
         setSaveError(data?.message || `${providerDef.name} connection is unavailable right now.`);
         setIsConnecting(false);
         return;
@@ -660,8 +874,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         setIsConnecting(false);
       }
     } catch {
-      setSaveError(`Couldn't start ${providerDef.name} connection.`);
-      setIsConnecting(false);
+      await fallbackConnectByProfileOrHint();
     }
   };
 
@@ -829,6 +1042,40 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
           }
         : undefined;
 
+    const finalCoffeeData: CoffeeData | undefined =
+      provider === 'coffee'
+        ? {
+            ...(coffeeData || block?.coffee || {}),
+            slug:
+              (finalMeta.handle || '').replace(/^@/, '').trim() ||
+              coffeeData?.slug ||
+              block?.coffee?.slug ||
+              finalUrl.split('/').filter(Boolean).pop() ||
+              undefined,
+            creatorName: finalMeta.override?.title || finalMeta.title || finalTitle,
+            bio:
+              finalMeta.override?.description ||
+              finalMeta.description ||
+              coffeeData?.bio ||
+              block?.coffee?.bio,
+            avatarUrl:
+              finalMeta.override?.imageUrl ||
+              finalMeta.avatarUrl ||
+              coffeeData?.avatarUrl ||
+              block?.coffee?.avatarUrl,
+            coverUrl: finalMeta.coverUrl || coffeeData?.coverUrl || block?.coffee?.coverUrl,
+            supportersLabel:
+              finalMeta.statsLabel ||
+              coffeeData?.supportersLabel ||
+              block?.coffee?.supportersLabel,
+            buttonLabel:
+              finalMeta.ctaLabel ||
+              coffeeData?.buttonLabel ||
+              block?.coffee?.buttonLabel ||
+              'Support with a Coffee',
+          }
+        : undefined;
+
     setIsSaving(true);
     try {
       await onSave({
@@ -837,6 +1084,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         provider,
         embedMeta: finalMeta,
         youtubeData,
+        coffeeData: finalCoffeeData,
         schedule: { startAt, endAt },
       });
       uncommittedBannerUrlsRef.current.clear();
@@ -887,24 +1135,43 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       }}
     >
       {urlInput.trim() || meta.override?.title || meta.title ? (
-        <EmbedBlock
-          block={previewBlock}
-          vibe={activeVibe}
-          effectiveRadius={effectiveRadius}
-          embedMode="placeholder"
-          activeEmbedId={null}
-          onActivate={() => {}}
-          fontFamily={getFontCssFamily(session.fontSettings?.buttonFont, activeVibe.fontFamily)}
-          pageCardLook={pageCardLook}
-          background={session.background}
-          userAvatarUrl={session.imageUrl}
-          userDisplayName={session.displayName}
-          surfaceStyle={{
-            backgroundColor: effectiveTokens.buttonBg,
-            color: effectiveTokens.buttonText,
-            borderColor: effectiveTokens.buttonBorder,
-          }}
-        />
+        provider === 'coffee' ? (
+          <CoffeeCardBlock
+            block={previewBlock}
+            vibe={activeVibe}
+            effectiveRadius={effectiveRadius}
+            embedMode="placeholder"
+            fontFamily={getFontCssFamily(session.fontSettings?.buttonFont, activeVibe.fontFamily)}
+            pageCardLook={pageCardLook}
+            background={session.background}
+            userAvatarUrl={session.imageUrl}
+            userDisplayName={session.displayName}
+            surfaceStyle={{
+              backgroundColor: effectiveTokens.buttonBg,
+              color: effectiveTokens.buttonText,
+              borderColor: effectiveTokens.buttonBorder,
+            }}
+          />
+        ) : (
+          <EmbedBlock
+            block={previewBlock}
+            vibe={activeVibe}
+            effectiveRadius={effectiveRadius}
+            embedMode="placeholder"
+            activeEmbedId={null}
+            onActivate={() => {}}
+            fontFamily={getFontCssFamily(session.fontSettings?.buttonFont, activeVibe.fontFamily)}
+            pageCardLook={pageCardLook}
+            background={session.background}
+            userAvatarUrl={session.imageUrl}
+            userDisplayName={session.displayName}
+            surfaceStyle={{
+              backgroundColor: effectiveTokens.buttonBg,
+              color: effectiveTokens.buttonText,
+              borderColor: effectiveTokens.buttonBorder,
+            }}
+          />
+        )
       ) : (
         <div
           className="w-full py-6 px-4 rounded-[12px] border border-dashed text-center text-[13px]"
@@ -947,9 +1214,13 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                 backgroundColor:
                   providerDef.brandColor === '#FFFC00'
                     ? 'rgba(255, 252, 0, 0.35)'
-                    : `${providerDef.brandColor}16`,
+                    : providerDef.brandColor === '#FFDD00'
+                      ? 'rgba(255, 221, 0, 0.35)'
+                      : `${providerDef.brandColor}16`,
                 color:
-                  providerDef.brandColor === '#000000' || providerDef.brandColor === '#FFFC00'
+                  providerDef.brandColor === '#000000' ||
+                  providerDef.brandColor === '#FFFC00' ||
+                  providerDef.brandColor === '#FFDD00'
                     ? '#0A0A0A'
                     : providerDef.brandColor,
               }}
@@ -1087,7 +1358,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                   </div>
                 )}
 
-                {providerDef.supportsOAuth && (Boolean(meta.connectedViaOAuth) || Boolean(oauthAvailability && oauthAvailability[provider])) && (
+                {providerDef.supportsOAuth && (
                   <div className="flex items-center justify-between gap-2 pt-0.5">
                     {meta.connectedViaOAuth ? (
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1162,8 +1433,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                 </section>
               )}
 
-              {/* 3. Content (collapsed out of main add-flow for social profiles so only Look customizations lead) */}
-              {(isEditing || !isSocialProfileFlow) && (
+              {/* 3. Content (collapsed out of main add-flow for social profiles except Buy Me a Coffee) */}
+              {(isEditing || !isSocialProfileFlow || provider === 'coffee') && (
               <section className="flex flex-col gap-3.5 pt-4 border-t border-divider">
                 <h3 className="text-[14px] font-semibold text-ink">Content</h3>
 
@@ -1349,8 +1620,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                 )
               )}
 
-              {/* 5. More options (single collapsed accordion, auto-expands on lookup fail for non-profile add flows) */}
-              {(isEditing || !isSocialProfileFlow) && (
+              {/* 5. More options */}
+              {(isEditing || !isSocialProfileFlow || provider === 'coffee') && (
               <section className="pt-4 border-t border-divider">
                 <button
                   type="button"

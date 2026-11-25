@@ -317,6 +317,9 @@ async function startServer() {
   app.post('/api/profile', dbHandlers.handleSaveProfile);
   app.get('/api/appearance', appearanceHandlers.handleGetAppearance);
   app.patch('/api/appearance', appearanceHandlers.handlePatchAppearance);
+  app.all('/api/appearance/surprise', appearanceHandlers.handleSurpriseAppearance);
+  app.all('/api/appearance/suggestions', appearanceHandlers.handleAppearanceSuggestions);
+  app.post('/api/appearance/regenerate', appearanceHandlers.handleRegenerateAppearance);
   app.post('/api/appearance/undo', appearanceHandlers.handleUndoAppearance);
   app.post('/api/appearance/redo', appearanceHandlers.handleRedoAppearance);
   app.get('/api/appearance/themes', appearanceHandlers.handleListThemes);

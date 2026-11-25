@@ -285,7 +285,7 @@ const FEATURES: FeatureOption[] = [
   {
     id: 'coffee',
     title: 'Buy Me a Coffee',
-    description: 'Connect your Buy Me a Coffee profile and extras',
+    description: 'Customize card look, banner & extras in Profiles',
     category: 'commerce',
     icon: Coffee,
     iconBg: 'bg-amber-100',

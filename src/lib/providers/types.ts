@@ -14,6 +14,7 @@ export type ProviderId =
   | 'twitch'
   | 'snapchat'
   | 'bluesky'
+  | 'coffee'
   | 'generic';
 
 export type CardLookId = 'match_page' | 'brand' | 'banner' | 'glass' | 'compact';

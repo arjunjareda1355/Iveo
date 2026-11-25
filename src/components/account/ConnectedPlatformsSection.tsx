@@ -158,8 +158,8 @@ export const ConnectedPlatformsSection: React.FC<{
 
     const handlePayload = async (payload: any) => {
       if (!payload || typeof payload !== 'object') return;
-      if (payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' && payload.profile) {
-        const p = payload.profile;
+      if (payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS') {
+        const p = payload.profile || payload.embed || payload.connection?.embedMeta || {};
         const targetGroup = groups.find((g) => g.provider === reconnectingProvider);
         if (targetGroup) {
           for (const b of targetGroup.blocks) {
@@ -167,10 +167,11 @@ export const ConnectedPlatformsSection: React.FC<{
               embedMeta: {
                 provider: targetGroup.provider,
                 ...(b.embedMeta || {}),
-                title: p.displayName || b.embedMeta?.title,
-                handle: p.handle || b.embedMeta?.handle,
+                title: p.displayName || p.title || b.embedMeta?.title,
+                handle: p.handle || p.subtitle || b.embedMeta?.handle,
                 avatarUrl: p.avatarUrl || b.embedMeta?.avatarUrl,
-                description: p.bio || b.embedMeta?.description,
+                coverUrl: p.coverUrl || b.embedMeta?.coverUrl,
+                description: p.bio || p.description || b.embedMeta?.description,
                 statsLabel: p.statsLabel || b.embedMeta?.statsLabel,
                 connectedViaOAuth: true,
                 needsAttention: false,
@@ -215,6 +216,19 @@ export const ConnectedPlatformsSection: React.FC<{
     };
 
     const onMessage = (e: MessageEvent) => handlePayload(e.data);
+    const onStorage = (e: StorageEvent) => {
+      if (
+        (e.key === 'iveo_social_oauth_result' || e.key === 'iveo_yt_oauth_result') &&
+        e.newValue
+      ) {
+        try {
+          void handlePayload(JSON.parse(e.newValue));
+          localStorage.removeItem(e.key);
+        } catch {
+          // ignore
+        }
+      }
+    };
     let bcSocial: BroadcastChannel | null = null;
     let bcYt: BroadcastChannel | null = null;
     try {
@@ -229,17 +243,57 @@ export const ConnectedPlatformsSection: React.FC<{
     }
 
     window.addEventListener('message', onMessage);
+    window.addEventListener('storage', onStorage);
     return () => {
       window.removeEventListener('message', onMessage);
+      window.removeEventListener('storage', onStorage);
       bcSocial?.close();
       bcYt?.close();
     };
   }, [reconnectingProvider, groups, updateBlock, showToast]);
 
+  const syncProviderPublicMetadata = async (provider: EmbedProvider): Promise<boolean> => {
+    const targetGroup = groups.find((g) => g.provider === provider);
+    if (!targetGroup) return false;
+    let updatedAny = false;
+    for (const b of targetGroup.blocks) {
+      if (!b.url) continue;
+      const qs = new URLSearchParams({ url: b.url, forceRefresh: '1', blockId: b.id });
+      const res = await fetch(`/api/integrations/embed?${qs.toString()}`).catch(() => null);
+      const data = await res?.json().catch(() => null);
+      const resolved = data?.embed || data?.embedMeta;
+      if (res?.ok && data?.ok && resolved) {
+        await updateBlock(b.id, {
+          embedMeta: {
+            provider,
+            ...(b.embedMeta || {}),
+            ...resolved,
+            needsAttention: false,
+            failureCount: 0,
+            fetchedAt: resolved.fetchedAt || new Date().toISOString(),
+          },
+        }).catch(() => {});
+        updatedAny = true;
+      }
+    }
+    return updatedAny;
+  };
+
   const handleReconnect = async (provider: EmbedProvider) => {
     if (offline) return;
     setReconnectingProvider(provider);
     try {
+      const statusRes = await fetch('/api/oauth/status').catch(() => null);
+      const statusJson = await statusRes?.json().catch(() => null);
+      const isOAuthReady = Boolean(statusJson?.providers?.[provider]);
+
+      if (!isOAuthReady) {
+        const synced = await syncProviderPublicMetadata(provider);
+        setReconnectingProvider(null);
+        showToast(synced ? `${getProviderDefinition(provider).name} profile synced` : 'Updated profile details from your link.');
+        return;
+      }
+
       const endpoint =
         provider === 'youtube'
           ? `/api/oauth/youtube/url?origin=${encodeURIComponent(window.location.origin)}`
@@ -247,7 +301,12 @@ export const ConnectedPlatformsSection: React.FC<{
       const res = await fetch(endpoint);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.url) {
-        showToast(data?.message || 'Connection is unavailable right now.');
+        if (data?.error === 'oauth_not_configured' || res.status === 503) {
+          const synced = await syncProviderPublicMetadata(provider);
+          showToast(synced ? `${getProviderDefinition(provider).name} profile synced` : 'Profile synced from public link.');
+        } else {
+          showToast(data?.message || 'Connection is unavailable right now.');
+        }
         setReconnectingProvider(null);
         return;
       }

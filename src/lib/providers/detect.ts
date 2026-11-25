@@ -125,6 +125,8 @@ function detectHandleForProvider(
       });
     case 'snapchat':
       return makeResult('snapchat', 'profile', `https://www.snapchat.com/add/${handle}`, handle);
+    case 'coffee':
+      return makeResult('coffee', 'profile', `https://www.buymeacoffee.com/${handle}`, handle);
     case 'discord':
       if (/^\d{15,22}$/.test(handle)) {
         return makeResult('discord', 'user', `https://discord.com/users/${handle}`, handle);
@@ -531,6 +533,16 @@ export function detectProviderUrl(
     const rawUser = (parts[0] || '').replace(/^@+/, '');
     if (rawUser && !reserved.has(rawUser.toLowerCase()) && /^[A-Za-z0-9._-]{2,64}$/.test(rawUser)) {
       return makeResult('snapchat', 'profile', `https://www.snapchat.com/add/${rawUser}`, rawUser);
+    }
+    return null;
+  }
+
+  // 17. Buy Me a Coffee
+  if (host === 'buymeacoffee.com' || host === 'coff.ee') {
+    const reserved = new Set(['explore', 'about', 'faq', 'login', 'signup', 'privacy', 'terms']);
+    const slug = (parts[0] || '').replace(/^@+/, '');
+    if (slug && !reserved.has(slug.toLowerCase()) && /^[A-Za-z0-9._-]{2,64}$/.test(slug)) {
+      return makeResult('coffee', 'profile', `https://www.buymeacoffee.com/${slug}`, slug);
     }
     return null;
   }

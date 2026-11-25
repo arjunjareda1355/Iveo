@@ -63,6 +63,7 @@ export type EmbedProvider =
   | 'snapchat'
   | 'linktree'
   | 'bluesky'
+  | 'coffee'
   | 'generic';
 export type LinkAnimation = 'none' | 'pulse' | 'shimmer' | 'bounce' | 'glow';
 export type CardLookStyle =

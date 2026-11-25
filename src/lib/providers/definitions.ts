@@ -891,6 +891,39 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDefinition> = {
     },
   },
 
+  coffee: {
+    id: 'coffee',
+    name: 'Buy Me a Coffee',
+    brandColor: '#FFDD00',
+    brandTextOnFill: '#000000',
+    category: 'social',
+    supportsOAuth: false,
+    supportsRefresh: true,
+    refreshIntervalHours: 6,
+    allowedDisplayModes: ['card'],
+    defaultDisplayMode: 'card',
+    strategies: ['api', 'opengraph', 'manual'],
+    defaultKind: 'profile',
+    kinds: {
+      profile: {
+        label: 'Buy Me a Coffee',
+        contentKind: 'profile',
+        placeholder: 'buymeacoffee.com/yourname',
+        defaultButtonText: 'Support with a Coffee',
+        capabilities: {
+          avatar: true,
+          artwork: false,
+          banner: true,
+          name: true,
+          handle: true,
+          summary: true,
+          stats: true,
+          player: false,
+        },
+      },
+    },
+  },
+
   generic: {
     id: 'generic',
     name: 'Website',

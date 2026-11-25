@@ -14,6 +14,7 @@ import { SocialIcon } from '../phone/SocialIcons';
 import { LinkFaviconOrFallback } from '../ui/LinkFaviconOrFallback';
 import { FeaturedLink } from './FeaturedLink';
 import { EmbedBlock } from './EmbedBlock';
+import { CoffeeCardBlock } from './CoffeeCardBlock';
 import { TipJarBlock } from '../public/TipJarBlock';
 import { FaqBlock } from '../public/FaqBlock';
 import { VCardBlock } from '../public/VCardBlock';
@@ -951,140 +952,22 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
 
           // 4e. Buy Me a Coffee Block
           if (block.kind === 'coffee') {
-            const coffeeUrl = block.url ? formatExternalUrl(block.url) : 'https://buymeacoffee.com';
-            const coffeeMeta = block.coffee;
-            const ctaLabel = coffeeMeta?.buttonLabel?.trim() || 'Support with a Coffee';
-            const cardRadius = resolveCardBorderRadius(effectiveRadius, scale, 'card');
-            const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
-            const controlRadius = resolveButtonControlRadius(effectiveRadius, scale);
-            const coffeeFg = buttonPalette.fg;
-            const ctaBg = buttonPalette.btnBg;
-            const ctaColor = buttonPalette.btnText;
-
             return (
-              <div
-                key={block.id}
-                className="w-full overflow-hidden flex flex-col items-center select-none transition-transform duration-150"
-                style={{
-                  ...buttonSurfaceStyle,
-                  color: coffeeFg,
-                  fontFamily: buttonFontFamily,
-                  borderRadius: `${cardRadius}px`,
-                  padding: `${Math.round(14 * scale)}px`,
-                }}
-              >
-                <div className="flex items-center gap-2.5 mb-1 max-w-full min-w-0">
-                  {coffeeMeta?.avatarUrl ? (
-                    <img
-                      src={coffeeMeta.avatarUrl}
-                      alt={coffeeMeta.creatorName || block.title || 'Creator'}
-                      className="w-7 h-7 rounded-full object-cover border border-current/20 shrink-0"
-                    />
-                  ) : (
-                    <span className="text-[18px] leading-none shrink-0">☕</span>
-                  )}
-                  <span
-                    className="font-semibold leading-tight truncate"
-                    style={{ fontSize: `${Math.max(13, Math.round(15 * scale))}px` }}
-                  >
-                    {block.title || coffeeMeta?.creatorName || 'Buy Me a Coffee'}
-                  </span>
-                  {typeof coffeeMeta?.supportersCount === 'number' && coffeeMeta.supportersCount > 0 && (
-                    <span
-                      className="px-2 py-0.5 text-[10px] font-semibold border border-current/25 shrink-0 whitespace-nowrap"
-                      style={{ opacity: 0.9, borderRadius: `${controlRadius}px` }}
-                    >
-                      {coffeeMeta.supportersCount} supporters
-                    </span>
-                  )}
-                </div>
-
-                {(block.badge || coffeeMeta?.bio) && (
-                  <p className="text-[11px] opacity-80 text-center leading-snug mb-1.5 max-w-[36ch]">
-                    {block.badge || coffeeMeta?.bio}
-                  </p>
-                )}
-
-                <div className="flex items-center flex-wrap justify-center gap-1.5 my-1.5">
-                  {[1, 3, 5].map((count) => (
-                    <a
-                      key={count}
-                      href={isPublicPage ? coffeeUrl : undefined}
-                      target={isPublicPage ? '_blank' : undefined}
-                      rel={isPublicPage ? 'noopener noreferrer' : undefined}
-                      onClick={isPublicPage ? () => onLinkClick?.(block) : undefined}
-                      className="px-2.5 py-1 text-[11px] font-medium border border-current/20 hover:border-current/60 transition-colors cursor-pointer"
-                      style={{ color: coffeeFg, borderRadius: `${controlRadius}px` }}
-                    >
-                      {count} ☕ (${count * 3})
-                    </a>
-                  ))}
-                </div>
-
-                {coffeeMeta?.recentSupporters && coffeeMeta.recentSupporters.length > 0 && (
-                  <div
-                    className="w-full mt-1 mb-1.5 px-2.5 py-1.5 border border-current/15 text-[11px] opacity-85 text-center truncate"
-                    style={{ borderRadius: `${innerRadius}px` }}
-                  >
-                    ☕ Latest:{' '}
-                    <strong>
-                      {coffeeMeta.recentSupporters[0].supporterName ||
-                        (coffeeMeta.recentSupporters[0] as any).name ||
-                        'Supporter'}
-                    </strong>{' '}
-                    ({coffeeMeta.recentSupporters[0].coffees}×)
-                    {coffeeMeta.recentSupporters[0].note
-                      ? ` · "${coffeeMeta.recentSupporters[0].note.slice(0, 42)}"`
-                      : ''}
-                  </div>
-                )}
-
-                {coffeeMeta?.extras && coffeeMeta.extras.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 mb-1.5">
-                    {coffeeMeta.extras.slice(0, 2).map((extra, idx) => (
-                      <a
-                        key={`${extra.title}-${idx}`}
-                        href={isPublicPage ? extra.url || coffeeUrl : undefined}
-                        target={isPublicPage ? '_blank' : undefined}
-                        rel={isPublicPage ? 'noopener noreferrer' : undefined}
-                        onClick={isPublicPage ? () => onLinkClick?.(block) : undefined}
-                        className="px-2 py-0.5 border border-current/20 text-[10px] font-medium opacity-90 hover:opacity-100"
-                        style={{ color: coffeeFg, borderRadius: `${innerRadius}px` }}
-                      >
-                        ★ {extra.title}
-                        {extra.price ? ` · ${extra.price}` : ''}
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {isPublicPage ? (
-                  <a
-                    href={coffeeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => onLinkClick?.(block)}
-                    className="mt-1 w-full py-2 px-3 text-center text-[13px] font-semibold transition-transform active:scale-[0.98]"
-                    style={{
-                      backgroundColor: ctaBg,
-                      color: ctaColor,
-                      borderRadius: `${controlRadius}px`,
-                    }}
-                  >
-                    {ctaLabel}
-                  </a>
-                ) : (
-                  <div
-                    className="mt-1 w-full py-2 px-3 text-center text-[13px] font-semibold"
-                    style={{
-                      backgroundColor: ctaBg,
-                      color: ctaColor,
-                      borderRadius: `${controlRadius}px`,
-                    }}
-                  >
-                    {ctaLabel}
-                  </div>
-                )}
+              <div key={block.id} className="w-full col-span-full">
+                <CoffeeCardBlock
+                  block={block}
+                  vibe={effectiveVibe}
+                  effectiveRadius={effectiveRadius}
+                  embedMode={embedMode}
+                  fontFamily={buttonFontFamily}
+                  scale={scale}
+                  onLinkClick={onLinkClick}
+                  surfaceStyle={buttonSurfaceStyle}
+                  pageCardLook={layout.cardLook}
+                  background={profile?.background}
+                  userAvatarUrl={profile?.avatarUrl ?? persona.avatarUrl ?? null}
+                  userDisplayName={displayName}
+                />
               </div>
             );
           }

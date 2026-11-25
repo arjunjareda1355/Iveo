@@ -167,6 +167,8 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const sessionInitIdRef = useRef<string | null>(null);
   const hasLocalEditsRef = useRef<boolean>(false);
   const hydratedUpdatedAtRef = useRef<string | null>(null);
+  const recentSurpriseSignaturesRef = useRef<string[]>([]);
+  const isSurprisingRef = useRef<boolean>(false);
 
   // Re-sync draft if user switches account OR async session finishes initial hydration before any local edit
   useEffect(() => {
@@ -721,7 +723,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
   }, [applyPatch]);
 
-  const surpriseMe = useCallback(() => {
+  const runLocalSurpriseFallback = useCallback(() => {
     const allowedVibes = session.isPro
       ? CATALOG_VIBES
       : CATALOG_VIBES.filter((v) => v.tier === 'free');
@@ -825,6 +827,70 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       { snackbarMessage: "Here's a new look", showUndo: true }
     );
   }, [session.isPro, session.username, applyPatch]);
+
+  const surpriseMe = useCallback(() => {
+    if (isSurprisingRef.current) return;
+    isSurprisingRef.current = true;
+
+    void (async () => {
+      try {
+        const snapshot = cloneAppearance(draftRef.current);
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (!isDemo && session.userId) headers['x-user-id'] = session.userId;
+        if (!isDemo && session.username) headers['x-iveo-username'] = session.username;
+        if (!isDemo && session.primaryEmail) headers['x-user-email'] = session.primaryEmail;
+
+        const res = await fetch('/api/appearance/surprise', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            username: !isDemo ? session.username : undefined,
+            current: snapshot,
+            locks: snapshot.locks,
+            bio: session.bio || '',
+            recent: recentSurpriseSignaturesRef.current.slice(-20),
+          }),
+        });
+
+        const json = res.ok ? await res.json().catch(() => null) : null;
+        if (json?.ok && json?.appearance) {
+          if (typeof json.signature === 'string' && json.signature) {
+            recentSurpriseSignaturesRef.current = [
+              ...recentSurpriseSignaturesRef.current.slice(-19),
+              json.signature,
+            ];
+          }
+          const nextFromBrain = cloneAppearance(json.appearance as Appearance);
+          applyPatch(() => nextFromBrain, {
+            snackbarMessage: "Here's a new look",
+            showUndo: true,
+          });
+          trackEvent('surprise_applied', {
+            vibeId: nextFromBrain.vibeId,
+            source: 'design-brain',
+          });
+          return;
+        }
+      } catch {
+        // Fallback below if network or backend is unavailable
+      } finally {
+        isSurprisingRef.current = false;
+      }
+
+      runLocalSurpriseFallback();
+    })();
+  }, [
+    isDemo,
+    session.userId,
+    session.username,
+    session.primaryEmail,
+    session.bio,
+    applyPatch,
+    trackEvent,
+    runLocalSurpriseFallback,
+  ]);
 
   const setCardLook = useCallback(
     async (look: CardLookStyle) => {

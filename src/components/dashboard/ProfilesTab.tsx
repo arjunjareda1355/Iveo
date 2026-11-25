@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, ArrowRight, Check } from 'lucide-react';
 import { useBlocks } from '../../data/BlocksContext';
 import { useIvioSession } from '../../auth/useIvioSession';
@@ -22,10 +22,11 @@ import { getProviderDefinition, listPlatformProviders } from '../../lib/provider
 import { DEFAULT_LAYOUT_SETTINGS, normalizeCardLookKey } from '../../lib/preferences';
 
 export const ProfilesTab: React.FC = () => {
-  const { blocks, addEmbed, updateBlock, deleteBlock, toggleActive, clearSchedule } =
+  const { blocks, addEmbed, addCoffee, updateBlock, deleteBlock, toggleActive, clearSchedule } =
     useBlocks();
   const session = useIvioSession();
   const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [editorState, setEditorState] = useState<{
     isOpen: boolean;
@@ -33,6 +34,22 @@ export const ProfilesTab: React.FC = () => {
     block?: Block | null;
   }>({ isOpen: false });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const requestedPlatform = searchParams.get('platform')?.trim().toLowerCase();
+    if (!requestedPlatform) return;
+    const validProviders = listPlatformProviders().map((p) => p.id as string);
+    if (validProviders.includes(requestedPlatform)) {
+      setEditorState({
+        isOpen: true,
+        provider: requestedPlatform as EmbedProvider,
+        block: null,
+      });
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('platform');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const pageCardLook = normalizeCardLookKey(
     session.layoutSettings?.cardLook || DEFAULT_LAYOUT_SETTINGS.cardLook,
@@ -53,7 +70,7 @@ export const ProfilesTab: React.FC = () => {
       ) {
         return true;
       }
-      if (b.kind === 'youtube' || b.kind === 'instagram') return true;
+      if (b.kind === 'youtube' || b.kind === 'instagram' || b.kind === 'coffee') return true;
       return false;
     });
   }, [blocks]);
@@ -77,6 +94,7 @@ export const ProfilesTab: React.FC = () => {
   const getBlockProvider = (block: Block): EmbedProvider => {
     if (block.kind === 'youtube') return 'youtube';
     if (block.kind === 'instagram') return 'instagram';
+    if (block.kind === 'coffee') return 'coffee';
     return (block.embedMeta?.provider || block.embedProvider || 'generic') as EmbedProvider;
   };
 
@@ -88,12 +106,25 @@ export const ProfilesTab: React.FC = () => {
         embedProvider: payload.provider,
         embedMeta: payload.embedMeta,
         ...(payload.youtubeData !== undefined ? { youtube: payload.youtubeData } : {}),
+        ...(payload.coffeeData !== undefined ? { coffee: payload.coffeeData } : {}),
         ...(payload.schedule
           ? { startAt: payload.schedule.startAt, endAt: payload.schedule.endAt }
           : {}),
       });
       setEditorState({ isOpen: false });
       showToast('Saved');
+      return;
+    }
+    if (payload.provider === 'coffee') {
+      await addCoffee(
+        payload.title,
+        payload.url,
+        payload.embedMeta?.subtitle || undefined,
+        payload.coffeeData || null,
+        payload.embedMeta
+      );
+      setEditorState({ isOpen: false });
+      showToast('Added');
       return;
     }
     await addEmbed(payload.url, payload.title, payload.provider, payload.embedMeta);
@@ -132,10 +163,17 @@ export const ProfilesTab: React.FC = () => {
               const pKey = getBlockProvider(block);
               const def = getProviderDefinition(pKey);
               const iconColor =
-                def.brandColor === '#000000' || def.brandColor === '#FFFC00'
+                def.brandColor === '#000000' ||
+                def.brandColor === '#FFFC00' ||
+                def.brandColor === '#FFDD00'
                   ? '#0A0A0A'
                   : def.brandColor;
-              const tileBg = def.brandColor === '#FFFC00' ? 'rgba(255, 252, 0, 0.35)' : `${iconColor}14`;
+              const tileBg =
+                def.brandColor === '#FFFC00'
+                  ? 'rgba(255, 252, 0, 0.35)'
+                  : def.brandColor === '#FFDD00'
+                    ? 'rgba(255, 221, 0, 0.35)'
+                    : `${iconColor}14`;
               const isConfirmDelete = confirmDeleteId === block.id;
               const effectiveLook = normalizeEmbedLookStyle(
                 block.embedMeta?.lookStyle || pageCardLook,
@@ -246,10 +284,17 @@ export const ProfilesTab: React.FC = () => {
           {catalogProviders.map((def) => {
             const existingCount = countByPlatform[def.id] || 0;
             const iconColor =
-              def.brandColor === '#000000' || def.brandColor === '#FFFC00'
+              def.brandColor === '#000000' ||
+              def.brandColor === '#FFFC00' ||
+              def.brandColor === '#FFDD00'
                 ? '#0A0A0A'
                 : def.brandColor;
-            const tileBg = def.brandColor === '#FFFC00' ? 'rgba(255, 252, 0, 0.35)' : `${iconColor}14`;
+            const tileBg =
+              def.brandColor === '#FFFC00'
+                ? 'rgba(255, 252, 0, 0.35)'
+                : def.brandColor === '#FFDD00'
+                  ? 'rgba(255, 221, 0, 0.35)'
+                  : `${iconColor}14`;
             const defaultKind = def.kinds[def.defaultKind];
 
             return (

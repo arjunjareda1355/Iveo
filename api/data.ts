@@ -48,6 +48,9 @@ import {
 import {
   handleGetAppearance,
   handlePatchAppearance,
+  handleSurpriseAppearance,
+  handleAppearanceSuggestions,
+  handleRegenerateAppearance,
   handleUndoAppearance,
   handleRedoAppearance,
   handleListThemes,
@@ -93,9 +96,7 @@ function getActionFromUrl(urlStr: string, queryAction?: string): string {
 
 async function dispatchNode(action: string, req: any, res: any) {
   const method = (req.method || 'GET').toUpperCase();
-  if (!req.params) {
-    req.params = { ...(req.query || {}) };
-  }
+  req.params = { ...(req.query || {}), ...(req.params || {}) };
 
   switch (action) {
     case 'public-page':
@@ -110,6 +111,12 @@ async function dispatchNode(action: string, req: any, res: any) {
       return handleSaveProfile(req, res);
     case 'appearance':
       return method === 'PATCH' ? handlePatchAppearance(req, res) : handleGetAppearance(req, res);
+    case 'appearance-surprise':
+      return handleSurpriseAppearance(req, res);
+    case 'appearance-suggestions':
+      return handleAppearanceSuggestions(req, res);
+    case 'appearance-regenerate':
+      return handleRegenerateAppearance(req, res);
     case 'appearance-undo':
       return handleUndoAppearance(req, res);
     case 'appearance-redo':

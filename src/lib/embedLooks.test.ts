@@ -37,6 +37,7 @@ describe('embedLooks & unified 5-look design system', () => {
     'bluesky',
     'twitch',
     'snapchat',
+    'coffee',
   ];
 
   it('exposes the 7 canonical card looks consistently across providers', () => {
@@ -96,6 +97,7 @@ describe('embedLooks & unified 5-look design system', () => {
     assert.equal(isSocialEmbedProvider('bluesky'), true);
     assert.equal(isSocialEmbedProvider('twitch'), true);
     assert.equal(isSocialEmbedProvider('snapchat'), true);
+    assert.equal(isSocialEmbedProvider('coffee'), true);
 
     assert.equal(isSocialEmbedProvider('youtube'), false);
     assert.equal(isSocialEmbedProvider('spotify'), false);
@@ -130,12 +132,12 @@ describe('embedLooks & unified 5-look design system', () => {
     assert.equal(getDefaultEmbedCtaLabel('snapchat', 'spotlight'), 'Watch');
   });
 
-  it('enforces WCAG AA contrast across all 12 vibes x 7 looks x 15 platform providers', () => {
+  it('enforces WCAG AA contrast across all 12 vibes x 7 looks x 16 platform providers', () => {
     const platformDefs = listPlatformProviders();
     const looks: CardLookStyle[] = CARD_LOOK_OPTIONS.map((o) => o.id);
     assert.equal(VIBES.length, 12);
     assert.equal(looks.length, 7);
-    assert.equal(platformDefs.length, 15);
+    assert.equal(platformDefs.length, 16);
 
     for (const vibe of VIBES) {
       const { tokens } = vibe;

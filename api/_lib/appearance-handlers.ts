@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  dbGetBlocks,
   dbGetProfile,
   dbGetProfileByUserId,
   dbReadAppearanceState,
@@ -12,6 +13,7 @@ import {
 } from './azureSql.ts';
 import {
   firebaseGetAppearanceState,
+  firebaseGetBlocks,
   firebaseGetProfile,
   firebaseGetProfileByUserId,
   firebaseSaveAppearanceState,
@@ -23,6 +25,20 @@ import { getBackgroundsBaseDir } from './backgroundUpload.ts';
 import { inspectAndSanitizeRasterBuffer } from './imageSanitizer.ts';
 import { isPrivilegedEmailServer } from './usernames.ts';
 import { resolveEffectivePlan } from '../../src/lib/plan.ts';
+import {
+  handleRegenerate as brainHandleRegenerate,
+  handleSuggestions as brainHandleSuggestions,
+  handleSurprise as brainHandleSurprise,
+} from './design-brain/api.ts';
+import {
+  applyPatch as brainApplyPatch,
+  fromIveoAppearance,
+  mapIveoLocksToBrain,
+  toIveoAppearance,
+} from './design-brain/adapter.ts';
+import { generateTheme, signature as brainSignature } from './design-brain/generator.ts';
+import type { Context as BrainContext } from './design-brain/types.ts';
+import { MOODS, USE_CASES, type Mood, type UseCase } from './design-brain/data-palettes.ts';
 import {
   HISTORY_COALESCE_MS,
   MAX_HISTORY_SNAPSHOTS,
@@ -1405,3 +1421,349 @@ export async function handleUploadAppearanceBgImage(req: ExpressReq, res: Expres
     luminanceGrid,
   });
 }
+
+// =========================================================================
+// Backend-Only Design Brain Endpoints (Surprise / Suggestions / Regenerate)
+// =========================================================================
+
+const VALID_MOODS = new Set<string>(MOODS);
+const VALID_USE_CASES = new Set<string>(USE_CASES);
+
+function sanitizeBrainLocks(rawLocks: unknown, fallback: AppearanceLock[] = []): AppearanceLock[] {
+  if (!Array.isArray(rawLocks)) return fallback;
+  return rawLocks.filter(
+    (item): item is AppearanceLock => typeof item === 'string' && VALID_LOCKS.has(item as AppearanceLock)
+  );
+}
+
+function sanitizeClientAppearanceSnapshot(
+  raw: unknown,
+  plan: 'free' | 'pro'
+): Appearance | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const src = raw as Record<string, any>;
+  if (src.schemaVersion !== 2) return undefined;
+  const base = migrateLegacyProfileToAppearanceV2({ onboardingComplete: true });
+  const merged = validateAndMergeAppearancePatch(base, src, plan === 'pro');
+  if (!merged.ok) return base;
+  return merged.nextAppearance;
+}
+
+async function resolveBrainRequestContext(req: ExpressReq): Promise<
+  | {
+      ok: true;
+      plan: 'free' | 'pro';
+      isPro: boolean;
+      locks: AppearanceLock[];
+      currentAppearance?: Appearance;
+      cardLook: 'match_page' | 'brand' | 'banner' | 'glass' | 'compact' | 'profile_card' | 'with_posts';
+      ctx: BrainContext;
+      baseBrainTheme: ReturnType<typeof generateTheme>;
+    }
+  | RejectedActor
+> {
+  const actor = await resolveAppearanceActor(req);
+  if (!actor.ok && actor.status !== 401) {
+    return actor;
+  }
+
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, any>;
+  const query = (req.query && typeof req.query === 'object' ? req.query : {}) as Record<string, any>;
+
+  // Plan is strictly derived from server-verified profile when authenticated; unauthenticated/demo always gets 'free'
+  const plan: 'free' | 'pro' = actor.ok ? actor.plan : 'free';
+  const isPro = plan === 'pro';
+
+  let currentAppearance: Appearance | undefined;
+  let cardLook: 'match_page' | 'brand' | 'banner' | 'glass' | 'compact' | 'profile_card' | 'with_posts' = 'match_page';
+  let serverBio = '';
+  let serverLinkTypes: string[] = [];
+
+  if (actor.ok) {
+    const [localState, fbState, localBlocks, fbBlocks] = await Promise.all([
+      dbReadAppearanceState(actor.username).catch(() => ({
+        profile: actor.profile,
+        history: { undoStack: [], redoStack: [] },
+        themes: [],
+      })),
+      withTimeout(firebaseGetAppearanceState(actor.username), null),
+      dbGetBlocks(actor.username).catch(() => []),
+      withTimeout(firebaseGetBlocks(actor.username, actor.userId), [] as any[]),
+    ]);
+
+    const prof = localState.profile || actor.profile;
+    const rawAppearance =
+      fbState?.appearance?.schemaVersion === 2 &&
+      (prof?.appearance?.schemaVersion !== 2 || (fbState as any)?.updatedAt > (prof?.updatedAt || ''))
+        ? fbState.appearance
+        : prof?.appearance?.schemaVersion === 2
+          ? prof.appearance
+          : null;
+
+    currentAppearance = migrateLegacyProfileToAppearanceV2({
+      vibeId: prof?.vibeId,
+      buttonShape: prof?.buttonShape,
+      background: prof?.background,
+      fontSettings: prof?.fontSettings,
+      buttonColors: prof?.buttonColors,
+      layoutSettings: prof?.layoutSettings,
+      appearance: rawAppearance,
+      onboardingComplete: true,
+    });
+
+    const rawCardLook = prof?.layoutSettings?.cardLook;
+    if (typeof rawCardLook === 'string') {
+      cardLook = rawCardLook as any;
+    }
+
+    serverBio = String(prof?.bio || '');
+    const blocks = Array.isArray(localBlocks) && localBlocks.length > 0 ? localBlocks : fbBlocks;
+    if (Array.isArray(blocks)) {
+      serverLinkTypes = blocks
+        .filter((b: any) => b && b.isVisible !== false)
+        .map((b: any) =>
+          String(
+            b.kind === 'coffee'
+              ? 'coffee'
+              : b.embedMeta?.provider || b.kind || b.url || ''
+          ).slice(0, 64)
+        )
+        .filter(Boolean)
+        .slice(0, 30);
+    }
+  }
+
+  // Allow unsaved draft state from client (for example current locks or unsaved appearance in editor / demo)
+  const clientAppearance = sanitizeClientAppearanceSnapshot(body.current, plan);
+  const effectiveCurrentAppearance = clientAppearance || currentAppearance;
+  const locks = sanitizeBrainLocks(
+    body.locks ?? clientAppearance?.locks,
+    effectiveCurrentAppearance?.locks || []
+  );
+
+  const clientLinkTypes = Array.isArray(body.linkTypes)
+    ? body.linkTypes
+        .filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)
+        .map((x: string) => x.trim().slice(0, 64))
+        .slice(0, 30)
+    : [];
+  const mergedLinkTypes = clientLinkTypes.length > 0 ? clientLinkTypes : serverLinkTypes;
+
+  const photoColors = Array.isArray(body.photoColors)
+    ? body.photoColors
+        .map((c: unknown) => validateHex6(c))
+        .filter((c: Hex | null): c is Hex => c !== null)
+        .slice(0, 5)
+    : undefined;
+
+  const rawMood = typeof (query.mood ?? body.mood) === 'string' ? String(query.mood ?? body.mood).trim() : '';
+  const mood: Mood | undefined = VALID_MOODS.has(rawMood) ? (rawMood as Mood) : undefined;
+
+  const rawUseCase = typeof (query.useCase ?? body.useCase) === 'string' ? String(query.useCase ?? body.useCase).trim() : '';
+  const useCase: UseCase | undefined = VALID_USE_CASES.has(rawUseCase) ? (rawUseCase as UseCase) : undefined;
+
+  const rawSeed = typeof (query.seed ?? body.seed) === 'string' ? String(query.seed ?? body.seed).trim().slice(0, 64) : '';
+  const bio = typeof body.bio === 'string' ? body.bio.slice(0, 400) : serverBio.slice(0, 400);
+
+  const currentBrainPartial = effectiveCurrentAppearance
+    ? fromIveoAppearance(effectiveCurrentAppearance, plan, cardLook)
+    : undefined;
+
+  const ctx: BrainContext = {
+    plan,
+    ...(rawSeed ? { seed: rawSeed } : {}),
+    ...(mood ? { mood } : {}),
+    ...(useCase ? { useCase } : {}),
+    ...(photoColors && photoColors.length > 0 ? { photoColors } : {}),
+    ...(bio ? { bio } : {}),
+    ...(mergedLinkTypes.length > 0 ? { linkTypes: mergedLinkTypes } : {}),
+    ...(locks.length > 0 ? { locked: mapIveoLocksToBrain(locks) } : {}),
+    ...(currentBrainPartial ? { current: currentBrainPartial } : {}),
+  };
+
+  const baseBrainTheme = generateTheme({
+    plan,
+    seed: rawSeed || 'iveo-base',
+    ...(currentBrainPartial ? { current: currentBrainPartial } : {}),
+  });
+
+  return {
+    ok: true,
+    plan,
+    isPro,
+    locks,
+    currentAppearance: effectiveCurrentAppearance,
+    cardLook,
+    ctx,
+    baseBrainTheme,
+  };
+}
+
+/**
+ * GET / POST /api/appearance/surprise
+ */
+export async function handleSurpriseAppearance(req: ExpressReq, res: ExpressRes) {
+  const resolvedCtx = await resolveBrainRequestContext(req);
+  if (!resolvedCtx.ok) {
+    return res.status(resolvedCtx.status).json({ error: resolvedCtx.error, message: resolvedCtx.message });
+  }
+
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, any>;
+  const query = (req.query && typeof req.query === 'object' ? req.query : {}) as Record<string, any>;
+  const recent = Array.isArray(body.recent)
+    ? body.recent.filter((s: unknown): s is string => typeof s === 'string').slice(-40)
+    : [];
+  const hasExplicitSeed = Boolean(
+    typeof (query.seed ?? body.seed) === 'string' && String(query.seed ?? body.seed).trim()
+  );
+
+  let theme = (brainHandleSurprise(query, resolvedCtx.ctx).body as { theme: ReturnType<typeof generateTheme> }).theme;
+  if (!hasExplicitSeed && recent.length > 0) {
+    const seen = new Set(recent);
+    for (let i = 0; i < 12; i++) {
+      const sig = brainSignature(theme);
+      if (!seen.has(sig)) break;
+      const retrySeed = `${Date.now().toString(36)}-${i}-${crypto.randomUUID().slice(0, 6)}`;
+      theme = (brainHandleSurprise({ ...query, seed: retrySeed }, resolvedCtx.ctx).body as {
+        theme: ReturnType<typeof generateTheme>;
+      }).theme;
+    }
+  }
+
+  const adapted = toIveoAppearance(theme, {
+    plan: resolvedCtx.plan,
+    locks: resolvedCtx.locks,
+    autoMatchButtons: resolvedCtx.currentAppearance?.autoMatchButtons ?? true,
+    currentAppearance: resolvedCtx.currentAppearance,
+  });
+
+  const resolved = resolveTokens(adapted.appearance, { isPro: resolvedCtx.isPro });
+  const warnings = computeAppearanceWarnings(resolved, adapted.appearance);
+
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  return res.status(200).json({
+    ok: true,
+    tier: resolvedCtx.plan,
+    appearance: adapted.appearance,
+    cardLook: adapted.cardLook,
+    resolved,
+    warnings,
+    meta: adapted.meta,
+    signature: brainSignature(theme),
+    theme,
+  });
+}
+
+/**
+ * GET / POST /api/appearance/suggestions?section=vibe|background|typography|buttons|layout
+ */
+export async function handleAppearanceSuggestions(req: ExpressReq, res: ExpressRes) {
+  const resolvedCtx = await resolveBrainRequestContext(req);
+  if (!resolvedCtx.ok) {
+    return res.status(resolvedCtx.status).json({ error: resolvedCtx.error, message: resolvedCtx.message });
+  }
+
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, any>;
+  const query = (req.query && typeof req.query === 'object' ? req.query : {}) as Record<string, any>;
+  const q = {
+    section:
+      typeof (query.section ?? body.section) === 'string' && String(query.section ?? body.section).trim()
+        ? String(query.section ?? body.section).trim()
+        : 'vibe',
+    seed: typeof (query.seed ?? body.seed) === 'string' ? String(query.seed ?? body.seed) : undefined,
+    count: query.count !== undefined ? String(query.count) : body.count !== undefined ? String(body.count) : undefined,
+  };
+
+  const result = brainHandleSuggestions(q, resolvedCtx.ctx);
+  if (result.status !== 200) {
+    return res.status(result.status).json(result.body);
+  }
+
+  const data = result.body as { items: Array<any>; signatures: string[] };
+  const baseForPatch = {
+    ...resolvedCtx.baseBrainTheme,
+    ...(resolvedCtx.ctx.current || {}),
+    page: {
+      ...resolvedCtx.baseBrainTheme.page,
+      ...(resolvedCtx.ctx.current?.page || {}),
+    },
+  };
+
+  const items = data.items.map((item) => {
+    const mergedTheme = brainApplyPatch(baseForPatch, item.patch);
+    const adapted = toIveoAppearance(mergedTheme, {
+      plan: resolvedCtx.plan,
+      locks: resolvedCtx.locks,
+      autoMatchButtons: resolvedCtx.currentAppearance?.autoMatchButtons ?? true,
+      currentAppearance: resolvedCtx.currentAppearance,
+    });
+    return {
+      ...item,
+      appearance: adapted.appearance,
+      cardLook: adapted.cardLook,
+    };
+  });
+
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  return res.status(200).json({
+    ok: true,
+    tier: resolvedCtx.plan,
+    items,
+    signatures: data.signatures,
+  });
+}
+
+/**
+ * POST /api/appearance/regenerate   body: { section, recent: string[] }
+ */
+export async function handleRegenerateAppearance(req: ExpressReq, res: ExpressRes) {
+  const resolvedCtx = await resolveBrainRequestContext(req);
+  if (!resolvedCtx.ok) {
+    return res.status(resolvedCtx.status).json({ error: resolvedCtx.error, message: resolvedCtx.message });
+  }
+
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, any>;
+  const recent = Array.isArray(body.recent)
+    ? body.recent.filter((s: unknown): s is string => typeof s === 'string').slice(-40)
+    : [];
+  const section = typeof body.section === 'string' ? body.section : 'all';
+
+  const result = brainHandleRegenerate({ section, recent }, resolvedCtx.ctx);
+  if (result.status !== 200) {
+    return res.status(result.status).json(result.body);
+  }
+
+  const data = result.body as { items: Array<any>; signatures: string[] };
+  const baseForPatch = {
+    ...resolvedCtx.baseBrainTheme,
+    ...(resolvedCtx.ctx.current || {}),
+    page: {
+      ...resolvedCtx.baseBrainTheme.page,
+      ...(resolvedCtx.ctx.current?.page || {}),
+    },
+  };
+
+  const items = data.items.map((item) => {
+    const mergedTheme = brainApplyPatch(baseForPatch, item.patch);
+    const adapted = toIveoAppearance(mergedTheme, {
+      plan: resolvedCtx.plan,
+      locks: resolvedCtx.locks,
+      autoMatchButtons: resolvedCtx.currentAppearance?.autoMatchButtons ?? true,
+      currentAppearance: resolvedCtx.currentAppearance,
+    });
+    return {
+      ...item,
+      appearance: adapted.appearance,
+      cardLook: adapted.cardLook,
+    };
+  });
+
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  return res.status(200).json({
+    ok: true,
+    tier: resolvedCtx.plan,
+    items,
+    signatures: data.signatures,
+  });
+}
+
