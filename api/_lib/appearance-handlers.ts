@@ -12,6 +12,7 @@ import {
   dbWriteAppearanceState,
 } from './azureSql.ts';
 import {
+  FirebasePersistError,
   firebaseGetAppearanceState,
   firebaseGetBlocks,
   firebaseGetProfile,
@@ -19,10 +20,12 @@ import {
   firebaseSaveAppearanceState,
   firebaseSaveProfile,
 } from './firebaseServer.ts';
+import { verifyClerkRequest } from './clerkAuth.ts';
 import { invalidatePublicPageCache } from './db-handlers.ts';
 import { notifyProfileSeoChanged } from './seoService.ts';
-import { getBackgroundsBaseDir } from './backgroundUpload.ts';
+import { getBackgroundsBaseDir, pruneOrphanedUserBackgrounds } from './backgroundUpload.ts';
 import { inspectAndSanitizeRasterBuffer } from './imageSanitizer.ts';
+import { isNewerTimestamp, selectFresherProfile } from './profileMerge.ts';
 import { isPrivilegedEmailServer } from './usernames.ts';
 import { resolveEffectivePlan } from '../../src/lib/plan.ts';
 import {
@@ -95,10 +98,38 @@ export function resetAppearanceRateLimitForTests() {
 }
 
 function withTimeout<T>(promise: Promise<T>, fallback: T, ms = 4000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
   return Promise.race([
     promise.catch(() => fallback),
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
+    timeoutPromise,
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function awaitFirebaseWrite<T>(promise: Promise<T>, operation: string, ms = 5000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new FirebasePersistError(operation, new Error(`Timed out after ${ms}ms`)));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function sendAppearanceWriteError(res: ExpressRes, err: unknown, fallback = 'appearance_save_failed') {
+  if (err instanceof FirebasePersistError) {
+    return res.status(502).json({ ok: false, error: 'firebase_sync_failed', message: err.message });
+  }
+  const message = err instanceof Error ? err.message : String(err || 'Unable to save appearance.');
+  return res.status(500).json({ ok: false, error: fallback, message });
 }
 
 interface ResolvedActor {
@@ -119,8 +150,20 @@ interface RejectedActor {
 }
 
 async function resolveAppearanceActor(req: ExpressReq): Promise<ResolvedActor | RejectedActor> {
+  const clerkAuth = await verifyClerkRequest(req);
+  if (clerkAuth.enforced && !clerkAuth.verifiedByJwt) {
+    return {
+      ok: false,
+      status: 401,
+      error: 'unauthorized',
+      message: 'Authentication required to manage appearance.',
+    };
+  }
+
   const userId = String(
-    req.headers['x-user-id'] || req.headers['x-iveo-user-id'] || req.query?.userId || req.body?.userId || ''
+    (clerkAuth.verifiedByJwt && clerkAuth.userId)
+      ? clerkAuth.userId
+      : (req.headers['x-user-id'] || req.headers['x-iveo-user-id'] || req.query?.userId || req.body?.userId || '')
   ).trim();
   const email =
     String(
@@ -154,10 +197,7 @@ async function resolveAppearanceActor(req: ExpressReq): Promise<ResolvedActor | 
       dbGetProfile(requestedUsername).catch(() => null),
       withTimeout(firebaseGetProfile(requestedUsername), null),
     ]);
-    profile =
-      dbProf && fbProf && (fbProf.updatedAt || '') > (dbProf.updatedAt || '')
-        ? { ...dbProf, ...fbProf }
-        : dbProf || fbProf;
+    profile = selectFresherProfile(dbProf, fbProf).profile;
 
     if (!profile) {
       return {
@@ -186,10 +226,7 @@ async function resolveAppearanceActor(req: ExpressReq): Promise<ResolvedActor | 
       dbGetProfileByUserId(userId, email).catch(() => null),
       withTimeout(firebaseGetProfileByUserId(userId, email), null),
     ]);
-    profile =
-      dbProf && fbProf && (fbProf.updatedAt || '') > (dbProf.updatedAt || '')
-        ? { ...dbProf, ...fbProf }
-        : dbProf || fbProf;
+    profile = selectFresherProfile(dbProf, fbProf).profile;
 
     if (!profile || !profile.username) {
       return {
@@ -716,6 +753,7 @@ async function persistAppearanceUpdate(
     const nextProf = {
       ...baseProf,
       vibeId: normalizedAppearance.vibeId,
+      background: legacy.background,
       buttonShape: legacy.buttonShape,
       buttonColors: legacy.buttonColors,
       fontSettings: legacy.fontSettings,
@@ -744,6 +782,7 @@ async function persistAppearanceUpdate(
     username: actor.username,
     primaryEmail: actor.email,
     vibeId: normalizedAppearance.vibeId,
+    background: legacy.background,
     buttonShape: legacy.buttonShape,
     buttonColors: legacy.buttonColors,
     fontSettings: legacy.fontSettings,
@@ -759,15 +798,15 @@ async function persistAppearanceUpdate(
   };
 
   await Promise.all([
-    withTimeout(
+    awaitFirebaseWrite(
       firebaseSaveProfile(
         actor.username,
         fullProfileForFirebase,
         actor.userId
       ),
-      undefined
+      'saveProfile'
     ),
-    withTimeout(
+    awaitFirebaseWrite(
       firebaseSaveAppearanceState(
         actor.username,
         {
@@ -777,9 +816,26 @@ async function persistAppearanceUpdate(
         },
         actor.userId
       ),
-      undefined
+      'saveAppearanceState'
     ),
   ]);
+
+  try {
+    const keepUrls = new Set<string>();
+    if (normalizedAppearance.background?.type === 'image' && normalizedAppearance.background.assetId) {
+      keepUrls.add(normalizedAppearance.background.assetId);
+    }
+    if (legacy.background?.imageUrl) {
+      keepUrls.add(legacy.background.imageUrl);
+    }
+    for (const theme of persisted.themes || []) {
+      const bg = theme?.data?.background;
+      if (bg?.type === 'image' && bg.assetId) {
+        keepUrls.add(bg.assetId);
+      }
+    }
+    pruneOrphanedUserBackgrounds(actor.username, Array.from(keepUrls));
+  } catch {}
 
   invalidatePublicPageCache(actor.username);
   notifyProfileSeoChanged('updated', actor.username).catch(() => {});
@@ -809,7 +865,7 @@ export async function handleGetAppearance(req: ExpressReq, res: ExpressRes) {
   const fbUpdatedAt = (fbState as any)?.updatedAt || '';
   const useFbAppearance =
     fbState?.appearance?.schemaVersion === 2 &&
-    (prof?.appearance?.schemaVersion !== 2 || fbUpdatedAt > localUpdatedAt);
+    (prof?.appearance?.schemaVersion !== 2 || isNewerTimestamp(fbUpdatedAt, localUpdatedAt));
   const rawAppearance = useFbAppearance
     ? fbState!.appearance
     : prof?.appearance?.schemaVersion === 2
@@ -956,32 +1012,36 @@ export async function handlePatchAppearance(req: ExpressReq, res: ExpressRes) {
     lastCoalesceAt: nowMs,
   };
 
-  const persisted = await persistAppearanceUpdate(actor, validated.nextAppearance, nextHistory);
-  const resolved = resolveTokens(validated.nextAppearance, { isPro: actor.isPro });
-  const warnings = computeAppearanceWarnings(resolved, validated.nextAppearance);
+  try {
+    const persisted = await persistAppearanceUpdate(actor, validated.nextAppearance, nextHistory);
+    const resolved = resolveTokens(validated.nextAppearance, { isPro: actor.isPro });
+    const warnings = computeAppearanceWarnings(resolved, validated.nextAppearance);
 
-  if (validated.proFields.length > 0) {
-    return res.status(402).json({
-      code: 'PRO_REQUIRED',
-      error: 'pro_required',
-      fields: validated.proFields,
-      partialApplied: true,
+    if (validated.proFields.length > 0) {
+      return res.status(402).json({
+        code: 'PRO_REQUIRED',
+        error: 'pro_required',
+        fields: validated.proFields,
+        partialApplied: true,
+        appearance: validated.nextAppearance,
+        resolved,
+        warnings,
+        historyMeta: persisted.history,
+        updatedAt: persisted.updatedAt,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
       appearance: validated.nextAppearance,
       resolved,
       warnings,
       historyMeta: persisted.history,
       updatedAt: persisted.updatedAt,
     });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err);
   }
-
-  return res.status(200).json({
-    ok: true,
-    appearance: validated.nextAppearance,
-    resolved,
-    warnings,
-    historyMeta: persisted.history,
-    updatedAt: persisted.updatedAt,
-  });
 }
 
 /**
@@ -1020,22 +1080,26 @@ export async function handleUndoAppearance(req: ExpressReq, res: ExpressRes) {
     } as HistorySnapshot,
   ];
 
-  const persisted = await persistAppearanceUpdate(actor, targetAppearance, {
-    undoStack,
-    redoStack,
-    lastCoalesceKey: null,
-    lastCoalesceAt: 0,
-  });
-  const resolved = resolveTokens(targetAppearance, { isPro: actor.isPro });
+  try {
+    const persisted = await persistAppearanceUpdate(actor, targetAppearance, {
+      undoStack,
+      redoStack,
+      lastCoalesceKey: null,
+      lastCoalesceAt: 0,
+    });
+    const resolved = resolveTokens(targetAppearance, { isPro: actor.isPro });
 
-  return res.status(200).json({
-    ok: true,
-    appearance: targetAppearance,
-    resolved,
-    warnings: computeAppearanceWarnings(resolved, targetAppearance),
-    historyMeta: persisted.history,
-    updatedAt: persisted.updatedAt,
-  });
+    return res.status(200).json({
+      ok: true,
+      appearance: targetAppearance,
+      resolved,
+      warnings: computeAppearanceWarnings(resolved, targetAppearance),
+      historyMeta: persisted.history,
+      updatedAt: persisted.updatedAt,
+    });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err, 'undo_failed');
+  }
 }
 
 /**
@@ -1074,22 +1138,26 @@ export async function handleRedoAppearance(req: ExpressReq, res: ExpressRes) {
     } as HistorySnapshot,
   ];
 
-  const persisted = await persistAppearanceUpdate(actor, targetAppearance, {
-    undoStack,
-    redoStack,
-    lastCoalesceKey: null,
-    lastCoalesceAt: 0,
-  });
-  const resolved = resolveTokens(targetAppearance, { isPro: actor.isPro });
+  try {
+    const persisted = await persistAppearanceUpdate(actor, targetAppearance, {
+      undoStack,
+      redoStack,
+      lastCoalesceKey: null,
+      lastCoalesceAt: 0,
+    });
+    const resolved = resolveTokens(targetAppearance, { isPro: actor.isPro });
 
-  return res.status(200).json({
-    ok: true,
-    appearance: targetAppearance,
-    resolved,
-    warnings: computeAppearanceWarnings(resolved, targetAppearance),
-    historyMeta: persisted.history,
-    updatedAt: persisted.updatedAt,
-  });
+    return res.status(200).json({
+      ok: true,
+      appearance: targetAppearance,
+      resolved,
+      warnings: computeAppearanceWarnings(resolved, targetAppearance),
+      historyMeta: persisted.history,
+      updatedAt: persisted.updatedAt,
+    });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err, 'redo_failed');
+  }
 }
 
 /**
@@ -1174,20 +1242,23 @@ export async function handleCreateTheme(req: ExpressReq, res: ExpressRes) {
   };
 
   const nextThemes = [newTheme, ...existingThemes];
-  await dbWriteAppearanceState(actor.username, () => ({
-    nextThemes,
-    result: newTheme,
-  }));
-  await withTimeout(
-    firebaseSaveAppearanceState(actor.username, {
-      appearance: currentAppearance,
-      history: state.history,
-      themes: nextThemes,
-    }, actor.userId),
-    undefined
-  );
-
-  return res.status(201).json({ ok: true, theme: newTheme, themes: nextThemes });
+  try {
+    await dbWriteAppearanceState(actor.username, () => ({
+      nextThemes,
+      result: newTheme,
+    }));
+    await awaitFirebaseWrite(
+      firebaseSaveAppearanceState(actor.username, {
+        appearance: currentAppearance,
+        history: state.history,
+        themes: nextThemes,
+      }, actor.userId),
+      'saveAppearanceState'
+    );
+    return res.status(201).json({ ok: true, theme: newTheme, themes: nextThemes });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err, 'theme_save_failed');
+  }
 }
 
 /**
@@ -1218,13 +1289,16 @@ export async function handleRenameTheme(req: ExpressReq, res: ExpressRes) {
   }
 
   themes[idx] = { ...themes[idx], name: rawName, updatedAt: new Date().toISOString() };
-  await dbWriteAppearanceState(actor.username, () => ({ nextThemes: themes, result: true }));
-  await withTimeout(
-    firebaseSaveAppearanceState(actor.username, { themes }, actor.userId),
-    undefined
-  );
-
-  return res.status(200).json({ ok: true, theme: themes[idx], themes });
+  try {
+    await dbWriteAppearanceState(actor.username, () => ({ nextThemes: themes, result: true }));
+    await awaitFirebaseWrite(
+      firebaseSaveAppearanceState(actor.username, { themes }, actor.userId),
+      'saveAppearanceState'
+    );
+    return res.status(200).json({ ok: true, theme: themes[idx], themes });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err, 'theme_rename_failed');
+  }
 }
 
 /**
@@ -1270,22 +1344,26 @@ export async function handleApplyTheme(req: ExpressReq, res: ExpressRes) {
     } as HistorySnapshot,
   ];
 
-  const persisted = await persistAppearanceUpdate(actor, nextAppearance, {
-    undoStack: nextUndoStack,
-    redoStack: [],
-    lastCoalesceKey: null,
-    lastCoalesceAt: 0,
-  });
-  const resolved = resolveTokens(nextAppearance, { isPro: actor.isPro });
+  try {
+    const persisted = await persistAppearanceUpdate(actor, nextAppearance, {
+      undoStack: nextUndoStack,
+      redoStack: [],
+      lastCoalesceKey: null,
+      lastCoalesceAt: 0,
+    });
+    const resolved = resolveTokens(nextAppearance, { isPro: actor.isPro });
 
-  return res.status(200).json({
-    ok: true,
-    appearance: nextAppearance,
-    resolved,
-    warnings: computeAppearanceWarnings(resolved, nextAppearance),
-    historyMeta: persisted.history,
-    updatedAt: persisted.updatedAt,
-  });
+    return res.status(200).json({
+      ok: true,
+      appearance: nextAppearance,
+      resolved,
+      warnings: computeAppearanceWarnings(resolved, nextAppearance),
+      historyMeta: persisted.history,
+      updatedAt: persisted.updatedAt,
+    });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err, 'theme_apply_failed');
+  }
 }
 
 /**
@@ -1310,13 +1388,16 @@ export async function handleDeleteTheme(req: ExpressReq, res: ExpressRes) {
     return res.status(404).json({ error: 'theme_not_found', message: 'Theme not found.' });
   }
 
-  await dbWriteAppearanceState(actor.username, () => ({ nextThemes, result: true }));
-  await withTimeout(
-    firebaseSaveAppearanceState(actor.username, { themes: nextThemes }, actor.userId),
-    undefined
-  );
-
-  return res.status(200).json({ ok: true, themes: nextThemes });
+  try {
+    await dbWriteAppearanceState(actor.username, () => ({ nextThemes, result: true }));
+    await awaitFirebaseWrite(
+      firebaseSaveAppearanceState(actor.username, { themes: nextThemes }, actor.userId),
+      'saveAppearanceState'
+    );
+    return res.status(200).json({ ok: true, themes: nextThemes });
+  } catch (err) {
+    return sendAppearanceWriteError(res, err, 'theme_delete_failed');
+  }
 }
 
 // =========================================================================
@@ -1494,7 +1575,7 @@ async function resolveBrainRequestContext(req: ExpressReq): Promise<
     const prof = localState.profile || actor.profile;
     const rawAppearance =
       fbState?.appearance?.schemaVersion === 2 &&
-      (prof?.appearance?.schemaVersion !== 2 || (fbState as any)?.updatedAt > (prof?.updatedAt || ''))
+      (prof?.appearance?.schemaVersion !== 2 || isNewerTimestamp((fbState as any)?.updatedAt, prof?.updatedAt))
         ? fbState.appearance
         : prof?.appearance?.schemaVersion === 2
           ? prof.appearance
@@ -1599,10 +1680,23 @@ async function resolveBrainRequestContext(req: ExpressReq): Promise<
   };
 }
 
+function getBrainRateLimitKey(req: ExpressReq): string {
+  const uid = String(req.headers['x-user-id'] || req.headers['x-iveo-user-id'] || req.body?.username || '').trim();
+  if (uid) return `brain:${uid}`;
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return `brain:${fwd || req.ip || req.socket?.remoteAddress || 'anon'}`;
+}
+
 /**
  * GET / POST /api/appearance/surprise
  */
 export async function handleSurpriseAppearance(req: ExpressReq, res: ExpressRes) {
+  const rate = checkAppearanceWriteRateLimit(getBrainRateLimitKey(req));
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({ error: 'rate_limited', message: 'Slow down slightly before trying another surprise theme.' });
+  }
+
   const resolvedCtx = await resolveBrainRequestContext(req);
   if (!resolvedCtx.ok) {
     return res.status(resolvedCtx.status).json({ error: resolvedCtx.error, message: resolvedCtx.message });
@@ -1658,6 +1752,12 @@ export async function handleSurpriseAppearance(req: ExpressReq, res: ExpressRes)
  * GET / POST /api/appearance/suggestions?section=vibe|background|typography|buttons|layout
  */
 export async function handleAppearanceSuggestions(req: ExpressReq, res: ExpressRes) {
+  const rate = checkAppearanceWriteRateLimit(getBrainRateLimitKey(req));
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({ error: 'rate_limited', message: 'Too many suggestion requests. Slow down slightly.' });
+  }
+
   const resolvedCtx = await resolveBrainRequestContext(req);
   if (!resolvedCtx.ok) {
     return res.status(resolvedCtx.status).json({ error: resolvedCtx.error, message: resolvedCtx.message });
@@ -1717,6 +1817,12 @@ export async function handleAppearanceSuggestions(req: ExpressReq, res: ExpressR
  * POST /api/appearance/regenerate   body: { section, recent: string[] }
  */
 export async function handleRegenerateAppearance(req: ExpressReq, res: ExpressRes) {
+  const rate = checkAppearanceWriteRateLimit(getBrainRateLimitKey(req));
+  if (!rate.allowed) {
+    if (rate.retryAfterSec) res.setHeader('Retry-After', String(rate.retryAfterSec));
+    return res.status(429).json({ error: 'rate_limited', message: 'Slow down slightly before regenerating again.' });
+  }
+
   const resolvedCtx = await resolveBrainRequestContext(req);
   if (!resolvedCtx.ok) {
     return res.status(resolvedCtx.status).json({ error: resolvedCtx.error, message: resolvedCtx.message });

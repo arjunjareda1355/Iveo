@@ -373,6 +373,10 @@ async function startServer() {
   app.get('/api/seo/admin/validate', dbHandlers.handleSeoAdminValidate);
   app.post('/api/seo/admin/inspect', dbHandlers.handleSeoAdminInspect);
   app.post('/api/seo/admin/moderate-background', dbHandlers.handleSeoAdminModerateBackground);
+  app.get('/api/seo/admin/gsc-config', dbHandlers.handleSeoAdminGetGscConfig);
+  app.post('/api/seo/admin/gsc-config', dbHandlers.handleSeoAdminSaveGscConfig);
+  app.delete('/api/seo/admin/gsc-config', dbHandlers.handleSeoAdminDeleteGscConfig);
+  app.post('/api/seo/admin/gsc-test', dbHandlers.handleSeoAdminTestGsc);
   app.post('/api/unlock-link', dbHandlers.handleUnlockLink);
   app.post('/api/link-password', dbHandlers.handleSetLinkPassword);
   app.get('/api/link-password/status', dbHandlers.handleGetProtectedLinkIds);
@@ -785,6 +789,12 @@ async function startServer() {
       }
     });
   }
+
+  const { purgeExpiredDeletedAccounts } = await import('./api/_lib/azureSql.ts');
+  purgeExpiredDeletedAccounts().catch(() => {});
+  setInterval(() => {
+    purgeExpiredDeletedAccounts().catch(() => {});
+  }, 15 * 60_000).unref();
 
   app.listen(port, '0.0.0.0', () => {
     console.log(

@@ -6,6 +6,7 @@ import { ogImageAddress, pageAddress } from './site.ts';
 import { loadPublicPage, version, type PublicPageServerData } from './publicPage.ts';
 import { appendSeoEvent, getSearchEngineStatus, notifyIndexNow, submitSitemapsToSearchEngines } from './searchEngines.ts';
 import { classifySegment, isPrivilegedEmailServer, PRIVATE_ROUTES, PUBLIC_INFO_ROUTES } from './usernames.ts';
+import { isNewerTimestamp } from './profileMerge.ts';
 import { normalizeSocialUrl } from '../../src/lib/urls.ts';
 
 export const MAIN_SEO_TITLE = 'Iveo – One Link for Everything You Create';
@@ -22,7 +23,7 @@ export interface SeoUnifiedProfile {
   vibeId: string;
   plan: string;
   isPro?: boolean;
-  status: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  status: 'active' | 'private' | 'unpublished' | 'deleted' | 'deleted_pending' | 'suspended';
   isPublished: boolean;
   hideFromSearch: boolean;
   customSeoTitle: string | null;
@@ -130,7 +131,7 @@ export function evaluateProfileIndexability(profile: Partial<SeoUnifiedProfile> 
   }
 
   const status = profile.status || 'active';
-  if (status === 'deleted') {
+  if (status === 'deleted' || status === 'deleted_pending') {
     return {
       indexable: false,
       reason: 'deleted_profile',
@@ -178,7 +179,7 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
   const upsertIfNewer = (candidate: SeoUnifiedProfile) => {
     if (isSyntheticTestHandle(candidate.username)) return;
     const existing = byUsername.get(candidate.username);
-    if (!existing || (candidate.updatedAt || '') >= (existing.updatedAt || '')) {
+    if (!existing || isNewerTimestamp(candidate.updatedAt, existing.updatedAt)) {
       byUsername.set(candidate.username, candidate);
     }
   };
@@ -188,7 +189,7 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
     const fbProfiles = await firebaseGetAllProfiles();
     for (const prof of fbProfiles) {
       const uname = typeof prof?.username === 'string' ? prof.username.toLowerCase().trim() : '';
-      if (!uname || prof?.status === 'deleted') continue;
+      if (!uname || prof?.status === 'deleted' || prof?.status === 'deleted_pending') continue;
       const isPro = Boolean(prof.isPro || prof.plan === 'pro' || isPrivilegedEmailServer(prof.primaryEmail));
       upsertIfNewer({
         username: uname,
@@ -215,7 +216,7 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
     const dbProfiles = await dbListAllProfiles();
     for (const prof of dbProfiles) {
       const uname = typeof prof?.username === 'string' ? prof.username.toLowerCase().trim() : '';
-      if (!uname || prof?.status === 'deleted') continue;
+      if (!uname || prof?.status === 'deleted' || prof?.status === 'deleted_pending') continue;
       const isPro = Boolean(prof.isPro || prof.plan === 'pro' || isPrivilegedEmailServer(prof.primaryEmail));
       upsertIfNewer({
         username: uname,

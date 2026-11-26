@@ -17,12 +17,14 @@ service cloud.firestore {
 
     function isValidClaim(data) {
       return data.keys().hasAll(['username'])
-        && data.keys().hasOnly(['username', 'userId', 'status', 'claimedAt', 'releasedAt'])
+        && data.keys().hasOnly(['username', 'userId', 'status', 'claimedAt', 'releasedAt', 'deletedAt', 'purgeAt'])
         && data.username is string && data.username.size() > 0 && data.username.size() <= 64
         && (!('userId' in data) || data.userId == null || (data.userId is string && data.userId.size() <= 128))
         && (!('status' in data) || data.status == null || (data.status is string && data.status.size() <= 32))
         && (!('claimedAt' in data) || data.claimedAt == null || (data.claimedAt is string && data.claimedAt.size() <= 64))
-        && (!('releasedAt' in data) || data.releasedAt == null || (data.releasedAt is string && data.releasedAt.size() <= 64));
+        && (!('releasedAt' in data) || data.releasedAt == null || (data.releasedAt is string && data.releasedAt.size() <= 64))
+        && (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64))
+        && (!('purgeAt' in data) || data.purgeAt == null || (data.purgeAt is string && data.purgeAt.size() <= 64));
     }
 
     function isValidRedirect(data) {
@@ -46,6 +48,8 @@ service cloud.firestore {
         && (!('primaryEmail' in data) || data.primaryEmail == null || (data.primaryEmail is string && data.primaryEmail.size() <= 320))
         && (!('customSeoTitle' in data) || data.customSeoTitle == null || (data.customSeoTitle is string && data.customSeoTitle.size() <= 160))
         && (!('customSeoDescription' in data) || data.customSeoDescription == null || (data.customSeoDescription is string && data.customSeoDescription.size() <= 320))
+        && (!('deletedAt' in data) || data.deletedAt == null || (data.deletedAt is string && data.deletedAt.size() <= 64))
+        && (!('purgeAt' in data) || data.purgeAt == null || (data.purgeAt is string && data.purgeAt.size() <= 64))
         && (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 

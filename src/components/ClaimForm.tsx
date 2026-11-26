@@ -19,8 +19,6 @@ interface ClaimFormProps {
   centerStatus?: boolean;
 }
 
-// Availability is mocked on the client. Replace with a real lookup when Firestore is added.
-
 export const ClaimForm: React.FC<ClaimFormProps> = ({
   tone = 'light',
   className,
@@ -40,6 +38,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     'initial' | 'checking' | 'available' | 'unavailable' | 'empty_submit'
   >('initial');
   const [availableUsername, setAvailableUsername] = useState<string>('');
+  const [unavailableMessage, setUnavailableMessage] = useState<string>('');
 
   const isDark = tone === 'dark';
 
@@ -50,11 +49,13 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       setIsChecking(false);
       setStatusState('initial');
       setAvailableUsername('');
+      setUnavailableMessage('');
       return;
     }
 
     setIsChecking(true);
     setStatusState('checking');
+    setUnavailableMessage('');
 
     const timer = setTimeout(async () => {
       const res = await checkUsernameAvailability(rawInput, session.userId || undefined, session.primaryEmail);
@@ -64,9 +65,11 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       if (res.status === 'available') {
         setStatusState('available');
         setAvailableUsername(res.username);
+        setUnavailableMessage('');
       } else {
         setStatusState('unavailable');
         setAvailableUsername('');
+        setUnavailableMessage(res.message || "That address isn't available. Try another.");
       }
     }, 350);
 
@@ -75,6 +78,14 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       clearTimeout(timer);
     };
   }, [rawInput, session.userId, session.primaryEmail]);
+
+  const cleanInput = normalizeUsername(rawInput);
+  const canClaim = Boolean(
+    cleanInput.length >= USERNAME_MIN &&
+      statusState === 'available' &&
+      availableUsername === cleanInput &&
+      !isChecking
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const clean = normalizeUsername(e.target.value);
@@ -86,22 +97,43 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
 
     const trimmed = rawInput.trim();
     if (!trimmed) {
-      navigate('/signup');
+      setStatusState('empty_submit');
+      inputRef.current?.focus();
       return;
     }
 
     const clean = normalizeUsername(trimmed);
     if (!clean || clean.length < USERNAME_MIN) {
-      navigate('/signup');
+      setStatusState('initial');
+      inputRef.current?.focus();
+      return;
+    }
+
+    if (isChecking || statusState === 'unavailable') {
+      return;
+    }
+
+    setIsChecking(true);
+    const verified = await checkUsernameAvailability(
+      clean,
+      session.userId || undefined,
+      session.primaryEmail
+    );
+    setIsChecking(false);
+
+    if (verified.status !== 'available') {
+      setStatusState('unavailable');
+      setAvailableUsername('');
+      setUnavailableMessage(verified.message || "That address isn't available. Try another.");
       return;
     }
 
     try {
-      sessionStorage.setItem('iveo.claim', clean);
-      sessionStorage.setItem('ivio.claim', clean);
+      sessionStorage.setItem('iveo.claim', verified.username);
+      sessionStorage.setItem('ivio.claim', verified.username);
     } catch {}
 
-    navigate(`/signup?u=${encodeURIComponent(clean)}`);
+    navigate(`/signup?u=${encodeURIComponent(verified.username)}`);
   };
 
   // Signed in state: compact pill + button
@@ -183,7 +215,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     if (statusState === 'unavailable') {
       return (
         <span className="text-error font-normal text-[14px]">
-          That address isn't available. Try another.
+          {unavailableMessage || "That address isn't available. Try another."}
         </span>
       );
     }
@@ -261,6 +293,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
               type="submit"
               variant={isDark ? 'inverse' : 'primary'}
               size="md"
+              disabled={!canClaim}
               iconRight={<ArrowRight size={16} strokeWidth={1.5} />}
             >
               {copy.hero.claimButton}
@@ -275,6 +308,7 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
             variant={isDark ? 'inverse' : 'primary'}
             size="lg"
             fullWidth
+            disabled={!canClaim}
             iconRight={<ArrowRight size={16} strokeWidth={1.5} />}
           >
             {copy.hero.claimButton}

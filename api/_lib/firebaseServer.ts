@@ -14,6 +14,44 @@ import {
 } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isDeletedPurgeExpired, isNewerTimestamp } from './profileMerge.ts';
+import {
+  clampNullableString,
+  clampRequiredString,
+  enforceAnalyticsRuleBounds,
+  enforceAppearanceRuleBounds,
+  enforceBlockRuleBounds,
+  enforceContactRuleBounds,
+  enforceProfileRuleBounds,
+  sanitizeForFirestore,
+} from './firebaseSanitize.ts';
+
+export class FirebasePersistError extends Error {
+  code = 'firebase_sync_failed';
+  operation: string;
+  causeErr?: unknown;
+
+  constructor(operation: string, causeErr?: unknown) {
+    const detail = causeErr instanceof Error ? causeErr.message : String(causeErr || 'Unknown Firestore error');
+    super(`Firestore ${operation} failed: ${detail}`);
+    this.name = 'FirebasePersistError';
+    this.operation = operation;
+    this.causeErr = causeErr;
+  }
+}
+
+type WriteHook = ((operation: string) => void | Promise<void>) | null;
+let writeHookForTests: WriteHook = null;
+
+export function setFirebaseWriteHookForTests(hook: WriteHook): void {
+  writeHookForTests = hook;
+}
+
+async function runWriteHook(operation: string): Promise<void> {
+  if (writeHookForTests) {
+    await writeHookForTests(operation);
+  }
+}
 
 // Read firebase configuration
 let firebaseConfig: any = null;
@@ -37,53 +75,50 @@ export const serverDb =
     ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
     : null;
 
+
 /**
  * Checks whether a username is claimed in Firebase
  */
 export async function firebaseIsUsernameClaimed(
   username: string,
   requestingUserId?: string | null
-): Promise<{ claimed: boolean; isOwn?: boolean; userId?: string }> {
+): Promise<{ claimed: boolean; isOwn?: boolean; userId?: string; status?: string }> {
   if (!serverDb || !username) return { claimed: false };
   const clean = username.replace(/^@+/, '').toLowerCase().trim();
+
+  const evaluateClaimDoc = (data: Record<string, any>, fallbackOwnerId?: string | null) => {
+    if (!data || data.status === 'deleted') return null;
+    const ownerId = data.userId || fallbackOwnerId || null;
+    if (data.status === 'deleted_pending' && isDeletedPurgeExpired(data)) {
+      firebasePurgeAccountPermanently(clean, ownerId || undefined).catch(() => {});
+      return null;
+    }
+    if (requestingUserId && ownerId && ownerId === requestingUserId) {
+      return { claimed: true, isOwn: true, userId: ownerId, status: data.status || 'active' };
+    }
+    return { claimed: true, isOwn: false, userId: ownerId, status: data.status || 'active' };
+  };
 
   // 1. Check atomic claims collection
   const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
   if (claimSnap.exists()) {
-    const data = claimSnap.data() || {};
-    if (data.status !== 'deleted') {
-      const ownerId = data.userId || null;
-      if (requestingUserId && ownerId && ownerId === requestingUserId) {
-        return { claimed: true, isOwn: true, userId: ownerId };
-      }
-      return { claimed: true, isOwn: false, userId: ownerId };
-    }
+    const res = evaluateClaimDoc(claimSnap.data() || {});
+    if (res) return res;
   }
 
   // 2. Check users collection doc keyed by username
   const userSnap = await getDoc(doc(serverDb, 'users', clean));
   if (userSnap.exists()) {
-    const data = userSnap.data() || {};
-    if (data.status !== 'deleted') {
-      const ownerId = data.userId || null;
-      if (requestingUserId && ownerId && ownerId === requestingUserId) {
-        return { claimed: true, isOwn: true, userId: ownerId };
-      }
-      return { claimed: true, isOwn: false, userId: ownerId };
-    }
+    const res = evaluateClaimDoc(userSnap.data() || {});
+    if (res) return res;
   }
 
   // 3. Check users collection query where username matches
   const q = query(collection(serverDb, 'users'), where('username', '==', clean));
   const querySnap = await getDocs(q);
   for (const docItem of querySnap.docs) {
-    const data = docItem.data() || {};
-    if (data.status === 'deleted') continue;
-    const ownerId = data.userId || docItem.id || null;
-    if (requestingUserId && ownerId && ownerId === requestingUserId) {
-      return { claimed: true, isOwn: true, userId: ownerId };
-    }
-    return { claimed: true, isOwn: false, userId: ownerId };
+    const res = evaluateClaimDoc(docItem.data() || {}, docItem.id);
+    if (res) return res;
   }
 
   return { claimed: false };
@@ -92,28 +127,53 @@ export async function firebaseIsUsernameClaimed(
 /**
  * Retrieves a user profile from Firebase
  */
-export async function firebaseGetProfile(username: string): Promise<any | null> {
+export async function firebaseGetProfile(
+  username: string,
+  opts?: { includePendingDelete?: boolean }
+): Promise<any | null> {
   if (!serverDb || !username) return null;
   const clean = username.replace(/^@+/, '').toLowerCase().trim();
   if (!clean) return null;
+  const includePendingDelete = Boolean(opts?.includePendingDelete);
+
+  const acceptProfile = (data: Record<string, any> | undefined, resolvedUname: string) => {
+    if (!data || data.status === 'deleted') return null;
+    if (data.status === 'deleted_pending') {
+      if (isDeletedPurgeExpired(data)) {
+        firebasePurgeAccountPermanently(resolvedUname, data.userId).catch(() => {});
+        return null;
+      }
+      if (!includePendingDelete) return null;
+    }
+    return {
+      ...data,
+      username: resolvedUname,
+    };
+  };
 
   try {
     // 1. Direct doc lookup by username
     const userSnap = await getDoc(doc(serverDb, 'users', clean));
     if (userSnap.exists()) {
       const data = userSnap.data();
-      if (data?.status !== 'deleted') {
-        return {
-          ...data,
-          username: String(data.username || clean).replace(/^@+/, '').toLowerCase().trim() || clean,
-        };
-      }
+      const resolvedUname =
+        String(data?.username || clean).replace(/^@+/, '').toLowerCase().trim() || clean;
+      const accepted = acceptProfile(data, resolvedUname);
+      if (accepted) return accepted;
+      if (data?.status === 'deleted_pending' && !includePendingDelete) return null;
     }
 
     // 2. Check claim to find userId
     const claimSnap = await getDoc(doc(serverDb, 'claims', clean));
     if (claimSnap.exists()) {
       const claimData = claimSnap.data();
+      if (claimData?.status === 'deleted_pending') {
+        if (isDeletedPurgeExpired(claimData)) {
+          firebasePurgeAccountPermanently(clean, claimData.userId).catch(() => {});
+          return null;
+        }
+        if (!includePendingDelete) return null;
+      }
       if (claimData?.status !== 'deleted' && claimData.userId && claimData.userId !== clean) {
         const userIdSnap = await getDoc(doc(serverDb, 'users', claimData.userId));
         if (userIdSnap.exists()) {
@@ -122,11 +182,9 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
             typeof udata?.username === 'string'
               ? udata.username.replace(/^@+/, '').toLowerCase().trim()
               : '';
-          if (udata?.status !== 'deleted' && (!uUsername || uUsername === clean)) {
-            return {
-              ...udata,
-              username: clean,
-            };
+          if (!uUsername || uUsername === clean) {
+            const accepted = acceptProfile(udata, clean);
+            if (accepted) return accepted;
           }
         }
       }
@@ -137,12 +195,8 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
       const q = query(collection(serverDb, 'users'), where('username', '==', candidate));
       const querySnap = await getDocs(q);
       for (const d of querySnap.docs) {
-        const data = d.data();
-        if (data?.status === 'deleted') continue;
-        return {
-          ...data,
-          username: clean,
-        };
+        const accepted = acceptProfile(d.data(), clean);
+        if (accepted) return accepted;
       }
     }
   } catch (err) {
@@ -157,35 +211,44 @@ export async function firebaseGetProfile(username: string): Promise<any | null> 
  */
 export async function firebaseGetProfileByUserId(
   userId: string,
-  email?: string | null
+  email?: string | null,
+  opts?: { includePendingDelete?: boolean }
 ): Promise<any | null> {
   if (!serverDb || (!userId && !email)) return null;
+  const includePendingDelete = opts?.includePendingDelete !== false;
+
+  const acceptUserDoc = (data: Record<string, any> | undefined): any | null => {
+    if (!data || !data.username || data.status === 'deleted') return null;
+    const uname = String(data.username).replace(/^@+/, '').toLowerCase().trim();
+    if (!uname) return null;
+    if (data.status === 'deleted_pending') {
+      if (isDeletedPurgeExpired(data)) {
+        firebasePurgeAccountPermanently(uname, data.userId).catch(() => {});
+        return null;
+      }
+      if (!includePendingDelete) return null;
+    }
+    return {
+      ...data,
+      username: uname,
+    };
+  };
 
   try {
     // 1. Direct doc lookup by userId
     if (userId) {
       const userSnap = await getDoc(doc(serverDb, 'users', userId));
       if (userSnap.exists()) {
-        const data = userSnap.data();
-        if (data.username && data.status !== 'deleted') {
-          return {
-            ...data,
-            username: data.username,
-          };
-        }
+        const accepted = acceptUserDoc(userSnap.data());
+        if (accepted) return accepted;
       }
 
       // 2. Query users collection where userId == userId
       const qUser = query(collection(serverDb, 'users'), where('userId', '==', userId));
       const qSnap = await getDocs(qUser);
       for (const d of qSnap.docs) {
-        const data = d.data();
-        if (data.username && data.status !== 'deleted') {
-          return {
-            ...data,
-            username: data.username,
-          };
-        }
+        const accepted = acceptUserDoc(d.data());
+        if (accepted) return accepted;
       }
 
       // 3. Query claims collection where userId == userId
@@ -193,14 +256,25 @@ export async function firebaseGetProfileByUserId(
       const claimsSnap = await getDocs(qClaims);
       if (!claimsSnap.empty) {
         const claimData = claimsSnap.docs[0].data();
-        const username = claimData.username || claimsSnap.docs[0].id;
+        const username = String(claimData.username || claimsSnap.docs[0].id || '')
+          .replace(/^@+/, '')
+          .toLowerCase()
+          .trim();
         if (username && claimData.status !== 'deleted') {
-          const profile = await firebaseGetProfile(username);
+          if (claimData.status === 'deleted_pending' && isDeletedPurgeExpired(claimData)) {
+            firebasePurgeAccountPermanently(username, userId).catch(() => {});
+            return null;
+          }
+          const profile = await firebaseGetProfile(username, { includePendingDelete });
           if (profile) return profile;
+          if (claimData.status === 'deleted_pending' && !includePendingDelete) return null;
           return {
             username,
             userId,
             displayName: username,
+            status: claimData.status || 'active',
+            deletedAt: claimData.deletedAt ?? null,
+            purgeAt: claimData.purgeAt ?? null,
           };
         }
       }
@@ -212,13 +286,8 @@ export async function firebaseGetProfileByUserId(
       const qEmail = query(collection(serverDb, 'users'), where('primaryEmail', '==', cleanEmail));
       const emailSnap = await getDocs(qEmail);
       for (const d of emailSnap.docs) {
-        const data = d.data();
-        if (data.username && data.status !== 'deleted') {
-          return {
-            ...data,
-            username: data.username,
-          };
-        }
+        const accepted = acceptUserDoc(d.data());
+        if (accepted) return accepted;
       }
     }
   } catch (err) {
@@ -280,15 +349,17 @@ export async function firebaseGetBlocks(username: string, ownerUserId?: string |
 }
 
 /**
- * Background async save of profile to Firebase
+ * Persists a user profile and claim registry document to Firestore with deep sanitization and error propagation.
  */
 export async function firebaseSaveProfile(
   username: string,
   profileData: Record<string, any>,
   userId?: string
 ): Promise<void> {
-  if (!serverDb || !username) return;
-  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!username) return;
+  await runWriteHook('saveProfile');
+  if (!serverDb) return;
+  const clean = clampRequiredString(username.replace(/^@+/, '').toLowerCase().trim(), 64, 'owner');
   const userRef = doc(serverDb, 'users', clean);
 
   try {
@@ -307,21 +378,26 @@ export async function firebaseSaveProfile(
       }
     }
 
-    const effectiveUserId =
+    const effectiveUserId = clampRequiredString(
       userId ||
-      profileData.userId ||
-      (existingData.userId && existingData.userId !== 'owner' ? existingData.userId : 'owner');
+        profileData.userId ||
+        (existingData.userId && existingData.userId !== 'owner' ? existingData.userId : 'owner'),
+      128,
+      'owner'
+    );
 
-    const resolvedStatus =
+    const resolvedStatus = clampNullableString(
       profileData.status !== undefined
         ? profileData.status
         : profileData.isPublished === false
           ? 'unpublished'
           : profileData.isPublished === true
             ? 'active'
-            : existingData.status || (existingData.isPublished === false ? 'unpublished' : 'active');
+            : existingData.status || (existingData.isPublished === false ? 'unpublished' : 'active'),
+      32
+    ) || 'active';
 
-    const cleanProfile: Record<string, any> = {
+    const rawProfile: Record<string, any> = {
       userId: effectiveUserId,
       username: clean,
       displayName:
@@ -436,11 +512,23 @@ export async function firebaseSaveProfile(
       ...(profileData.blocksInitialized !== undefined || existingData.blocksInitialized !== undefined
         ? { blocksInitialized: Boolean(profileData.blocksInitialized ?? existingData.blocksInitialized) }
         : {}),
+      deletedAt:
+        profileData.deletedAt !== undefined
+          ? profileData.deletedAt ?? null
+          : resolvedStatus === 'deleted_pending'
+            ? (existingData.deletedAt ?? null)
+            : null,
+      purgeAt:
+        profileData.purgeAt !== undefined
+          ? profileData.purgeAt ?? null
+          : resolvedStatus === 'deleted_pending'
+            ? (existingData.purgeAt ?? null)
+            : null,
       updatedAt: profileData.updatedAt || new Date().toISOString(),
     };
 
     if (typeof profileData.avatarData === 'string' && profileData.avatarData.length <= 350000) {
-      cleanProfile.avatarData = profileData.avatarData;
+      rawProfile.avatarData = profileData.avatarData;
     } else if (
       profileData.avatarData === null ||
       (profileData.avatarUrl !== undefined &&
@@ -448,10 +536,12 @@ export async function firebaseSaveProfile(
           (!String(profileData.avatarUrl).startsWith('/api/avatar/') &&
             !String(profileData.avatarUrl).startsWith('data:image/'))))
     ) {
-      cleanProfile.avatarData = null;
+      rawProfile.avatarData = null;
     } else if (existingData.avatarData !== undefined) {
-      cleanProfile.avatarData = existingData.avatarData;
+      rawProfile.avatarData = existingData.avatarData;
     }
+
+    const cleanProfile = enforceProfileRuleBounds(rawProfile, clean);
 
     const nestedOverwritePayload: Record<string, any> = {
       updatedAt: cleanProfile.updatedAt,
@@ -467,21 +557,24 @@ export async function firebaseSaveProfile(
     // Save to users collection and explicitly overwrite nested maps so removed keys never linger
     await setDoc(userRef, cleanProfile, { merge: true });
     if (Object.keys(nestedOverwritePayload).length > 1) {
-      await updateDoc(userRef, nestedOverwritePayload).catch(() => {});
+      await updateDoc(userRef, sanitizeForFirestore(nestedOverwritePayload));
     }
 
-    // Also save claim registry record
+    // Also save claim registry record adhering strictly to /claims rules
     await setDoc(
       doc(serverDb, 'claims', clean),
-      {
+      sanitizeForFirestore({
         username: clean,
         userId: effectiveUserId,
-        claimedAt: cleanProfile.updatedAt,
-      },
+        status: resolvedStatus,
+        deletedAt: cleanProfile.deletedAt ?? null,
+        purgeAt: cleanProfile.purgeAt ?? null,
+        claimedAt: clampRequiredString(cleanProfile.updatedAt, 64, new Date().toISOString()),
+      }),
       { merge: true }
     );
 
-    // Remove any stale redirect from this newly claimed handle
+    // Remove any stale redirect from this newly claimed handle (no-op if absent)
     await deleteDoc(doc(serverDb, 'redirects', clean)).catch(() => {});
 
     // If userId differs from username, mirror to users/{userId}
@@ -489,85 +582,92 @@ export async function firebaseSaveProfile(
       const mirrorRef = doc(serverDb, 'users', effectiveUserId);
       await setDoc(mirrorRef, cleanProfile, { merge: true });
       if (Object.keys(nestedOverwritePayload).length > 1) {
-        await updateDoc(mirrorRef, nestedOverwritePayload).catch(() => {});
+        await updateDoc(mirrorRef, sanitizeForFirestore(nestedOverwritePayload));
       }
     }
   } catch (err) {
-    console.warn('[FirebaseServer] Background saveProfile notice:', err);
+    console.error('[FirebaseServer] saveProfile failed:', err);
+    throw new FirebasePersistError('saveProfile', err);
   }
 }
 
 /**
- * Background async save of blocks to Firebase (removes deleted block docs)
+ * Persists blocks to Firestore (with batch chunking, deep sanitization, and deleted block cleanup).
  */
 export async function firebaseSaveBlocks(
   username: string,
   blocks: any[],
   userId?: string
 ): Promise<void> {
-  if (!serverDb || !username || !Array.isArray(blocks)) return;
-  const clean = username.replace(/^@+/, '').toLowerCase().trim();
-  const effectiveUserId = userId || 'owner';
+  if (!username || !Array.isArray(blocks)) return;
+  await runWriteHook('saveBlocks');
+  if (!serverDb) return;
+  const clean = clampRequiredString(username.replace(/^@+/, '').toLowerCase().trim(), 64, 'owner');
+  const effectiveUserId = clampRequiredString(userId || 'owner', 128, 'owner');
+  const nowIso = new Date().toISOString();
 
   try {
-    const batch = writeBatch(serverDb);
     const keepIds = new Set<string>();
+    const ops: Array<{ type: 'set'; ref: any; data: any } | { type: 'delete'; ref: any }> = [];
 
     blocks.forEach((b, index) => {
-      const blockId = b.id || `b_${Date.now()}_${index}`;
+      const rawBlockId = String(b?.id || `b_${Date.now()}_${index}`).replace(/[^a-zA-Z0-9._:-]/g, '_').slice(0, 128);
+      const blockId = rawBlockId || `b_${index}`;
       keepIds.add(blockId);
-      const cleanBlock = {
-        id: blockId,
-        userId: effectiveUserId,
-        username: clean,
-        kind: b.kind || 'link',
-        title: b.title || '',
-        url: b.url || null,
-        icon: b.icon || null,
-        thumbnailPath: b.thumbnailPath || null,
-        thumbnailUrl: b.thumbnailUrl || null,
-        layout: b.layout || 'classic',
-        embedProvider: b.embedProvider || null,
-        embedMeta: b.embedMeta || null,
-        isProtected: Boolean(b.isProtected),
-        signup: b.signup || null,
-        tipJar: b.tipJar || null,
-        coffee: b.coffee || null,
-        faq: b.faq || null,
-        vcard: b.vcard || null,
-        animation: b.animation || null,
-        badge: b.badge || null,
-        youtube: b.youtube || null,
-        product: b.product || null,
-        booking: b.booking || null,
-        countdown: b.countdown || null,
-        promo: b.promo || null,
-        location: b.location || null,
-        download: b.download || null,
-        bluesky: b.bluesky || null,
-        startAt: b.startAt || null,
-        endAt: b.endAt || null,
-        position: b.position ?? index,
-        order: b.position ?? index,
-        isActive: b.isActive ?? true,
-        isArchived: Boolean(b.isArchived),
-        updatedAt: new Date().toISOString(),
-      };
 
-      const ref = doc(serverDb, 'users', clean, 'blocks', blockId);
-      batch.set(ref, cleanBlock, { merge: true });
+      const cleanBlock = enforceBlockRuleBounds(
+        {
+          id: blockId,
+          userId: effectiveUserId,
+          username: clean,
+          kind: b?.kind || 'link',
+          title: b?.title || '',
+          url: b?.url || null,
+          icon: b?.icon || null,
+          thumbnailPath: b?.thumbnailPath || null,
+          thumbnailUrl: b?.thumbnailUrl || null,
+          layout: b?.layout || 'classic',
+          embedProvider: b?.embedProvider || null,
+          embedMeta: b?.embedMeta || null,
+          isProtected: Boolean(b?.isProtected),
+          signup: b?.signup || null,
+          tipJar: b?.tipJar || null,
+          coffee: b?.coffee || null,
+          faq: b?.faq || null,
+          vcard: b?.vcard || null,
+          animation: b?.animation || null,
+          badge: b?.badge || null,
+          youtube: b?.youtube || null,
+          product: b?.product || null,
+          booking: b?.booking || null,
+          countdown: b?.countdown || null,
+          promo: b?.promo || null,
+          location: b?.location || null,
+          download: b?.download || null,
+          bluesky: b?.bluesky || null,
+          startAt: b?.startAt || null,
+          endAt: b?.endAt || null,
+          position: Number.isFinite(Number(b?.position)) ? Number(b.position) : index,
+          order: Number.isFinite(Number(b?.position)) ? Number(b.position) : index,
+          isActive: b?.isActive ?? true,
+          isArchived: Boolean(b?.isArchived),
+          updatedAt: nowIso,
+        },
+        blockId,
+        clean,
+        effectiveUserId
+      );
 
+      ops.push({ type: 'set', ref: doc(serverDb!, 'users', clean, 'blocks', blockId), data: cleanBlock });
       if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
-        const userRef = doc(serverDb, 'users', effectiveUserId, 'blocks', blockId);
-        batch.set(userRef, cleanBlock, { merge: true });
+        ops.push({ type: 'set', ref: doc(serverDb!, 'users', effectiveUserId, 'blocks', blockId), data: cleanBlock });
       }
     });
 
-    // Delete any existing Firestore block documents absent from current blocks array
     const existingCleanSnap = await getDocs(collection(serverDb, 'users', clean, 'blocks'));
     existingCleanSnap.docs.forEach((docSnap) => {
       if (!keepIds.has(docSnap.id)) {
-        batch.delete(docSnap.ref);
+        ops.push({ type: 'delete', ref: docSnap.ref });
       }
     });
 
@@ -575,49 +675,70 @@ export async function firebaseSaveBlocks(
       const existingUserSnap = await getDocs(collection(serverDb, 'users', effectiveUserId, 'blocks'));
       existingUserSnap.docs.forEach((docSnap) => {
         if (!keepIds.has(docSnap.id)) {
-          batch.delete(docSnap.ref);
+          ops.push({ type: 'delete', ref: docSnap.ref });
         }
       });
     }
 
-    const blocksInitTs = new Date().toISOString();
-    batch.set(
-      doc(serverDb, 'users', clean),
-      { blocksInitialized: true, updatedAt: blocksInitTs },
-      { merge: true }
-    );
+    ops.push({
+      type: 'set',
+      ref: doc(serverDb, 'users', clean),
+      data: { blocksInitialized: true, updatedAt: nowIso },
+    });
     if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
-      batch.set(
-        doc(serverDb, 'users', effectiveUserId),
-        { blocksInitialized: true, updatedAt: blocksInitTs },
-        { merge: true }
-      );
+      ops.push({
+        type: 'set',
+        ref: doc(serverDb, 'users', effectiveUserId),
+        data: { blocksInitialized: true, updatedAt: nowIso },
+      });
     }
 
-    await batch.commit();
+    const CHUNK = 400;
+    for (let i = 0; i < ops.length; i += CHUNK) {
+      const batch = writeBatch(serverDb);
+      for (const op of ops.slice(i, i + CHUNK)) {
+        if (op.type === 'set') {
+          batch.set(op.ref, op.data, { merge: true });
+        } else {
+          batch.delete(op.ref);
+        }
+      }
+      await batch.commit();
+    }
   } catch (err) {
-    console.warn('[FirebaseServer] Background saveBlocks notice:', err);
+    console.error('[FirebaseServer] saveBlocks failed:', err);
+    throw new FirebasePersistError('saveBlocks', err);
   }
 }
 
 /**
- * Background async save of subscriber contact to Firebase
+ * Persists a subscriber contact to Firestore.
  */
 export async function firebaseSaveContact(
   username: string,
   contact: { id: string; email?: string | null; phone?: string | null; consentText?: string | null; source?: string | null; formTitle?: string | null }
 ): Promise<void> {
-  if (!serverDb || !username || !contact?.id) return;
-  const clean = username.toLowerCase().trim();
+  if (!username || !contact?.id) return;
+  await runWriteHook('saveContact');
+  if (!serverDb) return;
+  const clean = clampRequiredString(username.replace(/^@+/, '').toLowerCase().trim(), 64, 'owner');
+  const safeId = clampRequiredString(contact.id.replace(/[^a-zA-Z0-9._:-]/g, '_'), 128, `c_${Date.now()}`);
 
   try {
-    await setDoc(doc(serverDb, 'users', clean, 'contacts', contact.id), {
-      ...contact,
-      username: clean,
-      createdAt: new Date().toISOString(),
-    });
+    const cleanContact = enforceContactRuleBounds(
+      {
+        ...contact,
+        id: safeId,
+        username: clean,
+        createdAt: new Date().toISOString(),
+      },
+      safeId,
+      clean
+    );
+    await setDoc(doc(serverDb, 'users', clean, 'contacts', safeId), cleanContact);
   } catch (err) {
-    console.warn('[FirebaseServer] Background saveContact notice:', err);
+    console.error('[FirebaseServer] saveContact failed:', err);
+    throw new FirebasePersistError('saveContact', err);
   }
 }
 
@@ -636,23 +757,36 @@ export async function firebaseGetContacts(username: string): Promise<any[]> {
 }
 
 export async function firebaseDeleteContact(username: string, contactId: string): Promise<void> {
-  if (!serverDb || !username || !contactId) return;
+  if (!username || !contactId) return;
+  await runWriteHook('deleteContact');
+  if (!serverDb) return;
   const clean = username.toLowerCase().trim();
   try {
     await deleteDoc(doc(serverDb, 'users', clean, 'contacts', contactId));
-  } catch {}
+  } catch (err) {
+    console.error('[FirebaseServer] deleteContact failed:', err);
+    throw new FirebasePersistError('deleteContact', err);
+  }
 }
 
 export async function firebaseDeleteAllContacts(username: string): Promise<void> {
-  if (!serverDb || !username) return;
+  if (!username) return;
+  await runWriteHook('deleteAllContacts');
+  if (!serverDb) return;
   const clean = username.toLowerCase().trim();
   try {
     const snap = await getDocs(collection(serverDb, 'users', clean, 'contacts'));
     if (snap.empty) return;
-    const batch = writeBatch(serverDb);
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-  } catch {}
+    const refs = snap.docs.map((d) => d.ref);
+    for (let i = 0; i < refs.length; i += 400) {
+      const batch = writeBatch(serverDb);
+      refs.slice(i, i + 400).forEach((r) => batch.delete(r));
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error('[FirebaseServer] deleteAllContacts failed:', err);
+    throw new FirebasePersistError('deleteAllContacts', err);
+  }
 }
 
 export async function firebaseMigrateUsernameData(
@@ -739,18 +873,25 @@ export async function firebaseSaveRedirect(
   oldUsername: string,
   newUsername: string
 ): Promise<void> {
-  if (!serverDb || !oldUsername || !newUsername) return;
-  const cleanOld = oldUsername.replace(/^@+/, '').toLowerCase().trim();
-  const cleanNew = newUsername.replace(/^@+/, '').toLowerCase().trim();
+  if (!oldUsername || !newUsername) return;
+  await runWriteHook('saveRedirect');
+  if (!serverDb) return;
+  const cleanOld = clampRequiredString(oldUsername.replace(/^@+/, '').toLowerCase().trim(), 64, '');
+  const cleanNew = clampRequiredString(newUsername.replace(/^@+/, '').toLowerCase().trim(), 64, '');
   if (!cleanOld || !cleanNew || cleanOld === cleanNew) return;
   try {
-    await setDoc(doc(serverDb, 'redirects', cleanOld), {
-      from: cleanOld,
-      to: cleanNew,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    await setDoc(
+      doc(serverDb, 'redirects', cleanOld),
+      {
+        from: cleanOld,
+        to: cleanNew,
+        updatedAt: new Date().toISOString().slice(0, 64),
+      },
+      { merge: true }
+    );
   } catch (err) {
-    console.warn('[FirebaseServer] saveRedirect notice:', err);
+    console.error('[FirebaseServer] saveRedirect failed:', err);
+    throw new FirebasePersistError('saveRedirect', err);
   }
 }
 
@@ -785,20 +926,12 @@ export async function firebaseRecordAnalyticsEvent(event: {
 }): Promise<void> {
   if (!serverDb || !event?.username || !event?.id) return;
   const clean = event.username.replace(/^@+/, '').toLowerCase().trim();
-  const safeId = event.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
+  const safeId = event.id.replace(/[^a-zA-Z0-9._:-]/g, '_').slice(0, 128);
   if (!clean || !safeId) return;
 
   try {
-    await setDoc(doc(serverDb, 'users', clean, 'analytics', safeId), {
-      id: safeId,
-      username: clean,
-      eventType: event.eventType,
-      blockId: event.blockId || null,
-      country: event.country || 'Unknown',
-      referrer: event.referrer || 'direct',
-      device: event.device || 'desktop',
-      createdAt: event.createdAt || new Date().toISOString(),
-    });
+    const payload = enforceAnalyticsRuleBounds(event, safeId, clean);
+    await setDoc(doc(serverDb, 'users', clean, 'analytics', safeId), payload);
   } catch (err) {
     console.warn('[FirebaseServer] Background recordAnalyticsEvent notice:', err);
   }
@@ -854,6 +987,182 @@ export async function firebaseRecordClick(
   }
 }
 
+async function deleteDocRefsInBatches(refs: any[]): Promise<void> {
+  if (!serverDb || refs.length === 0) return;
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+    const batch = writeBatch(serverDb);
+    refs.slice(i, i + CHUNK_SIZE).forEach((r) => batch.delete(r));
+    await batch.commit();
+  }
+}
+
+/**
+ * Places an account into the 3-day deletion grace period while keeping data intact
+ * and locking the username so nobody else can claim it.
+ */
+export async function firebaseSoftDeleteAccount(
+  username: string,
+  userId?: string,
+  deletedAt?: string,
+  purgeAt?: string
+): Promise<void> {
+  if (!username) return;
+  await runWriteHook('softDeleteAccount');
+  if (!serverDb) return;
+  const clean = clampRequiredString(username.replace(/^@+/, '').toLowerCase().trim(), 64, '');
+  if (!clean) return;
+  const safeUserId = clampNullableString(userId, 128);
+  const nowIso = clampRequiredString(deletedAt || new Date().toISOString(), 64, new Date().toISOString());
+  const effectivePurgeAt = clampRequiredString(
+    purgeAt || new Date(Date.parse(nowIso) + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    64,
+    nowIso
+  );
+
+  const patch = {
+    status: 'deleted_pending',
+    isPublished: false,
+    hideFromSearch: true,
+    deletedAt: nowIso,
+    purgeAt: effectivePurgeAt,
+    updatedAt: nowIso,
+  };
+
+  try {
+    await setDoc(doc(serverDb, 'users', clean), sanitizeForFirestore({ username: clean, ...(safeUserId ? { userId: safeUserId } : {}), ...patch }), { merge: true });
+    await setDoc(
+      doc(serverDb, 'claims', clean),
+      sanitizeForFirestore({
+        username: clean,
+        ...(safeUserId ? { userId: safeUserId } : {}),
+        status: 'deleted_pending',
+        deletedAt: nowIso,
+        purgeAt: effectivePurgeAt,
+      }),
+      { merge: true }
+    );
+
+    if (safeUserId && safeUserId !== clean && safeUserId !== 'owner') {
+      await setDoc(doc(serverDb, 'users', safeUserId), sanitizeForFirestore({ username: clean, userId: safeUserId, ...patch }), { merge: true });
+    }
+  } catch (err) {
+    console.error('[FirebaseServer] softDeleteAccount failed:', err);
+    throw new FirebasePersistError('softDeleteAccount', err);
+  }
+}
+
+/**
+ * Restores a soft-deleted account within the 3-day grace window.
+ */
+export async function firebaseReactivateAccount(
+  username: string,
+  userId?: string
+): Promise<void> {
+  if (!username) return;
+  await runWriteHook('reactivateAccount');
+  if (!serverDb) return;
+  const clean = clampRequiredString(username.replace(/^@+/, '').toLowerCase().trim(), 64, '');
+  if (!clean) return;
+  const safeUserId = clampNullableString(userId, 128);
+  const nowIso = new Date().toISOString().slice(0, 64);
+  const patch = {
+    status: 'active',
+    isPublished: true,
+    hideFromSearch: false,
+    deletedAt: null,
+    purgeAt: null,
+    updatedAt: nowIso,
+  };
+
+  try {
+    await setDoc(doc(serverDb, 'users', clean), sanitizeForFirestore({ username: clean, ...(safeUserId ? { userId: safeUserId } : {}), ...patch }), { merge: true });
+    await setDoc(
+      doc(serverDb, 'claims', clean),
+      sanitizeForFirestore({
+        username: clean,
+        ...(safeUserId ? { userId: safeUserId } : {}),
+        status: 'active',
+        deletedAt: null,
+        purgeAt: null,
+      }),
+      { merge: true }
+    );
+
+    if (safeUserId && safeUserId !== clean && safeUserId !== 'owner') {
+      await setDoc(doc(serverDb, 'users', safeUserId), sanitizeForFirestore({ username: clean, userId: safeUserId, ...patch }), { merge: true });
+    }
+  } catch (err) {
+    console.error('[FirebaseServer] reactivateAccount failed:', err);
+    throw new FirebasePersistError('reactivateAccount', err);
+  }
+}
+
+/**
+ * Permanently deletes every Firestore document & subcollection for a purged account
+ * and releases the username claim completely.
+ */
+export async function firebasePurgeAccountPermanently(
+  username: string,
+  userId?: string
+): Promise<void> {
+  if (!username) return;
+  await runWriteHook('purgeAccountPermanently');
+  if (!serverDb) return;
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return;
+
+  const subcollections = ['blocks', 'contacts', 'clicks', 'analytics', 'appearance'];
+  const docIdsToWipe = new Set<string>([clean]);
+  if (userId && userId !== 'owner') {
+    docIdsToWipe.add(userId);
+  }
+
+  try {
+    const deleteRefs: any[] = [];
+
+    for (const parentId of docIdsToWipe) {
+      const snaps = await Promise.all(
+        subcollections.map((sub) => getDocs(collection(serverDb!, 'users', parentId, sub)).catch(() => null))
+      );
+      for (const s of snaps) {
+        if (s && !s.empty) {
+          s.docs.forEach((d) => deleteRefs.push(d.ref));
+        }
+      }
+    }
+
+    deleteRefs.push(doc(serverDb, 'claims', clean));
+    deleteRefs.push(doc(serverDb, 'redirects', clean));
+    deleteRefs.push(doc(serverDb, 'users', clean));
+
+    if (userId && userId !== clean && userId !== 'owner') {
+      const uidSnap = await getDoc(doc(serverDb, 'users', userId)).catch(() => null);
+      if (uidSnap && uidSnap.exists()) {
+        const uName = String(uidSnap.data()?.username || '').replace(/^@+/, '').toLowerCase().trim();
+        if (!uName || uName === clean) {
+          deleteRefs.push(uidSnap.ref);
+        }
+      }
+    }
+
+    for (const candidate of [clean, `@${clean}`]) {
+      const qUsers = query(collection(serverDb, 'users'), where('username', '==', candidate));
+      const uSnap = await getDocs(qUsers).catch(() => null);
+      uSnap?.docs.forEach((d) => deleteRefs.push(d.ref));
+    }
+
+    const qRedirects = query(collection(serverDb, 'redirects'), where('to', '==', clean));
+    const rSnap = await getDocs(qRedirects).catch(() => null);
+    rSnap?.docs.forEach((d) => deleteRefs.push(d.ref));
+
+    await deleteDocRefsInBatches(deleteRefs);
+  } catch (err) {
+    console.error('[FirebaseServer] purgeAccountPermanently failed:', err);
+    throw new FirebasePersistError('purgeAccountPermanently', err);
+  }
+}
+
 /**
  * Releases an old username cleanly across Firebase collections when a user renames or deletes their handle.
  */
@@ -861,13 +1170,14 @@ export async function firebaseReleaseUsername(
   oldUsername: string,
   userId?: string
 ): Promise<void> {
-  if (!serverDb || !oldUsername) return;
+  if (!oldUsername) return;
+  await runWriteHook('releaseUsername');
+  if (!serverDb) return;
   const cleanOld = oldUsername.replace(/^@+/, '').toLowerCase().trim();
   if (!cleanOld) return;
-  const nowIso = new Date().toISOString();
+  const nowIso = new Date().toISOString().slice(0, 64);
 
   try {
-    // 1. Tombstone + attempt delete of old claim doc if unclaimed or owned by this user
     const claimRef = doc(serverDb, 'claims', cleanOld);
     const claimSnap = await getDoc(claimRef).catch(() => null);
     if (claimSnap && claimSnap.exists()) {
@@ -878,33 +1188,26 @@ export async function firebaseReleaseUsername(
           userId: null,
           status: 'deleted',
           releasedAt: nowIso,
-        }).catch(() => {});
-        await deleteDoc(claimRef).catch(() => {});
+        });
+        await deleteDoc(claimRef);
       }
     }
 
-    // 2. Delete old blocks, contacts, clicks & analytics subcollections under users/{cleanOld}/...
-    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap, oldAnalyticsSnap] = await Promise.all([
+    const [oldBlocksSnap, oldContactsSnap, oldClicksSnap, oldAnalyticsSnap, oldAppearanceSnap] = await Promise.all([
       getDocs(collection(serverDb, 'users', cleanOld, 'blocks')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'contacts')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'clicks')).catch(() => null),
       getDocs(collection(serverDb, 'users', cleanOld, 'analytics')).catch(() => null),
+      getDocs(collection(serverDb, 'users', cleanOld, 'appearance')).catch(() => null),
     ]);
-    if (
-      (oldBlocksSnap && !oldBlocksSnap.empty) ||
-      (oldContactsSnap && !oldContactsSnap.empty) ||
-      (oldClicksSnap && !oldClicksSnap.empty) ||
-      (oldAnalyticsSnap && !oldAnalyticsSnap.empty)
-    ) {
-      const batch = writeBatch(serverDb);
-      oldBlocksSnap?.docs.forEach((d) => batch.delete(d.ref));
-      oldContactsSnap?.docs.forEach((d) => batch.delete(d.ref));
-      oldClicksSnap?.docs.forEach((d) => batch.delete(d.ref));
-      oldAnalyticsSnap?.docs.forEach((d) => batch.delete(d.ref));
-      await batch.commit().catch(() => {});
-    }
+    const subRefs: any[] = [];
+    oldBlocksSnap?.docs.forEach((d) => subRefs.push(d.ref));
+    oldContactsSnap?.docs.forEach((d) => subRefs.push(d.ref));
+    oldClicksSnap?.docs.forEach((d) => subRefs.push(d.ref));
+    oldAnalyticsSnap?.docs.forEach((d) => subRefs.push(d.ref));
+    oldAppearanceSnap?.docs.forEach((d) => subRefs.push(d.ref));
+    await deleteDocRefsInBatches(subRefs);
 
-    // 3. Tombstone + attempt delete of old user doc keyed by oldUsername
     const oldUserRef = doc(serverDb, 'users', cleanOld);
     const oldUserSnap = await getDoc(oldUserRef).catch(() => null);
     if (oldUserSnap && oldUserSnap.exists()) {
@@ -916,12 +1219,11 @@ export async function firebaseReleaseUsername(
           status: 'deleted',
           isPublished: false,
           updatedAt: nowIso,
-        }).catch(() => {});
-        await deleteDoc(oldUserRef).catch(() => {});
+        });
+        await deleteDoc(oldUserRef);
       }
     }
 
-    // 4. Tombstone + attempt delete of any mirrored user docs still holding username == cleanOld
     const qOld = query(collection(serverDb, 'users'), where('username', '==', cleanOld));
     const qOldSnap = await getDocs(qOld).catch(() => null);
     if (qOldSnap && !qOldSnap.empty) {
@@ -934,13 +1236,14 @@ export async function firebaseReleaseUsername(
             status: 'deleted',
             isPublished: false,
             updatedAt: nowIso,
-          }).catch(() => {});
-          await deleteDoc(d.ref).catch(() => {});
+          });
+          await deleteDoc(d.ref);
         }
       }
     }
   } catch (err) {
-    console.warn('[FirebaseServer] releaseUsername notice:', err);
+    console.error('[FirebaseServer] releaseUsername failed:', err);
+    throw new FirebasePersistError('releaseUsername', err);
   }
 }
 
@@ -954,10 +1257,11 @@ export async function firebaseGetAllProfiles(): Promise<any[]> {
     const byUsername = new Map<string, any>();
     snap.docs.forEach((d) => {
       const data = d.data() || {};
-      const uname = typeof data.username === 'string' ? data.username.toLowerCase().trim() : '';
+      const uname = typeof data.username === 'string' ? data.username.replace(/^@+/, '').toLowerCase().trim() : '';
       if (!uname) return;
+      if (data.status === 'deleted' || data.status === 'deleted_pending') return;
       const existing = byUsername.get(uname);
-      if (!existing || ((data.updatedAt || '') > (existing.updatedAt || ''))) {
+      if (!existing || isNewerTimestamp(data.updatedAt, existing.updatedAt)) {
         byUsername.set(uname, {
           ...data,
           username: uname,
@@ -991,22 +1295,41 @@ export async function firebaseSaveAppearanceState(
   state: { appearance?: any; history?: any; themes?: any[] },
   userId?: string
 ): Promise<void> {
-  if (!serverDb || !username) return;
-  const clean = username.replace(/^@+/, '').toLowerCase().trim();
-  const payload = {
-    username: clean,
-    userId: userId || 'owner',
-    appearance: state.appearance ?? null,
-    history: state.history ?? { undoStack: [], redoStack: [] },
-    themes: Array.isArray(state.themes) ? state.themes : [],
-    updatedAt: new Date().toISOString(),
-  };
+  if (!username) return;
+  await runWriteHook('saveAppearanceState');
+  if (!serverDb) return;
+  const clean = clampRequiredString(username.replace(/^@+/, '').toLowerCase().trim(), 64, 'owner');
   try {
-    await setDoc(doc(serverDb, 'users', clean, 'appearance', 'v2'), payload);
-    if (userId && userId !== clean && userId !== 'owner') {
-      await setDoc(doc(serverDb, 'users', userId, 'appearance', 'v2'), payload).catch(() => {});
+    const ref = doc(serverDb, 'users', clean, 'appearance', 'v2');
+    let prev: any = {};
+    if (state.appearance === undefined || state.history === undefined || state.themes === undefined) {
+      const prevSnap = await getDoc(ref).catch(() => null);
+      if (prevSnap && prevSnap.exists()) {
+        prev = prevSnap.data() || {};
+      }
     }
-  } catch {}
+    const effectiveUserId = clampRequiredString(userId || prev.userId || 'owner', 128, 'owner');
+    const payload = enforceAppearanceRuleBounds({
+      username: clean,
+      userId: effectiveUserId,
+      appearance: state.appearance !== undefined ? state.appearance : (prev.appearance ?? null),
+      history: state.history !== undefined ? state.history : (prev.history ?? { undoStack: [], redoStack: [] }),
+      themes: Array.isArray(state.themes)
+        ? state.themes
+        : Array.isArray(prev.themes)
+          ? prev.themes
+          : [],
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(ref, payload);
+    if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
+      await setDoc(doc(serverDb, 'users', effectiveUserId, 'appearance', 'v2'), payload);
+    }
+  } catch (err) {
+    console.error('[FirebaseServer] saveAppearanceState failed:', err);
+    throw new FirebasePersistError('saveAppearanceState', err);
+  }
 }
+
 
 

@@ -13,6 +13,8 @@ import {
   FileCode2,
   Activity,
   CreditCard,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 import { Card } from '../components/ui/Card';
@@ -44,16 +46,23 @@ interface SeoHealthReport {
   searchEngines: {
     gscConfigured: boolean;
     gscHasEnv?: boolean;
+    gscHasSavedFile?: boolean;
+    gscSource?: 'runtime_file' | 'env' | 'none';
     gscError?: string | null;
     gscSiteUrl?: string;
     bingConfigured: boolean;
     indexNowConfigured: boolean;
     googleSearchConsole?: {
       configured: boolean;
+      source?: 'runtime_file' | 'env' | 'none';
+      hasSavedFile?: boolean;
       hasEnv?: boolean;
       error?: string | null;
       serviceAccountEmail?: string | null;
+      projectId?: string | null;
+      privateKeyIdPreview?: string | null;
       propertyUrl?: string;
+      updatedAt?: string | null;
     };
     recentSubmissions?: Array<{
       engine: string;
@@ -132,6 +141,50 @@ export const SeoAdminPage: React.FC = () => {
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingData, setBillingData] = useState<any>(null);
 
+  const [gscConfigSummary, setGscConfigSummary] = useState<{
+    configured: boolean;
+    source: 'runtime_file' | 'env' | 'none';
+    hasSavedFile: boolean;
+    hasEnvVars: boolean;
+    clientEmail: string | null;
+    projectId: string | null;
+    privateKeyIdPreview: string | null;
+    propertyUrl: string;
+    updatedAt: string | null;
+    error: string | null;
+  } | null>(null);
+  const [gscJsonInput, setGscJsonInput] = useState('');
+  const [gscPropertyInput, setGscPropertyInput] = useState('');
+  const [gscSaving, setGscSaving] = useState(false);
+  const [gscTesting, setGscTesting] = useState(false);
+  const [gscFormError, setGscFormError] = useState<string | null>(null);
+  const [gscConnectionTest, setGscConnectionTest] = useState<{
+    ok: boolean;
+    oauthOk?: boolean;
+    matchedProperty?: string | null;
+    verifiedSites?: string[];
+    error?: string | null;
+    actionableHint?: string | null;
+  } | null>(null);
+
+  const loadGscConfig = useCallback(async () => {
+    if (!isAuthorized || !adminEmail) return;
+    try {
+      const res = await fetch(
+        `/api/seo/admin/gsc-config?adminEmail=${encodeURIComponent(adminEmail)}`,
+        {
+          headers: { 'x-user-email': adminEmail },
+          cache: 'no-store',
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok && data.gsc) {
+        setGscConfigSummary(data.gsc);
+        setGscPropertyInput((prev) => prev || data.gsc.propertyUrl || '');
+      }
+    } catch {}
+  }, [isAuthorized, adminEmail]);
+
   const loadReport = useCallback(async () => {
     if (!isAuthorized || !adminEmail) return;
     setLoading(true);
@@ -149,12 +202,13 @@ export const SeoAdminPage: React.FC = () => {
         return;
       }
       setReport(data.report);
+      void loadGscConfig();
     } catch {
       setError('Failed to fetch SEO report.');
     } finally {
       setLoading(false);
     }
-  }, [isAuthorized, adminEmail]);
+  }, [isAuthorized, adminEmail, loadGscConfig]);
 
   useEffect(() => {
     if (isAuthorized && adminEmail) {
@@ -163,6 +217,128 @@ export const SeoAdminPage: React.FC = () => {
       setLoading(false);
     }
   }, [isAuthorized, adminEmail, session.isLoaded, loadReport]);
+
+  const handleGscFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setGscFormError(null);
+    try {
+      const text = await file.text();
+      setGscJsonInput(text);
+    } catch {
+      setGscFormError('Could not read the selected JSON file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveGscConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminEmail) return;
+    setGscFormError(null);
+    setGscSaving(true);
+    try {
+      const res = await fetch(
+        `/api/seo/admin/gsc-config?adminEmail=${encodeURIComponent(adminEmail)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-email': adminEmail,
+          },
+          body: JSON.stringify({
+            rawJson: gscJsonInput.trim() || undefined,
+            propertyUrl: gscPropertyInput.trim() || undefined,
+            test: true,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setGscFormError(data?.error || data?.message || 'Could not save GSC credentials.');
+        if (data?.gsc) setGscConfigSummary(data.gsc);
+        return;
+      }
+      setGscJsonInput('');
+      if (data.gsc) setGscConfigSummary(data.gsc);
+      if (data.connection) setGscConnectionTest(data.connection);
+      showToast(
+        data.connection?.ok
+          ? 'GSC credentials saved & connected'
+          : 'GSC credentials saved (check permissions below)'
+      );
+      await loadReport();
+    } catch {
+      setGscFormError('Network error saving GSC configuration.');
+    } finally {
+      setGscSaving(false);
+    }
+  };
+
+  const handleTestGscConnection = async () => {
+    if (!adminEmail) return;
+    setGscFormError(null);
+    setGscTesting(true);
+    try {
+      const res = await fetch(
+        `/api/seo/admin/gsc-test?adminEmail=${encodeURIComponent(adminEmail)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-email': adminEmail,
+          },
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (data?.gsc) setGscConfigSummary(data.gsc);
+      if (data?.connection) {
+        setGscConnectionTest(data.connection);
+        showToast(
+          data.connection.ok
+            ? 'Google Search Console connected'
+            : data.connection.oauthOk
+              ? 'OAuth OK, check Search Console property permission'
+              : 'GSC connection check failed'
+        );
+      } else {
+        setGscFormError(data?.error || 'Could not test GSC connection.');
+      }
+    } catch {
+      setGscFormError('Network error testing GSC connection.');
+    } finally {
+      setGscTesting(false);
+    }
+  };
+
+  const handleDeleteGscConfig = async () => {
+    if (!adminEmail) return;
+    setGscFormError(null);
+    setGscSaving(true);
+    try {
+      const res = await fetch(
+        `/api/seo/admin/gsc-config?adminEmail=${encodeURIComponent(adminEmail)}`,
+        {
+          method: 'DELETE',
+          headers: { 'x-user-email': adminEmail },
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setGscConfigSummary(data.gsc || null);
+        setGscConnectionTest(null);
+        setGscJsonInput('');
+        showToast('Saved GSC service account removed');
+        await loadReport();
+      } else {
+        setGscFormError(data?.error || 'Could not remove saved GSC config.');
+      }
+    } catch {
+      setGscFormError('Network error removing GSC config.');
+    } finally {
+      setGscSaving(false);
+    }
+  };
 
   const handleRegenerate = async () => {
     if (!adminEmail) return;
@@ -650,30 +826,165 @@ export const SeoAdminPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-col gap-2.5 text-[13px]">
-                    <div className="flex flex-col gap-1 p-3 rounded-xl bg-surface-2 border border-border">
+                    <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-surface-2 border border-border">
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-medium text-ink">Google Search Console Sitemap API</span>
                         <span
                           className={`text-[12px] font-mono shrink-0 ${
-                            report.searchEngines.gscConfigured
+                            (gscConfigSummary?.configured ?? report.searchEngines.gscConfigured)
                               ? 'text-emerald-700'
-                              : report.searchEngines.gscError
+                              : (gscConfigSummary?.error || report.searchEngines.gscError)
                                 ? 'text-red-600'
                                 : 'text-muted'
                           }`}
                         >
-                          {report.searchEngines.gscConfigured
-                            ? 'Connected'
-                            : report.searchEngines.gscError
+                          {(gscConfigSummary?.configured ?? report.searchEngines.gscConfigured)
+                            ? 'Configured'
+                            : (gscConfigSummary?.error || report.searchEngines.gscError)
                               ? 'Config Error'
-                              : 'Ready (Env Needed)'}
+                              : 'Setup Needed'}
                         </span>
                       </div>
-                      {report.searchEngines.gscError && (
+
+                      {(gscConfigSummary?.clientEmail || report.searchEngines.googleSearchConsole?.serviceAccountEmail) && (
+                        <div className="text-[11.5px] text-muted flex flex-col gap-0.5 break-all">
+                          <span>
+                            Service account:{' '}
+                            <span className="font-mono text-ink">
+                              {gscConfigSummary?.clientEmail ||
+                                report.searchEngines.googleSearchConsole?.serviceAccountEmail}
+                            </span>
+                          </span>
+                          {(gscConfigSummary?.projectId || gscConfigSummary?.privateKeyIdPreview) && (
+                            <span>
+                              Project:{' '}
+                              <span className="font-mono text-ink">
+                                {gscConfigSummary?.projectId || '—'}
+                              </span>
+                              {gscConfigSummary?.privateKeyIdPreview
+                                ? ` · Key ${gscConfigSummary.privateKeyIdPreview}`
+                                : ''}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {(gscConfigSummary?.error || report.searchEngines.gscError) && (
                         <span className="text-[11px] text-red-600 leading-snug">
-                          {report.searchEngines.gscError}
+                          {gscConfigSummary?.error || report.searchEngines.gscError}
                         </span>
                       )}
+
+                      <form onSubmit={handleSaveGscConfig} className="flex flex-col gap-2 pt-1.5 border-t border-border/70">
+                        <div className="flex items-center justify-between gap-2">
+                          <label htmlFor="gsc-json-input" className="text-[11.5px] font-medium text-ink">
+                            Service Account JSON Key
+                          </label>
+                          <label className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] border border-border bg-surface text-[11px] font-medium text-ink hover:bg-surface-2 cursor-pointer">
+                            <Upload size={11} />
+                            <span>Upload .json</span>
+                            <input
+                              type="file"
+                              accept=".json,application/json"
+                              onChange={handleGscFileUpload}
+                              className="sr-only"
+                            />
+                          </label>
+                        </div>
+                        <textarea
+                          id="gsc-json-input"
+                          value={gscJsonInput}
+                          onChange={(e) => setGscJsonInput(e.target.value)}
+                          rows={3}
+                          placeholder={
+                            gscConfigSummary?.configured
+                              ? 'Paste new Google Cloud Service Account JSON to replace current key...'
+                              : 'Paste Google Cloud Service Account JSON key here or upload .json above...'
+                          }
+                          className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-[11.5px] font-mono text-ink focus-visible:outline-2 focus-visible:outline-ink resize-y"
+                        />
+                        <div className="flex flex-col gap-1">
+                          <label htmlFor="gsc-property-input" className="text-[11.5px] font-medium text-ink">
+                            GSC Property URL
+                          </label>
+                          <input
+                            id="gsc-property-input"
+                            type="text"
+                            value={gscPropertyInput}
+                            onChange={(e) => setGscPropertyInput(e.target.value)}
+                            placeholder="https://iveo.site/ or sc-domain:iveo.site"
+                            className="w-full h-7 px-2.5 bg-surface border border-border rounded-lg text-[11.5px] font-mono text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                          />
+                        </div>
+
+                        {gscFormError && (
+                          <span className="text-[11px] text-red-600 leading-snug" role="alert">
+                            {gscFormError}
+                          </span>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            disabled={gscSaving || (!gscJsonInput.trim() && !gscConfigSummary?.hasSavedFile)}
+                            className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[6px]"
+                          >
+                            {gscSaving ? 'Saving...' : 'Save & Test GSC'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={gscTesting || !(gscConfigSummary?.configured ?? report.searchEngines.gscConfigured)}
+                            onClick={handleTestGscConnection}
+                            className="!h-7 !min-h-0 !px-2.5 !text-[11.5px] !rounded-[6px]"
+                          >
+                            {gscTesting ? 'Testing...' : 'Test Connection'}
+                          </Button>
+                          {gscConfigSummary?.hasSavedFile && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={gscSaving}
+                              onClick={handleDeleteGscConfig}
+                              className="!h-7 !min-h-0 !px-2 !text-[11.5px] !rounded-[6px] text-red-600 hover:bg-red-50 gap-1"
+                            >
+                              <Trash2 size={11} />
+                              <span>Remove</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        {gscConnectionTest && (
+                          <div
+                            className={`p-2 rounded-lg border text-[11.5px] leading-snug ${
+                              gscConnectionTest.ok
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+                                : 'bg-amber-500/10 border-amber-500/30 text-amber-900'
+                            }`}
+                          >
+                            <div className="font-medium">
+                              {gscConnectionTest.ok
+                                ? `Connected to ${gscConnectionTest.matchedProperty}`
+                                : gscConnectionTest.oauthOk
+                                  ? 'OAuth succeeded — Search Console permission/property check needed'
+                                  : 'Connection failed'}
+                            </div>
+                            {Array.isArray(gscConnectionTest.verifiedSites) &&
+                              gscConnectionTest.verifiedSites.length > 0 && (
+                                <div className="mt-0.5 font-mono text-[10.5px]">
+                                  Properties: {gscConnectionTest.verifiedSites.join(', ')}
+                                </div>
+                              )}
+                            {gscConnectionTest.error && !gscConnectionTest.ok && (
+                              <div className="mt-0.5">{gscConnectionTest.error}</div>
+                            )}
+                          </div>
+                        )}
+                      </form>
                     </div>
 
                     <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-2 border border-border">

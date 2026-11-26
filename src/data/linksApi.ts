@@ -21,6 +21,7 @@ import {
 } from './types';
 import { storagePublicUrl } from './storageApi';
 import { apiFetch } from '../lib/apiFetch';
+import { buildAuthHeaders } from '../lib/clerkTokenBridge';
 
 const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -116,9 +117,11 @@ export async function syncBlocksToServer(
   const clean = (userId || '').replace(/^@+/, '').trim().toLowerCase();
   if (!clean) return;
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (auth?.ownerUserId) headers['x-user-id'] = auth.ownerUserId;
-  if (auth?.primaryEmail) headers['x-user-email'] = auth.primaryEmail;
+  const headers = await buildAuthHeaders({
+    'Content-Type': 'application/json',
+    ...(auth?.ownerUserId ? { 'x-user-id': auth.ownerUserId } : {}),
+    ...(auth?.primaryEmail ? { 'x-user-email': auth.primaryEmail } : {}),
+  });
 
   const res = await fetch('/api/blocks', {
     method: 'POST',

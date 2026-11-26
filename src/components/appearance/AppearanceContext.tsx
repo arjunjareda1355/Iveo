@@ -24,6 +24,7 @@ import { useUpgradeDialog } from '../plan/UpgradeDialogProvider';
 import { useToast } from '../ui/Toast';
 import type { CardLookStyle } from '../../data/types';
 import type { VibeId } from '../../lib/vibes';
+import { buildAuthHeaders } from '../../lib/clerkTokenBridge';
 
 export interface AppearanceSnackbar {
   id: number;
@@ -227,6 +228,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const mirror = appearanceToLegacyMirror(committed, session.layoutSettings);
       const syncFields: Record<string, any> = {
         vibeId: committed.vibeId as VibeId,
+        background: mirror.background,
         buttonShape: mirror.buttonShape,
         buttonColors: mirror.buttonColors,
         fontSettings: mirror.fontSettings,
@@ -276,11 +278,11 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           `/api/appearance?username=${encodeURIComponent(session.username!)}&_t=${Date.now()}`,
           {
             cache: 'no-store',
-            headers: {
+            headers: await buildAuthHeaders({
               'x-user-id': session.userId!,
               'x-iveo-username': session.username!,
               ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-            },
+            }),
           }
         );
         if (!res.ok || cancelled) return;
@@ -297,7 +299,15 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (json.appearance && !hasLocalEditsRef.current && !debounceSaveTimerRef.current) {
           const serverStamp = String(json.updatedAt || json.appearance.updatedAt || '');
           const localStamp = String(hydratedUpdatedAtRef.current || '');
-          if (!localStamp || (serverStamp && serverStamp > localStamp)) {
+          const serverMs = serverStamp ? Date.parse(serverStamp) : Number.NaN;
+          const localMs = localStamp ? Date.parse(localStamp) : Number.NaN;
+          const isServerNewer =
+            !localStamp ||
+            (Boolean(serverStamp) &&
+              (Number.isNaN(serverMs) || Number.isNaN(localMs)
+                ? serverStamp > localStamp
+                : serverMs > localMs));
+          if (isServerNewer) {
             const committed = cloneAppearance(json.appearance);
             hydratedUpdatedAtRef.current = serverStamp || null;
             lastCommittedRef.current = committed;
@@ -315,7 +325,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [isDemo, session.isLoaded, session.userId, session.username, session.primaryEmail, syncAppearanceToClientMirrors]);
 
   const persistAppearanceNow = useCallback(
-    async (targetAppearance: Appearance) => {
+    async (targetAppearance: Appearance, opts?: { keepalive?: boolean }) => {
       const mirror = appearanceToLegacyMirror(targetAppearance, session.layoutSettings);
       const stamped: Appearance = {
         ...targetAppearance,
@@ -326,14 +336,16 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         // If authenticated (non-demo), PATCH /api/appearance is the single authoritative server save (avoids self-409 races)
         if (!isDemo && session.userId && session.username) {
+          const authHeaders = await buildAuthHeaders({
+            'Content-Type': 'application/json',
+            'x-user-id': session.userId,
+            'x-iveo-username': session.username,
+            ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+          });
           const res = await fetch('/api/appearance', {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': session.userId,
-              'x-iveo-username': session.username,
-              ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-            },
+            keepalive: Boolean(opts?.keepalive),
+            headers: authHeaders,
             body: JSON.stringify({
               username: session.username,
               patch: stamped,
@@ -366,12 +378,12 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             // Retry once with the fresh server updatedAt so the user's explicit edit still persists cleanly
             const retryRes = await fetch('/api/appearance', {
               method: 'PATCH',
-              headers: {
+              headers: await buildAuthHeaders({
                 'Content-Type': 'application/json',
                 'x-user-id': session.userId,
                 'x-iveo-username': session.username,
                 ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-              },
+              }),
               body: JSON.stringify({
                 username: session.username,
                 patch: stamped,
@@ -409,6 +421,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         } else {
           await session.updatePreferences({
             vibeId: targetAppearance.vibeId as VibeId,
+            background: mirror.background,
             buttonShape: mirror.buttonShape,
             buttonColors: mirror.buttonColors,
             fontSettings: mirror.fontSettings,
@@ -417,24 +430,33 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           });
           lastCommittedRef.current = cloneAppearance(stamped);
           hydratedUpdatedAtRef.current = stamped.updatedAt || null;
+          syncAppearanceToClientMirrors(stamped, stamped.updatedAt!);
         }
 
         setSaveStatus('saved');
       } catch {
         setSaveStatus('error');
+        showToast("Couldn't save appearance changes to server. Please retry.");
       }
     },
-    [session, isDemo, openUpgrade, trackEvent, syncAppearanceToClientMirrors]
+    [session, isDemo, openUpgrade, trackEvent, syncAppearanceToClientMirrors, showToast]
   );
 
   const scheduleAutosave = useCallback(
-    (nextAppearance: Appearance) => {
-      if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current);
+    (nextAppearance: Appearance, immediate = false) => {
+      if (debounceSaveTimerRef.current) {
+        clearTimeout(debounceSaveTimerRef.current);
+        debounceSaveTimerRef.current = null;
+      }
+      if (immediate) {
+        void persistAppearanceNow(nextAppearance);
+        return;
+      }
       setSaveStatus('saving');
       debounceSaveTimerRef.current = setTimeout(() => {
         debounceSaveTimerRef.current = null;
         void persistAppearanceNow(nextAppearance);
-      }, 400);
+      }, 160);
     },
     [persistAppearanceNow]
   );
@@ -456,7 +478,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (debounceSaveTimerRef.current) {
         clearTimeout(debounceSaveTimerRef.current);
         debounceSaveTimerRef.current = null;
-        void persistAppearanceNow(draftRef.current);
+        void persistAppearanceNow(draftRef.current, { keepalive: true });
       }
     };
     window.addEventListener('pagehide', flushIfPending);
@@ -610,7 +632,7 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       hasLocalEditsRef.current = true;
       setDraft(finalNext);
-      scheduleAutosave(finalNext);
+      scheduleAutosave(finalNext, !opts?.coalesce);
 
       if (opts?.showUndo !== false && !opts?.checkBgToneShift) {
         presentSnackbar({
@@ -835,12 +857,12 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     void (async () => {
       try {
         const snapshot = cloneAppearance(draftRef.current);
-        const headers: Record<string, string> = {
+        const headers = await buildAuthHeaders({
           'Content-Type': 'application/json',
-        };
-        if (!isDemo && session.userId) headers['x-user-id'] = session.userId;
-        if (!isDemo && session.username) headers['x-iveo-username'] = session.username;
-        if (!isDemo && session.primaryEmail) headers['x-user-email'] = session.primaryEmail;
+          ...(!isDemo && session.userId ? { 'x-user-id': session.userId } : {}),
+          ...(!isDemo && session.username ? { 'x-iveo-username': session.username } : {}),
+          ...(!isDemo && session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+        });
 
         const res = await fetch('/api/appearance/surprise', {
           method: 'POST',
@@ -999,12 +1021,12 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         const res = await fetch('/api/appearance/themes', {
           method: 'POST',
-          headers: {
+          headers: await buildAuthHeaders({
             'Content-Type': 'application/json',
             'x-user-id': session.userId,
             'x-iveo-username': session.username,
             ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-          },
+          }),
           body: JSON.stringify({ username: session.username, name: cleanName, appearance: draftRef.current }),
         });
         if (res.status === 402) {
@@ -1044,12 +1066,12 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             `/api/appearance/themes/${encodeURIComponent(theme.id)}/apply?username=${encodeURIComponent(session.username)}`,
             {
               method: 'POST',
-              headers: {
+              headers: await buildAuthHeaders({
                 'Content-Type': 'application/json',
                 'x-user-id': session.userId,
                 'x-iveo-username': session.username,
                 ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-              },
+              }),
               body: JSON.stringify({ username: session.username }),
             }
           );
@@ -1094,46 +1116,94 @@ export const AppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     async (id: string, name: string): Promise<{ ok: boolean; error?: string }> => {
       const cleanName = name.trim();
       if (!cleanName) return { ok: false, error: 'Name required.' };
+      const prevThemes = themes;
       const nextList = themes.map((t) => (t.id === id ? { ...t, name: cleanName } : t));
       setThemes(nextList);
       persistLocalThemes(nextList);
 
       if (!isDemo && session.userId && session.username) {
-        await fetch(`/api/appearance/themes/${encodeURIComponent(id)}?username=${encodeURIComponent(session.username)}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': session.userId,
-            'x-iveo-username': session.username,
-            ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-          },
-          body: JSON.stringify({ name: cleanName }),
-        }).catch(() => {});
+        try {
+          const res = await fetch(
+            `/api/appearance/themes/${encodeURIComponent(id)}?username=${encodeURIComponent(session.username)}`,
+            {
+              method: 'PATCH',
+              headers: await buildAuthHeaders({
+                'Content-Type': 'application/json',
+                'x-user-id': session.userId,
+                'x-iveo-username': session.username,
+                ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+              }),
+              body: JSON.stringify({ name: cleanName }),
+            }
+          );
+          if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            setThemes(prevThemes);
+            persistLocalThemes(prevThemes);
+            const message = errJson.message || errJson.error || 'Could not rename theme.';
+            showToast(message);
+            return { ok: false, error: message };
+          }
+          const okJson = await res.json().catch(() => null);
+          if (Array.isArray(okJson?.themes)) {
+            setThemes(okJson.themes);
+            persistLocalThemes(okJson.themes);
+          }
+        } catch {
+          setThemes(prevThemes);
+          persistLocalThemes(prevThemes);
+          showToast('Network error renaming theme.');
+          return { ok: false, error: 'Network error renaming theme.' };
+        }
       }
       return { ok: true };
     },
-    [themes, isDemo, session.userId, session.username, session.primaryEmail, persistLocalThemes]
+    [themes, isDemo, session.userId, session.username, session.primaryEmail, persistLocalThemes, showToast]
   );
 
   const deleteTheme = useCallback(
     async (id: string): Promise<{ ok: boolean; error?: string }> => {
+      const prevThemes = themes;
       const nextList = themes.filter((t) => t.id !== id);
       setThemes(nextList);
       persistLocalThemes(nextList);
 
       if (!isDemo && session.userId && session.username) {
-        await fetch(`/api/appearance/themes/${encodeURIComponent(id)}?username=${encodeURIComponent(session.username)}`, {
-          method: 'DELETE',
-          headers: {
-            'x-user-id': session.userId,
-            'x-iveo-username': session.username,
-            ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
-          },
-        }).catch(() => {});
+        try {
+          const res = await fetch(
+            `/api/appearance/themes/${encodeURIComponent(id)}?username=${encodeURIComponent(session.username)}`,
+            {
+              method: 'DELETE',
+              headers: await buildAuthHeaders({
+                'x-user-id': session.userId,
+                'x-iveo-username': session.username,
+                ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+              }),
+            }
+          );
+          if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            setThemes(prevThemes);
+            persistLocalThemes(prevThemes);
+            const message = errJson.message || errJson.error || 'Could not delete theme.';
+            showToast(message);
+            return { ok: false, error: message };
+          }
+          const okJson = await res.json().catch(() => null);
+          if (Array.isArray(okJson?.themes)) {
+            setThemes(okJson.themes);
+            persistLocalThemes(okJson.themes);
+          }
+        } catch {
+          setThemes(prevThemes);
+          persistLocalThemes(prevThemes);
+          showToast('Network error deleting theme.');
+          return { ok: false, error: 'Network error deleting theme.' };
+        }
       }
       return { ok: true };
     },
-    [themes, isDemo, session.userId, session.username, persistLocalThemes]
+    [themes, isDemo, session.userId, session.username, session.primaryEmail, persistLocalThemes, showToast]
   );
 
   const saveScrollPos = useCallback((pathname: string, scrollY: number) => {

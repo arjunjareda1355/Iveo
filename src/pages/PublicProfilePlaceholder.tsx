@@ -223,7 +223,9 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
     };
   }, [isDemoMode, session, clean]);
 
-  const loadData = useCallback(async () => {
+  const pendingRefetchRef = useRef(false);
+
+  const loadData = useCallback(async (forceSync = false) => {
     if (isDemoMode && session.username?.toLowerCase() === clean) {
       const demoData = buildDemoPageData();
       if (demoData) {
@@ -232,12 +234,15 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
         return;
       }
     }
-    if (isFetchingRef.current) return;
+    if (isFetchingRef.current) {
+      if (forceSync) pendingRefetchRef.current = true;
+      return;
+    }
     isFetchingRef.current = true;
     try {
       const data = await fetchPublicPage(clean);
       setPageData((prev) => {
-        if (!data) return data;
+        if (!data || forceSync) return data;
         if (prev?.profile?.updatedAt && data?.profile?.updatedAt) {
           const prevTs = Date.parse(prev.profile.updatedAt);
           const nextTs = Date.parse(data.profile.updatedAt);
@@ -252,32 +257,36 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
     } finally {
       isFetchingRef.current = false;
       setIsLoading(false);
+      if (pendingRefetchRef.current) {
+        pendingRefetchRef.current = false;
+        void loadData(true);
+      }
     }
   }, [clean, isDemoMode, session.username, buildDemoPageData]);
 
   useEffect(() => {
-    loadData();
+    void loadData(false);
 
     // Refetch every 30s while tab is visible + immediate on focus/visibility/BroadcastChannel
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      loadData();
+      void loadData(false);
     }, 30000);
 
     const handleVisibility = () => {
       if (!document.hidden) {
-        loadData();
+        void loadData(true);
       }
     };
 
     const handleFocus = () => {
-      loadData();
+      void loadData(true);
     };
 
     const handleSyncEvent = (event: Event) => {
       const detail = (event as CustomEvent)?.detail;
       if (detail && typeof detail === 'object' && String(detail.username || '').toLowerCase() === clean) {
-        loadData();
+        void loadData(true);
       }
     };
 
@@ -289,7 +298,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
           event.key === `iveo_blocks_${clean}` ||
           event.key === 'iveo_demo_session_maya')
       ) {
-        loadData();
+        void loadData(true);
       }
     };
 
@@ -305,7 +314,7 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
         channel.onmessage = (event) => {
           const msg = event?.data;
           if (msg && typeof msg === 'object' && String(msg.username || '').toLowerCase() === clean) {
-            loadData();
+            void loadData(true);
           }
         };
       }

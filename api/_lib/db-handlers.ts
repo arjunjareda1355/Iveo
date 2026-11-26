@@ -2,6 +2,7 @@ import type { Request as ExpressReq, Response as ExpressRes } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  ACCOUNT_DELETE_GRACE_DAYS,
   checkDatabaseReadiness,
   dbClaimUsername,
   dbGetProfileByUserId,
@@ -15,7 +16,9 @@ import {
   dbGetContacts,
   dbDeleteContact,
   dbDeleteAllContacts,
-  dbDeleteAccount,
+  dbSoftDeleteAccount,
+  dbReactivateAccount,
+  dbPurgeAccountPermanently,
   dbSetLinkPassword,
   dbClearLinkPassword,
   dbVerifyLinkPassword,
@@ -24,6 +27,7 @@ import {
   dbRecordAnalyticsEvent,
   dbGetAnalytics,
   dbGetRedirectTarget,
+  dbReadAppearanceState,
   dbWriteAppearanceState,
 } from './azureSql.ts';
 import { normalizeAnalyticsSource } from '../../src/lib/analytics/sources.ts';
@@ -32,6 +36,7 @@ import {
   saveUploadedBackgroundImage,
   resolveBackgroundFilePath,
   deleteUserUploadedBackgrounds,
+  pruneOrphanedUserBackgrounds,
 } from './backgroundUpload.ts';
 import { cleanupUnreferencedUserCardBanners } from './cardBannerUpload.ts';
 import {
@@ -43,9 +48,11 @@ import {
   parseBackgroundConfig,
 } from '../../src/lib/preferences.ts';
 import { isAllowedAvatarHost } from './publicPage.ts';
+import { isDeletedPurgeExpired, selectFresherProfile } from './profileMerge.ts';
 import { RESERVED, isPrivilegedEmailServer } from './usernames.ts';
 import { getCanonicalSiteOrigin, getSiteOrigin } from './env.ts';
 import {
+  FirebasePersistError,
   firebaseIsUsernameClaimed,
   firebaseGetProfile,
   firebaseGetProfileByUserId,
@@ -59,8 +66,12 @@ import {
   firebaseSaveContact,
   firebaseSaveRedirect,
   firebaseReleaseUsername,
+  firebaseSoftDeleteAccount,
+  firebaseReactivateAccount,
+  firebasePurgeAccountPermanently,
   firebaseSaveAppearanceState,
 } from './firebaseServer.ts';
+import { verifyClerkRequest } from './clerkAuth.ts';
 import { fetchBuyMeACoffeeProfile } from './buymeacoffee.ts';
 import {
   buildYouTubeOAuthUrl,
@@ -77,7 +88,13 @@ import {
   regenerateAndPingSitemap,
   validateProfileSeo,
 } from './seoService.ts';
-import { inspectUrlWithGsc } from './searchEngines.ts';
+import {
+  clearGscRuntimeConfig,
+  getGscSafeConfigSummary,
+  inspectUrlWithGsc,
+  saveGscRuntimeConfig,
+  testGscConnection,
+} from './searchEngines.ts';
 import {
   EARLY_BIRD_PRO_DEADLINE_ISO,
   resolveEffectivePlan,
@@ -226,10 +243,46 @@ const publicPageCache = new Map<string, CachedPublicPageEntry>();
 const discoverCache = new Map<string, { payload: Record<string, any>; expiresAt: number }>();
 
 function withTimeout<T>(promise: Promise<T>, fallback: T, ms = FIREBASE_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
   return Promise.race([
     promise.catch(() => fallback),
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
+    timeoutPromise,
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function awaitFirebaseWrite<T>(
+  promise: Promise<T>,
+  operation: string,
+  ms = FIREBASE_TIMEOUT_MS
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new FirebasePersistError(operation, new Error(`Timed out after ${ms}ms`)));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function sendMutationError(res: ExpressRes, err: unknown, fallbackCode: string) {
+  if (err instanceof FirebasePersistError) {
+    return res.status(502).json({
+      ok: false,
+      error: 'firebase_sync_failed',
+      message: err.message,
+    });
+  }
+  const msg = err instanceof Error ? err.message : String(err || 'Operation failed');
+  return res.status(500).json({ ok: false, error: fallbackCode, message: msg });
 }
 
 export function invalidatePublicPageCache(username?: string | null) {
@@ -296,15 +349,9 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       ]),
     ]);
 
-    let profile = dbProf;
-    let cameFromFirebase = false;
-    if (!profile && fbProf) {
-      profile = fbProf;
-      cameFromFirebase = true;
-    } else if (profile && fbProf && (fbProf.updatedAt || '') > (profile.updatedAt || '')) {
-      profile = { ...profile, ...fbProf };
-      cameFromFirebase = true;
-    }
+    const merged = selectFresherProfile(dbProf, fbProf);
+    let profile = merged.profile;
+    const cameFromFirebase = merged.cameFromFirebase;
 
     if (!profile) {
       const redirectTo = await dbGetRedirectTarget(clean).catch(() => null);
@@ -321,13 +368,25 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       return res.status(404).json({ error: 'not_found', confirmed: !fbTimedOut });
     }
 
-    if (cameFromFirebase && !dbProf && profile.username) {
-      dbSaveProfile({ ...profile, username: clean }).catch(() => {});
+    const effectiveStatus = profile.status || (profile.isPublished === false ? 'unpublished' : 'active');
+    if (
+      effectiveStatus === 'deleted' ||
+      effectiveStatus === 'deleted_pending' ||
+      effectiveStatus === 'suspended' ||
+      effectiveStatus === 'private' ||
+      effectiveStatus === 'unpublished'
+    ) {
+      if (effectiveStatus === 'deleted_pending' && isDeletedPurgeExpired(profile)) {
+        dbPurgeAccountPermanently(clean, profile.userId, profile.primaryEmail).catch(() => {});
+        firebasePurgeAccountPermanently(clean, profile.userId).catch(() => {});
+      }
+      const terminal = effectiveStatus === 'deleted' || effectiveStatus === 'deleted_pending';
+      res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+      return res.status(404).json({ error: 'not_found', status: effectiveStatus, confirmed: terminal });
     }
 
-    const effectiveStatus = profile.status || (profile.isPublished === false ? 'unpublished' : 'active');
-    if (effectiveStatus === 'deleted' || effectiveStatus === 'suspended' || effectiveStatus === 'private' || effectiveStatus === 'unpublished') {
-      return res.status(404).json({ error: 'not_found', status: effectiveStatus });
+    if (cameFromFirebase && !dbProf && profile.username) {
+      dbSaveProfile({ ...profile, username: clean }).catch(() => {});
     }
 
     let allBlocks = dbBlocksInitial;
@@ -460,8 +519,15 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
  * Atomically validates, reserves, and claims a username in the database
  */
 export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
+  const clerkAuth = await verifyClerkRequest(req);
+  if (clerkAuth.enforced && !clerkAuth.verifiedByJwt) {
+    return res.status(401).json({ error: 'unauthorized', message: 'You must be signed in to claim an address.' });
+  }
+
   const body = req.body || {};
-  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const userId = (clerkAuth.verifiedByJwt && clerkAuth.userId
+    ? clerkAuth.userId
+    : (body.userId as string || req.headers['x-user-id'] as string || '')).trim();
   const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   const previousUsernameHint = (body.previousUsername as string || '').replace(/^@+/, '').toLowerCase().trim() || null;
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
@@ -511,10 +577,9 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
 
     if (result.username) {
       if (releasedOld) {
-        // Migrate existing blocks, contacts, clicks before releasing old username
-        await withTimeout(firebaseMigrateUsernameData(releasedOld, result.username, userId), undefined);
-        await withTimeout(firebaseSaveRedirect(releasedOld, result.username), undefined);
-        await withTimeout(firebaseReleaseUsername(releasedOld, userId), undefined);
+        await awaitFirebaseWrite(firebaseMigrateUsernameData(releasedOld, result.username, userId), 'migrateUsernameData');
+        await awaitFirebaseWrite(firebaseSaveRedirect(releasedOld, result.username), 'saveRedirect');
+        await awaitFirebaseWrite(firebaseReleaseUsername(releasedOld, userId), 'releaseUsername');
       }
       const claimCreatedAt = profileData?.createdAt || new Date().toISOString();
       const resolvedClaimPlan = resolveEffectivePlan({
@@ -523,8 +588,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
         createdAt: claimCreatedAt,
         subscription: profileData?.subscription,
       });
-      // Sync new claim and profile to Firebase (bounded await so subsequent renames never race)
-      await withTimeout(
+      await awaitFirebaseWrite(
         firebaseSaveProfile(
           result.username,
           {
@@ -535,7 +599,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
           },
           userId
         ),
-        undefined
+        'saveProfile'
       );
 
       notifyProfileSeoChanged(releasedOld ? 'renamed' : 'created', result.username, releasedOld).catch(() => {});
@@ -551,7 +615,7 @@ export async function handleClaimUsername(req: ExpressReq, res: ExpressRes) {
       message: `iveo.site/@${result.username} successfully claimed!`,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'claim_failed', message: err?.message });
+    return sendMutationError(res, err, 'claim_failed');
   }
 }
 
@@ -570,21 +634,52 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
   try {
     const [dbProf, fbProf] = await Promise.all([
       dbGetProfileByUserId(userId, email).catch(() => null),
-      withTimeout(firebaseGetProfileByUserId(userId, email), null),
+      withTimeout(firebaseGetProfileByUserId(userId, email, { includePendingDelete: true }), null),
     ]);
 
-    let profile = dbProf;
-    let cameFromFirebase = false;
-    if (!profile && fbProf) {
-      profile = fbProf;
-      cameFromFirebase = true;
-    } else if (profile && fbProf && (fbProf.updatedAt || '') > (profile.updatedAt || '')) {
-      profile = { ...profile, ...fbProf };
-      cameFromFirebase = true;
+    const merged = selectFresherProfile(dbProf, fbProf);
+    let profile = merged.profile;
+    const cameFromFirebase = merged.cameFromFirebase;
+
+    if (!profile || profile.status === 'deleted') {
+      res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+      return res.status(200).json({ ok: true, claimed: false });
     }
 
-    if (!profile) {
-      return res.status(200).json({ ok: true, claimed: false });
+    let cleanUname = String(profile.username || '').replace(/^@+/, '').toLowerCase().trim();
+    let reactivated = false;
+
+    if (profile.status === 'deleted_pending') {
+      if (isDeletedPurgeExpired(profile)) {
+        if (cleanUname) {
+          await Promise.all([
+            dbPurgeAccountPermanently(cleanUname, profile.userId || userId, profile.primaryEmail || email).catch(() => {}),
+            withTimeout(firebasePurgeAccountPermanently(cleanUname, profile.userId || userId), undefined),
+          ]);
+          invalidatePublicPageCache(cleanUname);
+        }
+        res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+        return res.status(200).json({ ok: true, claimed: false, purgedExpired: true });
+      }
+
+      if (cleanUname) {
+        const [restoredDb] = await Promise.all([
+          dbReactivateAccount(cleanUname, profile.userId || userId).catch(() => ({ ok: false, profile: null })),
+          withTimeout(firebaseReactivateAccount(cleanUname, profile.userId || userId), undefined),
+        ]);
+        profile = {
+          ...profile,
+          ...(restoredDb?.profile || {}),
+          status: 'active',
+          isPublished: true,
+          hideFromSearch: false,
+          deletedAt: null,
+          purgeAt: null,
+        };
+        reactivated = true;
+        invalidatePublicPageCache(cleanUname);
+        notifyProfileSeoChanged('created', cleanUname).catch(() => {});
+      }
     }
 
     const createdAt = profile.createdAt || profile.claimedAt || null;
@@ -595,7 +690,7 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
       createdAt,
       subscription: profile.subscription || null,
     });
-    const cleanUname = String(profile.username || '').replace(/^@+/, '').toLowerCase().trim();
+    cleanUname = String(profile.username || '').replace(/^@+/, '').toLowerCase().trim();
     const resolvedAvatarUrl =
       profile.avatarUrl || (profile.avatarData && cleanUname ? `/api/avatar/${encodeURIComponent(cleanUname)}` : null);
     const { avatarData: _omittedAvatarData, ...profileWithoutRawData } = profile;
@@ -630,6 +725,7 @@ export async function handleGetMe(req: ExpressReq, res: ExpressRes) {
     return res.status(200).json({
       ok: true,
       claimed: true,
+      reactivated,
       username: profile.username,
       profile,
       blocks,
@@ -678,11 +774,19 @@ export async function handleMigrateLegacy(req: ExpressReq, res: ExpressRes) {
  * Saves or updates profile in database with server-side ownership verification
  */
 export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
+  const clerkAuth = await verifyClerkRequest(req);
+  if (clerkAuth.enforced && !clerkAuth.verifiedByJwt) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Valid session required to save profile.' });
+  }
+
   const body = req.body || {};
   const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
   }
+  const actorUserId = (clerkAuth.verifiedByJwt && clerkAuth.userId
+    ? clerkAuth.userId
+    : (body.userId || req.headers['x-user-id'] as string || 'owner')).trim();
 
   try {
     const existing = await dbGetProfile(username).catch(() => null);
@@ -695,7 +799,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
     });
     const resolvedPlan = resolvedPlanInfo.plan;
     const saveResult = await dbSaveProfile({
-      userId: body.userId || req.headers['x-user-id'] as string || 'owner',
+      userId: actorUserId,
       username,
       displayName: body.displayName,
       bio: body.bio,
@@ -747,15 +851,33 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       updatedAt: savedAt,
     };
 
-    // Bounded await sync to Firebase Cloud Database so immediate page loads stay consistent
-    await withTimeout(
-      firebaseSaveProfile(
-        username,
-        firebasePayload,
-        body.userId || req.headers['x-user-id'] as string || 'owner'
-      ),
-      undefined
+    await awaitFirebaseWrite(
+      firebaseSaveProfile(username, firebasePayload, actorUserId),
+      'saveProfile'
     );
+
+    if (body.background !== undefined) {
+      try {
+        const keepUrls = new Set<string>();
+        const savedBg = parseBackgroundConfig(firebasePayload.background ?? body.background);
+        if (savedBg?.imageUrl) {
+          keepUrls.add(savedBg.imageUrl);
+        }
+        const appRef = firebasePayload.appearance || existing?.appearance;
+        if (appRef?.background?.type === 'image' && appRef.background.assetId) {
+          keepUrls.add(appRef.background.assetId);
+        }
+        const appState = await dbReadAppearanceState(username).catch(() => null);
+        if (appState?.themes) {
+          for (const t of appState.themes) {
+            if (t?.data?.background?.type === 'image' && t.data.background.assetId) {
+              keepUrls.add(t.data.background.assetId);
+            }
+          }
+        }
+        pruneOrphanedUserBackgrounds(username, Array.from(keepUrls));
+      } catch {}
+    }
 
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
@@ -853,9 +975,9 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
       appearance: existing?.appearance ?? null,
     };
     await dbSaveProfile(updatedAvatarProfile);
-    await withTimeout(
+    await awaitFirebaseWrite(
       firebaseSaveProfile(username, updatedAvatarProfile, updatedAvatarProfile.userId),
-      undefined
+      'saveProfile'
     );
 
     invalidatePublicPageCache(username);
@@ -1024,10 +1146,17 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
  * Saves owner's blocks
  */
 export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
+  const clerkAuth = await verifyClerkRequest(req);
+  if (clerkAuth.enforced && !clerkAuth.verifiedByJwt) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Valid session required to save blocks.' });
+  }
+
   const body = req.body || {};
   const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   const blocks = Array.isArray(body.blocks) ? body.blocks : [];
-  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const userId = (clerkAuth.verifiedByJwt && clerkAuth.userId
+    ? clerkAuth.userId
+    : (body.userId as string || req.headers['x-user-id'] as string || '')).trim();
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
 
   if (!username) {
@@ -1062,14 +1191,13 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
     try {
       cleanupUnreferencedUserCardBanners(username, sanitizedBlocks, prevBannerUrls);
     } catch {}
-    // Bounded-await sync to Firebase Cloud Database so deletions & edits never leave ghost items
-    await withTimeout(firebaseSaveBlocks(username, sanitizedBlocks, userId || undefined), undefined);
+    await awaitFirebaseWrite(firebaseSaveBlocks(username, sanitizedBlocks, userId || undefined), 'saveBlocks');
     notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
 
     return res.status(200).json({ ok: true, updatedAt: new Date().toISOString() });
   } catch (err: any) {
-    return res.status(500).json({ error: 'save_failed', message: err?.message });
+    return sendMutationError(res, err, 'save_failed');
   }
 }
 
@@ -1105,16 +1233,11 @@ export async function handleSaveContact(req: ExpressReq, res: ExpressRes) {
       formTitle: body.formTitle || body.source || null,
     };
     await dbSaveContact(contactData);
-
-    // Bounded-await sync contact to Firebase
-    await Promise.race([
-      firebaseSaveContact(username, contactData).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 1800)),
-    ]);
+    await awaitFirebaseWrite(firebaseSaveContact(username, contactData), 'saveContact');
 
     return res.status(200).json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: 'submit_failed', message: err?.message });
+    return sendMutationError(res, err, 'submit_failed');
   }
 }
 
@@ -1172,14 +1295,14 @@ export async function handleDeleteContacts(req: ExpressReq, res: ExpressRes) {
   try {
     if (all) {
       await dbDeleteAllContacts(username || undefined);
-      if (username) await firebaseDeleteAllContacts(username).catch(() => {});
+      if (username) await awaitFirebaseWrite(firebaseDeleteAllContacts(username), 'deleteAllContacts');
     } else if (contactId) {
       await dbDeleteContact(username || undefined, contactId);
-      if (username) await firebaseDeleteContact(username, contactId).catch(() => {});
+      if (username) await awaitFirebaseWrite(firebaseDeleteContact(username, contactId), 'deleteContact');
     }
     return res.status(200).json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: 'delete_failed', message: err?.message });
+    return sendMutationError(res, err, 'delete_failed');
   }
 }
 
@@ -1288,12 +1411,19 @@ export async function handleGetProtectedLinkIds(req: ExpressReq, res: ExpressRes
 
 /**
  * POST /api/account/delete
- * Deletes user profile and data from database
+ * Soft-deletes account for 3-day grace window (takes page offline, locks username, preserves data until expiry or re-login)
  */
 export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
+  const clerkAuth = await verifyClerkRequest(req);
+  if (clerkAuth.enforced && !clerkAuth.verifiedByJwt) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Valid session required to delete account.' });
+  }
+
   const body = req.body || {};
-  const username = (body.username as string || '').toLowerCase().trim();
-  const userId = (body.userId as string || req.headers['x-user-id'] as string || '').trim();
+  const username = (body.username as string || '').replace(/^@+/, '').toLowerCase().trim();
+  const userId = (clerkAuth.verifiedByJwt && clerkAuth.userId
+    ? clerkAuth.userId
+    : (body.userId as string || req.headers['x-user-id'] as string || '')).trim();
   const primaryEmail = (body.primaryEmail as string || req.headers['x-user-email'] as string || '').toLowerCase().trim() || null;
 
   if (!username) {
@@ -1301,19 +1431,28 @@ export async function handleDeleteAccount(req: ExpressReq, res: ExpressRes) {
   }
 
   try {
-    const result = await dbDeleteAccount(username, userId || undefined, primaryEmail);
+    const result = await dbSoftDeleteAccount(username, userId || undefined, primaryEmail);
     if (result && !result.ok) {
       if (result.error === 'unauthorized') {
         return res.status(403).json({ error: 'unauthorized', message: 'You are not authorized to delete this page.' });
       }
       return res.status(400).json({ error: result.error });
     }
-    await firebaseReleaseUsername(username, userId || undefined).catch(() => {});
+    await awaitFirebaseWrite(
+      firebaseSoftDeleteAccount(username, userId || undefined, result.deletedAt, result.purgeAt),
+      'softDeleteAccount'
+    );
     notifyProfileSeoChanged('deleted', username).catch(() => {});
     invalidatePublicPageCache(username);
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({
+      ok: true,
+      status: 'deleted_pending',
+      deletedAt: result.deletedAt,
+      purgeAt: result.purgeAt,
+      gracePeriodDays: ACCOUNT_DELETE_GRACE_DAYS,
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: 'delete_failed', message: err?.message });
+    return sendMutationError(res, err, 'delete_failed');
   }
 }
 
@@ -2287,7 +2426,7 @@ export async function handleSeoAdminModerateBackground(req: ExpressReq, res: Exp
     });
 
     await Promise.all([
-      withTimeout(
+      awaitFirebaseWrite(
         firebaseSaveProfile(
           username,
           saveRes?.profile || {
@@ -2298,16 +2437,16 @@ export async function handleSeoAdminModerateBackground(req: ExpressReq, res: Exp
           },
           existing.userId
         ),
-        undefined
+        'saveProfile'
       ),
       nextAppearance
-        ? withTimeout(
+        ? awaitFirebaseWrite(
             firebaseSaveAppearanceState(
               username,
               { appearance: nextAppearance },
               existing.userId
             ),
-            undefined
+            'saveAppearanceState'
           )
         : Promise.resolve(),
     ]);
@@ -2315,7 +2454,97 @@ export async function handleSeoAdminModerateBackground(req: ExpressReq, res: Exp
     invalidatePublicPageCache(username);
     return res.status(200).json({ ok: true, username, background: resetBg });
   } catch (err: any) {
-    return res.status(500).json({ ok: false, error: 'moderate_failed', message: err?.message });
+    return sendMutationError(res, err, 'moderate_failed');
   }
 }
+
+/**
+ * GET /api/seo/admin/gsc-config
+ * Returns redacted GSC service account summary (never returns private_key)
+ */
+export async function handleSeoAdminGetGscConfig(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  }
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  return res.status(200).json({ ok: true, gsc: getGscSafeConfigSummary() });
+}
+
+/**
+ * POST /api/seo/admin/gsc-config
+ * Saves a Google Cloud Service Account JSON and/or property URL on the server runtime store
+ */
+export async function handleSeoAdminSaveGscConfig(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  }
+  try {
+    const body = req.body || {};
+    const rawJson =
+      typeof body.json === 'string'
+        ? body.json
+        : typeof body.rawJson === 'string'
+          ? body.rawJson
+          : body.json && typeof body.json === 'object'
+            ? JSON.stringify(body.json)
+            : undefined;
+    const propertyUrl = typeof body.propertyUrl === 'string' ? body.propertyUrl : undefined;
+
+    const saved = saveGscRuntimeConfig({ rawJson, propertyUrl });
+    if (!saved.ok) {
+      return res.status(saved.status).json({
+        ok: false,
+        error: saved.error,
+        gsc: saved.summary,
+      });
+    }
+    const connection = body.test === false ? null : await testGscConnection();
+    return res.status(200).json({
+      ok: true,
+      gsc: saved.summary,
+      connection,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      error: redactSecrets(err?.message || 'Failed to save GSC configuration.'),
+    });
+  }
+}
+
+/**
+ * DELETE /api/seo/admin/gsc-config
+ * Clears the runtime GSC service account JSON file
+ */
+export async function handleSeoAdminDeleteGscConfig(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  }
+  const summary = clearGscRuntimeConfig();
+  return res.status(200).json({ ok: true, gsc: summary });
+}
+
+/**
+ * POST /api/seo/admin/gsc-test
+ * Tests live OAuth JWT exchange and Google Search Console /sites access
+ */
+export async function handleSeoAdminTestGsc(req: ExpressReq, res: ExpressRes) {
+  if (!isSeoAdminRequest(req)) {
+    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  }
+  try {
+    const result = await testGscConnection();
+    return res.status(200).json({
+      ok: result.ok,
+      connection: result,
+      gsc: getGscSafeConfigSummary(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      error: redactSecrets(err?.message || 'GSC connection test failed.'),
+    });
+  }
+}
+
 

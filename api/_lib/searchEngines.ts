@@ -11,6 +11,13 @@ import {
 
 const TELEMETRY_PATH = path.resolve(process.cwd(), 'data', 'seo_telemetry.json');
 
+function getGscRuntimeConfigPath(): string {
+  const baseDir = process.env.IVEO_DATA_DIR
+    ? path.resolve(process.env.IVEO_DATA_DIR)
+    : path.resolve(process.cwd(), 'data');
+  return path.join(baseDir, 'gsc_service_account.local.json');
+}
+
 export interface SearchEngineTelemetry {
   lastSitemapPingAt: string | null;
   lastSitemapPingResult: string | null;
@@ -30,13 +37,28 @@ export interface GscServiceAccountCredentials {
   client_email: string;
   private_key: string;
   project_id?: string;
+  private_key_id?: string;
   token_uri?: string;
 }
 
 export interface ParsedGscCredentials {
   configured: boolean;
+  source: 'runtime_file' | 'env' | 'none';
+  propertyUrl?: string;
+  updatedAt?: string;
   creds?: GscServiceAccountCredentials;
   error?: string;
+}
+
+interface StoredRuntimeGscConfig {
+  type?: string;
+  project_id?: string;
+  private_key_id?: string;
+  private_key?: string;
+  client_email?: string;
+  token_uri?: string;
+  propertyUrl?: string;
+  updatedAt?: string;
 }
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -98,6 +120,18 @@ function tryParseJsonString(rawInput: string): any | null {
     }
   }
 
+  // Handle pasted JSON where PEM private_key had literal unescaped newlines inside the string
+  try {
+    const fixedPemNewlines = trimmed.replace(
+      /("private_key"\s*:\s*")([\s\S]*?)(")/,
+      (_full, prefix, body, suffix) => `${prefix}${String(body).replace(/\r?\n/g, '\\n')}${suffix}`
+    );
+    const parsed = JSON.parse(fixedPemNewlines);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch {}
+
   // Base64-encoded JSON fallback
   if (!trimmed.startsWith('{') && /^[A-Za-z0-9+/=\s_-]+$/.test(trimmed)) {
     try {
@@ -114,31 +148,30 @@ function tryParseJsonString(rawInput: string): any | null {
   return null;
 }
 
-export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
-  const rawJson =
-    process.env.GSC_SERVICE_ACCOUNT_JSON?.trim() ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.trim() ||
-    '';
-  const fallbackEmail = process.env.GSC_CLIENT_EMAIL?.trim() || '';
-  const fallbackKey = process.env.GSC_PRIVATE_KEY?.trim() || '';
-
-  if (!rawJson && !fallbackEmail && !fallbackKey) {
-    return { configured: false };
-  }
-
-  let parsed: any = null;
-  if (rawJson) {
-    parsed = tryParseJsonString(rawJson);
-    if (!parsed) {
-      return {
-        configured: true,
-        error: 'GSC_SERVICE_ACCOUNT_JSON could not be parsed as valid JSON or base64 JSON.',
-      };
+function readRuntimeGscConfigFile(): StoredRuntimeGscConfig | null {
+  try {
+    const cfgPath = getGscRuntimeConfigPath();
+    if (!fs.existsSync(cfgPath)) return null;
+    const raw = fs.readFileSync(cfgPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as StoredRuntimeGscConfig;
     }
-  } else {
-    parsed = {
-      client_email: fallbackEmail,
-      private_key: fallbackKey,
+  } catch {}
+  return null;
+}
+
+function validateServiceAccountObject(
+  parsed: any,
+  source: 'runtime_file' | 'env',
+  propertyUrl?: string,
+  updatedAt?: string
+): ParsedGscCredentials {
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      configured: true,
+      source,
+      error: 'GSC service account JSON could not be parsed.',
     };
   }
 
@@ -148,6 +181,7 @@ export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
   if (!clientEmail || !clientEmail.includes('@')) {
     return {
       configured: true,
+      source,
       error: 'GSC service account credentials are missing a valid client_email.',
     };
   }
@@ -155,6 +189,7 @@ export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
   if (!rawPrivateKey.trim()) {
     return {
       configured: true,
+      source,
       error: 'GSC service account credentials are missing private_key.',
     };
   }
@@ -165,6 +200,7 @@ export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
   } catch {
     return {
       configured: true,
+      source,
       error:
         'GSC private_key is malformed or could not be decoded as a valid PEM RSA private key. Ensure full BEGIN/END PRIVATE KEY lines are intact.',
     };
@@ -172,16 +208,217 @@ export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
 
   return {
     configured: true,
+    source,
+    propertyUrl,
+    updatedAt,
     creds: {
       client_email: clientEmail,
       private_key: normalizedKey,
       project_id: typeof parsed.project_id === 'string' ? parsed.project_id.trim() : undefined,
+      private_key_id:
+        typeof parsed.private_key_id === 'string' ? parsed.private_key_id.trim() : undefined,
       token_uri:
         typeof parsed.token_uri === 'string' && parsed.token_uri.startsWith('https://')
           ? parsed.token_uri.trim()
           : 'https://oauth2.googleapis.com/token',
     },
   };
+}
+
+export function getEffectiveGscSiteUrl(): string | null {
+  const runtime = readRuntimeGscConfigFile();
+  if (runtime?.propertyUrl && typeof runtime.propertyUrl === 'string' && runtime.propertyUrl.trim()) {
+    return runtime.propertyUrl.trim();
+  }
+  return getGscSiteUrl();
+}
+
+export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
+  const runtime = readRuntimeGscConfigFile();
+  if (runtime && (runtime.client_email || runtime.private_key)) {
+    return validateServiceAccountObject(
+      runtime,
+      'runtime_file',
+      runtime.propertyUrl,
+      runtime.updatedAt
+    );
+  }
+
+  const rawJson =
+    process.env.GSC_SERVICE_ACCOUNT_JSON?.trim() ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.trim() ||
+    '';
+  const fallbackEmail = process.env.GSC_CLIENT_EMAIL?.trim() || '';
+  const fallbackKey = process.env.GSC_PRIVATE_KEY?.trim() || '';
+
+  if (!rawJson && !fallbackEmail && !fallbackKey) {
+    return { configured: false, source: 'none' };
+  }
+
+  let parsed: any = null;
+  if (rawJson) {
+    parsed = tryParseJsonString(rawJson);
+    if (!parsed) {
+      return {
+        configured: true,
+        source: 'env',
+        error: 'GSC_SERVICE_ACCOUNT_JSON could not be parsed as valid JSON or base64 JSON.',
+      };
+    }
+  } else {
+    parsed = {
+      client_email: fallbackEmail,
+      private_key: fallbackKey,
+    };
+  }
+
+  return validateServiceAccountObject(parsed, 'env', getGscSiteUrl() || undefined);
+}
+
+export function getGscSafeConfigSummary() {
+  const parsed = parseGscServiceAccountCredentials();
+  const runtime = readRuntimeGscConfigFile();
+  const siteUrl = getCanonicalSiteOrigin();
+  const propertyUrl = getEffectiveGscSiteUrl() || `${siteUrl}/`;
+  const hasEnvVars = Boolean(
+    process.env.GSC_SERVICE_ACCOUNT_JSON?.trim() ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.trim() ||
+      (process.env.GSC_CLIENT_EMAIL?.trim() && process.env.GSC_PRIVATE_KEY?.trim())
+  );
+  const keyId = parsed.creds?.private_key_id || runtime?.private_key_id || null;
+  const privateKeyIdPreview = keyId
+    ? keyId.length > 10
+      ? `${keyId.slice(0, 6)}…${keyId.slice(-4)}`
+      : keyId
+    : null;
+
+  return {
+    configured: Boolean(parsed.creds && !parsed.error),
+    source: parsed.source,
+    hasSavedFile: Boolean(runtime?.client_email && runtime?.private_key),
+    hasEnvVars,
+    clientEmail: parsed.creds?.client_email || runtime?.client_email || null,
+    projectId: parsed.creds?.project_id || runtime?.project_id || null,
+    privateKeyIdPreview,
+    propertyUrl,
+    updatedAt: runtime?.updatedAt || null,
+    error: parsed.error || null,
+  };
+}
+
+export function saveGscRuntimeConfig(input: {
+  rawJson?: string | null;
+  propertyUrl?: string | null;
+}): { ok: boolean; status: number; error?: string; summary: ReturnType<typeof getGscSafeConfigSummary> } {
+  const existing = readRuntimeGscConfigFile();
+  const trimmedProperty =
+    typeof input.propertyUrl === 'string' ? input.propertyUrl.trim() : undefined;
+
+  let normalizedPayload: StoredRuntimeGscConfig | null = null;
+  const rawJsonStr = typeof input.rawJson === 'string' ? input.rawJson.trim() : '';
+
+  if (rawJsonStr) {
+    const parsed = tryParseJsonString(rawJsonStr);
+    if (!parsed) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Could not parse Service Account JSON. Paste the full Google Cloud JSON key file.',
+        summary: getGscSafeConfigSummary(),
+      };
+    }
+    if (parsed.type && parsed.type !== 'service_account') {
+      return {
+        ok: false,
+        status: 400,
+        error: 'JSON file must have "type": "service_account".',
+        summary: getGscSafeConfigSummary(),
+      };
+    }
+    const validated = validateServiceAccountObject(parsed, 'runtime_file');
+    if (!validated.creds || validated.error) {
+      return {
+        ok: false,
+        status: 400,
+        error: validated.error || 'Invalid service account credentials.',
+        summary: getGscSafeConfigSummary(),
+      };
+    }
+    normalizedPayload = {
+      type: 'service_account',
+      project_id: validated.creds.project_id,
+      private_key_id: validated.creds.private_key_id,
+      private_key: validated.creds.private_key,
+      client_email: validated.creds.client_email,
+      token_uri: validated.creds.token_uri || 'https://oauth2.googleapis.com/token',
+      ...(trimmedProperty !== undefined
+        ? trimmedProperty
+          ? { propertyUrl: trimmedProperty }
+          : {}
+        : existing?.propertyUrl
+          ? { propertyUrl: existing.propertyUrl }
+          : {}),
+      updatedAt: new Date().toISOString(),
+    };
+  } else if (trimmedProperty !== undefined && existing) {
+    normalizedPayload = {
+      ...existing,
+      ...(trimmedProperty ? { propertyUrl: trimmedProperty } : { propertyUrl: undefined }),
+      updatedAt: new Date().toISOString(),
+    };
+  } else if (!rawJsonStr && trimmedProperty !== undefined) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Paste or upload a Service Account JSON key first.',
+      summary: getGscSafeConfigSummary(),
+    };
+  }
+
+  if (!normalizedPayload) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Missing Service Account JSON.',
+      summary: getGscSafeConfigSummary(),
+    };
+  }
+
+  const cfgPath = getGscRuntimeConfigPath();
+  const dir = path.dirname(cfgPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tmpPath = `${cfgPath}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(normalizedPayload, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  fs.renameSync(tmpPath, cfgPath);
+  try {
+    fs.chmodSync(cfgPath, 0o600);
+  } catch {}
+
+  tokenCache.clear();
+  propertyCache.clear();
+
+  return {
+    ok: true,
+    status: 200,
+    summary: getGscSafeConfigSummary(),
+  };
+}
+
+export function clearGscRuntimeConfig(): ReturnType<typeof getGscSafeConfigSummary> {
+  try {
+    const cfgPath = getGscRuntimeConfigPath();
+    if (fs.existsSync(cfgPath)) {
+      fs.unlinkSync(cfgPath);
+    }
+  } catch {}
+  tokenCache.clear();
+  propertyCache.clear();
+  return getGscSafeConfigSummary();
 }
 
 function readTelemetry(): SearchEngineTelemetry {
@@ -237,9 +474,10 @@ export function getSearchEngineStatus() {
   const bingVerification = getBingSiteVerification();
   const telemetry = readTelemetry();
   const parsedGsc = parseGscServiceAccountCredentials();
+  const gscSummary = getGscSafeConfigSummary();
 
   const siteUrl = getCanonicalSiteOrigin();
-  const preferredGscProperty = getGscSiteUrl() || `${siteUrl}/`;
+  const preferredGscProperty = gscSummary.propertyUrl || `${siteUrl}/`;
   const gscConfigured = Boolean(parsedGsc.creds && !parsedGsc.error);
   const gscClientEmail = parsedGsc.creds?.client_email || null;
   const bingConfigured = Boolean(bingApiKey);
@@ -248,7 +486,9 @@ export function getSearchEngineStatus() {
   return {
     siteUrl,
     gscConfigured,
-    gscHasEnv: parsedGsc.configured,
+    gscHasEnv: gscSummary.hasEnvVars,
+    gscHasSavedFile: gscSummary.hasSavedFile,
+    gscSource: gscSummary.source,
     gscError: parsedGsc.error || null,
     gscSiteUrl: preferredGscProperty,
     bingConfigured,
@@ -261,11 +501,16 @@ export function getSearchEngineStatus() {
     })),
     googleSearchConsole: {
       configured: gscConfigured,
-      hasEnv: parsedGsc.configured,
+      source: gscSummary.source,
+      hasEnv: gscSummary.hasEnvVars,
+      hasSavedFile: gscSummary.hasSavedFile,
       error: parsedGsc.error || null,
       verificationMetaConfigured: Boolean(googleVerification),
       serviceAccountEmail: gscClientEmail,
+      projectId: gscSummary.projectId,
+      privateKeyIdPreview: gscSummary.privateKeyIdPreview,
       propertyUrl: preferredGscProperty,
+      updatedAt: gscSummary.updatedAt,
       indexingApiNote:
         'Google Search Console Sitemaps & URL Inspection API supported. Google Indexing API is intentionally NOT used for creator profiles per Google guidelines.',
     },
@@ -289,7 +534,7 @@ async function getGscAccessToken(
 ): Promise<{ token?: string; clientEmail?: string; error?: string }> {
   const parsed = parseGscServiceAccountCredentials();
   if (!parsed.configured) {
-    return { error: 'GSC_SERVICE_ACCOUNT_JSON is not configured' };
+    return { error: 'GSC service account JSON is not configured' };
   }
   if (!parsed.creds || parsed.error) {
     return { error: parsed.error || 'Invalid GSC service account credentials' };
@@ -361,7 +606,7 @@ async function getGscAccessToken(
 
 export function buildGscPropertyCandidates(canonicalOrigin: string): string[] {
   const candidates = new Set<string>();
-  const explicit = getGscSiteUrl();
+  const explicit = getEffectiveGscSiteUrl();
   if (explicit) candidates.add(explicit);
 
   try {
@@ -707,3 +952,158 @@ export async function notifyIndexNow(urls: string[]): Promise<{
 
   return { attempted, ok, status };
 }
+
+export async function testGscConnection(): Promise<{
+  ok: boolean;
+  configured: boolean;
+  source: 'runtime_file' | 'env' | 'none';
+  oauthOk: boolean;
+  clientEmail: string | null;
+  projectId: string | null;
+  propertyUrl: string;
+  matchedProperty: string | null;
+  verifiedSites: string[];
+  allSites: Array<{ siteUrl: string; permissionLevel: string }>;
+  error: string | null;
+  actionableHint: string | null;
+}> {
+  const summary = getGscSafeConfigSummary();
+  const parsed = parseGscServiceAccountCredentials();
+  const siteUrl = getCanonicalSiteOrigin();
+  const candidates = buildGscPropertyCandidates(siteUrl);
+
+  if (!parsed.configured || !parsed.creds || parsed.error) {
+    return {
+      ok: false,
+      configured: false,
+      source: summary.source,
+      oauthOk: false,
+      clientEmail: summary.clientEmail,
+      projectId: summary.projectId,
+      propertyUrl: summary.propertyUrl,
+      matchedProperty: null,
+      verifiedSites: [],
+      allSites: [],
+      error: parsed.error || 'Google Search Console service account JSON is not configured.',
+      actionableHint: 'Upload or paste your Google Cloud Service Account JSON key below.',
+    };
+  }
+
+  const auth = await getGscAccessToken('https://www.googleapis.com/auth/webmasters');
+  if (!auth.token) {
+    return {
+      ok: false,
+      configured: true,
+      source: summary.source,
+      oauthOk: false,
+      clientEmail: summary.clientEmail,
+      projectId: summary.projectId,
+      propertyUrl: summary.propertyUrl,
+      matchedProperty: null,
+      verifiedSites: [],
+      allSites: [],
+      error: auth.error || 'Google OAuth token exchange failed.',
+      actionableHint:
+        'Check that the Service Account JSON key is active in Google Cloud IAM and has not been revoked.',
+    };
+  }
+
+  try {
+    const res = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${auth.token}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const apiMsg = json?.error?.message || `HTTP ${res.status}`;
+      const isApiDisabled = res.status === 403 && /disabled|not enabled|Search Console API/i.test(apiMsg);
+      return {
+        ok: false,
+        configured: true,
+        source: summary.source,
+        oauthOk: true,
+        clientEmail: summary.clientEmail,
+        projectId: summary.projectId,
+        propertyUrl: summary.propertyUrl,
+        matchedProperty: null,
+        verifiedSites: [],
+        allSites: [],
+        error: `Google Search Console API error: ${apiMsg}`,
+        actionableHint: isApiDisabled
+          ? `Enable "Google Search Console API" in Google Cloud project "${summary.projectId || 'your project'}".`
+          : `Grant ${summary.clientEmail} Full or Owner access in Google Search Console -> Settings -> Users and permissions.`,
+      };
+    }
+
+    const entries: any[] = Array.isArray(json?.siteEntry) ? json.siteEntry : [];
+    const allSites = entries
+      .filter((e) => e?.siteUrl)
+      .map((e) => ({
+        siteUrl: String(e.siteUrl),
+        permissionLevel: String(e.permissionLevel || 'unknown'),
+      }));
+    const verifiedSites = allSites
+      .filter((s) => s.permissionLevel !== 'siteUnverifiedUser')
+      .map((s) => s.siteUrl);
+
+    propertyCache.set(parsed.creds.client_email || 'default', {
+      sites: verifiedSites,
+      fetchedAt: Date.now(),
+    });
+
+    let matchedProperty: string | null = null;
+    for (const cand of candidates) {
+      const found = verifiedSites.find((s) => s.toLowerCase() === cand.toLowerCase());
+      if (found) {
+        matchedProperty = found;
+        break;
+      }
+    }
+    if (!matchedProperty) {
+      try {
+        const h = new URL(siteUrl).host.toLowerCase();
+        const bareHost = h.startsWith('www.') ? h.slice(4) : h;
+        matchedProperty = verifiedSites.find((s) => s.toLowerCase().includes(bareHost)) || null;
+      } catch {}
+    }
+
+    const ok = Boolean(matchedProperty);
+    const actionableHint = ok
+      ? null
+      : verifiedSites.length === 0
+        ? `OAuth succeeded, but no GSC properties are shared with ${summary.clientEmail}. In Google Search Console -> Settings -> Users and permissions, add ${summary.clientEmail} as Full or Owner user.`
+        : `OAuth succeeded (properties visible: ${verifiedSites.join(', ')}), but none match ${candidates[0]}. Set Property URL above or add ${summary.clientEmail} to ${candidates[0]}.`;
+
+    return {
+      ok,
+      configured: true,
+      source: summary.source,
+      oauthOk: true,
+      clientEmail: summary.clientEmail,
+      projectId: summary.projectId,
+      propertyUrl: matchedProperty || summary.propertyUrl,
+      matchedProperty,
+      verifiedSites,
+      allSites,
+      error: ok ? null : actionableHint,
+      actionableHint,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      configured: true,
+      source: summary.source,
+      oauthOk: true,
+      clientEmail: summary.clientEmail,
+      projectId: summary.projectId,
+      propertyUrl: summary.propertyUrl,
+      matchedProperty: null,
+      verifiedSites: [],
+      allSites: [],
+      error: err?.message || 'Network error contacting Google Search Console.',
+      actionableHint: null,
+    };
+  }
+}
+

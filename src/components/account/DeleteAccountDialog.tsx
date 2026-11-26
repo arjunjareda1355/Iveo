@@ -200,7 +200,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({
             onClick={handleDelete}
             className="order-1 sm:order-2 bg-[color:var(--error,#B3261E)] hover:bg-red-700 text-white disabled:opacity-40"
           >
-            Delete permanently
+            {copy.deleteAccount.deleteButton}
           </Button>
         </div>
       </div>

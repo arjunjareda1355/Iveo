@@ -36,6 +36,8 @@
         "customSeoTitle": { "type": "string", "maxLength": 160 },
         "customSeoDescription": { "type": "string", "maxLength": 320 },
         "blocksInitialized": { "type": "boolean" },
+        "deletedAt": { "type": "string", "maxLength": 64 },
+        "purgeAt": { "type": "string", "maxLength": 64 },
         "updatedAt": { "type": "string", "maxLength": 64 },
         "createdAt": { "type": "string", "maxLength": 64 }
       },
@@ -141,7 +143,9 @@
         "userId": { "type": "string", "maxLength": 128 },
         "status": { "type": "string", "maxLength": 32 },
         "claimedAt": { "type": "string", "maxLength": 64 },
-        "releasedAt": { "type": "string", "maxLength": 64 }
+        "releasedAt": { "type": "string", "maxLength": 64 },
+        "deletedAt": { "type": "string", "maxLength": 64 },
+        "purgeAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["username"]
     },

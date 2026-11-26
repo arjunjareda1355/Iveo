@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, useUser, useClerk } from '@clerk/react';
+import { useUser, useClerk } from '@clerk/react';
 import { useAccountDeletion } from '../../components/account/AccountDeletionProvider';
 import { SUPPORT_EMAIL } from '../../lib/site';
 import { copy } from '../../content/copy';
-
-const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export interface DeleteAccountState {
   isDeleting: boolean;
@@ -16,9 +13,32 @@ export interface DeleteAccountState {
   deleteAccount: (confirmedUsername: string) => Promise<void>;
 }
 
+function clearLocalAccountCaches(username?: string | null, userId?: string | null) {
+  try {
+    if (username) {
+      const clean = username.replace(/^@+/, '').toLowerCase().trim();
+      localStorage.removeItem(`iveo_blocks_${clean}`);
+      localStorage.removeItem(`iveo_public_blocks_${clean}`);
+      localStorage.removeItem(`ivio_blocks_${clean}`);
+      localStorage.removeItem(`iveo_profile_${clean}`);
+      localStorage.removeItem(`ivio_profile_${clean}`);
+      localStorage.removeItem(`iveo_themes_${clean}`);
+      localStorage.removeItem(`iveo_appearance_adv_${clean}`);
+      localStorage.removeItem(`iveo_onboarding_done_${clean}`);
+    }
+    if (userId) {
+      localStorage.removeItem(`iveo_blocks_${userId}`);
+      localStorage.removeItem(`iveo_public_blocks_${userId}`);
+      localStorage.removeItem(`iveo_onboarding_done_${userId}`);
+    }
+    localStorage.removeItem('iveo_current_username');
+    localStorage.removeItem('iveo_profile_completed');
+    sessionStorage.clear();
+  } catch {}
+}
+
 export function useDeleteAccount(): DeleteAccountState {
   const navigate = useNavigate();
-  const { getToken } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
   const { isDeleting, setIsDeleting } = useAccountDeletion();
@@ -33,14 +53,22 @@ export function useDeleteAccount(): DeleteAccountState {
     if (!user) {
       try {
         const u = confirmedClean || 'owner';
-        await fetch('/api/account/delete', {
+        const res = await fetch('/api/account/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: u, userId: u }),
         });
-        localStorage.clear();
-        sessionStorage.clear();
-      } catch {}
+        if (!res.ok) {
+          setError('first');
+          setIsDeleting(false);
+          return;
+        }
+        clearLocalAccountCaches(u, u);
+      } catch {
+        setError('first');
+        setIsDeleting(false);
+        return;
+      }
       setIsDeleting(false);
       navigate('/?deleted=1', { replace: true });
       return;
@@ -70,114 +98,39 @@ export function useDeleteAccount(): DeleteAccountState {
       return;
     }
 
-    setIsDeleting(true);
-    setError(null);
-
     const userId = user.id;
 
-    // 1. Unified server-side deletion (Azure SQL / Server store)
+    // 1. Soft-delete on backend (3-day grace period, page immediately offline, username locked for 3 days).
+    // Do NOT delete Clerk auth user or media immediately so re-login within 3 days restores everything cleanly.
     try {
-      await fetch('/api/account/delete', {
+      const res = await fetch('/api/account/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId,
+          ...(emailClean ? { 'x-user-email': emailClean } : {}),
+        },
         body: JSON.stringify({
           username: currentUsername || userId,
           userId,
+          primaryEmail: emailClean || null,
         }),
       });
+      if (!res.ok) {
+        setError('first');
+        setIsDeleting(false);
+        return;
+      }
     } catch {
-      // Continue
+      setError('first');
+      setIsDeleting(false);
+      return;
     }
 
-    // 2. Get Supabase token if configured
-    let token: string | null = null;
-    try {
-      token = await getToken({ template: 'supabase' }).catch(() => null);
-    } catch {
-      // Token fetch failed
-    }
+    // 2. Clean up client caches (server retains everything intact during 3-day window)
+    clearLocalAccountCaches(currentUsername, userId);
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      apikey: anonKey,
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // 3. Delete user's images in link-images bucket if Supabase configured
-    if (rawSupabaseUrl) {
-      try {
-        let pages = 0;
-        let hasMore = true;
-
-        while (hasMore && pages < 10) {
-          pages++;
-          const listRes = await fetch(
-            `${rawSupabaseUrl}/storage/v1/object/list/link-images`,
-            {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({ prefix: userId, limit: 100 }),
-            }
-          );
-
-          if (!listRes.ok) break;
-          const files = await listRes.json();
-          if (!files || !Array.isArray(files) || files.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          const prefixes = files.map((f: { name: string }) => `${userId}/${f.name}`);
-          await fetch(`${rawSupabaseUrl}/storage/v1/object/link-images`, {
-            method: 'DELETE',
-            headers,
-            body: JSON.stringify({ prefixes }),
-          });
-        }
-      } catch {
-        // Ignored
-      }
-    }
-
-    // 4. Delete Supabase profile row if configured
-    if (rawSupabaseUrl) {
-      try {
-        await fetch(
-          `${rawSupabaseUrl}/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}`,
-          {
-            method: 'DELETE',
-            headers,
-          }
-        );
-      } catch {
-        // Continue
-      }
-    }
-
-    // 5. Clean up all browser storage
-    try {
-      localStorage.removeItem(`iveo_blocks_${currentUsername}`);
-      localStorage.removeItem(`iveo_public_blocks_${currentUsername}`);
-      localStorage.removeItem(`ivio_blocks_${currentUsername}`);
-      localStorage.removeItem(`iveo_profile_${currentUsername}`);
-      localStorage.removeItem(`ivio_profile_${currentUsername}`);
-      localStorage.removeItem(`iveo_blocks_${userId}`);
-      localStorage.removeItem(`iveo_public_blocks_${userId}`);
-      localStorage.removeItem('iveo_current_username');
-      sessionStorage.clear();
-    } catch {}
-
-    // 6. Delete Clerk account or sign out
-    try {
-      if (typeof user.delete === 'function') {
-        await user.delete();
-      }
-    } catch (clerkErr) {
-      console.warn('Clerk user delete caught, signing out instead:', clerkErr);
-    }
-
+    // 3. Sign out Clerk session (preserve auth identity so re-login within 3 days restores the account)
     try {
       await signOut();
     } catch (signOutErr) {

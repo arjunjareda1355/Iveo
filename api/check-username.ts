@@ -41,7 +41,10 @@ export async function GET(request: Request): Promise<Response> {
         ok: true,
         available: false,
         reason: 'taken',
-        message: `iveo.site/@${clean} is already claimed. Try another.`,
+        message:
+          fbClaim.status === 'deleted_pending'
+            ? `iveo.site/@${clean} is currently unavailable. Try another.`
+            : `iveo.site/@${clean} is already claimed. Try another.`,
       });
     }
   } catch {
@@ -66,7 +69,10 @@ export async function GET(request: Request): Promise<Response> {
         ok: true,
         available: false,
         reason: 'taken',
-        message: `iveo.site/@${clean} is already claimed. Try another.`,
+        message:
+          existing.status === 'deleted_pending'
+            ? `iveo.site/@${clean} is currently unavailable. Try another.`
+            : `iveo.site/@${clean} is already claimed. Try another.`,
       });
     }
   } catch {

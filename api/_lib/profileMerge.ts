@@ -17,7 +17,7 @@ export interface ProfileSaveInput {
   plan?: string;
   createdAt?: string | null;
   subscription?: Partial<SubscriptionRecord> | null;
-  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'deleted_pending' | 'suspended';
   isPublished?: boolean;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
@@ -32,6 +32,8 @@ export interface ProfileSaveInput {
   businessCard?: any;
   layoutSettings?: any;
   appearance?: any;
+  deletedAt?: string | null;
+  purgeAt?: string | null;
   updatedAt?: string | null;
 }
 
@@ -52,7 +54,7 @@ export interface MergedProfileSave {
   plan: string;
   createdAt: string;
   subscription: SubscriptionRecord | null;
-  status: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  status: 'active' | 'private' | 'unpublished' | 'deleted' | 'deleted_pending' | 'suspended';
   isPublished: boolean;
   hideFooter: boolean;
   hideFromSearch: boolean;
@@ -67,7 +69,56 @@ export interface MergedProfileSave {
   businessCard: any;
   layoutSettings: any;
   appearance: any;
+  deletedAt: string | null;
+  purgeAt: string | null;
   updatedAt: string;
+}
+
+export function isNewerTimestamp(candidate?: string | null, baseline?: string | null): boolean {
+  if (!candidate) return false;
+  if (!baseline) return true;
+  const candMs = Date.parse(candidate);
+  const baseMs = Date.parse(baseline);
+  if (!Number.isNaN(candMs) && !Number.isNaN(baseMs)) {
+    return candMs > baseMs;
+  }
+  return candidate > baseline;
+}
+
+export function isDeletedPurgeExpired(
+  profile: { status?: string | null; purgeAt?: string | null } | null | undefined,
+  nowMs = Date.now()
+): boolean {
+  if (!profile || profile.status !== 'deleted_pending') return false;
+  if (!profile.purgeAt) return false;
+  const purgeMs = Date.parse(String(profile.purgeAt));
+  return !Number.isNaN(purgeMs) && nowMs >= purgeMs;
+}
+
+/**
+ * Selects the freshest profile without letting stale/cleared fields from an older copy leak back.
+ */
+export function selectFresherProfile<T extends Record<string, any>>(
+  localProf: T | null | undefined,
+  fbProf: T | null | undefined
+): { profile: T | null; cameFromFirebase: boolean } {
+  if (!localProf && !fbProf) return { profile: null, cameFromFirebase: false };
+  if (!localProf && fbProf) return { profile: fbProf, cameFromFirebase: true };
+  if (localProf && !fbProf) return { profile: localProf, cameFromFirebase: false };
+  if (localProf && fbProf && isNewerTimestamp(fbProf.updatedAt, localProf.updatedAt)) {
+    // Prefer the newer Firebase record cleanly while preserving essential identity metadata if absent
+    return {
+      profile: {
+        ...fbProf,
+        userId: fbProf.userId || localProf.userId,
+        primaryEmail: fbProf.primaryEmail ?? localProf.primaryEmail ?? null,
+        createdAt: fbProf.createdAt || localProf.createdAt || null,
+        subscription: fbProf.subscription !== undefined ? fbProf.subscription : (localProf.subscription ?? null),
+      },
+      cameFromFirebase: true,
+    };
+  }
+  return { profile: localProf || null, cameFromFirebase: false };
 }
 
 export function mergeProfileForSave(
@@ -146,6 +197,20 @@ export function mergeProfileForSave(
     incoming.isPublished !== undefined
       ? incoming.isPublished
       : status === 'active';
+
+  const deletedAt: string | null =
+    status === 'deleted_pending'
+      ? (incoming.deletedAt !== undefined ? incoming.deletedAt : (prev.deletedAt ?? null))
+      : incoming.deletedAt !== undefined
+        ? incoming.deletedAt
+        : null;
+
+  const purgeAt: string | null =
+    status === 'deleted_pending'
+      ? (incoming.purgeAt !== undefined ? incoming.purgeAt : (prev.purgeAt ?? null))
+      : incoming.purgeAt !== undefined
+        ? incoming.purgeAt
+        : null;
 
   const avatarUrl =
     incoming.avatarUrl !== undefined ? incoming.avatarUrl : (prev.avatarUrl ?? null);
@@ -252,6 +317,8 @@ export function mergeProfileForSave(
       incoming.appearance !== undefined
         ? incoming.appearance
         : (prev.appearance ?? null),
+    deletedAt,
+    purgeAt,
     updatedAt: incoming.updatedAt || new Date().toISOString(),
   };
 }

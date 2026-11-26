@@ -155,3 +155,38 @@ export function deleteUserUploadedBackgrounds(username: string): void {
     }
   } catch {}
 }
+
+export function pruneOrphanedUserBackgrounds(username: string, keepUrls: Iterable<string | null | undefined>): void {
+  const safeUser = sanitizeSafeSegment(username.replace(/^@+/, ''));
+  if (!safeUser) return;
+  const userDir = path.resolve(getBackgroundsBaseDir(), safeUser);
+  if (!fs.existsSync(userDir)) return;
+
+  const keepFiles = new Set<string>();
+  const prefix = `/api/backgrounds/${safeUser}/`;
+  for (const rawUrl of keepUrls) {
+    if (typeof rawUrl !== 'string') continue;
+    const cleaned = rawUrl.split('?')[0].trim();
+    if (cleaned.startsWith(prefix)) {
+      const file = cleaned.slice(prefix.length);
+      if (file && !file.includes('/') && !file.includes('..')) {
+        keepFiles.add(file);
+      }
+    }
+  }
+
+  try {
+    for (const file of fs.readdirSync(userDir)) {
+      if (file.endsWith('.tmp')) continue;
+      if (!keepFiles.has(file)) {
+        const candidate = path.resolve(userDir, file);
+        if (candidate.startsWith(userDir + path.sep)) {
+          try { fs.unlinkSync(candidate); } catch {}
+        }
+      }
+    }
+    if (fs.readdirSync(userDir).length === 0) {
+      try { fs.rmdirSync(userDir); } catch {}
+    }
+  } catch {}
+}

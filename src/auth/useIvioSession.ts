@@ -24,6 +24,7 @@ import {
 import { getSubdomainFromHostname } from '../lib/site';
 import type { Appearance } from '../lib/appearance/types';
 import { migrateLegacyProfileToAppearanceV2 } from '../lib/appearance/migrate';
+import { buildAuthHeaders, registerClerkTokenGetter } from '../lib/clerkTokenBridge';
 
 function broadcastProfileSync(username: string | null | undefined, type: 'profile' | 'blocks', updatedAt: string) {
   if (!username || typeof window === 'undefined') return;
@@ -142,12 +143,17 @@ const FALLBACK_SESSION: IveoSession = {
 };
 
 function useClerkSession(): IveoSession {
-  const { isLoaded: authLoaded, isSignedIn } = useAuth();
+  const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const { isLoaded: userLoaded, user } = useUser();
   const { signOut } = useClerk();
 
   const clerkLoaded = Boolean(authLoaded && userLoaded);
   const activeUser = clerkLoaded && isSignedIn && user ? user : null;
+
+  useEffect(() => {
+    registerClerkTokenGetter(isSignedIn ? () => getToken() : null);
+    return () => registerClerkTokenGetter(null);
+  }, [isSignedIn, getToken]);
 
   // Server-side profile data retrieved via /api/me for cross-browser synchronization
   const [serverProfile, setServerProfile] = useState<any | null>(null);
@@ -173,8 +179,16 @@ function useClerkSession(): IveoSession {
       );
       if (res.ok) {
         const data = await res.json();
-        if (data && data.claimed && data.username) {
+        if (data && data.claimed && data.username && data.profile) {
           setServerProfile(data.profile);
+          if (data.reactivated) {
+            try {
+              sessionStorage.setItem('iveo_account_reactivated', '1');
+              window.dispatchEvent(new CustomEvent('iveo_account_reactivated'));
+            } catch {}
+          }
+        } else if (data && data.ok === true && data.claimed === false) {
+          setServerProfile(null);
         }
       }
     } catch {}
@@ -202,7 +216,7 @@ function useClerkSession(): IveoSession {
     };
   }, []);
 
-  // Fetch claimed profile from database (with 5s timeout & direct Firestore fallback) whenever activeUser loads
+  // Fetch claimed profile from database (with 3s timeout & direct Firestore fallback) whenever activeUser loads
   useEffect(() => {
     if (!activeUser?.id) {
       setServerProfile(null);
@@ -214,6 +228,8 @@ function useClerkSession(): IveoSession {
     let isMounted = true;
     const fetchServerProfile = async () => {
       let hydratedProfile: any | null = null;
+      let serverConfirmedUnclaimed = false;
+      let serverPurgedExpired = false;
       const email = activeUser.primaryEmailAddress?.emailAddress || '';
       const cleanEmail = email.toLowerCase().trim();
 
@@ -229,6 +245,15 @@ function useClerkSession(): IveoSession {
             const data = await res.json();
             if (data && data.claimed && data.username && data.profile) {
               hydratedProfile = data.profile;
+              if (data.reactivated) {
+                try {
+                  sessionStorage.setItem('iveo_account_reactivated', '1');
+                  window.dispatchEvent(new CustomEvent('iveo_account_reactivated'));
+                } catch {}
+              }
+            } else if (data && data.ok === true && data.claimed === false) {
+              serverConfirmedUnclaimed = true;
+              serverPurgedExpired = Boolean(data.purgedExpired);
             }
           }
         } finally {
@@ -236,8 +261,8 @@ function useClerkSession(): IveoSession {
         }
       } catch {}
 
-      // Parallelized Direct Firestore fallback if /api/me timed out or had no local record
-      if (!hydratedProfile) {
+      // Parallelized Direct Firestore fallback ONLY when /api/me failed or did not confirm unclaimed
+      if (!hydratedProfile && !serverConfirmedUnclaimed) {
         try {
           const { doc, getDoc, getDocs, collection, query, where } = await import('firebase/firestore');
           const { db } = await import('../lib/firebase');
@@ -307,6 +332,36 @@ function useClerkSession(): IveoSession {
               ...currentMeta,
               username: cleanUname,
               onboardingComplete: true,
+            },
+          }).catch(() => {});
+        }
+      } else if (serverConfirmedUnclaimed && isMounted) {
+        setServerProfile(null);
+        const currentMeta = (activeUser.unsafeMetadata && typeof activeUser.unsafeMetadata === 'object'
+          ? activeUser.unsafeMetadata
+          : {}) as Record<string, unknown>;
+        const oldMetaUser = typeof currentMeta.username === 'string'
+          ? currentMeta.username.replace(/^@+/, '').toLowerCase().trim()
+          : '';
+        try {
+          if (oldMetaUser) {
+            localStorage.removeItem(`iveo_profile_${oldMetaUser}`);
+            localStorage.removeItem(`iveo_blocks_${oldMetaUser}`);
+            localStorage.removeItem(`iveo_public_blocks_${oldMetaUser}`);
+            localStorage.removeItem(`iveo_onboarding_done_${oldMetaUser}`);
+            localStorage.removeItem(`iveo_themes_${oldMetaUser}`);
+          }
+          localStorage.removeItem(`iveo_onboarding_done_${activeUser.id}`);
+          localStorage.removeItem('iveo_current_username');
+          localStorage.removeItem('iveo_profile_completed');
+        } catch {}
+        if (currentMeta.username || currentMeta.onboardingComplete === true || serverPurgedExpired) {
+          activeUser.update({
+            unsafeMetadata: {
+              ...currentMeta,
+              username: null,
+              preferredUsername: null,
+              onboardingComplete: false,
             },
           }).catch(() => {});
         }
@@ -480,14 +535,15 @@ function useClerkSession(): IveoSession {
 
   const syncToServer = async (payload: Record<string, unknown>, keepalive = false): Promise<string | null> => {
     if (!activeUser?.id) return null;
+    const headers = await buildAuthHeaders({
+      'Content-Type': 'application/json',
+      'x-user-id': activeUser.id,
+      'x-user-email': primaryEmail || '',
+    });
     const res = await fetch('/api/profile', {
       method: 'POST',
       keepalive,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': activeUser.id,
-        'x-user-email': primaryEmail || '',
-      },
+      headers,
       body: JSON.stringify({
         ...payload,
         userId: activeUser.id,
@@ -631,13 +687,14 @@ function useClerkSession(): IveoSession {
     const previousUsername = username && username !== clean ? username : null;
 
     // 1. Atomically claim username on database FIRST (server automatically releases previousUsername)
+    const claimHeaders = await buildAuthHeaders({
+      'Content-Type': 'application/json',
+      'x-user-id': currentUser.id,
+      'x-user-email': primaryEmail || '',
+    });
     const claimRes = await fetch('/api/claim-username', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': currentUser.id,
-        'x-user-email': primaryEmail || '',
-      },
+      headers: claimHeaders,
       body: JSON.stringify({
         userId: currentUser.id,
         username: clean,
@@ -973,13 +1030,14 @@ function useClerkSession(): IveoSession {
     if (finalAvatarUrl && finalAvatarUrl.startsWith('data:image/')) {
       try {
         const u = username || localStorage.getItem('iveo_current_username') || 'owner';
+        const avatarHeaders = await buildAuthHeaders({
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser.id,
+          'x-user-email': primaryEmail || '',
+        });
         const res = await fetch('/api/avatar', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': currentUser.id,
-            'x-user-email': primaryEmail || '',
-          },
+          headers: avatarHeaders,
           body: JSON.stringify({
             userId: currentUser.id,
             username: u,

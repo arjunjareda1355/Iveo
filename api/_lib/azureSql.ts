@@ -1,7 +1,7 @@
 import sql from 'mssql';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mergeProfileForSave } from './profileMerge.ts';
+import { isDeletedPurgeExpired, isNewerTimestamp, mergeProfileForSave } from './profileMerge.ts';
 import { resolveEffectivePlan, type SubscriptionRecord, type UserBillingStore } from '../../src/lib/plan.ts';
 import { normalizeAnalyticsSource } from '../../src/lib/analytics/sources.ts';
 import { detectDevice } from '../../src/lib/analytics/device.ts';
@@ -10,7 +10,12 @@ import {
   firebaseGetAnalyticsEvents,
   firebaseGetBlocks,
   firebaseGetRedirectTarget,
+  firebasePurgeAccountPermanently,
 } from './firebaseServer.ts';
+
+export const ACCOUNT_DELETE_GRACE_DAYS = 3;
+export const ACCOUNT_DELETE_GRACE_MS = ACCOUNT_DELETE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+const purgingAccountsNow = new Set<string>();
 
 // Confirmed Azure SQL Infrastructure details
 const AZURE_SQL_SERVER = process.env.AZURE_SQL_SERVER || 'faneme.database.windows.net';
@@ -618,11 +623,20 @@ function writeUserIndex(data: Record<string, string>): void {
   atomicWriteJson(path.join(getDataDir(), 'index_users.json'), data);
 }
 
-function readClaimsIndex(): Record<string, { userId: string; username: string; claimedAt: string }> {
+export interface ClaimIndexEntry {
+  userId: string;
+  username: string;
+  claimedAt: string;
+  status?: string;
+  deletedAt?: string | null;
+  purgeAt?: string | null;
+}
+
+function readClaimsIndex(): Record<string, ClaimIndexEntry> {
   ensureMigratedToPerUserStore();
   return readJsonFile(path.join(getDataDir(), 'index_claims.json'), {});
 }
-function writeClaimsIndex(data: Record<string, { userId: string; username: string; claimedAt: string }>): void {
+function writeClaimsIndex(data: Record<string, ClaimIndexEntry>): void {
   atomicWriteJson(path.join(getDataDir(), 'index_claims.json'), data);
 }
 
@@ -732,18 +746,41 @@ export async function dbClaimUsername(
       // Check if username is already claimed
       const checkReq = new sql.Request(transaction);
       checkReq.input('username', sql.NVarChar(64), clean);
-      const existing = await checkReq.query('SELECT user_id, display_name FROM iveo_profiles WHERE username = @username');
+      const existing = await checkReq.query('SELECT user_id, display_name, socials_json FROM iveo_profiles WHERE username = @username');
 
+      let purgedExpiredSqlClaim = false;
       if (existing.recordset.length > 0) {
-        const existingUserId = existing.recordset[0].user_id;
-        if (existingUserId && existingUserId !== userId && existingUserId !== 'owner' && !isOwnerEmailMatch) {
+        const existingRow = existing.recordset[0];
+        const existingUserId = existingRow.user_id;
+        let existingParsed: any = {};
+        try {
+          if (existingRow.socials_json) existingParsed = JSON.parse(existingRow.socials_json);
+        } catch {}
+        if (isDeletedPurgeExpired({ status: existingParsed?.status, purgeAt: existingParsed?.purgeAt })) {
+          await transaction.rollback();
+          await dbPurgeAccountPermanently(clean, existingUserId, null, { skipOwnershipCheck: true }).catch(() => {});
+          await firebasePurgeAccountPermanently(clean, existingUserId).catch(() => {});
+          purgedExpiredSqlClaim = true;
+        } else if (existingUserId && existingUserId !== userId && existingUserId !== 'owner' && !isOwnerEmailMatch) {
           await transaction.rollback();
           return { ok: false, error: 'already_claimed', message: `iveo.site/@${clean} is already claimed by another creator. Please pick another address.` };
         }
       }
 
+      if (purgedExpiredSqlClaim) {
+        // Re-open clean transaction after purging expired deleted handle
+        const retryTx = new sql.Transaction(pool);
+        await retryTx.begin();
+        await retryTx.commit();
+      }
+
+      const activeTx = purgedExpiredSqlClaim ? new sql.Transaction(pool) : transaction;
+      if (purgedExpiredSqlClaim) {
+        await activeTx.begin();
+      }
+
       // Check if this user already claimed a different username, rename/migrate blocks & contacts
-      const userCheckReq = new sql.Request(transaction);
+      const userCheckReq = new sql.Request(activeTx);
       userCheckReq.input('userId', sql.NVarChar(128), userId);
       const prevClaims = await userCheckReq.query('SELECT username FROM iveo_profiles WHERE user_id = @userId');
       let releasedUsername: string | null = null;
@@ -756,22 +793,22 @@ export async function dbClaimUsername(
       for (const oldUname of prevNames) {
         if (oldUname && oldUname !== clean) {
           releasedUsername = oldUname;
-          const delReq = new sql.Request(transaction);
+          const delReq = new sql.Request(activeTx);
           delReq.input('oldUsername', sql.NVarChar(64), oldUname);
           delReq.input('userId', sql.NVarChar(128), userId);
           await delReq.query('DELETE FROM iveo_profiles WHERE username = @oldUsername AND user_id = @userId');
 
-          const moveBlocksReq = new sql.Request(transaction);
+          const moveBlocksReq = new sql.Request(activeTx);
           moveBlocksReq.input('oldUsername', sql.NVarChar(64), oldUname);
           moveBlocksReq.input('newUsername', sql.NVarChar(64), clean);
           await moveBlocksReq.query('UPDATE iveo_blocks SET username = @newUsername WHERE username = @oldUsername');
 
-          const moveContactsReq = new sql.Request(transaction);
+          const moveContactsReq = new sql.Request(activeTx);
           moveContactsReq.input('oldUsername', sql.NVarChar(64), oldUname);
           moveContactsReq.input('newUsername', sql.NVarChar(64), clean);
           await moveContactsReq.query('UPDATE iveo_contacts SET username = @newUsername WHERE username = @oldUsername');
 
-          const moveAnalyticsReq = new sql.Request(transaction);
+          const moveAnalyticsReq = new sql.Request(activeTx);
           moveAnalyticsReq.input('oldUsername', sql.NVarChar(64), oldUname);
           moveAnalyticsReq.input('newUsername', sql.NVarChar(64), clean);
           await moveAnalyticsReq.query('UPDATE iveo_analytics_events SET username = @newUsername WHERE username = @oldUsername');
@@ -787,7 +824,7 @@ export async function dbClaimUsername(
         subscription: profileData?.subscription,
       });
       const effectivePlan = resolvedClaimPlan.plan;
-      const insReq = new sql.Request(transaction);
+      const insReq = new sql.Request(activeTx);
       insReq.input('userId', sql.NVarChar(128), userId);
       insReq.input('username', sql.NVarChar(64), clean);
       insReq.input('displayName', sql.NVarChar(128), profileData?.displayName || clean);
@@ -803,7 +840,9 @@ export async function dbClaimUsername(
         email: primaryEmail || null,
         background: profileData?.background || null,
         avatarData: profileData?.avatarData || null,
-        status: profileData?.status || 'active',
+        status: profileData?.status === 'deleted_pending' ? 'active' : (profileData?.status || 'active'),
+        deletedAt: null,
+        purgeAt: null,
         createdAt: claimCreatedAt,
         subscription: profileData?.subscription || null,
         integrations: {
@@ -839,13 +878,15 @@ export async function dbClaimUsername(
             button_shape = @buttonShape,
             socials_json = @socialsJson,
             plan = @plan,
+            is_published = 1,
+            hide_from_search = 0,
             updated_at = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
           INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, is_published)
           VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, 1);
       `);
 
-      await transaction.commit();
+      await activeTx.commit();
 
       // Synchronize isolated per-user store so appearance/block meta stays consistent with SQL
       await withUserLock(clean, () => {
@@ -923,20 +964,66 @@ export async function dbClaimUsername(
 
   // Isolated per-user store fallback
   return withUserLock(clean, () => {
-    const targetRecord = readUserRecord(clean);
-    const existingProfile = targetRecord.profile;
+    let targetRecord = readUserRecord(clean);
+    let existingProfile = targetRecord.profile;
+    let claimsIndex = readClaimsIndex();
+    const claimEntry = claimsIndex[clean];
+
     if (
-      existingProfile &&
-      existingProfile.userId &&
-      existingProfile.userId !== userId &&
-      existingProfile.userId !== 'owner' &&
+      (existingProfile && isDeletedPurgeExpired(existingProfile)) ||
+      (claimEntry && isDeletedPurgeExpired(claimEntry))
+    ) {
+      const expiredOwner = existingProfile?.userId || claimEntry?.userId;
+      // Purge stale expired record synchronously inside lock before claiming
+      const userFile = getUserFilePath(clean);
+      if (fs.existsSync(userFile)) {
+        try { fs.unlinkSync(userFile); } catch {}
+      }
+      delete claimsIndex[clean];
+      writeClaimsIndex(claimsIndex);
+      const userIndexTmp = readUserIndex();
+      for (const [uid, uname] of Object.entries(userIndexTmp)) {
+        if (uname === clean) delete userIndexTmp[uid];
+      }
+      writeUserIndex(userIndexTmp);
+      const pwIdxTmp = readPasswordsIndex();
+      let pwChangedTmp = false;
+      for (const [lid, entry] of Object.entries(pwIdxTmp)) {
+        if (entry.username === clean) {
+          delete pwIdxTmp[lid];
+          pwChangedTmp = true;
+        }
+      }
+      if (pwChangedTmp) writePasswordsIndex(pwIdxTmp);
+      const redIdxTmp = readRedirectsIndex();
+      let redChangedTmp = false;
+      for (const [fromK, redVal] of Object.entries(redIdxTmp)) {
+        if (fromK === clean || redVal?.to === clean) {
+          delete redIdxTmp[fromK];
+          redChangedTmp = true;
+        }
+      }
+      if (redChangedTmp) writeRedirectsIndex(redIdxTmp);
+      cleanupUploadedMediaForUser(clean);
+      firebasePurgeAccountPermanently(clean, expiredOwner).catch(() => {});
+      targetRecord = readUserRecord(clean);
+      existingProfile = null;
+      claimsIndex = readClaimsIndex();
+    }
+
+    const activeOwnerId = existingProfile?.userId || claimEntry?.userId;
+    const isDeletedTombstone = existingProfile?.status === 'deleted' || claimEntry?.status === 'deleted';
+    if (
+      !isDeletedTombstone &&
+      activeOwnerId &&
+      activeOwnerId !== userId &&
+      activeOwnerId !== 'owner' &&
       !isOwnerEmailMatch
     ) {
       return { ok: false, error: 'already_claimed', message: `iveo.site/@${clean} is already claimed by another creator. Please pick another address.` };
     }
 
     const userIndex = readUserIndex();
-    const claimsIndex = readClaimsIndex();
     const redirectsIndex = readRedirectsIndex();
     delete redirectsIndex[clean];
 
@@ -989,12 +1076,16 @@ export async function dbClaimUsername(
       targetRecord.blocks = [];
       targetRecord.contacts = [];
       targetRecord.passwords = {};
+      targetRecord.analytics = [];
     }
 
     userIndex[userId] = clean;
     claimsIndex[clean] = {
       userId,
       username: clean,
+      status: 'active',
+      deletedAt: null,
+      purgeAt: null,
       claimedAt: new Date().toISOString(),
     };
 
@@ -1026,10 +1117,12 @@ export async function dbClaimUsername(
       planSource: fallbackPlan.planSource,
       createdAt: fallbackCreatedAt,
       subscription: fallbackSubscription,
-      status: profileData?.status || basePrev?.status || 'active',
-      isPublished: profileData?.isPublished ?? basePrev?.isPublished ?? true,
+      status: 'active',
+      isPublished: profileData?.isPublished ?? true,
+      deletedAt: null,
+      purgeAt: null,
       hideFooter: Boolean(profileData?.hideFooter ?? basePrev?.hideFooter),
-      hideFromSearch: Boolean(profileData?.hideFromSearch ?? basePrev?.hideFromSearch),
+      hideFromSearch: Boolean(profileData?.hideFromSearch ?? false),
       background: profileData?.background !== undefined ? profileData.background : (basePrev?.background || null),
       googleAnalyticsId: profileData?.googleAnalyticsId !== undefined ? profileData.googleAnalyticsId : (basePrev?.googleAnalyticsId || null),
       metaPixelId: profileData?.metaPixelId !== undefined ? profileData.metaPixelId : (basePrev?.metaPixelId || null),
@@ -1079,6 +1172,9 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
         let socialsPosition: 'top' | 'bottom' | 'both' = 'top';
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
+        let parsedStatus = 'active';
+        let deletedAt: string | null = null;
+        let purgeAt: string | null = null;
         let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
         let subscription: SubscriptionRecord | null = null;
         let avatarData: string | null = null;
@@ -1093,6 +1189,9 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
               primaryEmail = parsed.email || null;
               backgroundConfig = parsed.background || null;
               avatarData = typeof parsed.avatarData === 'string' ? parsed.avatarData : null;
+              if (parsed.status) parsedStatus = parsed.status;
+              if (parsed.deletedAt) deletedAt = String(parsed.deletedAt);
+              if (parsed.purgeAt) purgeAt = String(parsed.purgeAt);
               if (parsed.createdAt) createdAt = String(parsed.createdAt);
               if (parsed.subscription) subscription = parsed.subscription;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
@@ -1102,6 +1201,17 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
             }
           }
         } catch {}
+
+        if (parsedStatus === 'deleted') {
+          return null;
+        }
+        if (isDeletedPurgeExpired({ status: parsedStatus, purgeAt }) && !purgingAccountsNow.has(String(row.username || '').toLowerCase())) {
+          const uname = String(row.username || '').replace(/^@+/, '').toLowerCase().trim();
+          await dbPurgeAccountPermanently(uname, row.user_id, null, { skipOwnershipCheck: true }).catch(() => {});
+          firebasePurgeAccountPermanently(uname, row.user_id).catch(() => {});
+          return null;
+        }
+
         const resolved = resolveEffectivePlan({
           email: primaryEmail || email,
           storedPlan: row.plan,
@@ -1127,6 +1237,9 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
           planSource: resolved.planSource,
           createdAt,
           subscription,
+          status: parsedStatus,
+          deletedAt,
+          purgeAt,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
@@ -1171,14 +1284,24 @@ export async function dbGetProfileByUserId(userId: string, email?: string | null
   if (userId && userIndex[userId]) {
     const uname = userIndex[userId];
     const rec = readUserRecord(uname);
-    if (rec.profile) {
-      return applyStorePlan(rec.profile);
+    if (rec.profile && rec.profile.status !== 'deleted') {
+      if (isDeletedPurgeExpired(rec.profile) && !purgingAccountsNow.has(uname)) {
+        await dbPurgeAccountPermanently(uname, rec.profile.userId, null, { skipOwnershipCheck: true }).catch(() => {});
+        firebasePurgeAccountPermanently(uname, rec.profile.userId).catch(() => {});
+      } else {
+        return applyStorePlan(rec.profile);
+      }
     }
   }
 
   for (const { username: uname, record } of listAllUserRecords()) {
     const p = record.profile;
-    if (!p) continue;
+    if (!p || p.status === 'deleted') continue;
+    if (isDeletedPurgeExpired(p) && !purgingAccountsNow.has(uname)) {
+      await dbPurgeAccountPermanently(uname, p.userId, null, { skipOwnershipCheck: true }).catch(() => {});
+      firebasePurgeAccountPermanently(uname, p.userId).catch(() => {});
+      continue;
+    }
     if (userId && p.userId === userId) {
       userIndex[userId] = uname;
       writeUserIndex(userIndex);
@@ -1216,7 +1339,7 @@ export async function dbSaveProfile(profile: {
   plan?: string;
   createdAt?: string | null;
   subscription?: Partial<SubscriptionRecord> | null;
-  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'deleted_pending' | 'suspended';
   isPublished?: boolean;
   hideFooter?: boolean;
   hideFromSearch?: boolean;
@@ -1231,6 +1354,8 @@ export async function dbSaveProfile(profile: {
   businessCard?: any;
   layoutSettings?: any;
   appearance?: any;
+  deletedAt?: string | null;
+  purgeAt?: string | null;
   updatedAt?: string;
 }): Promise<{ ok: boolean; error?: string; updatedAt?: string; profile?: any }> {
   const cleanUsername = profile.username.replace(/^@+/, '').toLowerCase().trim();
@@ -1256,6 +1381,8 @@ export async function dbSaveProfile(profile: {
     background: merged.background,
     avatarData: merged.avatarData || null,
     status: merged.status,
+    deletedAt: merged.deletedAt ?? null,
+    purgeAt: merged.purgeAt ?? null,
     createdAt: merged.createdAt,
     subscription: merged.subscription,
     integrations: {
@@ -1290,6 +1417,7 @@ export async function dbSaveProfile(profile: {
       req.input('plan', sql.NVarChar(32), merged.plan);
       req.input('hideFooter', sql.Bit, merged.hideFooter ? 1 : 0);
       req.input('hideFromSearch', sql.Bit, merged.hideFromSearch ? 1 : 0);
+      req.input('isPublished', sql.Bit, merged.isPublished ? 1 : 0);
 
       await req.query(`
         MERGE iveo_profiles AS target
@@ -1309,10 +1437,11 @@ export async function dbSaveProfile(profile: {
             plan = @plan,
             hide_footer = @hideFooter,
             hide_from_search = @hideFromSearch,
+            is_published = @isPublished,
             updated_at = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
           INSERT (user_id, username, display_name, bio, avatar_url, avatar_type, avatar_id, vibe_id, button_shape, socials_json, plan, hide_footer, hide_from_search, is_published)
-          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, 1);
+          VALUES (@userId, @username, @displayName, @bio, @avatarUrl, @avatarType, @avatarId, @vibeId, @buttonShape, @socialsJson, @plan, @hideFooter, @hideFromSearch, @isPublished);
       `);
       await withUserLock(cleanUsername, () => {
         const record = readUserRecord(cleanUsername);
@@ -1379,6 +1508,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
         let primaryEmail: string | null = null;
         let backgroundConfig: any = null;
         let parsedStatus = 'active';
+        let deletedAt: string | null = null;
+        let purgeAt: string | null = null;
         let createdAt: string | null = row.created_at ? new Date(row.created_at).toISOString() : null;
         let subscription: SubscriptionRecord | null = null;
         let avatarData: string | null = null;
@@ -1394,6 +1525,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
               backgroundConfig = parsed.background || null;
               avatarData = typeof parsed.avatarData === 'string' ? parsed.avatarData : null;
               if (parsed.status) parsedStatus = parsed.status;
+              if (parsed.deletedAt) deletedAt = String(parsed.deletedAt);
+              if (parsed.purgeAt) purgeAt = String(parsed.purgeAt);
               if (parsed.createdAt) createdAt = String(parsed.createdAt);
               if (parsed.subscription) subscription = parsed.subscription;
               integrations = (parsed.integrations && typeof parsed.integrations === 'object') ? parsed.integrations : {};
@@ -1403,6 +1536,16 @@ export async function dbGetProfile(username: string): Promise<any | null> {
             }
           }
         } catch {}
+
+        if (parsedStatus === 'deleted') {
+          return null;
+        }
+        if (isDeletedPurgeExpired({ status: parsedStatus, purgeAt }) && !purgingAccountsNow.has(clean)) {
+          await dbPurgeAccountPermanently(clean, row.user_id, null, { skipOwnershipCheck: true }).catch(() => {});
+          firebasePurgeAccountPermanently(clean, row.user_id).catch(() => {});
+          return null;
+        }
+
         const resolved = resolveEffectivePlan({
           email: primaryEmail,
           storedPlan: row.plan,
@@ -1429,6 +1572,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
           createdAt,
           subscription,
           status: parsedStatus,
+          deletedAt,
+          purgeAt,
           hideFooter: Boolean(row.hide_footer),
           hideFromSearch: Boolean(row.hide_from_search),
           background: backgroundConfig || (row as any).background || null,
@@ -1453,7 +1598,12 @@ export async function dbGetProfile(username: string): Promise<any | null> {
 
   const record = readUserRecord(clean);
   const prof = record.profile;
-  if (!prof) return null;
+  if (!prof || prof.status === 'deleted') return null;
+  if (isDeletedPurgeExpired(prof) && !purgingAccountsNow.has(clean)) {
+    await dbPurgeAccountPermanently(clean, prof.userId, null, { skipOwnershipCheck: true }).catch(() => {});
+    firebasePurgeAccountPermanently(clean, prof.userId).catch(() => {});
+    return null;
+  }
   const resolved = resolveEffectivePlan({
     email: prof.primaryEmail,
     storedPlan: prof.plan,
@@ -1468,6 +1618,8 @@ export async function dbGetProfile(username: string): Promise<any | null> {
     createdAt: prof.createdAt || prof.claimedAt || null,
     subscription: prof.subscription || null,
     status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
+    deletedAt: prof.deletedAt ?? null,
+    purgeAt: prof.purgeAt ?? null,
     avatarType: prof.avatarType || (prof.avatarId ? 'default' : (prof.avatarUrl ? 'uploaded' : 'default')),
     avatarId: prof.avatarId || null,
   };
@@ -1955,13 +2107,44 @@ export async function dbDeleteAllContacts(username?: string): Promise<void> {
   }
 }
 
-export async function dbDeleteAccount(
+function cleanupUploadedMediaForUser(cleanUsername: string): void {
+  try {
+    const dataDir = getDataDir();
+    const avatarDir = path.join(dataDir, 'avatars');
+    if (fs.existsSync(avatarDir)) {
+      for (const f of fs.readdirSync(avatarDir)) {
+        if (f.startsWith(`${cleanUsername}.`) || f.startsWith(`${cleanUsername}_`)) {
+          try { fs.unlinkSync(path.join(avatarDir, f)); } catch {}
+        }
+      }
+    }
+    const bgUserDir = path.join(dataDir, 'backgrounds', sanitizeUserFileKey(cleanUsername));
+    if (fs.existsSync(bgUserDir)) {
+      fs.rmSync(bgUserDir, { recursive: true, force: true });
+    }
+    const cardBannersDir = path.join(dataDir, 'card-banners', sanitizeUserFileKey(cleanUsername));
+    if (fs.existsSync(cardBannersDir)) {
+      fs.rmSync(cardBannersDir, { recursive: true, force: true });
+    }
+  } catch {}
+}
+
+/**
+ * Places an account into a 3-day deletion grace window:
+ * - Page goes offline immediately (status: deleted_pending, isPublished: false, hideFromSearch: true)
+ * - Username stays locked against anyone else claiming it
+ * - User data remains intact for 3 days so logging back in restores everything automatically
+ */
+export async function dbSoftDeleteAccount(
   username: string,
   userId?: string,
-  primaryEmail?: string | null
-): Promise<{ ok: boolean; error?: string }> {
-  const clean = username.toLowerCase().trim();
+  primaryEmail?: string | null,
+  graceMs = ACCOUNT_DELETE_GRACE_MS
+): Promise<{ ok: boolean; error?: string; deletedAt?: string; purgeAt?: string; userId?: string }> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return { ok: false, error: 'missing_username' };
 
+  const existing = await dbGetProfile(clean);
   if (userId) {
     const isAuthorized = await dbVerifyOwnership(clean, userId, primaryEmail);
     if (!isAuthorized) {
@@ -1969,74 +2152,328 @@ export async function dbDeleteAccount(
     }
   }
 
-  const pool = await getAzureSqlPool();
+  const deletedAt = new Date().toISOString();
+  const purgeAt = new Date(Date.parse(deletedAt) + graceMs).toISOString();
+  const effectiveUserId = userId || existing?.userId || 'owner';
 
+  const pool = await getAzureSqlPool();
   if (pool) {
     try {
-      const req1 = pool.request().input('username', sql.NVarChar(64), clean);
-      await req1.query('DELETE FROM iveo_profiles WHERE username = @username');
+      const res = await pool
+        .request()
+        .input('username', sql.NVarChar(64), clean)
+        .query('SELECT socials_json FROM iveo_profiles WHERE username = @username');
+      let parsed: Record<string, any> = {};
+      if (res.recordset.length > 0 && res.recordset[0].socials_json) {
+        try { parsed = JSON.parse(res.recordset[0].socials_json) || {}; } catch {}
+      }
+      parsed.status = 'deleted_pending';
+      parsed.deletedAt = deletedAt;
+      parsed.purgeAt = purgeAt;
 
-      const req2 = pool.request().input('username', sql.NVarChar(64), clean);
-      await req2.query('DELETE FROM iveo_blocks WHERE username = @username');
-
-      const req3 = pool.request().input('username', sql.NVarChar(64), clean);
-      await req3.query('DELETE FROM iveo_contacts WHERE username = @username');
+      await pool
+        .request()
+        .input('username', sql.NVarChar(64), clean)
+        .input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(parsed))
+        .query(`
+          UPDATE iveo_profiles
+          SET status = 'deleted_pending',
+              socials_json = @socialsJson,
+              is_published = 0,
+              hide_from_search = 1,
+              updated_at = SYSUTCDATETIME()
+          WHERE username = @username
+        `);
     } catch {
-      // Fall through to server store fallback
+      // Fall through cleanly to per-user store update
     }
   }
 
   await withUserLock(clean, () => {
-    const userFile = getUserFilePath(clean);
-    if (fs.existsSync(userFile)) {
-      try { fs.unlinkSync(userFile); } catch {}
-    }
+    const record = readUserRecord(clean);
+    const prevProf = record.profile || existing || { username: clean, userId: effectiveUserId };
+    record.profile = {
+      ...prevProf,
+      username: clean,
+      userId: prevProf.userId && prevProf.userId !== 'owner' ? prevProf.userId : effectiveUserId,
+      status: 'deleted_pending',
+      isPublished: false,
+      hideFromSearch: true,
+      deletedAt,
+      purgeAt,
+      updatedAt: deletedAt,
+    };
+    writeUserRecord(clean, record);
 
     const claims = readClaimsIndex();
-    delete claims[clean];
+    claims[clean] = {
+      ...(claims[clean] || { claimedAt: prevProf.createdAt || deletedAt }),
+      userId: record.profile.userId,
+      username: clean,
+      status: 'deleted_pending',
+      deletedAt,
+      purgeAt,
+    };
     writeClaimsIndex(claims);
 
-    const userIndex = readUserIndex();
-    for (const [uid, uname] of Object.entries(userIndex)) {
-      if (uname === clean) {
-        delete userIndex[uid];
-      }
+    if (record.profile.userId && record.profile.userId !== 'owner') {
+      const userIndex = readUserIndex();
+      userIndex[record.profile.userId] = clean;
+      writeUserIndex(userIndex);
     }
-    writeUserIndex(userIndex);
-
-    const pwIdx = readPasswordsIndex();
-    let pwChanged = false;
-    for (const [lid, entry] of Object.entries(pwIdx)) {
-      if (entry.username === clean) {
-        delete pwIdx[lid];
-        pwChanged = true;
-      }
-    }
-    if (pwChanged) writePasswordsIndex(pwIdx);
   });
 
-  // Clean up uploaded avatar & uploaded custom background directory
+  return { ok: true, deletedAt, purgeAt, userId: effectiveUserId };
+}
+
+/**
+ * Restores a pending-delete account when the same owner logs back in within 3 days.
+ */
+export async function dbReactivateAccount(
+  username: string,
+  userId?: string
+): Promise<{ ok: boolean; error?: string; profile?: any }> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return { ok: false, error: 'missing_username' };
+
+  const current = await dbGetProfile(clean);
+  if (!current) {
+    return { ok: false, error: 'expired' };
+  }
+  if (isDeletedPurgeExpired(current)) {
+    await dbPurgeAccountPermanently(clean, current.userId || userId, null, { skipOwnershipCheck: true }).catch(() => {});
+    return { ok: false, error: 'expired' };
+  }
+
+  const nowIso = new Date().toISOString();
+  const pool = await getAzureSqlPool();
+  if (pool) {
+    try {
+      const res = await pool
+        .request()
+        .input('username', sql.NVarChar(64), clean)
+        .query('SELECT socials_json FROM iveo_profiles WHERE username = @username');
+      let parsed: Record<string, any> = {};
+      if (res.recordset.length > 0 && res.recordset[0].socials_json) {
+        try { parsed = JSON.parse(res.recordset[0].socials_json) || {}; } catch {}
+      }
+      parsed.status = 'active';
+      parsed.deletedAt = null;
+      parsed.purgeAt = null;
+
+      await pool
+        .request()
+        .input('username', sql.NVarChar(64), clean)
+        .input('socialsJson', sql.NVarChar(sql.MAX), JSON.stringify(parsed))
+        .query(`
+          UPDATE iveo_profiles
+          SET status = 'active',
+              socials_json = @socialsJson,
+              is_published = 1,
+              hide_from_search = 0,
+              updated_at = SYSUTCDATETIME()
+          WHERE username = @username
+        `);
+    } catch {}
+  }
+
+  const restored = await withUserLock(clean, () => {
+    const record = readUserRecord(clean);
+    const prevProf = record.profile || current;
+    record.profile = {
+      ...prevProf,
+      username: clean,
+      status: 'active',
+      isPublished: true,
+      hideFromSearch: false,
+      deletedAt: null,
+      purgeAt: null,
+      updatedAt: nowIso,
+    };
+    writeUserRecord(clean, record);
+
+    const claims = readClaimsIndex();
+    claims[clean] = {
+      ...(claims[clean] || { claimedAt: prevProf.createdAt || nowIso }),
+      userId: record.profile.userId || userId || 'owner',
+      username: clean,
+      status: 'active',
+      deletedAt: null,
+      purgeAt: null,
+    };
+    writeClaimsIndex(claims);
+    return record.profile;
+  });
+
+  return { ok: true, profile: restored };
+}
+
+/**
+ * Permanently erases all data, analytics, blocks, contacts, passwords, indexes, redirects,
+ * and uploaded files for a deleted account after the 3-day window expires.
+ */
+export async function dbPurgeAccountPermanently(
+  username: string,
+  userId?: string,
+  primaryEmail?: string | null,
+  opts?: { skipOwnershipCheck?: boolean }
+): Promise<{ ok: boolean; error?: string }> {
+  const clean = username.replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return { ok: false, error: 'missing_username' };
+
+  purgingAccountsNow.add(clean);
   try {
-    const dataDir = getDataDir();
-    const avatarDir = path.join(dataDir, 'avatars');
-    if (fs.existsSync(avatarDir)) {
-      for (const f of fs.readdirSync(avatarDir)) {
-        if (f.startsWith(`${clean}.`) || f.startsWith(`${clean}_`)) {
-          try { fs.unlinkSync(path.join(avatarDir, f)); } catch {}
-        }
+    if (!opts?.skipOwnershipCheck && userId) {
+      const isAuthorized = await dbVerifyOwnership(clean, userId, primaryEmail);
+      if (!isAuthorized) {
+        return { ok: false, error: 'unauthorized' };
       }
     }
-    const bgUserDir = path.join(dataDir, 'backgrounds', sanitizeUserFileKey(clean));
-    if (fs.existsSync(bgUserDir)) {
-      fs.rmSync(bgUserDir, { recursive: true, force: true });
-    }
-    const cardBannersDir = path.join(dataDir, 'card-banners', sanitizeUserFileKey(clean));
-    if (fs.existsSync(cardBannersDir)) {
-      fs.rmSync(cardBannersDir, { recursive: true, force: true });
-    }
-  } catch {}
 
-  return { ok: true };
+    const localRec = readUserRecord(clean);
+    const blockIdsToDelete = new Set<string>();
+    for (const b of localRec.blocks || []) {
+      if (b?.id) blockIdsToDelete.add(String(b.id));
+    }
+    for (const pid of Object.keys(localRec.passwords || {})) {
+      blockIdsToDelete.add(pid);
+    }
+
+    const pool = await getAzureSqlPool();
+    if (pool) {
+      try {
+        const sqlBlocksRes = await pool
+          .request()
+          .input('username', sql.NVarChar(64), clean)
+          .query('SELECT id FROM iveo_blocks WHERE username = @username')
+          .catch(() => null);
+        for (const r of sqlBlocksRes?.recordset || []) {
+          if (r?.id) blockIdsToDelete.add(String(r.id));
+        }
+
+        for (const lid of blockIdsToDelete) {
+          await pool
+            .request()
+            .input('linkId', sql.NVarChar(128), lid)
+            .query('DELETE FROM iveo_link_passwords WHERE link_id = @linkId')
+            .catch(() => {});
+        }
+
+        const tables = ['iveo_contacts', 'iveo_blocks', 'iveo_analytics_events', 'iveo_profiles'];
+        for (const tbl of tables) {
+          await pool
+            .request()
+            .input('username', sql.NVarChar(64), clean)
+            .query(`DELETE FROM ${tbl} WHERE username = @username`)
+            .catch(() => {});
+        }
+      } catch {}
+    }
+
+    await withUserLock(clean, () => {
+      const userFile = getUserFilePath(clean);
+      if (fs.existsSync(userFile)) {
+        try { fs.unlinkSync(userFile); } catch {}
+      }
+
+      const claims = readClaimsIndex();
+      delete claims[clean];
+      writeClaimsIndex(claims);
+
+      const userIndex = readUserIndex();
+      let uidChanged = false;
+      for (const [uid, uname] of Object.entries(userIndex)) {
+        if (uname === clean || (userId && uid === userId && uname === clean)) {
+          delete userIndex[uid];
+          uidChanged = true;
+        }
+      }
+      if (uidChanged) writeUserIndex(userIndex);
+
+      const pwIdx = readPasswordsIndex();
+      let pwChanged = false;
+      for (const [lid, entry] of Object.entries(pwIdx)) {
+        if (entry.username === clean || blockIdsToDelete.has(lid)) {
+          delete pwIdx[lid];
+          pwChanged = true;
+        }
+      }
+      if (pwChanged) writePasswordsIndex(pwIdx);
+
+      const redirects = readRedirectsIndex();
+      let redChanged = false;
+      for (const [fromK, redVal] of Object.entries(redirects)) {
+        if (fromK === clean || redVal?.to === clean) {
+          delete redirects[fromK];
+          redChanged = true;
+        }
+      }
+      if (redChanged) writeRedirectsIndex(redirects);
+    });
+
+    cleanupUploadedMediaForUser(clean);
+    return { ok: true };
+  } finally {
+    purgingAccountsNow.delete(clean);
+  }
+}
+
+export async function dbDeleteAccount(
+  username: string,
+  userId?: string,
+  primaryEmail?: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  return dbPurgeAccountPermanently(username, userId, primaryEmail);
+}
+
+/**
+ * Sweeps local store, claim index, and Azure SQL for accounts whose 3-day deletion
+ * grace period has elapsed, permanently deleting all data and releasing usernames.
+ */
+export async function purgeExpiredDeletedAccounts(nowMs = Date.now()): Promise<{ purged: string[] }> {
+  const candidates = new Map<string, string | undefined>();
+
+  for (const { username: uname, record } of listAllUserRecords()) {
+    const p = record.profile;
+    if (p && isDeletedPurgeExpired(p, nowMs)) {
+      candidates.set(uname, p.userId);
+    }
+  }
+
+  const claims = readClaimsIndex();
+  for (const [uname, entry] of Object.entries(claims)) {
+    if (entry && isDeletedPurgeExpired(entry, nowMs) && !candidates.has(uname)) {
+      candidates.set(uname, entry.userId);
+    }
+  }
+
+  const pool = await getAzureSqlPool();
+  if (pool) {
+    try {
+      const res = await pool
+        .request()
+        .query("SELECT username, user_id, socials_json FROM iveo_profiles WHERE is_published = 0 OR socials_json LIKE '%deleted_pending%'");
+      for (const row of res.recordset || []) {
+        const uname = String(row.username || '').replace(/^@+/, '').toLowerCase().trim();
+        if (!uname) continue;
+        try {
+          const parsed = row.socials_json ? JSON.parse(row.socials_json) : {};
+          if (isDeletedPurgeExpired({ status: parsed?.status, purgeAt: parsed?.purgeAt }, nowMs)) {
+            candidates.set(uname, row.user_id);
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  const purged: string[] = [];
+  for (const [uname, uid] of candidates.entries()) {
+    await dbPurgeAccountPermanently(uname, uid, null, { skipOwnershipCheck: true }).catch(() => {});
+    await firebasePurgeAccountPermanently(uname, uid).catch(() => {});
+    purged.push(uname);
+  }
+
+  return { purged };
 }
 
 export async function dbSetLinkPassword(
@@ -2260,6 +2697,8 @@ export async function dbListAllProfiles(): Promise<any[]> {
         const uname = String(row.username || '').replace(/^@+/, '').toLowerCase().trim();
         if (!uname) continue;
         let parsedStatus = 'active';
+        let deletedAt: string | null = null;
+        let purgeAt: string | null = null;
         let integrations: Record<string, any> = {};
         let socials: Record<string, string> = {};
         let primaryEmail: string | null = null;
@@ -2273,6 +2712,8 @@ export async function dbListAllProfiles(): Promise<any[]> {
               socials = parsed.links || {};
               backgroundConfig = parsed.background || null;
               if (parsed.status) parsedStatus = parsed.status;
+              if (parsed.deletedAt) deletedAt = String(parsed.deletedAt);
+              if (parsed.purgeAt) purgeAt = String(parsed.purgeAt);
               if (parsed.email) primaryEmail = parsed.email;
               if (parsed.createdAt) createdAt = String(parsed.createdAt);
               if (parsed.subscription) subscription = parsed.subscription;
@@ -2280,6 +2721,7 @@ export async function dbListAllProfiles(): Promise<any[]> {
             }
           }
         } catch {}
+        if (parsedStatus === 'deleted' || parsedStatus === 'deleted_pending') continue;
         const resolved = resolveEffectivePlan({
           email: primaryEmail,
           storedPlan: row.plan,
@@ -2302,6 +2744,8 @@ export async function dbListAllProfiles(): Promise<any[]> {
           createdAt,
           subscription,
           status: parsedStatus,
+          deletedAt,
+          purgeAt,
           hideFromSearch: Boolean(row.hide_from_search),
           isPublished: Boolean(row.is_published),
           customSeoTitle: integrations.customSeoTitle || null,
@@ -2315,7 +2759,16 @@ export async function dbListAllProfiles(): Promise<any[]> {
   for (const { username: uname, record } of listAllUserRecords()) {
     const prof = record.profile;
     if (!prof || !uname) continue;
-    if (!byUsername.has(uname)) {
+    const resolvedStatus = prof.status || (prof.isPublished === false ? 'unpublished' : 'active');
+    if (resolvedStatus === 'deleted' || resolvedStatus === 'deleted_pending') continue;
+    const candidate = {
+      ...prof,
+      username: uname,
+      status: resolvedStatus,
+      isPublished: prof.isPublished !== false,
+    };
+    const prev = byUsername.get(uname);
+    if (!prev || isNewerTimestamp(candidate.updatedAt, prev.updatedAt)) {
       const resolved = resolveEffectivePlan({
         email: prof.primaryEmail,
         storedPlan: prof.plan,
@@ -2323,14 +2776,11 @@ export async function dbListAllProfiles(): Promise<any[]> {
         subscription: prof.subscription,
       });
       byUsername.set(uname, {
-        ...prof,
-        username: uname,
+        ...candidate,
         plan: resolved.plan,
         isPro: resolved.isPro,
         planSource: resolved.planSource,
         createdAt: prof.createdAt || prof.claimedAt || null,
-        status: prof.status || (prof.isPublished === false ? 'unpublished' : 'active'),
-        isPublished: prof.isPublished !== false,
       });
     }
   }

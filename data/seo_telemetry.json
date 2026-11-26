@@ -1,268 +1,268 @@
 {
   "lastSitemapPingAt": "2026-11-25T06:51:10.934Z",
   "lastSitemapPingResult": "GSC:submitted_ok | Bing:not_configured",
-  "lastIndexNowAt": "2026-11-25T12:33:11.611Z",
+  "lastIndexNowAt": "2026-11-26T11:59:37.990Z",
   "lastIndexNowUrls": [
-    "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator"
+    "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator"
   ],
   "lastIndexNowStatus": "not_configured",
   "recentEvents": [
     {
-      "at": "2026-11-25T12:33:11.612Z",
+      "at": "2026-11-26T11:59:37.990Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:59:37.990Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:59:37.940Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:59:37.939Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:59:37.885Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:59:37.884Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:59:37.861Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:59:37.861Z",
+      "action": "profile_deleted",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:59:37.857Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:59:37.856Z",
+      "action": "profile_created",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:59:37.799Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:59:37.799Z",
+      "action": "profile_deleted",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:57:34.058Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:57:34.058Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:57:34.015Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:57:34.014Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:57:33.965Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:57:33.965Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:57:33.946Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:57:33.946Z",
+      "action": "profile_deleted",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:57:33.943Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:57:33.943Z",
+      "action": "profile_created",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:57:33.897Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:57:33.896Z",
+      "action": "profile_deleted",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:54:59.319Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:54:59.319Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:54:59.269Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:54:59.269Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:54:59.210Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@themecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:54:59.209Z",
+      "action": "profile_updated",
+      "target": "themecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:54:59.192Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:54:59.192Z",
+      "action": "profile_created",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:54:59.145Z",
+      "action": "indexnow_ping",
+      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@gracecreator",
+      "status": "not_configured",
+      "detail": "1 url(s)"
+    },
+    {
+      "at": "2026-11-26T11:54:59.144Z",
+      "action": "profile_deleted",
+      "target": "gracecreator",
+      "status": "sitemap_invalidated"
+    },
+    {
+      "at": "2026-11-26T11:54:59.126Z",
       "action": "indexnow_ping",
       "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
       "status": "not_configured",
       "detail": "1 url(s)"
     },
     {
-      "at": "2026-11-25T12:33:11.611Z",
+      "at": "2026-11-26T11:54:59.125Z",
       "action": "profile_updated",
       "target": "synccreator",
       "status": "sitemap_invalidated"
     },
     {
-      "at": "2026-11-25T12:33:11.607Z",
+      "at": "2026-11-26T11:54:59.120Z",
       "action": "indexnow_ping",
       "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
       "status": "not_configured",
       "detail": "1 url(s)"
     },
     {
-      "at": "2026-11-25T12:33:11.607Z",
+      "at": "2026-11-26T11:54:59.119Z",
       "action": "profile_updated",
       "target": "synccreator",
       "status": "sitemap_invalidated"
     },
     {
-      "at": "2026-11-25T12:33:11.587Z",
+      "at": "2026-11-26T11:54:59.102Z",
       "action": "indexnow_ping",
       "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
       "status": "not_configured",
       "detail": "1 url(s)"
     },
     {
-      "at": "2026-11-25T12:33:11.586Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:33:11.540Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:33:11.540Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:33:11.536Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:33:11.536Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:33:11.525Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:33:11.525Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:33:11.507Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:33:11.505Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:39.087Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:39.086Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:39.081Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:39.081Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:39.042Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:39.041Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:38.950Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:38.949Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:38.945Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:38.944Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:38.924Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:38.923Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:32:38.911Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:32:38.910Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:27:52.412Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:27:52.411Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:27:52.408Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:27:52.407Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:27:52.390Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:27:52.390Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:27:52.348Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:27:52.347Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:27:52.335Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:27:52.334Z",
-      "action": "profile_updated",
-      "target": "synccreator",
-      "status": "sitemap_invalidated"
-    },
-    {
-      "at": "2026-11-25T12:27:52.323Z",
-      "action": "indexnow_ping",
-      "target": "https://ais-dev-ygb3srjlyxuzeezijs53ou-432043955168.asia-northeast1.run.app/@synccreator",
-      "status": "not_configured",
-      "detail": "1 url(s)"
-    },
-    {
-      "at": "2026-11-25T12:27:52.323Z",
+      "at": "2026-11-26T11:54:59.101Z",
       "action": "profile_updated",
       "target": "synccreator",
       "status": "sitemap_invalidated"

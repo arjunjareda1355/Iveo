@@ -81,7 +81,14 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       try {
         const errBody = await res.json();
         const st = errBody?.status;
-        if (st === 'deleted' || st === 'suspended' || st === 'private' || st === 'unpublished') {
+        if (
+          errBody?.confirmed === true ||
+          st === 'deleted' ||
+          st === 'deleted_pending' ||
+          st === 'suspended' ||
+          st === 'private' ||
+          st === 'unpublished'
+        ) {
           serverTerminalNotFound = true;
         }
       } catch {}
@@ -188,16 +195,29 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
     let blockOwnerKey = clean;
 
     const userDoc = await getDoc(doc(db, 'users', clean));
-    if (userDoc.exists() && userDoc.data()?.status !== 'deleted') {
+    if (
+      userDoc.exists() &&
+      userDoc.data()?.status !== 'deleted' &&
+      userDoc.data()?.status !== 'deleted_pending'
+    ) {
       fbData = userDoc.data();
     }
 
     if (!fbData) {
       const claimDoc = await getDoc(doc(db, 'claims', clean));
-      if (claimDoc.exists() && claimDoc.data()?.status !== 'deleted' && claimDoc.data()?.userId) {
+      if (
+        claimDoc.exists() &&
+        claimDoc.data()?.status !== 'deleted' &&
+        claimDoc.data()?.status !== 'deleted_pending' &&
+        claimDoc.data()?.userId
+      ) {
         const claimUid = String(claimDoc.data()!.userId);
         const uidDoc = await getDoc(doc(db, 'users', claimUid));
-        if (uidDoc.exists() && uidDoc.data()?.status !== 'deleted') {
+        if (
+          uidDoc.exists() &&
+          uidDoc.data()?.status !== 'deleted' &&
+          uidDoc.data()?.status !== 'deleted_pending'
+        ) {
           fbData = uidDoc.data();
           blockOwnerKey = claimUid;
         }
@@ -208,7 +228,7 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
       const qSnap = await getDocs(query(collection(db, 'users'), where('username', '==', clean)));
       for (const d of qSnap.docs) {
         const dData = d.data();
-        if (dData?.status !== 'deleted') {
+        if (dData?.status !== 'deleted' && dData?.status !== 'deleted_pending') {
           fbData = dData;
           blockOwnerKey = d.id;
           break;
@@ -218,7 +238,13 @@ export async function fetchPublicPage(username: string): Promise<PublicPageData 
 
     if (fbData) {
       const st = fbData.status || (fbData.isPublished === false ? 'unpublished' : 'active');
-      if (st === 'deleted' || st === 'suspended' || st === 'private' || st === 'unpublished') {
+      if (
+        st === 'deleted' ||
+        st === 'deleted_pending' ||
+        st === 'suspended' ||
+        st === 'private' ||
+        st === 'unpublished'
+      ) {
         return null;
       }
 

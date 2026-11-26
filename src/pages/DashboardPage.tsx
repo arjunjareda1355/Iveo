@@ -42,6 +42,7 @@ import { TypographyScreen } from '../components/appearance/TypographyScreen';
 import { LayoutScreen } from '../components/appearance/LayoutScreen';
 import { appearanceToLegacyMirror } from '../lib/appearance/migrate';
 import { resolveAnyVibeToV2Id } from '../lib/appearance/catalog/vibes';
+import { useToast } from '../components/ui/Toast';
 
 const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
   square: 0,
@@ -65,9 +66,24 @@ const DashboardContent: React.FC = () => {
   const { protectedIds } = useProtectedLinkIds();
   const now = useNow(30000);
   const appearanceCtx = useAppearance();
+  const { showToast } = useToast();
 
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+
+  useEffect(() => {
+    const notifyReactivated = () => {
+      try {
+        if (sessionStorage.getItem('iveo_account_reactivated') === '1') {
+          sessionStorage.removeItem('iveo_account_reactivated');
+          showToast('Welcome back — your account deletion was cancelled and your page is live again.');
+        }
+      } catch {}
+    };
+    notifyReactivated();
+    window.addEventListener('iveo_account_reactivated', notifyReactivated);
+    return () => window.removeEventListener('iveo_account_reactivated', notifyReactivated);
+  }, [showToast]);
 
   const isProfiles = location.pathname.includes('/profiles');
   const isAppearance = location.pathname.includes('/appearance');
@@ -151,7 +167,7 @@ const DashboardContent: React.FC = () => {
     socials: session.socials,
     socialsPosition: session.socialsPosition,
     whatsappNumber: session.whatsappNumber,
-    background: session.background,
+    background: isAppearance ? mirrored.background : session.background,
     fontSettings: isAppearance ? mirrored.fontSettings : session.fontSettings,
     buttonColors: isAppearance ? mirrored.buttonColors : session.buttonColors,
     layoutSettings: isAppearance ? mirrored.layoutSettings : session.layoutSettings,

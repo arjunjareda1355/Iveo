@@ -516,18 +516,19 @@ export const copy = {
   },
   deleteAccount: {
     cardTitle: 'Delete account',
-    cardBody: "Delete your account and everything on it. This can't be undone.",
+    cardBody:
+      'Take your page offline now. Your data stays safe for 3 days so you can log back in to cancel deletion before it is permanently erased.',
     helpLinePrefix: 'Need help instead? Email',
     dialogTitle: 'Delete your account?',
     dialogBody:
-      "This permanently deletes your page, links, images, statistics, contacts and your iveo account. Your address {host}/{username} becomes available to others.",
+      'Your page {host}/@{username} will go offline immediately and your username remains reserved for 3 days. Log back in within 3 days to cancel deletion and restore your account. After 3 days, all data is permanently deleted and your username becomes available to others.',
     confirmLabel: 'Type {username} to confirm',
     cancelButton: 'Cancel',
     deleteButton: 'Delete account',
     errorFirst: "We couldn't delete your account. Try again.",
     errorSecondPrefix:
-      "Your page data was deleted, but we couldn't finish deleting your account. Try again, or email",
-    deletedToast: 'Your account was deleted.',
+      "We couldn't finish deleting your account. Try again, or email",
+    deletedToast: 'Your account is scheduled for deletion in 3 days.',
   },
   exportData: {
     cardTitle: 'Your data',

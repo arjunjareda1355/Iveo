@@ -2,6 +2,7 @@ import { publicRpc } from './supabase.ts';
 import { dbGetProfile, dbGetRedirectTarget } from './azureSql.ts';
 import { firebaseGetProfile } from './firebaseServer.ts';
 import { isPrivilegedEmailServer } from './usernames.ts';
+import { selectFresherProfile } from './profileMerge.ts';
 import { resolveEffectivePlan } from '../../src/lib/plan.ts';
 
 export interface PublicPageServerData {
@@ -20,7 +21,7 @@ export interface PublicPageServerData {
   isPro?: boolean;
   isVerified?: boolean;
   isOwnerProfile?: boolean;
-  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'suspended';
+  status?: 'active' | 'private' | 'unpublished' | 'deleted' | 'deleted_pending' | 'suspended';
   updatedAt?: string | null;
   customSeoTitle?: string | null;
   customSeoDescription?: string | null;
@@ -77,21 +78,19 @@ export async function loadPublicPage(
       ]),
     ]);
 
-    let chosen: any = dbProf;
-    if (!chosen && fbProf) {
+    const selected = selectFresherProfile(dbProf, fbProf);
+    let chosen: any = selected.profile;
+    if (!dbProf && fbProf) {
       // Preserve active rename redirect precedence if username is unclaimed locally
       const activeRedirect = await dbGetRedirectTarget(clean).catch(() => null);
       if (activeRedirect) {
         return null;
       }
-      chosen = fbProf;
-    } else if (chosen && fbProf && (fbProf.updatedAt || '') > (chosen.updatedAt || '')) {
-      chosen = { ...chosen, ...fbProf };
     }
 
     if (chosen && chosen.username) {
       const status = chosen.status || (chosen.isPublished === false ? 'unpublished' : 'active');
-      if (status === 'deleted' || status === 'suspended') {
+      if (status === 'deleted' || status === 'deleted_pending' || status === 'suspended') {
         return null;
       }
       const isOwnerProfile = isPrivilegedEmailServer(chosen.primaryEmail);

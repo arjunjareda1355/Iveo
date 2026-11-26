@@ -24,6 +24,7 @@ import {
   resolveAnyVibeToV2Id,
   vibeToAppearanceDefaults,
 } from './catalog/vibes.ts';
+import { findCatalogBackground } from './catalog/backgrounds.ts';
 import { findCatalogFont } from './catalog/fonts.ts';
 
 export interface LegacyProfileAppearanceInput {
@@ -361,6 +362,7 @@ export function appearanceToLegacyMirror(
   buttonColors: ButtonColors;
   fontSettings: FontSettings;
   layoutSettings: LayoutSettings;
+  background: BackgroundConfig;
 } {
   const buttonShape: ButtonShape =
     app.buttons.shape === 'square'
@@ -401,6 +403,66 @@ export function appearanceToLegacyMirror(
           ? 'ring'
           : 'circle';
 
+  let background: BackgroundConfig;
+  const bg = app.background;
+  if (bg.type === 'solid') {
+    background = {
+      type: 'solid',
+      value: bg.color,
+      ...(bg.color.toUpperCase() === '#FFFFFF' ? { presetId: 'pure-white' } : {}),
+    };
+  } else if (bg.type === 'gradient') {
+    const stopsCss = bg.stops.map((s) => `${s.color} ${s.at}%`).join(', ');
+    const css =
+      bg.kind === 'radial'
+        ? `radial-gradient(circle at 50% 45%, ${stopsCss})`
+        : bg.kind === 'conic'
+          ? `conic-gradient(from ${bg.angle}deg at 50% 50%, ${stopsCss})`
+          : `linear-gradient(${bg.angle}deg, ${stopsCss})`;
+    background = {
+      type: 'gradient',
+      value: css,
+      gradientStops: bg.stops.map((s) => s.color).slice(0, 3),
+      gradientAngle: bg.angle,
+      ...(bg.kind === 'radial' ? { gradientDirection: 'radial' } : {}),
+    };
+  } else if (bg.type === 'preset') {
+    const presetMeta = findCatalogBackground(bg.id);
+    const cssVal = presetMeta?.cssBackground || '#FAFAF9';
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cssVal.trim())) {
+      background = {
+        type: 'solid',
+        value: cssVal.trim().toUpperCase(),
+        presetId: bg.id,
+      };
+    } else {
+      background = {
+        type: cssVal.includes('radial-gradient') ? 'mesh' : 'gradient',
+        value: cssVal,
+        presetId: bg.id,
+      };
+    }
+  } else if (bg.type === 'image') {
+    background = {
+      type: 'image',
+      value: bg.assetId,
+      blur: bg.blur,
+      opacity: bg.opacity !== undefined ? bg.opacity / 100 : undefined,
+      brightness: bg.brightness !== undefined ? bg.brightness / 100 : undefined,
+      ...(bg.overlay ? { overlayColor: bg.overlay.color, overlayOpacity: bg.overlay.alpha } : {}),
+      ...(bg.focal ? { imagePosition: bg.focal } : {}),
+    };
+  } else {
+    const rawCss = (bg.css || bg.baseHex || '#FFFFFF').trim();
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawCss)) {
+      background = { type: 'solid', value: rawCss.toUpperCase() };
+    } else if (/gradient\(/i.test(rawCss)) {
+      background = { type: rawCss.includes('radial-gradient') ? 'mesh' : 'gradient', value: rawCss };
+    } else {
+      background = { type: 'solid', value: bg.baseHex || '#FFFFFF' };
+    }
+  }
+
   return {
     buttonShape,
     buttonColors,
@@ -417,5 +479,6 @@ export function appearanceToLegacyMirror(
       pageWidth: app.layout.width === 'focused' ? 'compact' : app.layout.width === 'wide' ? 'wide' : 'standard',
       cardLook: existingLayout?.cardLook || 'match_page',
     },
+    background,
   };
 }
