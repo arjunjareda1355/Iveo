@@ -77,7 +77,6 @@ import {
   buildYouTubeOAuthUrl,
   exchangeYouTubeOAuthCode,
   fetchYouTubeShowcase,
-  parseRedirectUriFromState,
 } from './youtube.ts';
 import {
   evaluateProfileIndexability,
@@ -121,8 +120,14 @@ import {
   isPinterestOAuthEnabled,
   isValidSocialOAuthProvider,
   extractProviderFromOAuthState,
-  parseSocialOAuthState,
+  validateExternalFetchUrl,
 } from './socialIntegrations.ts';
+import {
+  consumeOAuthRedirectResult,
+  consumeOAuthState,
+  sanitizeOAuthReturnTo,
+  storeOAuthRedirectResult,
+} from './oauthStateStore.ts';
 import { redactSecrets } from './serverConfig.ts';
 import {
   BlueskyProxyError,
@@ -860,7 +865,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       try {
         const keepUrls = new Set<string>();
         const savedBg = parseBackgroundConfig(firebasePayload.background ?? body.background);
-        if (savedBg?.imageUrl) {
+        if (savedBg && 'imageUrl' in savedBg && typeof savedBg.imageUrl === 'string' && savedBg.imageUrl) {
           keepUrls.add(savedBg.imageUrl);
         }
         const appRef = firebasePayload.appearance || existing?.appearance;
@@ -890,7 +895,7 @@ export async function handleSaveProfile(req: ExpressReq, res: ExpressRes) {
       updatedAt: savedAt,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'save_failed', message: err?.message });
+    return sendMutationError(res, err, 'save_failed');
   }
 }
 
@@ -984,7 +989,7 @@ export async function handleUploadAvatar(req: ExpressReq, res: ExpressRes) {
     notifyProfileSeoChanged('updated', username).catch(() => {});
     return res.status(200).json({ ok: true, avatarUrl, avatarType: 'uploaded', avatarId: null });
   } catch (err: any) {
-    return res.status(500).json({ error: 'upload_failed', message: err?.message });
+    return sendMutationError(res, err, 'upload_failed');
   }
 }
 
@@ -1604,9 +1609,17 @@ export async function handleYouTubeShowcase(req: ExpressReq, res: ExpressRes) {
  * Builds Google OAuth URL pointing to /api/oauth/youtube/callback
  */
 export async function handleYouTubeOAuthUrl(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   const clientOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
   const origin = /^https?:\/\//i.test(clientOrigin) ? clientOrigin : getExpressRequestOrigin(req);
-  const built = buildYouTubeOAuthUrl(origin);
+  const mode = req.query.mode === 'redirect' ? 'redirect' : 'popup';
+  const returnTo =
+    typeof req.query.returnTo === 'string' ? sanitizeOAuthReturnTo(req.query.returnTo) : null;
+  const ownerKey = String(
+    req.query.username || req.query.userId || req.headers['x-user-id'] || ''
+  ).trim() || null;
+
+  const built = buildYouTubeOAuthUrl(origin, { mode, returnTo, ownerKey });
   if (!built) {
     return res.status(503).json({
       ok: false,
@@ -1619,9 +1632,10 @@ export async function handleYouTubeOAuthUrl(req: ExpressReq, res: ExpressRes) {
 
 /**
  * GET /api/oauth/youtube/callback (and trailing slash)
- * Exchanges Google OAuth code for tokens & returns lightweight popup HTML sending postMessage
+ * Exchanges Google OAuth code for tokens & returns popup HTML or safe redirect token
  */
 export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
   const oauthError = typeof req.query.error === 'string' ? req.query.error.trim() : '';
   const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
@@ -1635,7 +1649,8 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
 <body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#111;">
   <div style="text-align:center;padding:24px;">
     <p style="font-size:15px;font-weight:600;margin:0 0 8px;">${payload.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' ? 'YouTube connected to Iveo' : 'Could not connect YouTube'}</p>
-    <p style="font-size:13px;color:#666;margin:0;">This window will close automatically.</p>
+    <p style="font-size:13px;color:#666;margin:0 0 12px;">This window will close automatically.</p>
+    <a href="/dashboard" style="font-size:12px;color:#555;text-decoration:underline;">Return to dashboard</a>
   </div>
   <script>
     (function(){
@@ -1662,25 +1677,51 @@ export async function handleYouTubeOAuthCallback(req: ExpressReq, res: ExpressRe
 </html>`);
   };
 
-  if (oauthError || !code) {
+  const consumed = consumeOAuthState(stateParam, 'youtube');
+  if (consumed.ok === false) {
     return sendPopupHtml({
+      type: 'IVEO_YOUTUBE_OAUTH_ERROR',
+      error: 'Authorization session expired or invalid. Try connecting again.',
+    });
+  }
+
+  const sendResult = (payload: Record<string, any>) => {
+    if (consumed.record.mode === 'redirect') {
+      const targetPath = sanitizeOAuthReturnTo(consumed.record.returnTo) || '/dashboard';
+      const sep = targetPath.includes('?') ? '&' : '?';
+      if (payload.type === 'IVEO_YOUTUBE_OAUTH_ERROR') {
+        return res.redirect(
+          302,
+          `${targetPath}${sep}iveo_oauth_error=${encodeURIComponent(String(payload.error || 'Authorization failed.'))}`
+        );
+      }
+      const token = storeOAuthRedirectResult(payload);
+      return res.redirect(302, `${targetPath}${sep}iveo_oauth_result=${encodeURIComponent(token)}`);
+    }
+    return sendPopupHtml(payload);
+  };
+
+  if (oauthError || !code) {
+    return sendResult({
       type: 'IVEO_YOUTUBE_OAUTH_ERROR',
       error: oauthError || 'Authorization was cancelled.',
     });
   }
 
   try {
-    const fallbackOrigin = getExpressRequestOrigin(req);
-    const redirectUri = parseRedirectUriFromState(stateParam, fallbackOrigin);
-    const channel = await exchangeYouTubeOAuthCode(code, redirectUri);
-    return sendPopupHtml({
+    const channel = await exchangeYouTubeOAuthCode(
+      code,
+      consumed.record.redirectUri,
+      consumed.record.ownerKey
+    );
+    return sendResult({
       type: 'IVEO_YOUTUBE_OAUTH_SUCCESS',
       channel,
     });
   } catch (err: any) {
-    return sendPopupHtml({
+    return sendResult({
       type: 'IVEO_YOUTUBE_OAUTH_ERROR',
-      error: err?.message || 'Failed to read YouTube channel details.',
+      error: redactSecrets(err?.message || 'Failed to read YouTube channel details.'),
     });
   }
 }
@@ -1693,6 +1734,17 @@ export async function handleSocialEmbedLookup(req: ExpressReq, res: ExpressRes) 
   const rawUrl = String(req.query.url || '').trim();
   if (!rawUrl) {
     return res.status(400).json({ ok: false, error: 'missing_url', message: 'Paste a link to inspect.' });
+  }
+
+  if (/^https?:\/\//i.test(rawUrl)) {
+    const ssrf = await validateExternalFetchUrl(rawUrl);
+    if (ssrf.ok === false) {
+      return res.status(400).json({
+        ok: false,
+        error: 'forbidden_url',
+        message: 'That URL cannot be inspected.',
+      });
+    }
   }
 
   const rateKey =
@@ -1812,6 +1864,7 @@ export async function handleOAuthStatus(_req: ExpressReq, res: ExpressRes) {
  * Generates authorization URL for creator page card connections (Discord, GitHub, LinkedIn, X, etc.)
  */
 export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   const providerRaw = String(req.params?.provider || req.query?.provider || '').toLowerCase().trim();
   if (!isValidSocialOAuthProvider(providerRaw)) {
     return res.status(400).json({ ok: false, error: 'unsupported_provider' });
@@ -1826,7 +1879,14 @@ export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
   try {
     const clientOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
     const origin = /^https?:\/\//i.test(clientOrigin) ? clientOrigin : getExpressRequestOrigin(req);
-    const built = buildSocialOAuthUrl(providerRaw, origin);
+    const mode = req.query.mode === 'redirect' ? 'redirect' : 'popup';
+    const returnTo =
+      typeof req.query.returnTo === 'string' ? sanitizeOAuthReturnTo(req.query.returnTo) : null;
+    const ownerKey = String(
+      req.query.username || req.query.userId || req.headers['x-user-id'] || ''
+    ).trim() || null;
+
+    const built = buildSocialOAuthUrl(providerRaw, origin, { mode, returnTo, ownerKey });
     return res.status(200).json({
       ok: true,
       provider: providerRaw,
@@ -1843,9 +1903,10 @@ export async function handleSocialOAuthUrl(req: ExpressReq, res: ExpressRes) {
 }
 
 /**
- * GET /api/oauth/:provider/callback (and trailing slash)
+ * GET /api/oauth/:provider/callback (and trailing slash, plus /callback)
  */
 export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   const stateParam = typeof req.query.state === 'string' ? req.query.state : undefined;
   const providerParam = String(req.params?.provider || req.query?.provider || '').toLowerCase().trim();
   const providerRaw = providerParam || extractProviderFromOAuthState(stateParam) || '';
@@ -1861,7 +1922,8 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
 <body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#111;">
   <div style="text-align:center;padding:24px;">
     <p style="font-size:15px;font-weight:600;margin:0 0 8px;">${payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' ? 'Account connected to iveo' : 'Could not connect account'}</p>
-    <p style="font-size:13px;color:#666;margin:0;">This window will close automatically.</p>
+    <p style="font-size:13px;color:#666;margin:0 0 12px;">This window will close automatically.</p>
+    <a href="/dashboard" style="font-size:12px;color:#555;text-decoration:underline;">Return to dashboard</a>
   </div>
   <script>
     (function(){
@@ -1889,14 +1951,38 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
     });
   }
 
+  const consumed = consumeOAuthState(stateParam, providerRaw);
+  if (consumed.ok === false) {
+    return sendPopupHtml({
+      type: 'IVEO_SOCIAL_OAUTH_ERROR',
+      provider: providerRaw,
+      error: 'Authorization session expired or invalid. Try connecting again.',
+    });
+  }
+
+  const sendResult = (payload: Record<string, any>) => {
+    if (consumed.record.mode === 'redirect') {
+      const targetPath = sanitizeOAuthReturnTo(consumed.record.returnTo) || '/dashboard';
+      const sep = targetPath.includes('?') ? '&' : '?';
+      if (payload.type === 'IVEO_SOCIAL_OAUTH_ERROR') {
+        return res.redirect(
+          302,
+          `${targetPath}${sep}iveo_oauth_error=${encodeURIComponent(String(payload.error || 'Authorization failed.'))}`
+        );
+      }
+      const token = storeOAuthRedirectResult(payload);
+      return res.redirect(302, `${targetPath}${sep}iveo_oauth_result=${encodeURIComponent(token)}`);
+    }
+    return sendPopupHtml(payload);
+  };
+
   const oauthErrorDesc =
     typeof req.query.error_description === 'string' ? req.query.error_description.trim() : '';
 
   if (oauthError || !code) {
-    const fallbackOrigin = getExpressRequestOrigin(req);
-    const { redirectUri } = parseSocialOAuthState(stateParam, fallbackOrigin, providerRaw);
+    const redirectUri = consumed.record.redirectUri;
     const readableErr = redactSecrets(oauthErrorDesc || oauthError || 'Authorization was cancelled.');
-    return sendPopupHtml({
+    return sendResult({
       type: 'IVEO_SOCIAL_OAUTH_ERROR',
       provider: providerRaw,
       redirectUri,
@@ -1907,10 +1993,14 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
   }
 
   try {
-    const fallbackOrigin = getExpressRequestOrigin(req);
-    const { redirectUri, nonce } = parseSocialOAuthState(stateParam, fallbackOrigin, providerRaw);
-    const connected = await exchangeSocialOAuthCode(providerRaw, code, redirectUri, nonce);
-    return sendPopupHtml({
+    const connected = await exchangeSocialOAuthCode(
+      providerRaw,
+      code,
+      consumed.record.redirectUri,
+      consumed.record.codeVerifier,
+      consumed.record.ownerKey
+    );
+    return sendResult({
       type: 'IVEO_SOCIAL_OAUTH_SUCCESS',
       provider: providerRaw,
       profile: {
@@ -1930,12 +2020,26 @@ export async function handleSocialOAuthCallback(req: ExpressReq, res: ExpressRes
       connection: connected,
     });
   } catch (err: any) {
-    return sendPopupHtml({
+    return sendResult({
       type: 'IVEO_SOCIAL_OAUTH_ERROR',
       provider: providerRaw,
       error: redactSecrets(err?.message || 'Failed to read profile details.'),
     });
   }
+}
+
+/**
+ * GET /api/oauth/result?token=...
+ * Consumes a single-use server-stored OAuth result after a mobile redirect fallback.
+ */
+export async function handleConsumeOAuthResult(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  const token = typeof req.query.token === 'string' ? req.query.token.trim() : '';
+  const result = consumeOAuthRedirectResult(token);
+  if (!result) {
+    return res.status(404).json({ ok: false, error: 'oauth_result_not_found' });
+  }
+  return res.status(200).json({ ok: true, result });
 }
 
 /**

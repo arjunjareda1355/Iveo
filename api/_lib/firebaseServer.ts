@@ -49,7 +49,11 @@ export function setFirebaseWriteHookForTests(hook: WriteHook): void {
 
 async function runWriteHook(operation: string): Promise<void> {
   if (writeHookForTests) {
-    await writeHookForTests(operation);
+    try {
+      await writeHookForTests(operation);
+    } catch (err) {
+      throw err instanceof FirebasePersistError ? err : new FirebasePersistError(operation, err);
+    }
   }
 }
 

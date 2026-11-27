@@ -825,7 +825,7 @@ async function persistAppearanceUpdate(
     if (normalizedAppearance.background?.type === 'image' && normalizedAppearance.background.assetId) {
       keepUrls.add(normalizedAppearance.background.assetId);
     }
-    if (legacy.background?.imageUrl) {
+    if (legacy.background && 'imageUrl' in legacy.background && typeof legacy.background.imageUrl === 'string' && legacy.background.imageUrl) {
       keepUrls.add(legacy.background.imageUrl);
     }
     for (const theme of persisted.themes || []) {

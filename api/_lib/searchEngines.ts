@@ -63,10 +63,12 @@ interface StoredRuntimeGscConfig {
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 const propertyCache = new Map<string, { sites: string[]; fetchedAt: number }>();
+let indexNowCooldownUntil = 0;
 
 export function clearGscCachesForTest(): void {
   tokenCache.clear();
   propertyCache.clear();
+  indexNowCooldownUntil = 0;
 }
 
 export function normalizePrivateKeyPem(rawKey: string): string {
@@ -230,7 +232,7 @@ export function getEffectiveGscSiteUrl(): string | null {
   if (runtime?.propertyUrl && typeof runtime.propertyUrl === 'string' && runtime.propertyUrl.trim()) {
     return runtime.propertyUrl.trim();
   }
-  return getGscSiteUrl();
+  return getGscSiteUrl() ?? null;
 }
 
 export function parseGscServiceAccountCredentials(): ParsedGscCredentials {
@@ -906,23 +908,45 @@ export async function notifyIndexNow(urls: string[]): Promise<{
   let attempted = false;
 
   if (key) {
-    attempted = true;
-    try {
-      const res = await fetch('https://api.indexnow.org/indexnow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          host,
-          key,
-          keyLocation: `${siteUrl}/${key}.txt`,
-          urlList: cleanUrls,
-        }),
-        signal: AbortSignal.timeout(4500),
-      });
-      ok = res.ok || res.status === 202;
-      status = ok ? `indexnow_${res.status}` : `indexnow_err_${res.status}`;
-    } catch (err: any) {
-      status = `indexnow_fail:${err?.message || 'timeout'}`;
+    if (Date.now() < indexNowCooldownUntil) {
+      status = 'indexnow_cooldown';
+      attempted = false;
+      ok = false;
+    } else {
+      attempted = true;
+      try {
+        const res = await fetch('https://api.indexnow.org/IndexNow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            host,
+            key,
+            keyLocation: `${siteUrl}/${key}.txt`,
+            urlList: cleanUrls,
+          }),
+          signal: AbortSignal.timeout(4500),
+        });
+        if (res.status === 429) {
+          const retryRaw = res.headers.get('retry-after');
+          let cooldownMs = 5 * 60_000;
+          if (retryRaw) {
+            const secs = Number(retryRaw);
+            if (Number.isFinite(secs) && secs > 0) {
+              cooldownMs = Math.min(3_600_000, Math.max(5_000, secs * 1000));
+            } else {
+              const targetMs = Date.parse(retryRaw);
+              if (!Number.isNaN(targetMs) && targetMs > Date.now()) {
+                cooldownMs = Math.min(3_600_000, targetMs - Date.now());
+              }
+            }
+          }
+          indexNowCooldownUntil = Date.now() + cooldownMs;
+        }
+        ok = res.ok || res.status === 202;
+        status = ok ? `indexnow_${res.status}` : `indexnow_err_${res.status}`;
+      } catch (err: any) {
+        status = `indexnow_fail:${err?.message || 'timeout'}`;
+      }
     }
   } else if (bingKey) {
     attempted = true;

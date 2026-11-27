@@ -6,7 +6,10 @@ import 'dotenv/config';
  */
 
 export function getSiteOrigin(request?: Request): string {
-  const envOrigin = process.env.VITE_SITE_ORIGIN?.trim() || process.env.APP_URL?.trim();
+  const envOrigin =
+    process.env.SITE_URL?.trim() ||
+    process.env.VITE_SITE_ORIGIN?.trim() ||
+    process.env.APP_URL?.trim();
   if (envOrigin) {
     try {
       const u = new URL(envOrigin);
@@ -47,7 +50,10 @@ export function getGscSiteUrl(): string | undefined {
 }
 
 export function getCanonicalSiteOrigin(): string {
-  const explicitOrigin = process.env.VITE_SITE_ORIGIN?.trim() || process.env.APP_URL?.trim();
+  const explicitOrigin =
+    process.env.SITE_URL?.trim() ||
+    process.env.VITE_SITE_ORIGIN?.trim() ||
+    process.env.APP_URL?.trim();
   const gscSite = getGscSiteUrl();
 
   if (explicitOrigin) {

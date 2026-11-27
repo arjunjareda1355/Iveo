@@ -63,7 +63,7 @@ export function clampRequiredString(val: unknown, maxLen: number, fallback: stri
 export function enforceProfileRuleBounds(raw: Record<string, any>, fallbackUsername: string): Record<string, any> {
   const sanitized = (sanitizeForFirestore(raw) || {}) as Record<string, any>;
   const cleanUsername = clampRequiredString(
-    String(sanitized.username || fallbackUsername).replace(/^@+/, '').toLowerCase().trim(),
+    String(sanitized.username || fallbackUsername).trim().replace(/^@+/, '').toLowerCase(),
     64,
     fallbackUsername.slice(0, 64)
   );

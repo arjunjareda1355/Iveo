@@ -1,5 +1,8 @@
 import 'dotenv/config';
 
+import { createOAuthState } from './oauthStateStore.ts';
+import { saveEncryptedOAuthToken } from './tokenCrypto.ts';
+
 export interface YouTubeVideoItem {
   videoId: string;
   title: string;
@@ -1017,26 +1020,44 @@ export function resolveYouTubeOAuthRedirectUri(requestOrigin?: string): string {
     requestOrigin && /^https?:\/\//i.test(requestOrigin.trim())
       ? requestOrigin.trim().replace(/\/+$/, '')
       : null;
-  const appUrl = process.env.APP_URL?.trim();
-  const cleanAppUrl =
-    appUrl && /^https?:\/\//i.test(appUrl) ? appUrl.replace(/\/+$/, '') : null;
+  const isLocalOrigin = Boolean(
+    cleanOrigin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleanOrigin)
+  );
+  const envRaw =
+    process.env.SITE_URL?.trim() ||
+    process.env.VITE_SITE_ORIGIN?.trim() ||
+    '';
+  const appFallbackRaw = process.env.APP_URL?.trim() || '';
+  const canonicalOrigin =
+    envRaw && /^https?:\/\//i.test(envRaw) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(envRaw)
+      ? envRaw.replace(/\/+$/, '')
+      : null;
+  const appFallbackOrigin =
+    appFallbackRaw && /^https?:\/\//i.test(appFallbackRaw) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(appFallbackRaw)
+      ? appFallbackRaw.replace(/\/+$/, '')
+      : null;
 
-  // Prefer the actual live request origin so OAuth callbacks return to the exact host
-  // where the popup opener lives (localhost, AI Studio preview, or iveo.site).
-  const base = cleanOrigin || cleanAppUrl || 'https://iveo.site';
+  const base = isLocalOrigin && cleanOrigin
+    ? cleanOrigin
+    : canonicalOrigin || cleanOrigin || appFallbackOrigin || 'https://iveo.site';
   return `${base}/api/oauth/youtube/callback`;
 }
 
 export function buildYouTubeOAuthUrl(
-  requestOrigin?: string
-): { url: string; redirectUri: string } | null {
+  requestOrigin?: string,
+  options: { mode?: 'popup' | 'redirect'; returnTo?: string | null; ownerKey?: string | null } = {}
+): { url: string; redirectUri: string; state: string } | null {
   const creds = getGoogleOAuthCredentials();
   if (!creds) return null;
 
   const redirectUri = resolveYouTubeOAuthRedirectUri(requestOrigin);
-  const statePayload = Buffer.from(JSON.stringify({ r: redirectUri }), 'utf8').toString(
-    'base64url'
-  );
+  const statePayload = createOAuthState({
+    provider: 'youtube',
+    redirectUri,
+    mode: options.mode || 'popup',
+    returnTo: options.returnTo,
+    ownerKey: options.ownerKey,
+  });
 
   const params = new URLSearchParams({
     client_id: creds.clientId,
@@ -1052,6 +1073,7 @@ export function buildYouTubeOAuthUrl(
   return {
     url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
     redirectUri,
+    state: statePayload,
   };
 }
 
@@ -1072,7 +1094,8 @@ export function parseRedirectUriFromState(
 
 export async function exchangeYouTubeOAuthCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  ownerKey?: string | null
 ): Promise<YouTubeShowcaseData> {
   const creds = getGoogleOAuthCredentials();
   if (!creds) {
@@ -1102,6 +1125,15 @@ export async function exchangeYouTubeOAuthCode(
   }
 
   const accessToken = String(tokenJson.access_token);
+  if (ownerKey) {
+    const expiresIn = Number(tokenJson.expires_in);
+    saveEncryptedOAuthToken(ownerKey, 'youtube', {
+      accessToken,
+      refreshToken: tokenJson.refresh_token ? String(tokenJson.refresh_token) : null,
+      expiresAt: Number.isFinite(expiresIn) && expiresIn > 0 ? Date.now() + expiresIn * 1000 : null,
+      scope: typeof tokenJson.scope === 'string' ? tokenJson.scope : null,
+    });
+  }
   const chRes = await fetch(
     'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&mine=true',
     {

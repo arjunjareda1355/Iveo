@@ -25,6 +25,7 @@ import { BackgroundLayer } from '../components/page/BackgroundLayer';
 import { isAllowedAvatarUrl } from '../lib/avatar';
 import { Loader } from '../components/ui/Loader';
 import { resolveTokens } from '../lib/appearance/resolveTokens';
+import { buildProfileSeoDescription, buildProfileSeoTitle } from '../lib/seoMeta';
 
 export interface PublicProfilePlaceholderProps {
   usernameOverride?: string;
@@ -355,6 +356,9 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
       pageData.profile.fontSettings?.nameFont,
       pageData.profile.fontSettings?.bioFont,
       pageData.profile.fontSettings?.buttonFont,
+      pageData.profile.appearance?.typography?.name?.family,
+      pageData.profile.appearance?.typography?.bio?.family,
+      pageData.profile.appearance?.typography?.button?.family,
       pageData.profile.businessCard?.fontId,
     ]);
 
@@ -378,17 +382,20 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
 
     if (pageData?.profile) {
       const display = pageData.profile.displayName || `@${clean}`;
-      const titleText =
-        pageData.profile.customSeoTitle ||
-        `${display} – Links, Projects & Social Profiles | Iveo`;
+      const titleText = buildProfileSeoTitle({
+        username: clean,
+        displayName: pageData.profile.displayName,
+        customSeoTitle: pageData.profile.customSeoTitle,
+      });
       document.title = titleText;
 
       const bioClean = pageData.profile.bio?.trim() || '';
-      const descText =
-        pageData.profile.customSeoDescription ||
-        (bioClean
-          ? `${bioClean} — Discover ${display} (@${clean}) on Iveo.`
-          : `Discover ${display} on Iveo. Explore their projects, websites, social media links and latest work.`);
+      const descText = buildProfileSeoDescription({
+        username: clean,
+        displayName: pageData.profile.displayName,
+        bio: bioClean,
+        customSeoDescription: pageData.profile.customSeoDescription,
+      });
 
       const robotsValue = pageData.profile.hideFromSearch ? 'noindex, nofollow' : 'index, follow';
       const origin = typeof window !== 'undefined' ? window.location.origin : SITE_ORIGIN;
@@ -516,9 +523,11 @@ const PublicProfilePlaceholderInner: React.FC<{ clean: string; isReservedName: b
         w.dataLayer.push(arguments);
       };
     }
-    const resolvedTitle =
-      pageData?.profile?.customSeoTitle ||
-      `${pageData?.profile?.displayName || `@${clean}`} – Links, Projects & Social Profiles | Iveo`;
+    const resolvedTitle = buildProfileSeoTitle({
+      username: clean,
+      displayName: pageData?.profile?.displayName,
+      customSeoTitle: pageData?.profile?.customSeoTitle,
+    });
     w.gtag('js', new Date());
     w.gtag('config', measurementId, {
       page_path: `/@${clean}`,

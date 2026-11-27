@@ -429,6 +429,42 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const isSocialProfileFlow =
     provider !== 'generic' && kindDef.contentKind === 'profile' && displayAs === 'card';
 
+  const pendingRedirectOAuthRef = useRef<any>(null);
+
+  // Consume one-time server OAuth redirect result on mount if popup was blocked on mobile
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const resultToken = params.get('iveo_oauth_result');
+    const oauthErr = params.get('iveo_oauth_error');
+    if (!resultToken && !oauthErr) return;
+
+    params.delete('iveo_oauth_result');
+    params.delete('iveo_oauth_error');
+    const nextSearch = params.toString();
+    const cleanUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    if (oauthErr) {
+      pendingRedirectOAuthRef.current = {
+        type: 'IVEO_SOCIAL_OAUTH_ERROR',
+        error: oauthErr,
+      };
+      return;
+    }
+
+    if (resultToken) {
+      fetch(`/api/oauth/result?token=${encodeURIComponent(resultToken)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => {
+          if (json?.ok && json?.result) {
+            pendingRedirectOAuthRef.current = json.result;
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Listen for account connection popup events (ZERO "OAuth" copy shown to creator)
   useEffect(() => {
     if (!isOpen) return;
@@ -498,6 +534,12 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         setIsConnecting(false);
       }
     };
+
+    if (pendingRedirectOAuthRef.current) {
+      const pending = pendingRedirectOAuthRef.current;
+      pendingRedirectOAuthRef.current = null;
+      handlePopupPayload(pending);
+    }
 
     const onMessage = (e: MessageEvent) => handlePopupPayload(e.data);
     const onStorage = (e: StorageEvent) => {
@@ -840,11 +882,18 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         return;
       }
 
-      const endpoint =
+      const commonQs = new URLSearchParams({
+        origin: window.location.origin,
+        returnTo: `${window.location.pathname}${window.location.search}`,
+      });
+      if (session.username) commonQs.set('username', session.username);
+      if (session.userId) commonQs.set('userId', session.userId);
+
+      const baseEndpoint =
         provider === 'youtube'
-          ? `/api/oauth/youtube/url?origin=${encodeURIComponent(window.location.origin)}`
-          : `/api/oauth/${provider}/url?origin=${encodeURIComponent(window.location.origin)}`;
-      const res = await fetch(endpoint);
+          ? `/api/oauth/youtube/url`
+          : `/api/oauth/${provider}/url`;
+      const res = await fetch(`${baseEndpoint}?${commonQs.toString()}`);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.url) {
         if (
@@ -870,6 +919,14 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
       );
       if (!popup) {
+        const redirectQs = new URLSearchParams(commonQs);
+        redirectQs.set('mode', 'redirect');
+        const redirectRes = await fetch(`${baseEndpoint}?${redirectQs.toString()}`).catch(() => null);
+        const redirectData = await redirectRes?.json().catch(() => null);
+        if (redirectRes?.ok && redirectData?.ok && redirectData?.url) {
+          window.location.assign(redirectData.url);
+          return;
+        }
         setSaveError('Allow popups to connect your account, or paste the link directly above.');
         setIsConnecting(false);
       }

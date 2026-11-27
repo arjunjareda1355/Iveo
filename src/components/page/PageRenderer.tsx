@@ -1499,12 +1499,11 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
       )}
 
       {/* Footer Area */}
-      {/* Footer Area - iveo branding (as-is) + formatted Create your page button + Report / Terms / Privacy line */}
       <div
-        className="w-full flex flex-col items-center justify-center shrink-0 pb-8 mt-auto"
+        className="w-full flex flex-col items-center justify-center shrink-0 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] mt-auto"
         style={{
           paddingTop: `${Math.round(28 * scale)}px`,
-          gap: `${Math.round(10 * scale)}px`,
+          gap: `${Math.round(6 * scale)}px`,
         }}
       >
         {/* Refined and small iveo mark at the bottom */}
@@ -1532,85 +1531,65 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
           );
         })()}
 
-        {/* Public Footer CTA + Utility Links unified with vibe font, curvature, and border/surface */}
-        {isPublicPage && (() => {
-          const footerBtnRadius =
-            effectiveRadius <= 0
-              ? '2px'
-              : effectiveRadius >= 999
-                ? '9999px'
-                : `${Math.min(12, Math.round(effectiveRadius * 0.8))}px`;
-          const footerSurfaceBg = themeContract.isDarkPage
-            ? 'rgba(255,255,255,0.08)'
-            : 'rgba(10,10,10,0.05)';
-          const footerBorderColor =
-            tokens.buttonBorder && tokens.buttonBorder !== 'transparent'
-              ? tokens.buttonBorder
-              : themeContract.isDarkPage
-                ? 'rgba(255,255,255,0.22)'
-                : 'rgba(10,10,10,0.16)';
-          const footerUtilityStyle: React.CSSProperties = {
-            fontFamily: buttonFontFamily,
-            color: tokens.text,
-            backgroundColor: footerSurfaceBg,
-            border: `1px solid ${footerBorderColor}`,
-            borderRadius: footerBtnRadius,
-          };
+        {/* Clean borderless inline public footer links */}
+        {isPublicPage && (
+          <nav
+            aria-label="Page footer links"
+            className="w-full max-w-[460px] flex flex-wrap items-center justify-center gap-x-0.5 gap-y-0 text-[11.5px] font-medium select-none"
+            style={{
+              fontFamily: buttonFontFamily,
+              color: tokens.text,
+            }}
+          >
+            <a
+              href="https://iveo.site/signup"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-2 opacity-65 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 bg-transparent border-0"
+            >
+              Create your page
+            </a>
 
-          return (
-            <>
-              <a
-                href="https://iveo.site/signup"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-4 py-1.5 text-[11.5px] font-medium transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] select-none"
-                style={{
-                  ...footerUtilityStyle,
-                  fontFamily: buttonFontFamily,
-                }}
-              >
-                Create your page
-              </a>
+            {displayHandle && !profile?.isOwnerProfile && (
+              <>
+                <span aria-hidden="true" className="opacity-35 select-none">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-2 opacity-65 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 bg-transparent border-0 cursor-pointer"
+                >
+                  Report
+                </button>
+              </>
+            )}
 
-              <div
-                className="inline-flex items-center justify-center flex-wrap gap-2 text-[11px] font-medium select-none"
-                style={{
-                  fontFamily: buttonFontFamily,
-                  color: tokens.muted,
-                }}
-              >
-                {displayHandle && !profile?.isOwnerProfile && (
-                  <button
-                    type="button"
-                    onClick={() => setIsReportModalOpen(true)}
-                    className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium opacity-85 hover:opacity-100 transition-all duration-150 hover:scale-[1.02] cursor-pointer"
-                    style={footerUtilityStyle}
-                  >
-                    Report
-                  </button>
-                )}
-                <a
-                  href="/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium opacity-85 hover:opacity-100 transition-all duration-150 hover:scale-[1.02]"
-                  style={footerUtilityStyle}
-                >
-                  Terms
-                </a>
-                <a
-                  href="/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium opacity-85 hover:opacity-100 transition-all duration-150 hover:scale-[1.02]"
-                  style={footerUtilityStyle}
-                >
-                  Privacy
-                </a>
-              </div>
-            </>
-          );
-        })()}
+            <span aria-hidden="true" className="opacity-35 select-none">
+              ·
+            </span>
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-2 opacity-65 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 bg-transparent border-0"
+            >
+              Terms
+            </a>
+
+            <span aria-hidden="true" className="opacity-35 select-none">
+              ·
+            </span>
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-2 opacity-65 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 bg-transparent border-0"
+            >
+              Privacy
+            </a>
+          </nav>
+        )}
       </div>
       </div>
 

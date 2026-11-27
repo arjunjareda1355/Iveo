@@ -8,6 +8,10 @@ import { appendSeoEvent, getSearchEngineStatus, notifyIndexNow, submitSitemapsTo
 import { classifySegment, isPrivilegedEmailServer, PRIVATE_ROUTES, PUBLIC_INFO_ROUTES } from './usernames.ts';
 import { isNewerTimestamp } from './profileMerge.ts';
 import { normalizeSocialUrl } from '../../src/lib/urls.ts';
+import {
+  buildProfileSeoDescription as buildSharedProfileSeoDescription,
+  buildProfileSeoTitle as buildSharedProfileSeoTitle,
+} from '../../src/lib/seoMeta.ts';
 
 export const MAIN_SEO_TITLE = 'Iveo – One Link for Everything You Create';
 export const MAIN_SEO_DESCRIPTION =
@@ -242,34 +246,20 @@ export async function getAllUnifiedProfiles(): Promise<SeoUnifiedProfile[]> {
 }
 
 export function buildProfileSeoTitle(page: PublicPageServerData): string {
-  const displayName = (page.displayName || page.username || '').trim();
-  if (page.customSeoTitle?.trim()) {
-    return truncate(page.customSeoTitle.trim(), 70);
-  }
-  const suffix = ' – Links, Projects & Social Profiles | Iveo';
-  const maxNameLen = Math.max(12, 72 - suffix.length);
-  return `${truncate(displayName, maxNameLen)}${suffix}`;
+  return buildSharedProfileSeoTitle({
+    username: page.username,
+    displayName: page.displayName,
+    customSeoTitle: page.customSeoTitle,
+  });
 }
 
 export function buildProfileSeoDescription(page: PublicPageServerData): string {
-  const displayName = (page.displayName || page.username || '').trim();
-  if (page.customSeoDescription?.trim()) {
-    return truncate(page.customSeoDescription.trim(), 160);
-  }
-  if (page.bio?.trim()) {
-    const bioClean = page.bio.trim();
-    if (bioClean.length >= 45) {
-      return truncate(`${bioClean} — Discover ${displayName} (@${page.username}) on Iveo.`, 160);
-    }
-    return truncate(
-      `${bioClean} Discover ${displayName} on Iveo. Explore their projects, websites, and social media links.`,
-      160
-    );
-  }
-  return truncate(
-    `Discover ${displayName} on Iveo. Explore their projects, websites, social media links and latest work.`,
-    160
-  );
+  return buildSharedProfileSeoDescription({
+    username: page.username,
+    displayName: page.displayName,
+    bio: page.bio,
+    customSeoDescription: page.customSeoDescription,
+  });
 }
 
 export function buildVerificationMetaTags(): string {

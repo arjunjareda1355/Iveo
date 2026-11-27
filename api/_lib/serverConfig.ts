@@ -54,10 +54,13 @@ export function getServerConfig(): ServerConfig {
   const pinterestAppId = trim(env.PINTEREST_APP_ID);
   const pinterestAppSecret = trim(env.PINTEREST_APP_SECRET);
 
+  const rawSiteUrl = trim(env.SITE_URL) || trim(env.VITE_SITE_ORIGIN) || trim(env.APP_URL);
+  const resolvedAppUrl = /^https?:\/\//i.test(rawSiteUrl) ? rawSiteUrl.replace(/\/+$/, '') : 'https://iveo.site';
+
   return {
     nodeEnv: trim(env.NODE_ENV) || 'development',
     isProduction: trim(env.NODE_ENV) === 'production',
-    appUrl: trim(env.APP_URL) || 'https://iveo.site',
+    appUrl: resolvedAppUrl,
     youtubeApiKey: trim(env.YOUTUBE_API_KEY),
     googleClientId: trim(env.GOOGLE_CLIENT_ID),
     googleClientSecret: trim(env.GOOGLE_CLIENT_SECRET),
@@ -128,6 +131,7 @@ export function getKnownSecretValues(): string[] {
     cfg.pinterestAccessToken,
     cfg.razorpayKeySecret,
     cfg.razorpayWebhookSecret,
+    process.env.TOKEN_ENCRYPTION_KEY?.trim() || '',
     ...Object.values(cfg.oauth).map((o) => o.clientSecret),
   ];
   return Array.from(new Set(candidates.filter((v) => v && v.length >= 6)));

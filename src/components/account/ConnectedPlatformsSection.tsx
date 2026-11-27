@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MoreHorizontal } from 'lucide-react';
 import { Block, EmbedProvider } from '../../data/types';
 import { useBlocks } from '../../data/BlocksContext';
+import { useIvioSession } from '../../auth/useIvioSession';
 import { getProviderDefinition } from '../../lib/providers';
 import { ProviderGlyph } from '../page/EmbedBlock';
 import { Button } from '../ui/Button';
@@ -130,12 +131,14 @@ export const ConnectedPlatformsSection: React.FC<{
   offline?: boolean;
   onProvidersDetected?: (providers: Set<string>) => void;
 }> = ({ offline = false, onProvidersDetected }) => {
+  const session = useIvioSession();
   const { blocks, isLoading, updateBlock } = useBlocks();
   const { showToast } = useToast();
 
   const [reconnectingProvider, setReconnectingProvider] = useState<EmbedProvider | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<ConnectedPlatformGroup | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [pendingRedirectPayload, setPendingRedirectPayload] = useState<any>(null);
 
   const groups = useMemo(() => groupConnectedPlatforms(blocks), [blocks]);
   const providersKey = useMemo(
@@ -151,6 +154,112 @@ export const ConnectedPlatformsSection: React.FC<{
     lastReportedKeyRef.current = providersKey;
     onProvidersDetectedRef.current?.(new Set(groups.map((g) => g.provider)));
   }, [providersKey, groups]);
+
+  // Consume one-time OAuth redirect result if user completed OAuth via mobile full-page redirect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const resultToken = params.get('iveo_oauth_result');
+    const oauthErr = params.get('iveo_oauth_error');
+    if (!resultToken && !oauthErr) return;
+
+    params.delete('iveo_oauth_result');
+    params.delete('iveo_oauth_error');
+    const nextSearch = params.toString();
+    const cleanUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    let pendingProvider: string | null = null;
+    try {
+      pendingProvider = sessionStorage.getItem('iveo_pending_oauth_reconnect');
+      sessionStorage.removeItem('iveo_pending_oauth_reconnect');
+    } catch {}
+
+    if (oauthErr) {
+      showToast(oauthErr);
+      return;
+    }
+
+    if (resultToken) {
+      fetch(`/api/oauth/result?token=${encodeURIComponent(resultToken)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => {
+          if (json?.ok && json?.result) {
+            setPendingRedirectPayload({
+              ...json.result,
+              _fallbackProvider: pendingProvider || undefined,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [showToast]);
+
+  // Apply fetched redirect OAuth payload once blocks are loaded
+  useEffect(() => {
+    if (!pendingRedirectPayload || isLoading) return;
+    const payload = pendingRedirectPayload;
+    setPendingRedirectPayload(null);
+    const targetProvider = (
+      payload.provider ||
+      (payload.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' ? 'youtube' : payload._fallbackProvider)
+    ) as EmbedProvider | undefined;
+
+    if (payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS' && targetProvider) {
+      const p = payload.profile || payload.embed || payload.connection?.embedMeta || {};
+      const targetGroup = groups.find((g) => g.provider === targetProvider);
+      if (targetGroup) {
+        Promise.all(
+          targetGroup.blocks.map((b) =>
+            updateBlock(b.id, {
+              embedMeta: {
+                provider: targetGroup.provider,
+                ...(b.embedMeta || {}),
+                title: p.displayName || p.title || b.embedMeta?.title,
+                handle: p.handle || p.subtitle || b.embedMeta?.handle,
+                avatarUrl: p.avatarUrl || b.embedMeta?.avatarUrl,
+                coverUrl: p.coverUrl || b.embedMeta?.coverUrl,
+                description: p.bio || p.description || b.embedMeta?.description,
+                statsLabel: p.statsLabel || b.embedMeta?.statsLabel,
+                connectedViaOAuth: true,
+                needsAttention: false,
+                failureCount: 0,
+                fetchedAt: new Date().toISOString(),
+              },
+            }).catch(() => {})
+          )
+        ).then(() => showToast('Platform reconnected'));
+      }
+    } else if (payload.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' && payload.channel) {
+      const ch = payload.channel;
+      const targetGroup = groups.find((g) => g.provider === 'youtube');
+      if (targetGroup) {
+        Promise.all(
+          targetGroup.blocks.map((b) =>
+            updateBlock(b.id, {
+              embedMeta: {
+                provider: 'youtube',
+                ...(b.embedMeta || {}),
+                title: ch.channelTitle || b.embedMeta?.title,
+                handle: ch.handle || b.embedMeta?.handle,
+                avatarUrl: ch.avatarUrl || b.embedMeta?.avatarUrl,
+                statsLabel: ch.subscriberCountText || b.embedMeta?.statsLabel,
+                connectedViaOAuth: true,
+                needsAttention: false,
+                failureCount: 0,
+                fetchedAt: new Date().toISOString(),
+              },
+            }).catch(() => {})
+          )
+        ).then(() => showToast('YouTube reconnected'));
+      }
+    } else if (
+      payload.type === 'IVEO_SOCIAL_OAUTH_ERROR' ||
+      payload.type === 'IVEO_YOUTUBE_OAUTH_ERROR'
+    ) {
+      showToast(payload.error || "Couldn't reconnect platform.");
+    }
+  }, [pendingRedirectPayload, isLoading, groups, updateBlock, showToast]);
 
   // Listen for OAuth popup completion when reconnecting from /account#connections
   useEffect(() => {
@@ -294,11 +403,18 @@ export const ConnectedPlatformsSection: React.FC<{
         return;
       }
 
-      const endpoint =
+      const commonQs = new URLSearchParams({
+        origin: window.location.origin,
+        returnTo: `${window.location.pathname}${window.location.hash}`,
+      });
+      if (session.username) commonQs.set('username', session.username);
+      if (session.userId) commonQs.set('userId', session.userId);
+
+      const baseEndpoint =
         provider === 'youtube'
-          ? `/api/oauth/youtube/url?origin=${encodeURIComponent(window.location.origin)}`
-          : `/api/oauth/${provider}/url?origin=${encodeURIComponent(window.location.origin)}`;
-      const res = await fetch(endpoint);
+          ? `/api/oauth/youtube/url`
+          : `/api/oauth/${provider}/url`;
+      const res = await fetch(`${baseEndpoint}?${commonQs.toString()}`);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.url) {
         if (data?.error === 'oauth_not_configured' || res.status === 503) {
@@ -320,6 +436,17 @@ export const ConnectedPlatformsSection: React.FC<{
         `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
       );
       if (!popup) {
+        const redirectQs = new URLSearchParams(commonQs);
+        redirectQs.set('mode', 'redirect');
+        const redirectRes = await fetch(`${baseEndpoint}?${redirectQs.toString()}`).catch(() => null);
+        const redirectData = await redirectRes?.json().catch(() => null);
+        if (redirectRes?.ok && redirectData?.ok && redirectData?.url) {
+          try {
+            sessionStorage.setItem('iveo_pending_oauth_reconnect', provider);
+          } catch {}
+          window.location.assign(redirectData.url);
+          return;
+        }
         showToast('Allow popups to reconnect this platform.');
         setReconnectingProvider(null);
       }

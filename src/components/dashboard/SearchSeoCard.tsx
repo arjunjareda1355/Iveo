@@ -7,6 +7,7 @@ import { useIveoSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { sanitizeSeoField } from '../../lib/integrations';
 import { isOwnerEmail } from '../../lib/plan';
+import { buildProfileSeoDescription, buildProfileSeoTitle } from '../../lib/seoMeta';
 
 export const SearchSeoCard: React.FC = () => {
   const session = useIveoSession();
@@ -27,9 +28,15 @@ export const SearchSeoCard: React.FC = () => {
     seoTitle.trim() !== (session.customSeoTitle || '') ||
     seoDesc.trim() !== (session.customSeoDescription || '');
 
-  const fallbackTitle = `${session.displayName || session.username || 'Creator'} | iveo`;
-  const fallbackDesc =
-    session.bio || 'Explore official links, projects, and updates on iveo.';
+  const fallbackTitle = buildProfileSeoTitle({
+    username: session.username,
+    displayName: session.displayName,
+  });
+  const fallbackDesc = buildProfileSeoDescription({
+    username: session.username,
+    displayName: session.displayName,
+    bio: session.bio,
+  });
 
   const previewTitle = seoTitle.trim() || fallbackTitle;
   const previewDesc = seoDesc.trim() || fallbackDesc;

@@ -347,6 +347,7 @@ async function startServer() {
   app.get('/api/integrations/embed', dbHandlers.handleSocialEmbedLookup);
   app.get('/api/integrations/pinterest/me', dbHandlers.handlePinterestTokenProfile);
   app.get('/api/oauth/status', dbHandlers.handleOAuthStatus);
+  app.get('/api/oauth/result', dbHandlers.handleConsumeOAuthResult);
   app.get('/api/oauth/youtube/url', dbHandlers.handleYouTubeOAuthUrl);
   app.get(['/api/oauth/youtube/callback', '/api/oauth/youtube/callback/'], dbHandlers.handleYouTubeOAuthCallback);
   app.get('/api/oauth/:provider/url', dbHandlers.handleSocialOAuthUrl);

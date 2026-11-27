@@ -10,11 +10,13 @@ import {
   type SocialOAuthProvider,
   type ProviderCredentials,
 } from './serverConfig.ts';
+import {
+  createOAuthState,
+  peekOAuthStateProvider,
+} from './oauthStateStore.ts';
+import { saveEncryptedOAuthToken } from './tokenCrypto.ts';
 
 export type { SocialOAuthProvider };
-
-// Short-lived in-memory PKCE verifier store keyed by OAuth state nonce (X/Twitter PKCE OAuth 2.0)
-const pkceStore = new Map<string, { verifier: string; expiresAt: number }>();
 
 // Caches: 6h for stats-bearing providers, 24h for static media metadata, +/- 10% jitter
 const STATS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -353,34 +355,56 @@ export function resolveSocialOAuthRedirectUri(
     requestOrigin && /^https?:\/\//i.test(requestOrigin.trim())
       ? requestOrigin.trim().replace(/\/+$/, '')
       : null;
-  const appUrl = cfg.appUrl;
-  const cleanAppUrl =
-    appUrl && /^https?:\/\//i.test(appUrl) ? appUrl.replace(/\/+$/, '') : null;
+  const isLocalOrigin = Boolean(
+    cleanOrigin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleanOrigin)
+  );
+  const envRaw =
+    process.env.SITE_URL?.trim() ||
+    process.env.VITE_SITE_ORIGIN?.trim() ||
+    '';
+  const appFallbackRaw = process.env.APP_URL?.trim() || '';
+  const canonicalOrigin =
+    envRaw && /^https?:\/\//i.test(envRaw) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(envRaw)
+      ? envRaw.replace(/\/+$/, '')
+      : null;
+  const appFallbackOrigin =
+    appFallbackRaw && /^https?:\/\//i.test(appFallbackRaw) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(appFallbackRaw)
+      ? appFallbackRaw.replace(/\/+$/, '')
+      : null;
 
   if (provider === 'spotify') {
     if (cfg.spotifyRedirectUri && /^https?:\/\//i.test(cfg.spotifyRedirectUri)) {
       return cfg.spotifyRedirectUri.replace(/\/+$/, '');
     }
-    const isLocalOrigin = Boolean(
-      cleanOrigin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleanOrigin)
-    );
     const spotifyBase =
       isLocalOrigin && cleanOrigin
         ? cleanOrigin
-        : cleanOrigin && /iveo\.site$/i.test(new URL(cleanOrigin).hostname)
-          ? 'https://iveo.site'
-          : cleanAppUrl || cleanOrigin || 'https://iveo.site';
+        : canonicalOrigin ||
+          (cleanOrigin && /iveo\.site$/i.test(new URL(cleanOrigin).hostname)
+            ? 'https://iveo.site'
+            : cleanOrigin) ||
+          appFallbackOrigin ||
+          'https://iveo.site';
     return `${spotifyBase}/callback`;
   }
 
-  const base = cleanOrigin || cleanAppUrl || 'https://iveo.site';
+  const base = isLocalOrigin && cleanOrigin
+    ? cleanOrigin
+    : canonicalOrigin || cleanOrigin || appFallbackOrigin || 'https://iveo.site';
   return `${base}/api/oauth/${provider}/callback`;
+}
+
+export interface BuildSocialOAuthOptions {
+  mode?: 'popup' | 'redirect';
+  returnTo?: string | null;
+  ownerKey?: string | null;
 }
 
 export function buildSocialOAuthUrl(
   provider: SocialOAuthProvider,
-  requestOrigin?: string
-): { url: string; redirectUri: string } {
+  requestOrigin?: string,
+  options: BuildSocialOAuthOptions = {}
+): { url: string; redirectUri: string; state: string } {
   const creds = getSocialOAuthCredentials(provider);
   if (!creds.clientId) {
     throw new Error(`${provider} connection is not configured on the server.`);
@@ -389,11 +413,15 @@ export function buildSocialOAuthUrl(
     throw new Error('Pinterest OAuth connection is disabled until Standard API access is enabled.');
   }
   const redirectUri = resolveSocialOAuthRedirectUri(provider, requestOrigin);
-  const nonce = crypto.randomBytes(12).toString('base64url');
-  const statePayload = Buffer.from(
-    JSON.stringify({ p: provider, r: redirectUri, n: nonce }),
-    'utf8'
-  ).toString('base64url');
+  const verifier = provider === 'x' ? crypto.randomBytes(32).toString('base64url') : null;
+  const statePayload = createOAuthState({
+    provider,
+    redirectUri,
+    codeVerifier: verifier,
+    mode: options.mode || 'popup',
+    returnTo: options.returnTo,
+    ownerKey: options.ownerKey,
+  });
 
   if (provider === 'discord') {
     const params = new URLSearchParams({
@@ -407,6 +435,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://discord.com/oauth2/authorize?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -420,6 +449,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://github.com/login/oauth/authorize?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -434,6 +464,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -448,6 +479,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -462,6 +494,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -476,6 +509,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://threads.net/oauth/authorize?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -490,6 +524,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://accounts.spotify.com/authorize?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -504,6 +539,7 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://www.pinterest.com/oauth/?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
@@ -522,13 +558,12 @@ export function buildSocialOAuthUrl(
     return {
       url: `https://accounts.snapchat.com/accounts/oauth2/auth?${params.toString()}`,
       redirectUri,
+      state: statePayload,
     };
   }
 
   // X (Twitter) OAuth 2.0 PKCE S256
-  const verifier = crypto.randomBytes(32).toString('base64url');
-  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-  pkceStore.set(nonce, { verifier, expiresAt: Date.now() + 15 * 60_000 });
+  const challenge = crypto.createHash('sha256').update(verifier!).digest('base64url');
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -542,11 +577,16 @@ export function buildSocialOAuthUrl(
   return {
     url: `https://x.com/i/oauth2/authorize?${params.toString()}`,
     redirectUri,
+    state: statePayload,
   };
 }
 
 export function extractProviderFromOAuthState(stateParam?: string): SocialOAuthProvider | null {
   if (!stateParam) return null;
+  const fromStore = peekOAuthStateProvider(stateParam);
+  if (fromStore && isValidSocialOAuthProvider(fromStore)) {
+    return fromStore;
+  }
   try {
     const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf8'));
     if (typeof decoded?.p === 'string' && isValidSocialOAuthProvider(decoded.p)) {
@@ -660,12 +700,24 @@ export async function exchangeSocialOAuthCode(
   provider: SocialOAuthProvider,
   code: string,
   redirectUri: string,
-  nonce?: string | null
+  codeVerifier?: string | null,
+  ownerKey?: string | null
 ): Promise<SocialOAuthConnectResult> {
   const creds = getSocialOAuthCredentials(provider);
   if (!creds.clientId || !creds.clientSecret) {
     throw new Error(`${provider} connection is not configured on the server.`);
   }
+
+  const persistToken = (tokenJson: any) => {
+    if (!ownerKey || !tokenJson?.access_token) return;
+    const expiresIn = Number(tokenJson.expires_in);
+    saveEncryptedOAuthToken(ownerKey, provider, {
+      accessToken: String(tokenJson.access_token),
+      refreshToken: tokenJson.refresh_token ? String(tokenJson.refresh_token) : null,
+      expiresAt: Number.isFinite(expiresIn) && expiresIn > 0 ? Date.now() + expiresIn * 1000 : null,
+      scope: typeof tokenJson.scope === 'string' ? tokenJson.scope : null,
+    });
+  };
 
   if (provider === 'discord') {
     const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
@@ -690,6 +742,7 @@ export async function exchangeSocialOAuthCode(
       );
       throw new Error(detail);
     }
+    persistToken(tokenJson);
 
     const userRes = await fetch('https://discord.com/api/v10/users/@me', {
       headers: { Authorization: `Bearer ${tokenJson.access_token}` },
@@ -763,6 +816,7 @@ export async function exchangeSocialOAuthCode(
     if (!tokenRes.ok || !tokenJson?.access_token) {
       throw new Error(redactSecrets(tokenJson?.error_description || tokenJson?.error || 'GitHub connection failed.'));
     }
+    persistToken(tokenJson);
 
     const userRes = await fetch('https://api.github.com/user', {
       headers: {
@@ -818,6 +872,7 @@ export async function exchangeSocialOAuthCode(
     if (!tokenRes.ok || !tokenJson?.access_token) {
       throw new Error(redactSecrets(tokenJson?.error_description || tokenJson?.error || 'LinkedIn connection failed.'));
     }
+    persistToken(tokenJson);
 
     const userRes = await fetch('https://api.linkedin.com/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokenJson.access_token}` },
@@ -869,6 +924,7 @@ export async function exchangeSocialOAuthCode(
     }
 
     const accessToken = String(tokenJson.access_token);
+    persistToken(tokenJson);
     if (provider === 'instagram') {
       try {
         const accountsRes = await fetch(
@@ -980,6 +1036,7 @@ export async function exchangeSocialOAuthCode(
     if (!tokenRes.ok || !tokenJson?.access_token) {
       throw new Error(redactSecrets(tokenJson?.error_message || tokenJson?.error?.message || 'Threads connection failed.'));
     }
+    persistToken(tokenJson);
 
     const userRes = await fetch(
       `https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${encodeURIComponent(String(tokenJson.access_token))}`,
@@ -1033,6 +1090,7 @@ export async function exchangeSocialOAuthCode(
     }
 
     const accessToken = String(tokenJson.access_token);
+    persistToken(tokenJson);
     const meRes = await fetch('https://api.spotify.com/v1/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(5500),
@@ -1085,6 +1143,7 @@ export async function exchangeSocialOAuthCode(
     if (!tokenRes.ok || !tokenJson?.access_token) {
       throw new Error(redactSecrets(tokenJson?.message || tokenJson?.error_description || 'Pinterest connection failed.'));
     }
+    persistToken(tokenJson);
     return readPinterestProfileWithToken(String(tokenJson.access_token), true);
   }
 
@@ -1107,6 +1166,7 @@ export async function exchangeSocialOAuthCode(
     if (!tokenRes.ok || !tokenJson?.access_token) {
       throw new Error(redactSecrets(tokenJson?.error_description || tokenJson?.error || 'Snapchat connection failed.'));
     }
+    persistToken(tokenJson);
 
     const meRes = await fetch('https://kit.snapchat.com/v1/me', {
       method: 'POST',
@@ -1151,8 +1211,6 @@ export async function exchangeSocialOAuthCode(
   }
 
   // X (Twitter)
-  const pkceEntry = nonce ? pkceStore.get(nonce) : undefined;
-  if (nonce) pkceStore.delete(nonce);
   const basicAuth = Buffer.from(`${creds.clientId}:${creds.clientSecret}`, 'utf8').toString('base64');
 
   const formParams = new URLSearchParams({
@@ -1160,7 +1218,7 @@ export async function exchangeSocialOAuthCode(
     grant_type: 'authorization_code',
     client_id: creds.clientId,
     redirect_uri: redirectUri,
-    code_verifier: pkceEntry?.verifier || '',
+    code_verifier: codeVerifier || '',
   });
 
   const tokenRes = await fetch('https://api.x.com/2/oauth2/token', {
@@ -1176,6 +1234,7 @@ export async function exchangeSocialOAuthCode(
   if (!tokenRes.ok || !tokenJson?.access_token) {
     throw new Error(redactSecrets(tokenJson?.error_description || tokenJson?.error || 'X connection failed.'));
   }
+  persistToken(tokenJson);
 
   const userRes = await fetch(
     'https://api.x.com/2/users/me?user.fields=profile_image_url,description,public_metrics',
