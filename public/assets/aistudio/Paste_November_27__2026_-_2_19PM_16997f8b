@@ -1,0 +1,342 @@
+IVEO.SITE - FIX PROMPT (v3)
+Links Sync | Section Header | Social Card Looks | SEO (organised, per-user, Search Console JSON) | Speed
+Version: 2026-11-27
+
+HOW TO USE
+- Paste this whole file into your AI coding agent (Cursor, Claude Code, Replit, Bolt, Lovable, Windsurf, etc.) that has access to the iveo.site repository.
+- This prompt is standalone. If an earlier iveo prompt (v1/v2) was applied, treat THIS file as the latest instructions for the areas it covers (links, section header, card looks, SEO, speed).
+- If the agent cannot read the repo, paste the relevant files under this prompt and tell it to return COMPLETE files.
+- If the agent has a length or context limit, run one workstream at a time: paste Sections 0-3, then ONE workstream (Section 4, 5, 6, 7 or 8), then Sections 9-11. Run Section 4 (W1) first - W2 and W3 depend on it.
+
+
+==============================
+0. ROLE AND MISSION
+==============================
+You are a senior full-stack engineer (Firebase data storage, Clerk-authenticated server code, performance, technical SEO, secure credential handling) working inside the existing iveo.site codebase.
+
+Iveo is a link-in-bio platform. Every user gets a public page at https://iveo.site/@username and manages it from a mobile-first dashboard with six bottom tabs: Links, Profiles, Appearance, Contacts, Analytics, Settings. ALL user data is stored in the Firebase database. Users sign in with Clerk.
+
+FIXED ARCHITECTURE - DO NOT CHANGE
+- Clerk is the authentication system ONLY (sign-in, sessions, user identity).
+- Firebase is the data storage ONLY (the database).
+- Do not replace, migrate, re-configure or add any auth, database or backend provider. Do not add Firebase Auth, Clerk-to-Firebase token integrations or new services. Do not change Clerk or Firebase project settings, sign-in methods, keys, user ids or security rules.
+
+DO NOT ADD OR REMOVE FEATURES
+Fix what is broken. Keep every existing feature, route, flow and piece of copy. The one deliberate UI change is the SEO area (W4), which the owner asked to be minimized and organised: that means a tighter, better-grouped layout of the SAME features - never removing any.
+
+MISSION: make the items below work correctly, reliably and fast, with Firebase as the single source of truth and the public page always in sync with the dashboard.
+
+THE FIVE WORKSTREAMS
+W1  Links <-> public page sync: add, edit, delete, reorder, enable/disable - for every item type
+W2  Section header: add, edit, reorder, delete - working and synced with the public page
+W3  Social card Looks and the card editor (YouTube, X, LinkedIn, ...) - working and synced
+W4  SEO: minimized and organised, per-user scope, Crawler & Search Console Integrations working with the Google service-account JSON stored in the backend
+W5  Speed and smoothness (dashboard + public page)
+
+ORDER OF WORK: Phase 0 audit -> W1 -> W2 -> W3 -> W4 -> W5 -> verification -> final report.
+
+
+==============================
+1. NON-NEGOTIABLE RULES
+==============================
+1. NO FEATURES ADDED OR REMOVED. Fix, do not redesign. The only new control permitted anywhere is the minimal "Remove key" action in W4.5.
+2. UI/UX STAYS VISUALLY IDENTICAL everywhere EXCEPT the SEO surfaces in W4 (Settings -> "SEO & search" and "Search console" blocks, and the /admin/seo console), where the layout may be minimized and regrouped using the existing design tokens and components only (no new design language). Settings -> "Integrations" (Google Analytics, Meta Pixel, WhatsApp) is out of scope. Elsewhere the only permitted change is an error/status message where a failure currently shows nothing or a raw error - reuse the existing toast/inline-message components and tone, and list each one in the report.
+3. ARCHITECTURE IS FIXED. Clerk stays the only authentication system; Firebase stays the only database (data storage only). No new providers, no Firebase Auth, no Clerk-Firebase integration, no changes to Clerk or Firebase configuration or security rules. NEVER "fix" a failing write by opening Firebase rules to the public (for example allow write: if true).
+4. FIX ROOT CAUSES, NOT SYMPTOMS. No band-aids, hard-coded values, mock/fake data, TODO stubs, placeholder "success" messages or swallowed errors (no empty catch blocks).
+5. NO DATA LOSS. No destructive migrations. Schema changes must stay backward compatible with existing documents. Any migration must be idempotent, have a dry-run mode, and run only after a backup/export.
+6. SECURITY FIRST. Per-user isolation: a user can only read, write, inspect or submit their OWN profile data. The user id always comes from the verified Clerk session on the server, never from the client. Admin-only tools verify the admin role on the SERVER (hiding a button is not security). Validate all input on the server.
+7. SECRETS NEVER IN CODE, REPO OR THIS PROMPT. The owner has a Google Cloud service-account JSON key for Search Console. NEVER ask for it, embed it, commit it, log it, put it in a public/static folder or return it to a browser. The owner will upload it through the SEO console's "Upload .json" control after you finish (W4.5). If you find such a file in the repo or working directory, do not open it: keep it out of git (.gitignore) and mention it in the report.
+8. KEEP THE STACK, CHANGE LITTLE. Keep the existing framework, folder structure, naming, routes, URLs and code style. Fix the actual cause with the smallest change; do not refactor or rewrite code that works. No new heavy dependencies unless unavoidable (justify each in the report).
+9. VERIFIABLE STEPS. After each workstream run build, lint, type-check and tests. Never continue on a failing build.
+10. SAFE TESTING. Use the Firebase Emulator Suite or a staging project for tests. Never run migrations or destructive scripts against production data.
+11. COMPLETE OUTPUT ONLY (see Section 10). No "..." or "rest unchanged" placeholders.
+12. DO NOT STOP TO ASK. If something is ambiguous, choose the safest backward-compatible option, document it, and continue. Stop only if blocked by missing credentials - list those in the final report.
+13. OWNER ACTIONS. Anything that must be changed in the Firebase console, the Clerk dashboard, Google Cloud, Search Console, Bing, or the hosting environment settings is an OWNER ACTION: do not attempt it; list it precisely (what, where, why, exact steps) in the final report.
+
+
+==============================
+2. CURRENT STATE (observed in the live app)
+==============================
+Treat this as ground truth about what exists today. Confirm each point in the code; do not assume.
+
+LINKS TAB - "Add to your page" bottom sheet
+- Title "Add to your page" with the line "Paste any link or pick a card, player, form, or section."
+- "Paste a link" input (placeholder "Paste any YouTube, Twitch ...") + "Add" button.
+- Search field and category chips: All, Social, Players, Links, Support & shop, Forms & utilities, Layout.
+- Example entries: "Social icon - Add a profile icon to your header or footer social bar" and "Section header - Organize your page into clean titled sections".
+- The header/footer social bar shows "No social icons added yet. Add Instagram, YouTube, X, or Email" when empty.
+
+CARD EDITOR - e.g. the "Edit YouTube card" bottom sheet
+- Sticky "Live preview" (Hide/Show) showing the card in the selected look (name, handle, subscriber count, Subscribe button).
+- "Profile link or username" field with a detected-type chip ("YouTube channel") and a "Refresh" button.
+- "Show stats" toggle; "Button text" field with a counter (e.g. "Subscribe", 9/24).
+- "Look" picker: Banner (selected), Glass, and more.
+- Bottom bar: "Cancel" and "Save changes" (disabled until something changes).
+- Note: in the owner's long screenshot the sticky Live preview header appears several times - most likely a scroll-capture artifact. Check in a real browser and fix only if it truly renders more than once.
+
+SETTINGS TAB
+- "Account, plan and security" card ("Open account").
+- "Integrations" card: Google Analytics, Meta Pixel, WhatsApp (all "Not connected") - OUT OF SCOPE.
+- "SEO & search" card: "Control how your page appears on Google and social search previews." Page title (0/60, placeholder "{Name} | iveo"), Meta description (0/160), a "Search preview" card (URL, title, description) and a "Save" button (disabled until changed).
+- Inside it, "Search console": "Inspect profile indexability, regenerate sitemaps, and submit updates to search engines." + an "Open SEO console" button.
+
+SEO HEALTH CONSOLE (/admin/seo; header "iveo | SEO Health Console"; buttons "Sync" and "Dashboard")
+- 4 stat tiles: "Indexable profiles" (e.g. 5 of 5 total creators), "Sitemap URLs" (e.g. 13, "2 sitemap pages"), "Excluded (noindex)" (e.g. 0, "Private, hidden, or incomplete"), "Missing bio metadata" (e.g. 2, "Using automated SEO fallback").
+- "Live Profile SEO & Snippet Validator": handle input ("Enter handle (e.g. maya or @maya)"), "Validate SEO" and "GSC Inspect" buttons.
+- "Crawler & Search Console Integrations":
+  - Google Search Console Sitemap API - status "Setup Needed"; "Service Account JSON Key" with an "Upload .json" button; a textarea ("Paste Google Cloud Service Account JSON key here or upload .json above..."); "GSC Property URL" input (placeholder "https://iveo.site/ or sc-domain:"); buttons "Save & Test GSC" (disabled until valid) and "Test Connection".
+  - Bing Webmaster API - "Ready (Env Needed)".
+  - IndexNow Instant Ping - "Ready (Env Needed)".
+  - "XML Sitemaps & Crawlers": robots.txt, sitemap.xml, sitemap-pages.xml, sitemap-profiles.xml, llms.txt.
+  - "Recent Submission Events": rows like "indexnow_ping -> not_configured" and "profile_updated -> sitemap_invalidated".
+- "Billing & Subscription Inspector": "Privileged admin lookup & lifecycle reconciliation" (handle input + "Inspect Billing").
+- "Public Profile Indexability Audit": table (Handle, Display Name, Status, Indexability) of all profiles.
+- Observation: earlier console snippets used a different title/description pattern ("{Name} - Links, Projects & Social Profiles | Iveo" with a redundant description) than the current Settings preview ("{Name} | iveo" + the bio). Check which one the live page really serves and make every surface use ONE builder (W4.8).
+
+REPORTED SYMPTOMS (from the owner)
+1. LINKS: when a user adds a link it usually appears on their public page, but sometimes it does not; when a link is deleted it still shows on the public page.
+2. SOCIAL CARD LOOKS: choosing a different look (YouTube etc.) does not change the card.
+3. SECTION HEADER: adding a "Section header" does not work properly and does not sync with the public page.
+4. SPEED: the app is not smooth or fast enough.
+5. SEO: the SEO area should be minimized and organised; SEO is for ALL users but each user controls ONLY their own profile's SEO; "Crawler & Search Console Integrations" must work with the Google service-account JSON stored in the app backend.
+
+
+==============================
+3. PHASE 0 - AUDIT FIRST (read-only, before any code change)
+==============================
+1. Create a new git branch (e.g. fix/iveo-links-looks-seo) if git is available.
+2. Identify (read-only): hosting platform and runtime (serverless / edge / long-running); framework; Firestore vs Realtime Database (stay with it); WHERE writes happen (browser client SDK, server routes/actions with the Admin SDK, or both); how server code gets the signed-in user from Clerk; how the admin role is determined today; how the public page is rendered and cached (SSR / ISR / static / CDN) and how it is revalidated; the data model for page items (one ordered collection or several, how order is stored, how delete works, any denormalized public snapshot); where card Looks are defined and rendered (picker, live preview, public page); every place the SEO fallback title/description is built; where integration credentials are stored today and how the /admin/seo endpoints authorize.
+3. Reproduce each reported symptom on a mobile-width viewport and capture REAL evidence: network responses, the Firebase documents, the public page HTML, server logs.
+4. Create or update docs/FIREBASE_DATA_MAP.md (the only new documentation file allowed): item types, paths, schemas, who writes, who reads.
+5. List each broken item with evidence and root cause. Fix based on evidence; do not rewrite code that works.
+6. If you cannot run something (missing credentials, no emulator), say so explicitly, review the code statically, and mark the item UNVERIFIED in the final report. Never claim something works unless you verified it.
+
+
+==============================
+4. W1 - LINKS <-> PUBLIC PAGE SYNC
+==============================
+GOAL: whatever the owner does to the items on their page - add, edit, delete, reorder, enable/disable - is saved to Firebase immediately and shows on the public page within seconds, for EVERY item type, with no ghost items (deleted but still visible) and no missing items (added but not visible).
+
+ITEM TYPES: enumerate them from the code registry behind the "Add to your page" sheet (Social, Players, Links, Support & shop, Forms & utilities, Layout): plain links, social cards (all platforms), players (YouTube, Twitch, Spotify, SoundCloud, ...), forms, support & shop items, section headers, and social icons (header/footer social bar). Test every type with every operation, including items created through the "Paste a link" box.
+
+W1.1 TRACE. For each operation x item type, trace: UI event -> client handler/state -> network request (URL, method, status, payload) -> server route/action -> Clerk user id present and ownership check -> database write (awaited? what did it return?) -> the document(s)/fields the public page reads -> render -> cache layer. Add TEMPORARY structured logging (never secrets or personal data) and write down the FIRST hop where the dashboard and the public page diverge. For DELETE specifically, determine which of these happens today: (a) the document is removed; (b) it is removed only from the dashboard list but not from the stored order list/array, section reference or a denormalized public snapshot; (c) it is soft-deleted with a flag the public page ignores; (d) the request fails silently; (e) it is "resurrected" by a later stale write (autosave or optimistic state re-saving the old list); (f) it is removed in the database but the public page is served from a stale cache.
+
+W1.2 CHECK THESE CAUSES, MOST LIKELY FIRST (confirm with evidence, then apply the smallest fix):
+a. Public page cache never invalidated. After EVERY successful add/edit/delete/reorder/toggle, trigger on-demand revalidation (path and/or tag per profile) for the canonical lowercase handle - awaited, not fire-and-forget - and keep a short TTL (60 s or less) as a safety net. Make sure CDN/edge caches honor it (consistent cache headers: s-maxage + stale-while-revalidate; tag/path purge where the platform supports it).
+b. Whole-list overwrite. The dashboard writes the complete items list on every change from a possibly stale local copy, so a delete is undone or a fresh add is lost. Replace with per-item writes (one document or field per item) and field-level order updates; never write back a list built from stale state.
+c. Delete leaves references. Deleting an item must, in ONE transaction/batch, remove the item AND every reference to it (order list/array, section membership, header/footer social-icon list, denormalized public snapshot, featured/pinned flags, and whatever feeds sitemap/JSON-LD sameAs). Dashboard and public page must read the same structure.
+d. Denormalized snapshot not rebuilt. If a "published/public profile" snapshot exists, rebuild it in the same publish step (W1.3) - or remove the snapshot and read live data.
+e. Filter/renderer mismatch. The public query or renderer excludes valid new items (requires a url, wrong enabled flag, type not in an allow-list, schedule/visibility rules, missing order) or includes deleted ones; a renderer switch that lacks a case for some item types silently renders nothing.
+f. Ordering. Concurrent adds/reorders create duplicate or missing order values and hide or misplace items. Use a safe scheme (sparse/fractional order values, or a transaction that renumbers) so no item is ever dropped or duplicated; items with missing order values get a deterministic position.
+g. Optimistic UI without confirmation. The dashboard shows the change before the server confirms and never rolls back on failure; "Saved" appears on failure; non-2xx responses are ignored; errors are swallowed in empty catch blocks.
+h. Race conditions. Add followed quickly by delete (before the add's response) leaves an orphan or resurrects the item. Use client-generated stable ids (idempotent creates), serialize mutations per user or per item, and ignore out-of-order responses.
+i. Dashboard data cache. Query keys not updated/invalidated after a mutation, or a refetch racing with an optimistic update brings back the old list.
+j. Write-path basics. Writes not awaited before the response is returned on serverless hosting; the Admin SDK used on an edge runtime; the Clerk user id not detected on the server (middleware matcher or helper usage) so the handler returns early; undefined values or oversized documents rejected by the database; wrong project/env vars in the hosting environment. Confirm every mutation by reading the document back from Firebase.
+
+W1.3 ONE MUTATION PATH + ONE PUBLISH STEP. All item mutations (every type, from every entry point including the "Paste a link" box and the "Add to your page" sheet) go through the same server-side functions that: (1) verify the Clerk session and that the caller owns the profile/item; (2) validate and sanitize input per item type; (3) write with transactions/batches (field-level updates, server timestamps); (4) run ONE publish step: rebuild the snapshot (if any), revalidate the public page, refresh the sitemap lastmod, and queue search-engine notification (W4.7); (5) return the saved item(s) so the client reconciles. No mutation may bypass it.
+
+W1.4 UI TRUTHFULNESS. Optimistic updates are fine but must reconcile with the server response; on failure roll back and show the existing error toast. Use the existing loading/skeleton components for pending states.
+
+DONE WHEN (W1): for every item type: add -> on the public page within about 5 s (hard refresh and on a second device); edit -> updated; reorder -> same order; disable -> disappears, enable -> returns; delete -> gone from Firebase (document and all references), from the dashboard and from the public page, with no reappearance after refresh, sign-out/sign-in or a later edit; rapid add/edit/delete/reorder sequences end in the correct final state; a forced failure shows an honest error and rolls back; each proven by a Firebase read-back (path + redacted fields) in the report.
+
+
+==============================
+5. W2 - SECTION HEADER
+==============================
+GOAL: "Section header" (Add to your page: "Organize your page into clean titled sections") can be added, edited, reordered, enabled/disabled and deleted, and the public page shows it correctly in the right place, always in sync with the dashboard. It uses the W1 mutation/publish path.
+
+W2.1 Add flow. Tapping "Section header" in the "Add to your page" sheet (also when found through search, e.g. typing "Head") creates the item (or opens its existing editor) and saves it. It then appears in the Links list at the position the current UX intends, and on the public page as a titled section divider.
+
+W2.2 Behavior. A header is a normal ordered item: reordering moves it; the items between it and the next header form its section on the public page (keep the current intended design - do not redesign); editing the title updates both views; disabling or deleting a header NEVER deletes or hides the other items; the title is required, trimmed and length-limited with an inline message (reuse the existing counter style if there is one); multiple headers are allowed; first and last positions work; pages without headers are unaffected.
+
+W2.3 Public rendering. The public renderer must have a case for the header type, using the existing section-title style and the Appearance typography tokens.
+
+W2.4 CHECK FIRST: header type missing from the renderer switch or the public filter (for example items without a url are filtered out); the "Add" handler for headers is a placeholder or writes the wrong schema; link-url validation wrongly applied to headers (they have no url); code assuming every item has a url (a null error that aborts the whole public page render or the dashboard list); missing order field; sitemap/JSON-LD/analytics code assuming a url; cached public page not revalidated (W1.2a).
+
+DONE WHEN (W2): add a header (empty page, top, middle, end) -> visible in the list and on the public page; edit the title; reorder across items; disable/enable; delete (items remain); two headers in a row; legacy pages unaffected; database read-back proves each.
+
+
+==============================
+6. W3 - SOCIAL CARD LOOKS AND THE CARD EDITOR
+==============================
+GOAL: in the Add/Edit card sheet of EVERY platform, choosing a Look changes the live preview immediately, persists when saved, and renders on the public page exactly as previewed. The other editor controls work too.
+
+W3.1 INVENTORY. From the existing code, list for every platform/player card its looks, the component/style that renders each look in (1) the picker thumbnail, (2) the live preview and (3) the public page, and the stored field. Put the table in the report. Do NOT redesign any look.
+
+W3.2 ONE LOOK REGISTRY. One registry (look id, label, renderer/style tokens) used by the picker, the live preview and the public page renderer; the look id is stored on the item; unknown or legacy ids fall back to the platform default (never a blank card or a crash).
+
+W3.3 SELECTION FLOW. Tapping a look updates the draft and the live preview immediately; "Save changes" enables when the draft differs from the saved item (a look change counts as a change); Cancel discards; Save writes the whole draft (look, button text, show stats, link/handle, resolved metadata snapshot) in ONE write via the W1 mutation path; the dashboard list and the public page show the new look within seconds.
+
+W3.4 CHECK FIRST: the preview component ignores the look prop or hard-codes the default; the look is saved under a different key than the public renderer reads; the public renderer's switch lacks some look ids; dynamically built CSS class names (for example "look-" + id) removed by the CSS build/purge in production (missing safelist) - verify in a PRODUCTION build, not only dev; Appearance theme tokens overriding look colors; a stale closure or memoization saving the old draft; the dirty-state comparison ignoring the look field; the public page served from cache (W1.2a).
+
+W3.5 OTHER CONTROLS
+- "Profile link or username": shared parser/normalizer, detected-type chip, debounced live preview, inline validation in the existing style.
+- "Refresh": re-resolves metadata server-side (name, avatar, follower/subscriber stats, ...), updates the draft and preview, stores fetchedAt; loading and honest failure states; rate-limited. The public page uses the stored snapshot (refreshed with a TTL) and never calls a provider on every page view.
+- "Show stats": shows/hides stats in the preview and on the public page; persists.
+- "Button text": max 24 characters with the counter; empty = the platform default; plain text only (sanitized); saved and shown on the public page.
+
+DONE WHEN (W3): for every platform and EVERY look: select -> preview changes -> Save changes -> Firebase read-back shows the look id -> the public page shows the same look (after revalidation, in a production build); Show stats and Button text persist and render; Refresh updates the data; Cancel discards; legacy items without a look still render.
+
+
+==============================
+7. W4 - SEO: MINIMIZED, ORGANISED, PER-USER, SEARCH CONSOLE JSON IN THE BACKEND
+==============================
+GOAL: SEO is available to EVERY user for THEIR OWN profile only; the global/admin SEO tooling stays admin-only; the SEO UI is compact and well organised; "Crawler & Search Console Integrations" work, with the Google service-account JSON stored securely in the backend.
+
+W4.1 TWO SURFACES, STRICT SCOPE (enforced on the server, not just hidden in the UI)
+- USER SURFACE (every signed-in user): Settings -> "SEO & search" (Page title, Meta description, Search preview, Save) and the "Search console" block. They act ONLY on the signed-in user's own profile.
+- ADMIN SURFACE (admins/owner only): the global console at /admin/seo - global stats, validator for ANY handle, Crawler & Search Console Integrations (credentials), sitemap/crawler tools, all submission events, Billing & Subscription Inspector, indexability audit of all profiles.
+- Rules: (1) User-surface endpoints derive the profile from the verified Clerk session; never trust a handle or id sent by the client (if a handle is accepted it must equal the caller's own, otherwise 403). (2) Admin endpoints verify the admin role on the server using the existing admin check (find how admin is determined today; do not invent a new auth system). (3) Non-admins never receive other users' data, credentials, billing data or global stats; a non-admin who opens an admin route gets the user-scoped view (or a proper 403), never the global data. (4) Add tests: user A cannot read/write/inspect/submit for user B; a non-admin cannot call any admin endpoint; an admin can.
+- "Open SEO console" (Settings) must work for EVERY user: for a non-admin it opens a user-scoped SEO console (same components, own profile only); for an admin it opens the global console. Reuse the existing route if it can be made role-aware; add a user route only if the current one is admin-gated and cannot be made role-aware.
+
+W4.2 USER SEO SETTINGS (Settings -> "SEO & search")
+- Fields: Page title (counter 0/60), Meta description (0/160), live Search preview, Save (enabled only when something changed).
+- Placeholders show the auto-generated fallback; an empty field means "use the fallback"; counters accurate; trim; strip control characters/HTML; inline errors only for truly invalid values.
+- The Search preview updates as the user types using the SAME builder as the public page (W4.8), so the preview equals what is served. Preview URL = https://iveo.site/@handle.
+- Save writes to Firebase through the W1 mutation/publish path (revalidate the public page, refresh the sitemap lastmod, queue search-engine notification), then reads back and shows honest success/failure; a reload shows the saved values.
+- Keep any visibility/indexing setting that exists elsewhere (do not add one). A hidden/private/incomplete profile must be noindex and excluded from the sitemap.
+
+W4.3 USER "SEARCH CONSOLE" BLOCK (own profile only)
+- Compact actions for the user's own profile: (a) check indexability (live check of their own public page, plus Google "GSC Inspect" when the admin has connected Search Console), (b) regenerate their own sitemap entry, (c) submit updates to search engines (IndexNow/Bing ping for their own URL), rate-limited per user (e.g. 1 per 10 minutes) with a friendly message. Results appear in a compact panel, with their own recent events only.
+
+W4.4 ADMIN CONSOLE - ORGANISE AND MINIMISE (/admin/seo)
+Keep EVERY existing feature; only regroup and tighten, using the existing design tokens and components. Target structure (mobile first), top to bottom:
+1. Header unchanged (logo, "SEO Health Console", Sync, Dashboard). "Sync" keeps its meaning: refresh ALL console data (stats, statuses, events, sitemaps) from the backend and show the real result.
+2. Summary: the 4 stat tiles (Indexable profiles, Sitemap URLs, Excluded (noindex), Missing bio metadata) in ONE compact grid/row with smaller padding and one-line labels.
+3. Sections as collapsible accordions or a segmented control (use whichever component already exists in the project). Default open = Validator; the others collapsed, each collapsed row showing its title plus a one-line status:
+   a. Validator - "Live Profile SEO & Snippet Validator" (handle input, Validate SEO, GSC Inspect, compact result).
+   b. Integrations - "Crawler & Search Console Integrations": three compact rows (Google Search Console, Bing Webmaster API, IndexNow), each with a status chip; tapping a row expands its settings. When Google is connected, show a one-line summary (service-account email, property, last test) instead of the large textarea; the upload/paste fields appear only when setting up or replacing the key.
+   c. Sitemaps & events - the crawler file links (robots.txt, sitemap.xml, sitemap-pages.xml, sitemap-profiles.xml, llms.txt) in one compact row + "Recent Submission Events" showing the latest ~5 with "Show more".
+   d. Indexability audit - "Public Profile Indexability Audit" as a compact table (Handle, Display Name, Status, Indexability) with search + pagination (never load all users at once).
+   e. Admin tools - "Billing & Subscription Inspector" (collapsed; privileged).
+4. Consistent spacing, one card style, consistent buttons/chips, a single title + one-line description per section, no duplicated headings. Keep the copy; shorten only where it wraps awkwardly (list changes in the report).
+- Settings page: merge "SEO & search" and "Search console" into one tidy card with two compact sub-sections (Page title/Description/Preview/Save; Search console actions) - same components, same copy.
+- ACCEPTANCE: the first screen of /admin/seo shows the summary + validator without scrolling more than about 1.3 screens; every section is one tap away; no horizontal overflow at 320 px; all features still present and working; no new design language.
+
+W4.5 GOOGLE SEARCH CONSOLE - SERVICE-ACCOUNT JSON STORED IN THE BACKEND (admin only)
+The UI exists: "Service Account JSON Key" with "Upload .json", a paste textarea, "GSC Property URL", buttons "Save & Test GSC" and "Test Connection", and a status chip (now "Setup Needed"). Make it fully work:
+a. Input. File upload (.json, max about 20 KB) or pasted text. The property URL accepts "https://iveo.site/" (URL-prefix property, trailing slash) or "sc-domain:iveo.site" (trim and normalize).
+b. Client pre-check (no network): valid JSON; type = "service_account"; has client_email, private_key, project_id, token_uri; precise inline errors; "Save & Test GSC" enables only when both fields are valid. Do not keep the private key in client state longer than needed, never log it, and clear the textarea after a successful save.
+c. Server (admin only, HTTPS POST, rate-limited, size-capped, Origin/CSRF-checked): re-validate everything, including that the PEM private key parses. Encrypt the whole JSON at rest with AES-256-GCM (random IV, auth tag, key version) using a server-only key from the environment variable INTEGRATIONS_ENCRYPTION_KEY (32 random bytes, base64). If that variable is missing, derive a key with HKDF from an existing server-only secret already in the environment and flag it in the report as an OWNER ACTION to set a dedicated key; if neither exists, refuse with a precise message. If decryption later fails (key changed), show "Setup Needed - re-upload the key" and never crash. Store the result in an admin-only configuration document in Firebase (e.g. a system/integrations document): encrypted blob + IV + tag + key version, client_email, project_id, property URL, updatedAt, updatedBy (Clerk user id), lastTestAt, lastTestStatus, lastError (sanitized). NEVER store plaintext, and NEVER return the private key (or the raw JSON) from ANY endpoint, log it, or include it in error messages: the browser only ever sees masked metadata (client_email, project_id, property, status, last test time).
+d. Environment override. If GSC_SERVICE_ACCOUNT_JSON (+ GSC_SITE_URL) exist in the environment they take precedence (the status says "Configured via environment"); accept raw JSON or base64 and fix escaped newlines in private_key.
+e. "Save & Test GSC" saves then tests; "Test Connection" tests the stored configuration. A test = the server gets an access token with the JWT-bearer grant (RS256 JWT: iss = client_email, scope https://www.googleapis.com/auth/webmasters, aud = token_uri, lifetime 1 hour or less; exchange at token_uri; use the Google auth library if the project already has it, otherwise Node crypto), then calls the Search Console API to confirm the property is accessible and reads the permission level. Map failures to precise, actionable messages in the existing status area: bad key / JWT signature or clock skew; Search Console API not enabled in the key's Google Cloud project (name the project and say where to enable it); service-account email not added to the property (show the exact email and where to add it: Search Console -> Settings -> Users and permissions -> Add user, Owner or Full); property URL wrong, not found or wrong type; quota; network.
+f. Status chip: Setup Needed -> Connected (service-account email, property, permission level, last test time) or Error (reason). It reflects the stored status; Test Connection refreshes it.
+g. Use. ONE server helper (e.g. getGscClient) used by (1) "GSC Inspect" in the validator (URL Inspection API for URLs inside the property) and the user-level inspect (own URL only), (2) sitemap submission (sitemaps.submit for the sitemap index after regeneration, throttled), (3) the user "Search console" block. Cache the access token in memory until about 5 minutes before expiry; never persist tokens.
+h. Replace = upload again. Add ONE minimal "Remove key" action (the only new control permitted in this prompt) that deletes the stored configuration. Log who changed what and when (no secrets).
+i. NEVER: commit the JSON to git, hard-code it, place it in the client bundle or a public folder, log it, or store it unencrypted. Make sure .gitignore blocks common key-file patterns (for example *service-account*.json and *-firebase-adminsdk-*.json). The owner uploads the JSON through this UI after deployment; do not ask for it.
+
+W4.6 BING, INDEXNOW, SITEMAPS, EVENTS (admin console)
+- Bing Webmaster API: real status from BING_WEBMASTER_API_KEY (missing = "Setup Needed"; present = verified on test/first use); submit changed URLs (single/batch) and respect quotas. Bing also accepts IndexNow, so this API is optional - never block anything on it.
+- IndexNow needs no external sign-up (internal change, no new UI): key source order = INDEXNOW_KEY env, else the stored backend configuration, else generate once (random 32 hex characters) and store it. Serve the key file at /{key}.txt (a route returning exactly the key as text/plain). Status becomes active. POST to https://api.indexnow.org/IndexNow with host, key, keyLocation and urlList (public, indexable, canonical URLs only; batched; debounced). Treat 200/202 as accepted and 400/403/422/429 as errors (log them; back off on 429).
+- Sitemaps and crawler files: /robots.txt, /sitemap.xml (index), /sitemap-pages.xml, /sitemap-profiles.xml (ONLY public, indexable profiles; canonical URLs; lastmod = real updatedAt from Firebase; split at 50,000 URLs), /llms.txt - all return 200 with the right Content-Type; invalidated/regenerated on every profile/link/SEO change ("profile_updated -> sitemap_invalidated" must really regenerate). The stat tiles (Sitemap URLs, Indexable profiles, Excluded) must match the real sitemap and database.
+- Recent Submission Events: real events in Firebase (type, scope = user/handle, provider, target URL, HTTP status/response summary, outcome: success / failed / rate_limited / not_configured / skipped_duplicate, timestamp; no secrets). Admin sees all (latest N with "Show more"); a user sees only their own; debounce so repeated saves do not spam; cap retention.
+
+W4.7 SEARCH-ENGINE NOTIFICATION (server-side, async, debounced; never in the user's save path)
+- After a publish step (W1.3) queue: IndexNow + Bing for the profile URL (at most once per URL per 10 minutes, batched) and, if Google is connected, a sitemap refresh via sitemaps.submit (throttled, e.g. once per hour). Failures are logged as events and never affect the user's save.
+- Do NOT use the retired google.com/ping sitemap endpoint. Do NOT use the Google Indexing API for profile pages (it is only for job-posting and livestream pages).
+
+W4.8 PUBLIC PAGE SEO OUTPUT (ONE shared builder)
+- One function builds title, description, canonical, robots, Open Graph/Twitter tags and JSON-LD from the Firebase profile. It is used by the public page, the Settings "Search preview", the validator's snippet preview and the console counters (e.g. "Missing bio metadata").
+- Inspect what the public page REALLY serves, make every surface use that one builder, and fix the redundant default description (no repeated phrases, 160 characters or less, cut at a word boundary; title about 60 characters).
+- Output rules: rendered on the server (present in the initial HTML); canonical https://iveo.site/@handle (lowercase, no trailing slash, no query); robots index/follow unless hidden/private/incomplete (then noindex + excluded from the sitemap); Open Graph + Twitter tags; JSON-LD ProfilePage with mainEntity Person (name, alternateName "@handle", image, description, url, sameAs from the profile's real social cards); 404 for unknown handles; one-hop 301 for uppercase/www/http variants.
+
+W4.9 CODE ORGANISATION
+Group the SEO code into one clear module (builder, validator, integrations/google-search-console, bing, indexnow, sitemaps, events, access control) with typed inputs/outputs, no duplicated logic, consistent naming, and API routes grouped by surface (user vs admin). Add unit tests for the builder, the JSON pre-check, the encryption round-trip and the access-control rules.
+
+CHECK FIRST (W4): the Settings preview and the public page using different builders; admin endpoints trusting a client-supplied handle or role; "Open SEO console" leading non-admins to a blocked or global view; the JSON upload posting to a route that does not exist or is blocked by body-size limits/parsing; private_key newline escaping; service-account email not added to the Search Console property; Search Console API not enabled in the key's Google Cloud project; property URL missing the trailing slash; IndexNow key-file route missing; sitemap never invalidated; status chips hard-coded ("Ready (Env Needed)").
+
+DONE WHEN (W4): (1) a normal user can edit and save ONLY their own SEO and run only their own checks, and cross-user attempts get 403; (2) the admin console is compact and organised with all features intact; (3) uploading a valid service-account JSON stores it encrypted in the backend, Test Connection reports Connected with the real permission level (or a precise reason), and GSC Inspect + sitemap submission work; the key is never visible in any response, log or plaintext in the database; (4) IndexNow is active without manual setup and events show real outcomes; (5) sitemaps/robots/llms return 200 and the stat tiles match reality; (6) the Settings preview equals the served title/description.
+
+
+==============================
+8. W5 - SPEED AND SMOOTHNESS (dashboard + public page)
+==============================
+GOAL: the dashboard and the public page feel instant on a mid-range phone, without changing features or visuals. Keep the existing animated "i" logo loader (if present) for genuinely slow states - do not remove or redesign it; reduce how often users see it by making things faster and using optimistic updates.
+
+W5.1 MEASURE FIRST (before changing anything). On a mobile viewport with throttled 4G and 4x CPU slowdown record: Lighthouse mobile (Performance score, LCP, INP/TBT, CLS) for the public page and the dashboard; JS bundle size per route; API p50/p95 latency for the main endpoints (list items, save item, appearance save, SEO save); number of database reads/writes per user action; time for tab switches and sheet opens. Keep the numbers for the report.
+
+W5.2 TARGETS (guides). Public page: LCP 2.5 s or better, CLS 0.1 or better, INP 200 ms or better. Tab switches and sheet opens feel immediate (under about 100 ms). Saves feel instant (optimistic) with server confirmation under about 500 ms p95. Scrolling and sheet animations stay smooth on a mid-range phone.
+
+W5.3 PUBLIC PAGE
+- Serve from the static/ISR cache with on-demand revalidation (W1.2a) and CDN-friendly headers (s-maxage + stale-while-revalidate); one database read (or one snapshot) per render; all data in the initial HTML (no client waterfalls).
+- Do not ship dashboard code or the Clerk client SDK to anonymous public-page visitors (verify nothing on that page depends on it).
+- Fonts: only the families/weights actually used, subsetted, preloaded, font-display: swap. Images: correct sizes (srcset), modern formats, explicit width/height, lazy-load below the fold, optimized avatar/background.
+- Embeds (YouTube, Spotify, SoundCloud, Twitch, ...) load only when near the viewport (or on tap) using the same look. No third-party script on first paint unless required. Analytics events batched (sendBeacon).
+
+W5.4 DASHBOARD
+- Code-split per tab and per sheet/editor (Appearance, card editors, SEO console, color pickers, charts) with prefetch on intent (visible/touchstart); do not load every platform editor up front.
+- Avoid request waterfalls: one bootstrap request/batch for what a tab needs, independent calls in parallel; stale-while-revalidate fetching; keep optimistic updates.
+- Debounce autosave (about 300-800 ms) and coalesce several field changes into one write. Memoize list rows with stable keys; do not re-render the whole page per keystroke (colocate state, debounce expensive previews); virtualize only genuinely long lists. No layout shift when sheets open. Remove noisy console logging and dead code.
+
+W5.5 BACKEND
+- Add missing database indexes; bound and paginate queries (audit table, events, items); remove N+1 reads; use Promise.all for independent awaits.
+- Reuse the Firebase Admin initialization (singleton); keep server functions in the same region as the database; trim heavy imports/cold-start cost.
+- Cache admin/integration configuration reads in memory with a short TTL; cache provider metadata calls (oEmbed etc.) with a TTL; never call Google/Bing/IndexNow in a user's request path (W4.7).
+
+W5.6 NETWORK. Compression (brotli/gzip), immutable caching for hashed static assets, preconnect only to origins really used, minimal third-party scripts.
+
+W5.7 CONSTRAINTS. No visual changes (outside the SEO surfaces), no feature removal (including existing animations), no new dependencies unless they clearly reduce weight. If a visual effect causes measurable jank, report it under NEEDS APPROVAL instead of changing it.
+
+DONE WHEN (W5): the before/after table shows improvement on the metrics above with no functional regression and no visual difference outside the SEO surfaces.
+
+
+==============================
+9. VERIFICATION CHECKLIST (run before the final report)
+==============================
+LINKS (W1)
+[ ] Every item type x (add, edit, reorder, enable/disable, delete): Firebase read-back OK; public page correct after a hard refresh and on a second device; no reappearance after refresh, sign-out/sign-in or a later edit.
+[ ] Ten rapid add/edit/delete/reorder actions end in the right state; an offline/failed save shows an honest error and rolls back.
+
+SECTION HEADER (W2)
+[ ] Add (empty page, top, middle, end), edit title, reorder, disable/enable, delete (items remain), two headers in a row - dashboard and public page always match.
+
+LOOKS (W3)
+[ ] Every platform x every look: preview changes, Save persists, public page matches (production build). Show stats, Button text, Refresh and Cancel work.
+
+SEO (W4)
+[ ] User A cannot read/write/inspect/submit for user B; a non-admin cannot call admin endpoints; an admin can.
+[ ] Settings SEO: edit, save, reload; the public page head matches; the preview equals what is served.
+[ ] JSON upload: invalid JSON -> clear errors; valid JSON without permission -> precise message naming the email to add; valid with permission -> Connected. The key never appears in responses, logs or plaintext in the database; "Remove key" works.
+[ ] GSC Inspect and sitemap submission work when connected. IndexNow key file is served; a ping is accepted; events show real outcomes.
+[ ] robots.txt, sitemap.xml, sitemap-pages.xml, sitemap-profiles.xml, llms.txt return 200 with valid content; the stat tiles match reality.
+[ ] Admin console layout meets the W4.4 acceptance (first screen, one tap to any section, no overflow at 320 px, all features present).
+
+SPEED (W5)
+[ ] Before/after table recorded; no functional regressions.
+
+GENERAL
+[ ] build, lint, type-check and all tests pass.
+[ ] Before/after screenshots (390 px wide, if tooling allows) of Links, Profiles, Appearance, Contacts, Analytics, Settings (non-SEO parts) and a public page are identical; only the SEO surfaces differ.
+[ ] No change to Clerk or Firebase configuration/rules; no feature added or removed (except the "Remove key" action).
+
+
+==============================
+10. REQUIRED OUTPUT (definition of done)
+==============================
+1. All five workstreams implemented and working in the repository. Nothing left as TODO, stub, mock or "not implemented". If you cannot edit files directly, output COMPLETE files - never snippets with "..." or "rest unchanged".
+2. No features added or removed; UI changes only in the SEO surfaces (plus the "Remove key" action). No changes to Clerk or Firebase configuration or rules.
+3. Git commits (if git is available): one clear commit per workstream.
+4. If you run low on context or time: finish the current workstream cleanly, commit, and report exactly what is done and what remains - never leave a workstream half-done.
+5. FINAL REPORT in your reply, with these parts:
+   a) ROOT CAUSES for symptoms 1-3 (links not syncing / deleted links still showing, looks not changing, section header not working): the first failing hop, the exact (sanitized) error, the evidence and the fix.
+   b) Summary table of every other problem: problem -> root cause -> fix -> files.
+   c) Files added / changed / deleted.
+   d) Database: collections/paths touched, index definitions needed (for the owner to deploy), any migration (and how to run it safely).
+   e) Environment variables table (names only): INTEGRATIONS_ENCRYPTION_KEY, GSC_SERVICE_ACCOUNT_JSON (optional override), GSC_SITE_URL (optional override), BING_WEBMASTER_API_KEY (optional), INDEXNOW_KEY (optional override), and any others you added - purpose, server-only or public, required or optional, plus a note that the owner must set them in the hosting environment and redeploy.
+   f) OWNER ACTIONS list, with exact steps: (1) set INTEGRATIONS_ENCRYPTION_KEY (32 random bytes, base64) and redeploy; (2) Google Cloud: make sure the Search Console API is enabled in the project the service-account key belongs to; (3) Search Console: add the service-account email (client_email from the JSON) as a user (Owner or Full) of the iveo.site property; (4) in the SEO console, upload the JSON, enter the property URL, press "Save & Test GSC"; (5) once it shows Connected, if the key file was ever shared outside the app (chat, email), create a new key in Google Cloud (IAM & Admin -> Service accounts -> Keys), upload it in the console, and delete the old key; (6) optional: Bing Webmaster Tools -> Settings -> API access -> BING_WEBMASTER_API_KEY; (7) deploy any listed database indexes.
+   g) Performance before/after table.
+   h) Test results: what you ran and the result, plus everything you could NOT verify without credentials (marked UNVERIFIED).
+   i) NEEDS APPROVAL list: anything that would require a UI/UX change outside the SEO surfaces.
+   j) Known limitations.
+
+
+==============================
+11. FINAL REMINDERS
+==============================
+- Clerk = authentication only. Firebase = data storage only. Neither is changed.
+- No features added or removed. Visual changes only in the SEO surfaces.
+- One mutation path and one publish step: every change is saved to Firebase, revalidates the public page, and is proven by a read-back.
+- Each user controls only their own SEO; admin tools stay admin-only and are enforced on the server.
+- The service-account JSON never appears in code, git, logs, responses or this prompt - the owner uploads it in the console and it is stored encrypted in the backend.
+- Evidence first: reproduce, find the root cause, then fix. Never claim something works unless you verified it.
+- Deliver complete, working output and the full final report.

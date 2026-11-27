@@ -6,7 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+data/*.json
 data/*.local.json
 data/gsc_service_account.local.json
+*service-account*.json
+*-firebase-adminsdk-*.json
 .playwright-cli/
+
 
