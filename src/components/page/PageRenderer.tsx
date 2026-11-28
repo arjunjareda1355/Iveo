@@ -512,20 +512,37 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
                 gap: `${Math.round(2 * scale)}px`,
               }}
             >
-              <h1
-                className={`leading-tight max-w-full truncate ${
-                  isCompactHeader || isLeftHeader ? '' : 'px-2'
-                } ${nameUppercase ? 'uppercase' : ''}`}
-                style={{
-                  fontSize: `${nameSizePx}px`,
-                  fontWeight: nameWeight,
-                  letterSpacing: nameTracking,
-                  color: tokens.text,
-                  fontFamily: nameFontFamily,
-                }}
-              >
-                {displayName}
-              </h1>
+              {isPublicPage ? (
+                <h1
+                  className={`leading-tight max-w-full truncate ${
+                    isCompactHeader || isLeftHeader ? '' : 'px-2'
+                  } ${nameUppercase ? 'uppercase' : ''}`}
+                  style={{
+                    fontSize: `${nameSizePx}px`,
+                    fontWeight: nameWeight,
+                    letterSpacing: nameTracking,
+                    color: tokens.text,
+                    fontFamily: nameFontFamily,
+                  }}
+                >
+                  {displayName}
+                </h1>
+              ) : (
+                <div
+                  className={`leading-tight max-w-full truncate ${
+                    isCompactHeader || isLeftHeader ? '' : 'px-2'
+                  } ${nameUppercase ? 'uppercase' : ''}`}
+                  style={{
+                    fontSize: `${nameSizePx}px`,
+                    fontWeight: nameWeight,
+                    letterSpacing: nameTracking,
+                    color: tokens.text,
+                    fontFamily: nameFontFamily,
+                  }}
+                >
+                  {displayName}
+                </div>
+              )}
 
               <div
                 className={`font-mono tracking-tight max-w-full inline-flex items-center gap-1.5 ${
@@ -972,8 +989,46 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
-          // 4f. Instagram Showcase Block
+          // 4f. Instagram Showcase Block (use EmbedBlock whenever embedMeta or custom page Card Look is active)
           if (block.kind === 'instagram') {
+            if (block.embedMeta || layout.cardLook !== 'match_page') {
+              const normalizedIgBlock: PageBlock = {
+                ...block,
+                embedProvider: 'instagram',
+                embedMeta: {
+                  provider: 'instagram',
+                  subtype: 'profile',
+                  title: block.title || 'Instagram',
+                  subtitle: block.badge || 'Follow for stories & updates',
+                  ctaLabel: 'Follow',
+                  displayAs: 'card',
+                  ...(block.embedMeta || {}),
+                },
+              };
+              return (
+                <div key={block.id} className="w-full">
+                  <EmbedBlock
+                    block={normalizedIgBlock}
+                    vibe={vibe}
+                    effectiveRadius={effectiveRadius}
+                    embedMode={embedMode}
+                    activeEmbedId={activeEmbedId}
+                    onActivate={(id) =>
+                      setActiveEmbedId((prev) => (prev === id ? null : id))
+                    }
+                    fontFamily={buttonFontFamily}
+                    scale={scale}
+                    onLinkClick={onLinkClick}
+                    surfaceStyle={buttonSurfaceStyle}
+                    pageCardLook={layout.cardLook}
+                    background={profile?.background}
+                    userAvatarUrl={profile?.avatarUrl ?? persona.avatarUrl ?? null}
+                    userDisplayName={displayName}
+                  />
+                </div>
+              );
+            }
+
             const igUrl = block.url ? formatExternalUrl(block.url) : 'https://instagram.com';
             const barRadius = resolveCardBorderRadius(effectiveRadius, scale, 'bar');
             const innerRadius = resolveCardBorderRadius(effectiveRadius, scale, 'inner');
@@ -1048,8 +1103,51 @@ export const PageRenderer: React.FC<PageRendererProps> = ({
             );
           }
 
-          // 4g. YouTube Showcase Block
+          // 4g. YouTube Showcase Block (use EmbedBlock whenever embedMeta or custom page Card Look is active)
           if (block.kind === 'youtube') {
+            if (block.embedMeta || layout.cardLook !== 'match_page') {
+              const yt = block.youtube;
+              const normalizedYtBlock: PageBlock = {
+                ...block,
+                embedProvider: 'youtube',
+                embedMeta: {
+                  provider: 'youtube',
+                  subtype: block.embedMeta?.subtype || 'channel',
+                  title: yt?.channelTitle || block.title || 'YouTube',
+                  handle: yt?.handle || null,
+                  subtitle: yt?.handle || block.badge || null,
+                  description: yt?.description || null,
+                  avatarUrl: yt?.avatarUrl || null,
+                  statsLabel: yt?.subscriberText || null,
+                  ctaLabel: yt?.buttonLabel || 'Subscribe',
+                  displayAs: block.embedMeta?.displayAs || 'card',
+                  ...(block.embedMeta || {}),
+                },
+              };
+              return (
+                <div key={block.id} className="w-full">
+                  <EmbedBlock
+                    block={normalizedYtBlock}
+                    vibe={vibe}
+                    effectiveRadius={effectiveRadius}
+                    embedMode={embedMode}
+                    activeEmbedId={activeEmbedId}
+                    onActivate={(id) =>
+                      setActiveEmbedId((prev) => (prev === id ? null : id))
+                    }
+                    fontFamily={buttonFontFamily}
+                    scale={scale}
+                    onLinkClick={onLinkClick}
+                    surfaceStyle={buttonSurfaceStyle}
+                    pageCardLook={layout.cardLook}
+                    background={profile?.background}
+                    userAvatarUrl={profile?.avatarUrl ?? persona.avatarUrl ?? null}
+                    userDisplayName={displayName}
+                  />
+                </div>
+              );
+            }
+
             return (
               <YouTubeShowcaseCard
                 key={block.id}

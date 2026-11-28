@@ -261,61 +261,7 @@ function useClerkSession(): IveoSession {
         }
       } catch {}
 
-      // Parallelized Direct Firestore fallback ONLY when /api/me failed or did not confirm unclaimed
-      if (!hydratedProfile && !serverConfirmedUnclaimed) {
-        try {
-          const { doc, getDoc, getDocs, collection, query, where } = await import('firebase/firestore');
-          const { db } = await import('../lib/firebase');
-
-          const uidPromise = getDoc(doc(db, 'users', activeUser.id))
-            .then((d) => (d.exists() && d.data()?.username && d.data()?.status !== 'deleted' ? d.data() : null))
-            .catch(() => null);
-
-          const userQueryPromise = getDocs(query(collection(db, 'users'), where('userId', '==', activeUser.id)))
-            .then((snap) => {
-              for (const d of snap.docs) {
-                const dData = d.data();
-                if (dData?.username && dData?.status !== 'deleted') return dData;
-              }
-              return null;
-            })
-            .catch(() => null);
-
-          const claimsPromise = getDocs(query(collection(db, 'claims'), where('userId', '==', activeUser.id)))
-            .then(async (snap) => {
-              for (const d of snap.docs) {
-                const cData = d.data();
-                if (cData?.status !== 'deleted') {
-                  const uname = String(cData.username || d.id || '').replace(/^@+/, '').toLowerCase().trim();
-                  if (uname) {
-                    const uDoc = await getDoc(doc(db, 'users', uname)).catch(() => null);
-                    return uDoc && uDoc.exists() ? uDoc.data() : { username: uname, userId: activeUser.id, displayName: uname };
-                  }
-                }
-              }
-              return null;
-            })
-            .catch(() => null);
-
-          const emailPromise = cleanEmail
-            ? getDocs(query(collection(db, 'users'), where('primaryEmail', '==', cleanEmail)))
-                .then((snap) => {
-                  for (const d of snap.docs) {
-                    const dData = d.data();
-                    if (dData?.username && dData?.status !== 'deleted') return dData;
-                  }
-                  return null;
-                })
-                .catch(() => null)
-            : Promise.resolve(null);
-
-          const results = await Promise.race([
-            Promise.all([uidPromise, userQueryPromise, claimsPromise, emailPromise]),
-            new Promise<null[]>((resolve) => setTimeout(() => resolve([null, null, null, null]), 3000)),
-          ]);
-          hydratedProfile = results.find((r) => Boolean(r && r.username)) || null;
-        } catch {}
-      }
+      // Firebase is backend-only: /api/me is the authoritative source of profile hydration.
 
       if (hydratedProfile && hydratedProfile.username && isMounted) {
         const cleanUname = String(hydratedProfile.username).replace(/^@+/, '').toLowerCase().trim();

@@ -106,6 +106,8 @@ describe('Account Lifecycle (3-Day Grace, Re-Login, Permanent Purge), Orphan Pru
   });
 
   beforeEach(async () => {
+    process.env.INTEGRATIONS_ENCRYPTION_KEY =
+      process.env.INTEGRATIONS_ENCRYPTION_KEY || crypto.randomBytes(32).toString('base64');
     resetAppearanceRateLimitForTests();
     clearGscCachesForTest();
     clearGscRuntimeConfig();
@@ -417,7 +419,7 @@ describe('Account Lifecycle (3-Day Grace, Re-Login, Permanent Purge), Orphan Pru
     });
     assert.equal(saveRes.ok, true);
     assert.equal(saveRes.summary.configured, true);
-    assert.equal(saveRes.summary.source, 'runtime_file');
+    assert.equal(saveRes.summary.source, 'stored');
     assert.equal(saveRes.summary.clientEmail, fakeServiceAccountEmail);
     assert.equal(saveRes.summary.projectId, 'example-project');
     assert.equal(JSON.stringify(saveRes.summary).includes('BEGIN PRIVATE KEY'), false);

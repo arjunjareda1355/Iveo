@@ -4,7 +4,13 @@ import { firebaseGetAllProfiles } from './firebaseServer.ts';
 import { escapeHtml, safeJsonLd, truncate } from './html.ts';
 import { ogImageAddress, pageAddress } from './site.ts';
 import { loadPublicPage, version, type PublicPageServerData } from './publicPage.ts';
-import { appendSeoEvent, getSearchEngineStatus, notifyIndexNow, submitSitemapsToSearchEngines } from './searchEngines.ts';
+import {
+  getSearchEngineStatusAsync,
+  notifyIndexNow,
+  submitSitemapsIfDueAsync,
+  submitSitemapsToSearchEngines,
+} from './searchEngines.ts';
+import { appendSeoIntegrationEvent, listSeoIntegrationEvents } from './seoIntegrationsStore.ts';
 import { classifySegment, isPrivilegedEmailServer, PRIVATE_ROUTES, PUBLIC_INFO_ROUTES } from './usernames.ts';
 import { isNewerTimestamp } from './profileMerge.ts';
 import { normalizeSocialUrl } from '../../src/lib/urls.ts';
@@ -94,24 +100,47 @@ export function invalidateSitemapCache(reason: string): void {
   sitemapState.lastInvalidationReason = reason;
 }
 
+const profileSeoDebounceMap = new Map<string, number>();
+const PROFILE_SEO_DEBOUNCE_MS = 10_000;
+
 export async function notifyProfileSeoChanged(
   action: 'created' | 'updated' | 'deleted' | 'renamed',
   username: string,
   previousUsername?: string | null
 ): Promise<void> {
   const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
+  if (!clean) return;
   invalidateSitemapCache(`${action}:${clean}`);
-  appendSeoEvent(`profile_${action}`, clean, 'sitemap_invalidated', previousUsername ? `from:${previousUsername}` : undefined);
 
+  const now = Date.now();
+  const prevPingAt = profileSeoDebounceMap.get(clean) || 0;
   const origin = getCanonicalSiteOrigin();
   const urls: string[] = [`${origin}/@${encodeURIComponent(clean)}`];
   if (previousUsername && previousUsername !== clean) {
     const prevClean = previousUsername.replace(/^@+/, '').toLowerCase().trim();
-    urls.push(`${origin}/@${encodeURIComponent(prevClean)}`);
+    if (prevClean) {
+      urls.push(`${origin}/@${encodeURIComponent(prevClean)}`);
+    }
   }
 
-  // Non-blocking background IndexNow notification when configured
-  notifyIndexNow(urls).catch(() => {});
+  appendSeoIntegrationEvent({
+    type: `profile_${action}`,
+    scope: clean,
+    provider: 'seo',
+    targetUrl: urls[0],
+    httpStatus: null,
+    outcome: 'info',
+    detail: previousUsername ? `renamed from @${previousUsername}` : 'sitemap cache refreshed',
+  }).catch(() => {});
+
+  if (now - prevPingAt < PROFILE_SEO_DEBOUNCE_MS && action === 'updated') {
+    return;
+  }
+  profileSeoDebounceMap.set(clean, now);
+
+  // Non-blocking background IndexNow (10-min per-URL dedup) + hourly throttled sitemap ping
+  notifyIndexNow(urls, { scope: clean }).catch(() => {});
+  submitSitemapsIfDueAsync().catch(() => {});
 }
 
 export function evaluateProfileIndexability(profile: Partial<SeoUnifiedProfile> | null | undefined): IndexabilityDecision {
@@ -287,7 +316,8 @@ export function buildMainDomainHeadTags(requestOrigin?: string): string {
     '@type': 'Organization',
     name: 'Iveo',
     url: canonicalUrl,
-    logo: 'https://i.postimg.cc/d1cqB7Dm/iveo-logo-04-tile-white-shadow-4k.png',
+    email: 'help@iveo.site',
+    logo: `${canonicalOrigin}/icon-512.png`,
     sameAs: [
       'https://www.instagram.com/iveo.site',
       'https://youtube.com/@iveosite',
@@ -1050,7 +1080,10 @@ export async function validateProfileSeo(origin: string, username: string) {
   };
 }
 
-export async function getSeoHealthReport(origin: string) {
+export async function getSeoHealthReport(
+  origin: string,
+  options?: { q?: string; page?: number; pageSize?: number }
+) {
   const allProfiles = await getAllUnifiedProfiles();
   await generateSitemapXml(origin);
 
@@ -1117,6 +1150,24 @@ export async function getSeoHealthReport(origin: string) {
     });
   }
 
+  const q = String(options?.q || '').toLowerCase().trim();
+  const filtered = q
+    ? profileSummaries.filter(
+        (p) =>
+          p.username.includes(q) ||
+          (p.displayName || '').toLowerCase().includes(q) ||
+          (p.reason || '').toLowerCase().includes(q)
+      )
+    : profileSummaries;
+
+  const pageSize = Math.max(1, Math.min(options?.pageSize ?? 25, 100));
+  const totalFiltered = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const safePage = Math.max(1, Math.min(options?.page ?? 1, totalPages));
+  const start = (safePage - 1) * pageSize;
+
+  const searchEngines = await getSearchEngineStatusAsync();
+
   return {
     generatedAt: new Date().toISOString(),
     canonicalDomain: getCanonicalSiteOrigin(),
@@ -1135,16 +1186,60 @@ export async function getSeoHealthReport(origin: string) {
       lastInvalidatedAt: sitemapState.lastInvalidatedAt,
       lastInvalidationReason: sitemapState.lastInvalidationReason,
     },
-    searchEngines: getSearchEngineStatus(),
+    searchEngines,
     issues: issues.slice(0, 50),
-    profiles: profileSummaries.slice(0, 100),
+    profiles: filtered.slice(start, start + pageSize),
+    profilesPagination: {
+      page: safePage,
+      pageSize,
+      total: totalFiltered,
+      totalPages,
+      query: q,
+    },
+  };
+}
+
+export async function buildUserSeoOverview(
+  origin: string,
+  username: string,
+  isAdmin = false
+) {
+  const clean = (username || '').replace(/^@+/, '').toLowerCase().trim();
+  const [validation, events, engineStatus] = await Promise.all([
+    validateProfileSeo(origin, clean),
+    listSeoIntegrationEvents({ scope: clean, limit: 20 }),
+    getSearchEngineStatusAsync(),
+  ]);
+
+  return {
+    username: clean,
+    isAdmin,
+    canonicalDomain: getCanonicalSiteOrigin(),
+    validation,
+    sitemapIncluded: Boolean(validation.found && validation.indexable),
+    sitemapUrl: `${getCanonicalSiteOrigin()}/sitemap-profiles.xml`,
+    engines: {
+      gscActive: engineStatus.gscConfigured,
+      bingActive: engineStatus.bingConfigured,
+      indexNowActive: engineStatus.indexNowConfigured,
+    },
+    events: events.map((e) => ({
+      id: e.id,
+      at: e.at,
+      type: e.type,
+      provider: e.provider,
+      targetUrl: e.targetUrl,
+      httpStatus: e.httpStatus,
+      outcome: e.outcome,
+      detail: e.detail,
+    })),
   };
 }
 
 export async function regenerateAndPingSitemap(origin: string) {
   invalidateSitemapCache('manual_admin_regenerate');
   const sitemapResult = await generateSitemapXml(origin);
-  const submitResult = await submitSitemapsToSearchEngines();
+  const submitResult = await submitSitemapsToSearchEngines({ force: true });
   return {
     ok: true,
     sitemap: {

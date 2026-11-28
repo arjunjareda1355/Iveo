@@ -137,7 +137,7 @@ export async function firebaseGetProfile(
 ): Promise<any | null> {
   if (!serverDb || !username) return null;
   const clean = username.replace(/^@+/, '').toLowerCase().trim();
-  if (!clean) return null;
+  if (!clean || clean === 'system.integrations' || clean.startsWith('__')) return null;
   const includePendingDelete = Boolean(opts?.includePendingDelete);
 
   const acceptProfile = (data: Record<string, any> | undefined, resolvedUname: string) => {
@@ -687,13 +687,13 @@ export async function firebaseSaveBlocks(
     ops.push({
       type: 'set',
       ref: doc(serverDb, 'users', clean),
-      data: { blocksInitialized: true, updatedAt: nowIso },
+      data: { blocksInitialized: true, blocksUpdatedAt: nowIso, updatedAt: nowIso },
     });
     if (effectiveUserId && effectiveUserId !== clean && effectiveUserId !== 'owner') {
       ops.push({
         type: 'set',
         ref: doc(serverDb, 'users', effectiveUserId),
-        data: { blocksInitialized: true, updatedAt: nowIso },
+        data: { blocksInitialized: true, blocksUpdatedAt: nowIso, updatedAt: nowIso },
       });
     }
 
@@ -1260,9 +1260,10 @@ export async function firebaseGetAllProfiles(): Promise<any[]> {
     const snap = await getDocs(collection(serverDb, 'users'));
     const byUsername = new Map<string, any>();
     snap.docs.forEach((d) => {
+      if (d.id.startsWith('__') || d.id === 'system.integrations') return;
       const data = d.data() || {};
       const uname = typeof data.username === 'string' ? data.username.replace(/^@+/, '').toLowerCase().trim() : '';
-      if (!uname) return;
+      if (!uname || uname.startsWith('__') || uname === 'system.integrations') return;
       if (data.status === 'deleted' || data.status === 'deleted_pending') return;
       const existing = byUsername.get(uname);
       if (!existing || isNewerTimestamp(data.updatedAt, existing.updatedAt)) {

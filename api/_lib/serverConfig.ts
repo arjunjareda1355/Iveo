@@ -132,6 +132,9 @@ export function getKnownSecretValues(): string[] {
     cfg.razorpayKeySecret,
     cfg.razorpayWebhookSecret,
     process.env.TOKEN_ENCRYPTION_KEY?.trim() || '',
+    process.env.INTEGRATIONS_ENCRYPTION_KEY?.trim() || '',
+    process.env.BING_WEBMASTER_API_KEY?.trim() || '',
+    process.env.CLERK_SECRET_KEY?.trim() || '',
     ...Object.values(cfg.oauth).map((o) => o.clientSecret),
   ];
   return Array.from(new Set(candidates.filter((v) => v && v.length >= 6)));
@@ -144,12 +147,13 @@ export function redactSecrets(input: string): string {
       out = out.split(secret).join(maskSecret(secret));
     }
   }
-  // Redact common bearer tokens / pinterest tokens / Google API keys / Razorpay secrets if present
+  // Redact common bearer tokens / pinterest tokens / Google API keys / Razorpay secrets / PEM keys if present
   out = out
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{10,}/gi, 'Bearer [REDACTED]')
     .replace(/pina_[A-Za-z0-9_-]{12,}/g, 'pina_[REDACTED]')
     .replace(/AIza[0-9A-Za-z_-]{20,}/g, 'AIza[REDACTED]')
-    .replace(/rzp_(?:live|test)_[0-9A-Za-z]{8,}/g, 'rzp_[REDACTED]');
+    .replace(/rzp_(?:live|test)_[0-9A-Za-z]{8,}/g, 'rzp_[REDACTED]')
+    .replace(/-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g, '[REDACTED_PRIVATE_KEY]');
   return out;
 }
 

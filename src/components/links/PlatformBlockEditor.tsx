@@ -19,6 +19,7 @@ import type {
   YouTubeData,
 } from '../../data/types';
 import { useIvioSession } from '../../auth/useIvioSession';
+import { buildAuthHeaders } from '../../lib/clerkTokenBridge';
 import { VIBES } from '../../lib/vibes';
 import { getFontCssFamily, loadGoogleFonts } from '../../lib/fonts';
 import { resolveEffectiveTokens } from '../../lib/colors';
@@ -72,185 +73,7 @@ export interface PlatformBlockEditorProps {
   onClearScheduleImmediate?: () => Promise<void>;
 }
 
-function deriveInitialFromBlock(
-  block: Block | null | undefined,
-  fallbackProvider: EmbedProvider = 'generic',
-  initialUrl = ''
-): {
-  provider: EmbedProvider;
-  url: string;
-  title: string;
-  meta: EmbedMetaData;
-  coffeeData: CoffeeData | null;
-  startAt: string | null;
-  endAt: string | null;
-} {
-  if (!block) {
-    const detected = initialUrl ? detectProviderUrl(initialUrl) : null;
-    const provider = (detected?.provider || fallbackProvider) as EmbedProvider;
-    const def = getProviderDefinition(provider);
-    const subtype = detected?.subtype || def.defaultKind;
-    const kindDef = getProviderKindDefinition(provider, subtype);
-    return {
-      provider,
-      url: detected?.canonicalUrl || initialUrl || '',
-      title: '',
-      meta: {
-        provider,
-        subtype,
-        displayAs:
-          detected?.defaultDisplayAs ||
-          (kindDef.capabilities.player ? def.defaultDisplayMode : 'card'),
-        playerSize: def.defaultPlayerSize || 'standard',
-        showAvatar: true,
-        showDescription: true,
-        showStats: kindDef.capabilities.stats,
-        showPlatformLabel: true,
-      },
-      coffeeData: null,
-      startAt: null,
-      endAt: null,
-    };
-  }
-
-  // Legacy YouTube card block compatibility
-  if (block.kind === 'youtube') {
-    const yt = block.youtube;
-    const detected = block.url ? detectProviderUrl(block.url) : null;
-    const subtype = detected?.subtype || 'channel';
-    return {
-      provider: 'youtube',
-      url: block.url || '',
-      title: block.title || yt?.channelTitle || '',
-      meta: {
-        provider: 'youtube',
-        subtype,
-        title: yt?.channelTitle || block.title || null,
-        subtitle: yt?.handle || block.badge || null,
-        handle: yt?.handle || null,
-        description: yt?.description || null,
-        avatarUrl: yt?.avatarUrl || null,
-        statsLabel: yt?.subscriberText || null,
-        ctaLabel: yt?.buttonLabel || 'Subscribe',
-        displayAs: subtype === 'video' || subtype === 'playlist' ? 'player' : 'card',
-        playerSize: 'standard',
-        showAvatar: true,
-        showDescription: true,
-        showStats: true,
-        showPlatformLabel: true,
-        connectedViaOAuth: Boolean(yt?.connectedViaOAuth),
-        fetchedAt: yt?.fetchedAt || null,
-      },
-      coffeeData: null,
-      startAt: block.startAt || null,
-      endAt: block.endAt || null,
-    };
-  }
-
-  // Legacy Instagram card block compatibility
-  if (block.kind === 'instagram') {
-    const detected = block.url ? detectProviderUrl(block.url) : null;
-    const subtype = detected?.subtype || 'profile';
-    return {
-      provider: 'instagram',
-      url: block.url || '',
-      title: block.title || '',
-      meta: {
-        provider: 'instagram',
-        subtype,
-        title: block.title || null,
-        subtitle: block.badge || null,
-        displayAs: 'card',
-        showAvatar: true,
-        showDescription: true,
-        showStats: false,
-        showPlatformLabel: true,
-      },
-      coffeeData: null,
-      startAt: block.startAt || null,
-      endAt: block.endAt || null,
-    };
-  }
-
-  // Buy Me a Coffee card block compatibility (legacy & themed)
-  if (block.kind === 'coffee') {
-    const c = block.coffee;
-    const existingMeta = block.embedMeta;
-    const handle = c?.slug ? `@${c.slug.replace(/^@/, '')}` : existingMeta?.handle || null;
-    const fallbackUrl =
-      block.url ||
-      (c?.slug ? `https://www.buymeacoffee.com/${c.slug}` : 'https://www.buymeacoffee.com');
-    const derivedStats =
-      existingMeta?.statsLabel ??
-      c?.supportersLabel ??
-      (typeof c?.supportersCount === 'number' && c.supportersCount > 0
-        ? `${c.supportersCount} supporters`
-        : null);
-    return {
-      provider: 'coffee',
-      url: fallbackUrl,
-      title: block.title || existingMeta?.title || c?.creatorName || 'Buy Me a Coffee',
-      meta: {
-        ...(existingMeta || { provider: 'coffee' }),
-        provider: 'coffee',
-        subtype: existingMeta?.subtype || 'profile',
-        title: existingMeta?.title || c?.creatorName || block.title || null,
-        handle,
-        subtitle:
-          existingMeta?.subtitle ||
-          block.badge ||
-          (c?.slug ? `buymeacoffee.com/${c.slug}` : null),
-        description: existingMeta?.description || c?.bio || null,
-        avatarUrl: existingMeta?.avatarUrl || c?.avatarUrl || null,
-        coverUrl: existingMeta?.coverUrl || c?.coverUrl || null,
-        statsLabel: derivedStats,
-        ctaLabel: existingMeta?.ctaLabel || c?.buttonLabel || 'Support with a Coffee',
-        displayAs: 'card',
-        lookStyle: existingMeta?.lookStyle
-          ? normalizeEmbedLookStyle(existingMeta.lookStyle, 'match_page')
-          : undefined,
-        showAvatar: existingMeta?.showAvatar ?? true,
-        showDescription: existingMeta?.showDescription ?? true,
-        showStats: existingMeta?.showStats ?? true,
-        showPlatformLabel: existingMeta?.showPlatformLabel ?? true,
-      },
-      coffeeData: c || null,
-      startAt: block.startAt || null,
-      endAt: block.endAt || null,
-    };
-  }
-
-  const detected = block.url ? detectProviderUrl(block.url) : null;
-  const provider = (block.embedMeta?.provider || block.embedProvider || detected?.provider || fallbackProvider) as EmbedProvider;
-  const def = getProviderDefinition(provider);
-  const subtype = block.embedMeta?.subtype || detected?.subtype || def.defaultKind;
-  const kindDef = getProviderKindDefinition(provider, subtype);
-
-  return {
-    provider,
-    url: block.url || '',
-    title: block.title || block.embedMeta?.override?.title || block.embedMeta?.title || '',
-    meta: {
-      ...(block.embedMeta || { provider }),
-      provider,
-      subtype,
-      lookStyle: block.embedMeta?.lookStyle
-        ? normalizeEmbedLookStyle(block.embedMeta.lookStyle, 'match_page')
-        : undefined,
-      displayAs:
-        block.embedMeta?.displayAs ||
-        (kindDef.capabilities.player ? def.defaultDisplayMode : 'card'),
-      playerSize: block.embedMeta?.playerSize || def.defaultPlayerSize || 'standard',
-      showAvatar: block.embedMeta?.showAvatar ?? true,
-      showDescription: block.embedMeta?.showDescription ?? true,
-      showStats: block.embedMeta?.showStats ?? kindDef.capabilities.stats,
-      showPlatformLabel: block.embedMeta?.showPlatformLabel ?? true,
-    },
-    coffeeData: block.coffee || null,
-    startAt: block.startAt || null,
-    endAt: block.endAt || null,
-  };
-}
+import { deriveInitialFromBlock } from '../../lib/platformBlockInit';
 
 export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   isOpen,
@@ -298,6 +121,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [oauthAvailability, setOauthAvailability] = useState<Record<string, boolean> | null>(null);
+  const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
 
   const [isBannerUploading, setIsBannerUploading] = useState(false);
 
@@ -305,10 +129,23 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const lastResolvedUrlRef = useRef<string>(block?.url || '');
   const lookupSeqRef = useRef(0);
   const uncommittedBannerUrlsRef = useRef<Set<string>>(new Set());
+  const popupPollRef = useRef<number | null>(null);
+
+  const stopPopupPoll = () => {
+    if (popupPollRef.current !== null) {
+      window.clearInterval(popupPollRef.current);
+      popupPollRef.current = null;
+    }
+  };
 
   // Sync state whenever editor opens or target block changes
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      stopPopupPoll();
+      setIsConnecting(false);
+      setPendingAuthUrl(null);
+      return;
+    }
     const init = deriveInitialFromBlock(block, initialProvider, initialUrl);
     setProvider(init.provider);
     setUrlInput(init.url);
@@ -324,6 +161,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     setUrlError(null);
     setMismatchHint(null);
     setSaveError(null);
+    setPendingAuthUrl(null);
+    setIsConnecting(false);
     setIsBannerUploading(false);
     uncommittedBannerUrlsRef.current.clear();
     setIsDirty(!block && Boolean(init.url));
@@ -346,6 +185,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      stopPopupPoll();
     };
   }, [isOpen, block, initialProvider, initialUrl]);
 
@@ -473,6 +313,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       if (!payload || typeof payload !== 'object') return;
       if (payload.type === 'IVEO_SOCIAL_OAUTH_SUCCESS') {
         if (payload.provider && payload.provider !== provider) return;
+        stopPopupPoll();
+        setPendingAuthUrl(null);
         const em = (payload.embed || payload.connection?.embedMeta || {}) as EmbedMetaData & {
           url?: string;
         };
@@ -498,6 +340,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         setUrlError(null);
         setIsConnecting(false);
       } else if (payload.type === 'IVEO_YOUTUBE_OAUTH_SUCCESS' && provider === 'youtube' && payload.channel) {
+        stopPopupPoll();
+        setPendingAuthUrl(null);
         const ch = payload.channel;
         const chUrl = ch.channelUrl || urlInput;
         if (chUrl) {
@@ -530,6 +374,8 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         payload.type === 'IVEO_SOCIAL_OAUTH_ERROR' ||
         payload.type === 'IVEO_YOUTUBE_OAUTH_ERROR'
       ) {
+        stopPopupPoll();
+        setPendingAuthUrl(null);
         setSaveError(payload.error || `Couldn't finish connecting ${providerDef.name}.`);
         setIsConnecting(false);
       }
@@ -780,6 +626,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
     url: detectedCurrent?.canonicalUrl || urlInput || null,
     embedProvider: provider,
     embedMeta: meta,
+    youtube: block?.youtube,
     coffee: provider === 'coffee' ? coffeeData : undefined,
     isActive: true,
     isArchived: false,
@@ -799,43 +646,54 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
           subtype: activeSubtype,
           displayAs,
         },
+        youtube: block?.youtube,
         coffee: provider === 'coffee' ? coffeeData : undefined,
         isActive: true,
         isArchived: false,
       });
     }, 150);
     return () => clearTimeout(timer);
-  }, [block?.id, titleInput, urlInput, detectedCurrent?.canonicalUrl, provider, meta, coffeeData, activeSubtype, displayAs, kindDef.label]);
+  }, [block?.id, block?.youtube, titleInput, urlInput, detectedCurrent?.canonicalUrl, provider, meta, coffeeData, activeSubtype, displayAs, kindDef.label]);
 
   if (!isOpen) return null;
 
   const fallbackConnectByProfileOrHint = async () => {
     if (provider === 'pinterest') {
       try {
-        const pinRes = await fetch('/api/integrations/pinterest/me');
+        const headers = await buildAuthHeaders({
+          ...(session.userId ? { 'x-user-id': session.userId } : {}),
+          ...(session.primaryEmail ? { 'x-user-email': session.primaryEmail } : {}),
+        });
+        const pinRes = await fetch('/api/integrations/pinterest/me', {
+          headers,
+        });
         const pinData = await pinRes.json().catch(() => null);
-        if (pinRes.ok && pinData?.ok && pinData?.profile) {
-          const p = pinData.profile;
-          const profileUrl = p.profileUrl || `https://www.pinterest.com/${p.username || ''}/`;
+        const em = pinData?.embedMeta || pinData?.embed || pinData?.profile;
+        if (pinRes.ok && pinData?.ok && em) {
+          const uname = String(em.handle || em.subtitle || '').replace(/^@+/, '').trim();
+          const profileUrl =
+            pinData.url || em.profileUrl || (uname ? `https://www.pinterest.com/${uname}/` : 'https://www.pinterest.com/');
+          const displayTitle = pinData.title || em.title || em.displayName || (uname ? `@${uname}` : 'Pinterest');
           setUrlInput(profileUrl);
           lastResolvedUrlRef.current = profileUrl;
           setMeta((prev) => ({
             ...prev,
             provider: 'pinterest',
             subtype: 'profile',
-            title: p.displayName || p.username || prev.title,
-            handle: p.username ? `@${p.username}` : prev.handle,
-            subtitle: p.username ? `@${p.username}` : prev.subtitle,
-            description: p.bio || prev.description,
-            avatarUrl: p.avatarUrl || prev.avatarUrl,
-            statsLabel: p.statsLabel || prev.statsLabel,
+            title: displayTitle || prev.title,
+            handle: em.handle || (uname ? `@${uname}` : prev.handle),
+            subtitle: em.subtitle || (uname ? `@${uname}` : prev.subtitle),
+            description: em.description ?? em.bio ?? prev.description,
+            avatarUrl: em.avatarUrl || prev.avatarUrl,
+            coverUrl: em.coverUrl || prev.coverUrl,
+            statsLabel: em.statsLabel || prev.statsLabel,
             connectedViaOAuth: true,
             needsAttention: false,
             failureCount: 0,
-            fetchedAt: new Date().toISOString(),
+            fetchedAt: em.fetchedAt || new Date().toISOString(),
           }));
-          if (!titleManuallyEdited && (p.displayName || p.username)) {
-            setTitleInput(String(p.displayName || p.username).slice(0, 60));
+          if (!titleManuallyEdited && displayTitle) {
+            setTitleInput(String(displayTitle).slice(0, 60));
           }
           setIsDirty(true);
           setUrlError(null);
@@ -861,7 +719,57 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
   const handleConnectAccount = async () => {
     setSaveError(null);
     setUrlError(null);
+    setPendingAuthUrl(null);
+    stopPopupPoll();
     setIsConnecting(true);
+
+    // If we already know OAuth isn't available for this provider, sync by link/hint without opening a blank popup
+    if (oauthAvailability && oauthAvailability[provider] === false) {
+      await fallbackConnectByProfileOrHint();
+      return;
+    }
+
+    // Open the popup SYNCHRONOUSLY while user click activation is still active so browsers don't block it
+    const w = 520;
+    const h = 660;
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    let popup: Window | null = null;
+    try {
+      popup = window.open(
+        'about:blank',
+        `iveo_connect_${provider}`,
+        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
+      if (popup && !popup.closed) {
+        try {
+          popup.document.write(
+            `<!DOCTYPE html><html><head><title>Connecting ${providerDef.name}...</title></head><body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa;color:#111;"><p style="font-size:14px;">Opening ${providerDef.name} sign-in...</p></body></html>`
+          );
+          popup.document.close();
+        } catch {
+          // ignore cross-origin write failure
+        }
+        popupPollRef.current = window.setInterval(() => {
+          if (!popup || popup.closed) {
+            stopPopupPoll();
+            setIsConnecting(false);
+          }
+        }, 400);
+      }
+    } catch {
+      popup = null;
+    }
+
+    const closePendingPopup = () => {
+      stopPopupPoll();
+      try {
+        if (popup && !popup.closed) popup.close();
+      } catch {
+        // ignore
+      }
+    };
+
     try {
       let availability = oauthAvailability;
       if (!availability) {
@@ -878,6 +786,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       }
 
       if (!availability || !availability[provider]) {
+        closePendingPopup();
         await fallbackConnectByProfileOrHint();
         return;
       }
@@ -896,6 +805,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
       const res = await fetch(`${baseEndpoint}?${commonQs.toString()}`);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.url) {
+        closePendingPopup();
         if (
           res.status === 503 ||
           data?.error === 'oauth_not_configured' ||
@@ -909,16 +819,14 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
         return;
       }
 
-      const w = 520;
-      const h = 660;
-      const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
-      const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
-      const popup = window.open(
-        data.url,
-        `iveo_connect_${provider}`,
-        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
-      );
-      if (!popup) {
+      if (popup && !popup.closed) {
+        popup.location.href = data.url;
+        return;
+      }
+
+      // Popup was blocked: only full-page redirect when NOT embedded in an iframe (OAuth pages block framing)
+      const isEmbeddedIframe = window.self !== window.top;
+      if (!isEmbeddedIframe) {
         const redirectQs = new URLSearchParams(commonQs);
         redirectQs.set('mode', 'redirect');
         const redirectRes = await fetch(`${baseEndpoint}?${redirectQs.toString()}`).catch(() => null);
@@ -927,10 +835,13 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
           window.location.assign(redirectData.url);
           return;
         }
-        setSaveError('Allow popups to connect your account, or paste the link directly above.');
-        setIsConnecting(false);
       }
+
+      setPendingAuthUrl(data.url);
+      setSaveError(`Allow popups or open ${providerDef.name} sign-in in a new tab below.`);
+      setIsConnecting(false);
     } catch {
+      closePendingPopup();
       await fallbackConnectByProfileOrHint();
     }
   };
@@ -1415,7 +1326,7 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                   </div>
                 )}
 
-                {providerDef.supportsOAuth && (
+                {(providerDef.supportsOAuth || Boolean(oauthAvailability?.[provider])) && (
                   <div className="flex items-center justify-between gap-2 pt-0.5">
                     {meta.connectedViaOAuth ? (
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1447,27 +1358,41 @@ export const PlatformBlockEditor: React.FC<PlatformBlockEditorProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span className="text-[12px] text-muted truncate">
-                          {providerDef.oauthCopy || `Connect ${providerDef.name} to load profile details.`}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleConnectAccount}
-                          disabled={isConnecting}
-                          className="shrink-0 text-ink"
-                        >
-                          {isConnecting ? (
-                            <>
-                              <Loader2 size={13} className="animate-spin mr-1" />
-                              <span>Connecting...</span>
-                            </>
-                          ) : (
-                            'Connect account'
-                          )}
-                        </Button>
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span className="text-[12px] text-muted truncate">
+                            {providerDef.oauthCopy || `Connect ${providerDef.name} to load profile details.`}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleConnectAccount}
+                            disabled={isConnecting}
+                            className="shrink-0 text-ink"
+                          >
+                            {isConnecting ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin mr-1" />
+                                <span>Connecting...</span>
+                              </>
+                            ) : (
+                              'Connect account'
+                            )}
+                          </Button>
+                        </div>
+                        {pendingAuthUrl && (
+                          <div className="flex justify-end">
+                            <a
+                              href={pendingAuthUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[12px] font-semibold text-ink underline underline-offset-2"
+                            >
+                              Open {providerDef.name} sign-in in new tab
+                            </a>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

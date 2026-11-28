@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express from 'express';
 type ExpressReq = express.Request;
 type ExpressRes = express.Response;
@@ -369,6 +370,10 @@ async function startServer() {
   app.get('/api/admin/billing/inspect', dbHandlers.handleAdminBillingInspect);
   app.post('/api/admin/billing/reconcile', dbHandlers.handleAdminBillingReconcile);
   app.get('/api/discover', dbHandlers.handleDiscoverProfiles);
+  app.get('/api/seo/me/overview', dbHandlers.handleSeoMeOverview);
+  app.get('/api/seo/me/validate', dbHandlers.handleSeoMeValidate);
+  app.post('/api/seo/me/inspect', dbHandlers.handleSeoMeInspect);
+  app.post('/api/seo/me/submit', dbHandlers.handleSeoMeSubmit);
   app.get('/api/seo/admin/overview', dbHandlers.handleSeoAdminOverview);
   app.post('/api/seo/admin/regenerate-sitemap', dbHandlers.handleSeoAdminRegenerate);
   app.get('/api/seo/admin/validate', dbHandlers.handleSeoAdminValidate);
@@ -490,7 +495,8 @@ async function startServer() {
   });
 
   // 4.6 SEO: robots.txt, categorized sitemaps, llms.txt, and IndexNow verification file
-  const { getCanonicalSiteOrigin, getIndexNowKey } = await import('./api/_lib/env.ts');
+  const { getCanonicalSiteOrigin } = await import('./api/_lib/env.ts');
+  const { getOrCreateIndexNowKey } = await import('./api/_lib/seoIntegrationsStore.ts');
   const {
     buildLlmsTxt,
     buildRobotsTxt,
@@ -602,12 +608,15 @@ async function startServer() {
     }
   });
 
-  app.get('/:verificationKey.txt', (req, res, next) => {
-    const configuredKey = getIndexNowKey();
-    if (configuredKey && req.params.verificationKey === configuredKey) {
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      return res.status(200).send(configuredKey);
-    }
+  app.get('/:verificationKey.txt', async (req, res, next) => {
+    try {
+      const configuredKey = await getOrCreateIndexNowKey().catch(() => null);
+      if (configuredKey && req.params.verificationKey === configuredKey) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(200).send(configuredKey);
+      }
+    } catch {}
     return next();
   });
 

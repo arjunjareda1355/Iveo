@@ -23,7 +23,14 @@ const {
 } = await import('./seoService.ts');
 const { notifyIndexNow, clearGscCachesForTest } = await import('./searchEngines.ts');
 
-const ENV_KEYS = ['SITE_URL', 'VITE_SITE_ORIGIN', 'APP_URL', 'GSC_SITE_URL', 'INDEXNOW_KEY'] as const;
+const ENV_KEYS = [
+  'SITE_URL',
+  'VITE_SITE_ORIGIN',
+  'APP_URL',
+  'GSC_SITE_URL',
+  'INDEXNOW_KEY',
+  'BING_WEBMASTER_API_KEY',
+] as const;
 const savedEnv: Record<string, string | undefined> = {};
 const originalFetch = globalThis.fetch;
 

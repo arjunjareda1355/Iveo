@@ -112,10 +112,10 @@ export async function syncBlocksToServer(
   userId: string,
   blocks: Block[],
   auth?: BlockAuthContext
-): Promise<void> {
-  if (auth?.isDemo) return;
+): Promise<Block[] | null> {
+  if (auth?.isDemo) return blocks;
   const clean = (userId || '').replace(/^@+/, '').trim().toLowerCase();
-  if (!clean) return;
+  if (!clean) return null;
 
   const headers = await buildAuthHeaders({
     'Content-Type': 'application/json',
@@ -137,6 +137,8 @@ export async function syncBlocksToServer(
   if (!res.ok) {
     throw new Error(`sync_failed_${res.status}`);
   }
+  const json = await res.json().catch(() => null);
+  const serverBlocks = Array.isArray(json?.blocks) ? (json.blocks as Block[]) : null;
 
   // If userId was still 'owner' while username existed in localStorage, mirror once
   try {
@@ -163,13 +165,14 @@ export async function syncBlocksToServer(
       throw err;
     }
   }
+  return serverBlocks;
 }
 
 interface PendingDebouncedSync {
   userId: string;
   blocks: Block[];
   auth?: BlockAuthContext;
-  waiters: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
+  waiters: Array<{ resolve: (blocks: Block[] | null) => void; reject: (err: unknown) => void }>;
 }
 
 const blockSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -213,13 +216,19 @@ function enqueueServerBlockWrite(
   userId: string,
   blocks: Block[],
   auth?: BlockAuthContext
-): Promise<void> {
+): Promise<Block[] | null> {
   const prevChain = blockSyncChains.get(key) || Promise.resolve();
   const nextChain = prevChain
     .catch(() => {})
-    .then(() => syncBlocksToServer(userId, blocks, auth))
-    .then(() => notifyBlockSync(userId));
-  blockSyncChains.set(key, nextChain.catch(() => {}));
+    .then(async () => {
+      const serverBlocks = await syncBlocksToServer(userId, blocks, auth);
+      if (serverBlocks) {
+        persistLocalStorageBlocks(userId, serverBlocks);
+      }
+      notifyBlockSync(userId);
+      return serverBlocks;
+    });
+  blockSyncChains.set(key, nextChain.then(() => undefined, () => undefined));
   return nextChain;
 }
 
@@ -239,12 +248,12 @@ export async function flushPendingBlockSync(
   const resolvedAuth = authOverride || pending.auth;
   if (resolvedAuth?.isDemo) {
     notifyBlockSync(pending.userId);
-    pending.waiters.forEach((w) => w.resolve());
+    pending.waiters.forEach((w) => w.resolve(pending.blocks));
     return;
   }
   try {
-    await enqueueServerBlockWrite(key, pending.userId, pending.blocks, resolvedAuth);
-    pending.waiters.forEach((w) => w.resolve());
+    const synced = await enqueueServerBlockWrite(key, pending.userId, pending.blocks, resolvedAuth);
+    pending.waiters.forEach((w) => w.resolve(synced));
   } catch (err) {
     pending.waiters.forEach((w) => w.reject(err));
     throw err;
@@ -255,11 +264,11 @@ export async function flushSaveLocalBlocks(
   userId: string,
   blocks: Block[],
   auth?: BlockAuthContext
-): Promise<void> {
+): Promise<Block[] | null> {
   persistLocalStorageBlocks(userId, blocks);
   if (auth?.isDemo) {
     notifyBlockSync(userId);
-    return;
+    return blocks;
   }
   const key = (userId || 'owner').trim().toLowerCase();
   const prevTimer = blockSyncTimers.get(key);
@@ -271,55 +280,17 @@ export async function flushSaveLocalBlocks(
   if (prevPending) {
     pendingBlockSyncs.delete(key);
     // Superseded by newer full snapshot flush
-    prevPending.waiters.forEach((w) => w.resolve());
+    prevPending.waiters.forEach((w) => w.resolve(null));
   }
-  await enqueueServerBlockWrite(key, userId, blocks, auth);
+  return enqueueServerBlockWrite(key, userId, blocks, auth);
 }
 
 export async function saveLocalBlocks(
   userId: string,
   blocks: Block[],
   auth?: BlockAuthContext
-): Promise<void> {
-  persistLocalStorageBlocks(userId, blocks);
-  if (auth?.isDemo) {
-    notifyBlockSync(userId);
-    return;
-  }
-  const key = (userId || 'owner').trim().toLowerCase();
-  const prevTimer = blockSyncTimers.get(key);
-  if (prevTimer) {
-    clearTimeout(prevTimer);
-    blockSyncTimers.delete(key);
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const existing = pendingBlockSyncs.get(key);
-    const waiters = existing ? [...existing.waiters, { resolve, reject }] : [{ resolve, reject }];
-    pendingBlockSyncs.set(key, {
-      userId,
-      blocks,
-      auth,
-      waiters,
-    });
-
-    blockSyncTimers.set(
-      key,
-      setTimeout(() => {
-        blockSyncTimers.delete(key);
-        const latest = pendingBlockSyncs.get(key);
-        if (!latest) return;
-        pendingBlockSyncs.delete(key);
-        enqueueServerBlockWrite(key, latest.userId, latest.blocks, latest.auth)
-          .then(() => {
-            latest.waiters.forEach((w) => w.resolve());
-          })
-          .catch((err) => {
-            latest.waiters.forEach((w) => w.reject(err));
-          });
-      }, 80)
-    );
-  });
+): Promise<Block[] | null> {
+  return flushSaveLocalBlocks(userId, blocks, auth);
 }
 
 export async function seedStarterLinks(
@@ -443,18 +414,18 @@ export async function listMyBlocks(
   }));
 }
 
-export async function createBlock(
+export async function createBlockWithSync(
   token: string | null,
   userId: string,
   input: CreateBlockInput,
   auth?: BlockAuthContext,
   currentBlocks?: Block[]
-): Promise<Block> {
+): Promise<{ block: Block; blocks: Block[] | null }> {
   const newBlock: Block = {
     id: crypto.randomUUID(),
     kind: input.kind,
     title: input.title,
-    url: input.url || null,
+    url: input.url ?? null,
     icon: input.icon || null,
     thumbnailPath: input.thumbnailPath || null,
     thumbnailUrl: input.thumbnailUrl !== undefined ? input.thumbnailUrl : storagePublicUrl(input.thumbnailPath),
@@ -491,9 +462,33 @@ export async function createBlock(
         position: idx,
       })
     );
-    await flushSaveLocalBlocks(userId, updated, auth);
-    return { ...newBlock, position: 0 };
+    const syncedBlocks = await flushSaveLocalBlocks(userId, updated, auth);
+    return { block: { ...newBlock, position: 0 }, blocks: syncedBlocks };
   }
+
+  const created = await createBlockSupabase(token, userId, input);
+  return { block: created, blocks: null };
+}
+
+export async function createBlock(
+  token: string | null,
+  userId: string,
+  input: CreateBlockInput,
+  auth?: BlockAuthContext,
+  currentBlocks?: Block[]
+): Promise<Block> {
+  if (!rawSupabaseUrl) {
+    const { block } = await createBlockWithSync(token, userId, input, auth, currentBlocks);
+    return block;
+  }
+  return createBlockSupabase(token, userId, input);
+}
+
+async function createBlockSupabase(
+  token: string | null,
+  userId: string,
+  input: CreateBlockInput
+): Promise<Block> {
 
   const payload: any = {
     user_id: userId,
@@ -565,16 +560,11 @@ export async function updateBlock(
   input: UpdateBlockInput,
   auth?: BlockAuthContext,
   currentBlocks?: Block[]
-): Promise<void> {
+): Promise<Block[] | null> {
   if (!rawSupabaseUrl) {
     const list = Array.isArray(currentBlocks) ? currentBlocks : getLocalBlocks(userId);
     const updated = list.map((b) => (b.id === blockId ? { ...b, ...input } : b));
-    if (input.isArchived !== undefined || input.isActive !== undefined) {
-      await flushSaveLocalBlocks(userId, updated, auth);
-    } else {
-      await saveLocalBlocks(userId, updated, auth);
-    }
-    return;
+    return flushSaveLocalBlocks(userId, updated, auth);
   }
 
   const payload: any = {};
@@ -608,6 +598,7 @@ export async function updateBlock(
     }
     throw new Error('Failed to update block');
   }
+  return null;
 }
 
 export async function setBlockImage(
@@ -617,8 +608,8 @@ export async function setBlockImage(
   input: { thumbnailPath: string | null; layout: BlockLayout; thumbnailUrl?: string | null },
   auth?: BlockAuthContext,
   currentBlocks?: Block[]
-): Promise<void> {
-  await updateBlock(
+): Promise<Block[] | null> {
+  return updateBlock(
     token,
     userId,
     blockId,
@@ -638,15 +629,14 @@ export async function deleteBlock(
   blockId: string,
   auth?: BlockAuthContext,
   currentBlocks?: Block[]
-): Promise<void> {
+): Promise<Block[] | null> {
   if (!rawSupabaseUrl) {
     const list = Array.isArray(currentBlocks) ? currentBlocks : getLocalBlocks(userId);
-    await flushSaveLocalBlocks(
+    return flushSaveLocalBlocks(
       userId,
       list.filter((b) => b.id !== blockId),
       auth
     );
-    return;
   }
 
   const response = await fetch(`${rawSupabaseUrl}/rest/v1/links?id=eq.${blockId}`, {
@@ -660,6 +650,7 @@ export async function deleteBlock(
   if (!response.ok) {
     throw new Error('Failed to delete block');
   }
+  return null;
 }
 
 export async function saveOrderedBlocks(
@@ -667,13 +658,13 @@ export async function saveOrderedBlocks(
   userId: string,
   orderedBlocks: Block[],
   auth?: BlockAuthContext
-): Promise<void> {
+): Promise<Block[] | null> {
   if (!rawSupabaseUrl) {
-    await flushSaveLocalBlocks(userId, orderedBlocks, auth);
-    return;
+    return flushSaveLocalBlocks(userId, orderedBlocks, auth);
   }
 
   for (let i = 0; i < orderedBlocks.length; i++) {
     await updateBlock(token, userId, orderedBlocks[i].id, { position: i }, auth);
   }
+  return null;
 }

@@ -71,7 +71,7 @@ import {
   firebasePurgeAccountPermanently,
   firebaseSaveAppearanceState,
 } from './firebaseServer.ts';
-import { verifyClerkRequest } from './clerkAuth.ts';
+import { resolveVerifiedRequestActor, verifyClerkRequest } from './clerkAuth.ts';
 import { fetchBuyMeACoffeeProfile } from './buymeacoffee.ts';
 import {
   buildYouTubeOAuthUrl,
@@ -79,21 +79,25 @@ import {
   fetchYouTubeShowcase,
 } from './youtube.ts';
 import {
+  buildUserSeoOverview,
   evaluateProfileIndexability,
   getAllUnifiedProfiles,
   getSeoHealthReport,
+  invalidateSitemapCache,
   isSyntheticTestHandle,
   notifyProfileSeoChanged,
   regenerateAndPingSitemap,
   validateProfileSeo,
 } from './seoService.ts';
 import {
-  clearGscRuntimeConfig,
-  getGscSafeConfigSummary,
+  clearGscRuntimeConfigAsync,
+  getGscSafeConfigSummaryAsync,
   inspectUrlWithGsc,
-  saveGscRuntimeConfig,
+  notifyIndexNow,
+  saveGscRuntimeConfigAsync,
   testGscConnection,
 } from './searchEngines.ts';
+import { appendSeoIntegrationEvent } from './seoIntegrationsStore.ts';
 import {
   EARLY_BIRD_PRO_DEADLINE_ISO,
   resolveEffectivePlan,
@@ -399,15 +403,24 @@ export async function handleGetPublicPage(req: ExpressReq, res: ExpressRes) {
       blocksInitialized: false,
       deletedBlockIds: new Set<string>(),
     }));
+    const firebaseBlocksNewer = Boolean(
+      fbProf?.blocksUpdatedAt &&
+      (!profile.updatedAt || fbProf.blocksUpdatedAt > profile.updatedAt)
+    );
     const shouldTryFirebaseBlocks =
       cameFromFirebase ||
+      firebaseBlocksNewer ||
       (!syncMeta.blocksInitialized && (!allBlocks || allBlocks.length === 0));
     if (shouldTryFirebaseBlocks) {
       const fbBlocks = await withTimeout(firebaseGetBlocks(clean, profile.userId), [] as any[]);
+      const trustFirebaseList = cameFromFirebase || firebaseBlocksNewer;
       const filteredFb = (fbBlocks || []).filter(
-        (b) => cameFromFirebase || !syncMeta.deletedBlockIds.has(String(b?.id || ''))
+        (b) => trustFirebaseList || !syncMeta.deletedBlockIds.has(String(b?.id || ''))
       );
-      if (cameFromFirebase && (filteredFb.length > 0 || (fbProf?.blocksInitialized && (!dbBlocksInitial || dbBlocksInitial.length === 0)))) {
+      if (
+        trustFirebaseList &&
+        (filteredFb.length > 0 || (fbProf?.blocksInitialized && (!dbBlocksInitial || dbBlocksInitial.length === 0 || firebaseBlocksNewer)))
+      ) {
         allBlocks = filteredFb;
         dbSaveBlocks(clean, filteredFb, profile.userId, profile.primaryEmail).catch(() => {});
       } else if (filteredFb.length > 0 && (!allBlocks || allBlocks.length === 0)) {
@@ -1115,6 +1128,7 @@ export async function handleServeBackground(req: ExpressReq, res: ExpressRes) {
  * Retrieves owner's blocks
  */
 export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   const username = (req.query.username as string || '').replace(/^@+/, '').toLowerCase().trim();
   if (!username) {
     return res.status(400).json({ error: 'missing_username' });
@@ -1151,6 +1165,7 @@ export async function handleGetBlocks(req: ExpressReq, res: ExpressRes) {
  * Saves owner's blocks
  */
 export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
+  res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   const clerkAuth = await verifyClerkRequest(req);
   if (clerkAuth.enforced && !clerkAuth.verifiedByJwt) {
     return res.status(401).json({ error: 'unauthorized', message: 'Valid session required to save blocks.' });
@@ -1168,15 +1183,22 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
     return res.status(400).json({ error: 'missing_username' });
   }
 
-  const sanitizedBlocks = blocks.map((b: any) => {
-    if (!b || typeof b !== 'object' || !b.embedMeta) return b;
+  const sanitizedBlocks = blocks.map((b: any, idx: number) => {
+    if (!b || typeof b !== 'object') return b;
+    const base = {
+      ...b,
+      position: idx,
+      isActive: b.isActive !== false,
+      isArchived: Boolean(b.isArchived),
+    };
+    if (!base.embedMeta) return base;
     const explicitLook =
-      typeof b.embedMeta.lookStyle === 'string' && b.embedMeta.lookStyle
-        ? b.embedMeta.lookStyle
+      typeof base.embedMeta.lookStyle === 'string' && base.embedMeta.lookStyle
+        ? base.embedMeta.lookStyle
         : null;
     return {
-      ...b,
-      embedMeta: sanitizeEmbedMetaBannerForSave(b.embedMeta, explicitLook, {
+      ...base,
+      embedMeta: sanitizeEmbedMetaBannerForSave(base.embedMeta, explicitLook, {
         allowDataUrl: false,
       }),
     };
@@ -1194,13 +1216,23 @@ export async function handleSaveBlocks(req: ExpressReq, res: ExpressRes) {
       return res.status(400).json({ error: result.error });
     }
     try {
+      await awaitFirebaseWrite(firebaseSaveBlocks(username, sanitizedBlocks, userId || undefined), 'saveBlocks');
+    } catch (fbErr) {
+      await dbSaveBlocks(username, prevBlocks, userId || undefined, primaryEmail).catch(() => {});
+      throw fbErr;
+    }
+    try {
       cleanupUnreferencedUserCardBanners(username, sanitizedBlocks, prevBannerUrls);
     } catch {}
-    await awaitFirebaseWrite(firebaseSaveBlocks(username, sanitizedBlocks, userId || undefined), 'saveBlocks');
-    notifyProfileSeoChanged('updated', username).catch(() => {});
     invalidatePublicPageCache(username);
+    notifyProfileSeoChanged('updated', username).catch(() => {});
 
-    return res.status(200).json({ ok: true, updatedAt: new Date().toISOString() });
+    const protectedSet = new Set(await dbGetProtectedLinkIds(username).catch(() => []));
+    const authoritativeBlocks = sanitizedBlocks.map((b: any) =>
+      protectedSet.has(String(b?.id || '')) && !b?.isProtected ? { ...b, isProtected: true } : b
+    );
+    const updatedAt = new Date().toISOString();
+    return res.status(200).json({ ok: true, blocks: authoritativeBlocks, updatedAt });
   } catch (err: any) {
     return sendMutationError(res, err, 'save_failed');
   }
@@ -2267,9 +2299,8 @@ export async function handleGetSubscriptionInvoice(req: ExpressReq, res: Express
 }
 
 export async function handleAdminBillingInspect(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'Admin access required.' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   const rawUsername = String(req.query.username || req.query.u || '').replace(/^@+/, '').toLowerCase().trim();
   if (!rawUsername) {
@@ -2285,12 +2316,11 @@ export async function handleAdminBillingInspect(req: ExpressReq, res: ExpressRes
 }
 
 export async function handleAdminBillingReconcile(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'Admin access required.' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   const body = req.body || {};
-  const adminEmail = String(req.query.adminEmail || req.headers['x-user-email'] || '').toLowerCase().trim();
+  const adminEmail = adminActor.email || 'admin';
   const rawUsername = String(body.username || '').replace(/^@+/, '').toLowerCase().trim();
   const action = String(body.action || '').trim() as any;
 
@@ -2383,18 +2413,273 @@ export async function handleDiscoverProfiles(req: ExpressReq, res: ExpressRes) {
   }
 }
 
-function isSeoAdminRequest(req: ExpressReq): boolean {
-  const email = String(req.query.adminEmail || req.headers['x-user-email'] || '').toLowerCase().trim();
-  return isPrivilegedEmailServer(email);
+const adminGscMutationRate = new Map<string, { count: number; resetAt: number }>();
+const userSeoSubmitCooldown = new Map<string, number>();
+
+function isSafeSameOriginMutation(req: ExpressReq): boolean {
+  const originHeader = String(req.headers.origin || '').trim();
+  const refererHeader = String(req.headers.referer || '').trim();
+  const checkHeader = originHeader || refererHeader;
+  if (!checkHeader) return true;
+  try {
+    const parsed = new URL(checkHeader);
+    const reqHost = String(req.get('host') || '').toLowerCase().split(':')[0];
+    const hdrHost = parsed.hostname.toLowerCase();
+    if (hdrHost === reqHost) return true;
+    if (hdrHost === 'iveo.site' || hdrHost.endsWith('.iveo.site')) return true;
+    if (hdrHost === 'localhost' || hdrHost === '127.0.0.1') return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function checkAdminGscRateLimit(key: string): boolean {
+  const now = Date.now();
+  const cur = adminGscMutationRate.get(key);
+  if (!cur || cur.resetAt <= now) {
+    adminGscMutationRate.set(key, { count: 1, resetAt: now + 60 * 60_000 });
+    return true;
+  }
+  if (cur.count >= 30) return false;
+  cur.count += 1;
+  return true;
+}
+
+async function requireVerifiedAdmin(req: ExpressReq, res: ExpressRes) {
+  const actor = await resolveVerifiedRequestActor(req);
+  if (!actor.authenticated || !isPrivilegedEmailServer(actor.email)) {
+    res.status(403).json({
+      ok: false,
+      error: 'forbidden',
+      message: 'Admin access required.',
+    });
+    return null;
+  }
+  return actor;
+}
+
+async function resolveVerifiedCreatorScope(
+  req: ExpressReq,
+  res: ExpressRes,
+  requestedUsernameRaw?: string | null
+): Promise<{
+  username: string;
+  isAdmin: boolean;
+  actorUserId: string | null;
+  actorEmail: string | null;
+} | null> {
+  const actor = await resolveVerifiedRequestActor(req);
+  if (!actor.authenticated) {
+    res.status(401).json({
+      ok: false,
+      error: 'unauthorized',
+      message: 'Sign in required.',
+    });
+    return null;
+  }
+
+  const isAdmin = isPrivilegedEmailServer(actor.email);
+  let ownedProfile: any = null;
+  if (actor.userId) {
+    ownedProfile = await dbGetProfileByUserId(actor.userId).catch(() => null);
+    if (!ownedProfile) {
+      ownedProfile = await withTimeout(firebaseGetProfileByUserId(actor.userId), null);
+    }
+  }
+
+  const ownUsername = ownedProfile?.username
+    ? String(ownedProfile.username).replace(/^@+/, '').toLowerCase().trim()
+    : '';
+
+  const requested = String(requestedUsernameRaw || '')
+    .replace(/^@+/, '')
+    .toLowerCase()
+    .trim();
+
+  if (requested) {
+    if (isAdmin) {
+      return {
+        username: requested,
+        isAdmin: true,
+        actorUserId: actor.userId,
+        actorEmail: actor.email,
+      };
+    }
+    if (ownUsername && requested !== ownUsername) {
+      res.status(403).json({
+        ok: false,
+        error: 'forbidden',
+        message: 'You can only access SEO controls for your own profile.',
+      });
+      return null;
+    }
+    if (!ownUsername) {
+      // Verify ownership directly against requested profile if profile lookup by userId wasn't cached
+      let targetProf = await dbGetProfile(requested).catch(() => null);
+      if (!targetProf) {
+        targetProf = await withTimeout(firebaseGetProfile(requested), null);
+      }
+      const ownsTarget =
+        Boolean(targetProf) &&
+        ((actor.userId && targetProf.userId === actor.userId) ||
+          (actor.email &&
+            targetProf.primaryEmail &&
+            String(targetProf.primaryEmail).toLowerCase().trim() === actor.email));
+      if (!ownsTarget) {
+        res.status(403).json({
+          ok: false,
+          error: 'forbidden',
+          message: 'You can only access SEO controls for your own profile.',
+        });
+        return null;
+      }
+      return {
+        username: requested,
+        isAdmin: false,
+        actorUserId: actor.userId,
+        actorEmail: actor.email,
+      };
+    }
+  }
+
+  if (!ownUsername) {
+    res.status(404).json({
+      ok: false,
+      error: 'profile_not_found',
+      message: 'Claim your Iveo username first to use Search Console.',
+    });
+    return null;
+  }
+
+  return {
+    username: ownUsername,
+    isAdmin,
+    actorUserId: actor.userId,
+    actorEmail: actor.email,
+  };
+}
+
+/**
+ * GET /api/seo/me/overview
+ * Creator-scoped SEO overview strictly limited to the signed-in user's own @username.
+ */
+export async function handleSeoMeOverview(req: ExpressReq, res: ExpressRes) {
+  const requested = String(req.query.u || req.query.username || '').trim() || null;
+  const scope = await resolveVerifiedCreatorScope(req, res, requested);
+  if (!scope) return;
+
+  try {
+    const overview = await buildUserSeoOverview(getCanonicalSiteOrigin(), scope.username, scope.isAdmin);
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.status(200).json({ ok: true, overview });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'seo_me_overview_failed', message: err?.message });
+  }
+}
+
+/**
+ * GET /api/seo/me/validate
+ * Creator-scoped profile SEO validation (only own handle unless admin).
+ */
+export async function handleSeoMeValidate(req: ExpressReq, res: ExpressRes) {
+  const requested = String(req.query.u || req.query.username || '').trim() || null;
+  const scope = await resolveVerifiedCreatorScope(req, res, requested);
+  if (!scope) return;
+
+  try {
+    const validation = await validateProfileSeo(getCanonicalSiteOrigin(), scope.username);
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.status(200).json({ ok: true, validation });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'validate_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/seo/me/inspect
+ * Creator-scoped live URL inspect (only own handle unless admin).
+ */
+export async function handleSeoMeInspect(req: ExpressReq, res: ExpressRes) {
+  const requested = String(req.body?.username || req.query.u || '').trim() || null;
+  const scope = await resolveVerifiedCreatorScope(req, res, requested);
+  if (!scope) return;
+
+  try {
+    const canonical = `${getCanonicalSiteOrigin()}/@${encodeURIComponent(scope.username)}`;
+    const [localValidation, gsc] = await Promise.all([
+      validateProfileSeo(getCanonicalSiteOrigin(), scope.username),
+      inspectUrlWithGsc(canonical),
+    ]);
+    return res.status(200).json({
+      ok: true,
+      targetUrl: canonical,
+      localValidation,
+      gsc,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'inspect_failed', message: err?.message });
+  }
+}
+
+/**
+ * POST /api/seo/me/submit
+ * Creator-scoped sitemap entry refresh & search ping (rate limited 1 per 10 min per handle).
+ */
+export async function handleSeoMeSubmit(req: ExpressReq, res: ExpressRes) {
+  const requested = String(req.body?.username || req.query.u || '').trim() || null;
+  const scope = await resolveVerifiedCreatorScope(req, res, requested);
+  if (!scope) return;
+
+  const now = Date.now();
+  const nextAllowedAt = userSeoSubmitCooldown.get(scope.username) || 0;
+  if (nextAllowedAt > now) {
+    const retryAfterSec = Math.max(1, Math.ceil((nextAllowedAt - now) / 1000));
+    res.setHeader('Retry-After', String(retryAfterSec));
+    return res.status(429).json({
+      ok: false,
+      error: 'rate_limited',
+      retryAfterSec,
+      nextAllowedAt: new Date(nextAllowedAt).toISOString(),
+      message: `Please wait ${Math.ceil(retryAfterSec / 60)} minute(s) before submitting @${scope.username} again.`,
+    });
+  }
+
+  try {
+    const cooldownUntil = now + 10 * 60_000;
+    userSeoSubmitCooldown.set(scope.username, cooldownUntil);
+    invalidateSitemapCache(`user_submit:${scope.username}`);
+    const canonical = `${getCanonicalSiteOrigin()}/@${encodeURIComponent(scope.username)}`;
+    const pingResult = await notifyIndexNow([canonical], {
+      scope: scope.username,
+      bypassDedup: true,
+    });
+    await appendSeoIntegrationEvent({
+      type: 'creator_ping',
+      scope: scope.username,
+      provider: 'seo',
+      targetUrl: canonical,
+      httpStatus: 200,
+      outcome: 'success',
+      detail: pingResult.status,
+    });
+    return res.status(200).json({
+      ok: true,
+      targetUrl: canonical,
+      ping: pingResult,
+      nextAllowedAt: new Date(cooldownUntil).toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: 'submit_failed', message: err?.message });
+  }
 }
 
 /**
  * GET /api/seo/admin/overview
  */
 export async function handleSeoAdminOverview(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   try {
     const origin = getSiteOrigin({
@@ -2405,7 +2690,11 @@ export async function handleSeoAdminOverview(req: ExpressReq, res: ExpressRes) {
         },
       },
     } as any);
-    const report = await getSeoHealthReport(origin);
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const page = Number(req.query.page || '1') || 1;
+    const pageSize = Number(req.query.pageSize || '25') || 25;
+    const report = await getSeoHealthReport(origin, { q, page, pageSize });
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     return res.status(200).json({ ok: true, report });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: 'seo_overview_failed', message: err?.message });
@@ -2416,9 +2705,8 @@ export async function handleSeoAdminOverview(req: ExpressReq, res: ExpressRes) {
  * POST /api/seo/admin/regenerate-sitemap
  */
 export async function handleSeoAdminRegenerate(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   try {
     const result = await regenerateAndPingSitemap(getCanonicalSiteOrigin());
@@ -2432,9 +2720,8 @@ export async function handleSeoAdminRegenerate(req: ExpressReq, res: ExpressRes)
  * GET /api/seo/admin/validate?u=username
  */
 export async function handleSeoAdminValidate(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   const username = String(req.query.u || req.query.username || '').trim();
   if (!username) {
@@ -2453,9 +2740,8 @@ export async function handleSeoAdminValidate(req: ExpressReq, res: ExpressRes) {
  * POST /api/seo/admin/inspect
  */
 export async function handleSeoAdminInspect(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   const rawUsername = String(req.body?.username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!rawUsername) {
@@ -2479,9 +2765,8 @@ export async function handleSeoAdminInspect(req: ExpressReq, res: ExpressRes) {
  * Allows SEO/Platform admin to reset a user's custom/uploaded background to Pure White default
  */
 export async function handleSeoAdminModerateBackground(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
 
   const username = String(req.body?.username || '').replace(/^@+/, '').toLowerCase().trim();
   if (!username) {
@@ -2567,21 +2852,28 @@ export async function handleSeoAdminModerateBackground(req: ExpressReq, res: Exp
  * Returns redacted GSC service account summary (never returns private_key)
  */
 export async function handleSeoAdminGetGscConfig(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
-  }
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
   res.setHeader('Cache-Control', 'no-store, max-age=0');
-  return res.status(200).json({ ok: true, gsc: getGscSafeConfigSummary() });
+  const gsc = await getGscSafeConfigSummaryAsync();
+  return res.status(200).json({ ok: true, gsc });
 }
 
 /**
  * POST /api/seo/admin/gsc-config
- * Saves a Google Cloud Service Account JSON and/or property URL on the server runtime store
+ * Validates, AES-256-GCM encrypts, persists GSC credentials to Firebase, and optionally tests live.
  */
 export async function handleSeoAdminSaveGscConfig(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
+  if (!isSafeSameOriginMutation(req)) {
+    return res.status(403).json({ ok: false, error: 'invalid_origin', message: 'Cross-origin mutation blocked.' });
   }
+  const rateKey = adminActor.email || adminActor.userId || getBlueskyClientIp(req);
+  if (!checkAdminGscRateLimit(rateKey)) {
+    return res.status(429).json({ ok: false, error: 'rate_limited', message: 'Too many GSC config attempts. Try again later.' });
+  }
+
   try {
     const body = req.body || {};
     const rawJson =
@@ -2594,7 +2886,18 @@ export async function handleSeoAdminSaveGscConfig(req: ExpressReq, res: ExpressR
             : undefined;
     const propertyUrl = typeof body.propertyUrl === 'string' ? body.propertyUrl : undefined;
 
-    const saved = saveGscRuntimeConfig({ rawJson, propertyUrl });
+    if (rawJson && Buffer.byteLength(rawJson, 'utf8') > 25 * 1024) {
+      return res.status(413).json({
+        ok: false,
+        error: 'Service Account JSON exceeds the 25 KB limit.',
+      });
+    }
+
+    const saved = await saveGscRuntimeConfigAsync({
+      rawJson,
+      propertyUrl,
+      updatedBy: adminActor.email || adminActor.userId || 'admin',
+    });
     if (!saved.ok) {
       return res.status(saved.status).json({
         ok: false,
@@ -2603,9 +2906,11 @@ export async function handleSeoAdminSaveGscConfig(req: ExpressReq, res: ExpressR
       });
     }
     const connection = body.test === false ? null : await testGscConnection();
+    const freshSummary = await getGscSafeConfigSummaryAsync();
     return res.status(200).json({
       ok: true,
-      gsc: saved.summary,
+      warning: saved.warning || null,
+      gsc: freshSummary,
       connection,
     });
   } catch (err: any) {
@@ -2618,13 +2923,15 @@ export async function handleSeoAdminSaveGscConfig(req: ExpressReq, res: ExpressR
 
 /**
  * DELETE /api/seo/admin/gsc-config
- * Clears the runtime GSC service account JSON file
+ * Clears the stored encrypted GSC service account configuration
  */
 export async function handleSeoAdminDeleteGscConfig(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
+  if (!isSafeSameOriginMutation(req)) {
+    return res.status(403).json({ ok: false, error: 'invalid_origin', message: 'Cross-origin mutation blocked.' });
   }
-  const summary = clearGscRuntimeConfig();
+  const summary = await clearGscRuntimeConfigAsync();
   return res.status(200).json({ ok: true, gsc: summary });
 }
 
@@ -2633,15 +2940,19 @@ export async function handleSeoAdminDeleteGscConfig(req: ExpressReq, res: Expres
  * Tests live OAuth JWT exchange and Google Search Console /sites access
  */
 export async function handleSeoAdminTestGsc(req: ExpressReq, res: ExpressRes) {
-  if (!isSeoAdminRequest(req)) {
-    return res.status(403).json({ ok: false, error: 'forbidden', message: 'SEO admin access required.' });
+  const adminActor = await requireVerifiedAdmin(req, res);
+  if (!adminActor) return;
+  const rateKey = adminActor.email || adminActor.userId || getBlueskyClientIp(req);
+  if (!checkAdminGscRateLimit(rateKey)) {
+    return res.status(429).json({ ok: false, error: 'rate_limited', message: 'Too many GSC test requests. Try again later.' });
   }
   try {
     const result = await testGscConnection();
+    const gsc = await getGscSafeConfigSummaryAsync();
     return res.status(200).json({
       ok: result.ok,
       connection: result,
-      gsc: getGscSafeConfigSummary(),
+      gsc,
     });
   } catch (err: any) {
     return res.status(500).json({

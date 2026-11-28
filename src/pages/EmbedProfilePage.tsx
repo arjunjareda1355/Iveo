@@ -15,6 +15,7 @@ import { PageRenderer } from '../components/page/PageRenderer';
 import { BackgroundLayer } from '../components/page/BackgroundLayer';
 import { LinkFaviconOrFallback } from '../components/ui/LinkFaviconOrFallback';
 import { Loader } from '../components/ui/Loader';
+import { usePageMeta } from '../hooks/usePageMeta';
 
 function resolveEmbedPalette(theme: ProfileEmbedTheme, vibeTokens: { bg: string; text: string; muted: string; buttonBg: string; buttonText: string; buttonBorder?: string | null }) {
   if (theme === 'light') {
@@ -72,6 +73,11 @@ export const EmbedProfilePage: React.FC = () => {
   const [pageData, setPageData] = useState<PublicPageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [avatarFailed, setAvatarFailed] = useState(false);
+
+  usePageMeta({
+    title: clean ? `@${clean} | Iveo` : 'Iveo Embed',
+    robots: 'noindex, nofollow',
+  });
 
   useEffect(() => {
     const prevBodyBg = document.body.style.backgroundColor;

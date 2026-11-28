@@ -1226,68 +1226,102 @@ export const EmbedBlock: React.FC<EmbedBlockProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            {statsItems ? (
-              statsItems.map((st, idx) => (
+          {provider === 'youtube' &&
+          Array.isArray(block.youtube?.latestVideos) &&
+          block.youtube.latestVideos.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {block.youtube.latestVideos.slice(0, 2).map((vid, idx) => (
                 <div
-                  key={`${st.key}-${idx}`}
-                  className="rounded-[10px] px-2.5 py-2 border flex flex-col justify-center"
+                  key={`${vid.id || idx}`}
+                  className="rounded-[10px] overflow-hidden border flex flex-col"
                   style={{
                     backgroundColor: innerCardBg,
                     borderColor: innerCardBorder,
                   }}
                 >
+                  {vid.thumbnailUrl && (
+                    <img
+                      src={vid.thumbnailUrl}
+                      alt={vid.title}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-16 object-cover block"
+                    />
+                  )}
                   <span
-                    className="font-bold leading-tight truncate"
-                    style={{ fontSize: `${Math.max(13, Math.round(14 * scale))}px`, color: textPrimary }}
+                    dir="auto"
+                    className="px-2 py-1.5 text-[11px] font-medium line-clamp-2 leading-snug"
+                    style={{ color: textPrimary }}
                   >
-                    {st.value}
-                  </span>
-                  <span
-                    className="truncate uppercase tracking-wider"
-                    style={{ fontSize: `${Math.max(9.5, Math.round(10.5 * scale))}px`, color: textMuted }}
-                  >
-                    {st.key}
+                    {vid.title}
                   </span>
                 </div>
-              ))
-            ) : (
-              <>
-                <div
-                  className="rounded-[10px] px-2.5 py-2 border flex items-center gap-2 min-w-0"
-                  style={{
-                    backgroundColor: innerCardBg,
-                    borderColor: innerCardBorder,
-                  }}
-                >
-                  <span style={{ color: glyphColor }} className="shrink-0">
-                    <ProviderGlyph provider={provider} size={13} />
-                  </span>
-                  <span
-                    className="truncate font-medium"
-                    style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px`, color: textPrimary }}
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {statsItems ? (
+                statsItems.map((st, idx) => (
+                  <div
+                    key={`${st.key}-${idx}`}
+                    className="rounded-[10px] px-2.5 py-2 border flex flex-col justify-center"
+                    style={{
+                      backgroundColor: innerCardBg,
+                      borderColor: innerCardBorder,
+                    }}
                   >
-                    {statsLabel || `${providerDef.name} feed`}
-                  </span>
-                </div>
-                <div
-                  className="rounded-[10px] px-2.5 py-2 border flex items-center justify-between gap-1.5 min-w-0"
-                  style={{
-                    backgroundColor: innerCardBg,
-                    borderColor: innerCardBorder,
-                  }}
-                >
-                  <span
-                    className="truncate font-medium"
-                    style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px`, color: textPrimary }}
+                    <span
+                      className="font-bold leading-tight truncate"
+                      style={{ fontSize: `${Math.max(13, Math.round(14 * scale))}px`, color: textPrimary }}
+                    >
+                      {st.value}
+                    </span>
+                    <span
+                      className="truncate uppercase tracking-wider"
+                      style={{ fontSize: `${Math.max(9.5, Math.round(10.5 * scale))}px`, color: textMuted }}
+                    >
+                      {st.key}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div
+                    className="rounded-[10px] px-2.5 py-2 border flex items-center gap-2 min-w-0"
+                    style={{
+                      backgroundColor: innerCardBg,
+                      borderColor: innerCardBorder,
+                    }}
                   >
-                    Latest posts
-                  </span>
-                  <ExternalLink size={11} style={{ color: textMuted }} className="shrink-0" />
-                </div>
-              </>
-            )}
-          </div>
+                    <span style={{ color: glyphColor }} className="shrink-0">
+                      <ProviderGlyph provider={provider} size={13} />
+                    </span>
+                    <span
+                      className="truncate font-medium"
+                      style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px`, color: textPrimary }}
+                    >
+                      {statsLabel || `${providerDef.name} feed`}
+                    </span>
+                  </div>
+                  <div
+                    className="rounded-[10px] px-2.5 py-2 border flex items-center justify-between gap-1.5 min-w-0"
+                    style={{
+                      backgroundColor: innerCardBg,
+                      borderColor: innerCardBorder,
+                    }}
+                  >
+                    <span
+                      className="truncate font-medium"
+                      style={{ fontSize: `${Math.max(11, Math.round(12 * scale))}px`, color: textPrimary }}
+                    >
+                      Latest posts
+                    </span>
+                    <ExternalLink size={11} style={{ color: textMuted }} className="shrink-0" />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

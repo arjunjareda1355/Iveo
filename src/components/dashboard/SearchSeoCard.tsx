@@ -6,7 +6,6 @@ import { Button } from '../ui/Button';
 import { useIveoSession } from '../../auth/useIvioSession';
 import { useToast } from '../ui/Toast';
 import { sanitizeSeoField } from '../../lib/integrations';
-import { isOwnerEmail } from '../../lib/plan';
 import { buildProfileSeoDescription, buildProfileSeoTitle } from '../../lib/seoMeta';
 
 export const SearchSeoCard: React.FC = () => {
@@ -84,7 +83,7 @@ export const SearchSeoCard: React.FC = () => {
     }
   };
 
-  const showOwnerSeoConsole = isOwnerEmail(session.primaryEmail);
+  const showSeoConsole = Boolean(session.isSignedIn);
 
   return (
     <Card className="flex flex-col gap-5">
@@ -197,14 +196,14 @@ export const SearchSeoCard: React.FC = () => {
         </div>
       </form>
 
-      {showOwnerSeoConsole && (
+      {showSeoConsole && (
         <div className="pt-4 border-t border-divider flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">
             <h4 className="text-[14px] font-semibold text-ink leading-tight">
               Search console
             </h4>
             <p className="mt-0.5 text-[12px] text-muted">
-              Inspect profile indexability, regenerate sitemaps, and submit updates to search engines.
+              Inspect your profile indexability, check live Google preview, and submit updates to search engines.
             </p>
           </div>
           <Button

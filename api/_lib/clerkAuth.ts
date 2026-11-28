@@ -64,3 +64,96 @@ export async function verifyClerkRequest(req: ExpressReq): Promise<VerifiedClerk
     };
   }
 }
+
+export interface ResolvedRequestActor {
+  enforced: boolean;
+  authenticated: boolean;
+  userId: string | null;
+  email: string | null;
+  verifiedByJwt: boolean;
+  error?: string;
+}
+
+const clerkEmailCache = new Map<string, { email: string | null; expiresAt: number }>();
+
+export function clearClerkActorCacheForTests(): void {
+  clerkEmailCache.clear();
+}
+
+/**
+ * Resolves the caller identity for both enforced Clerk JWT mode and local/dev fallback mode.
+ * When CLERK_SECRET_KEY is configured, client-supplied email/adminEmail headers or query params
+ * are NEVER trusted; the verified email is resolved directly from Clerk Backend API.
+ */
+export async function resolveVerifiedRequestActor(req: ExpressReq): Promise<ResolvedRequestActor> {
+  const jwtActor = await verifyClerkRequest(req);
+  if (!jwtActor.enforced) {
+    const rawHeaderEmail = String(
+      req.headers['x-user-email'] || req.query?.adminEmail || ''
+    )
+      .toLowerCase()
+      .trim();
+    const email = rawHeaderEmail || null;
+    return {
+      enforced: false,
+      authenticated: Boolean(jwtActor.userId || email),
+      userId: jwtActor.userId,
+      email,
+      verifiedByJwt: false,
+    };
+  }
+
+  if (!jwtActor.verifiedByJwt || !jwtActor.userId) {
+    return {
+      enforced: true,
+      authenticated: false,
+      userId: null,
+      email: null,
+      verifiedByJwt: false,
+      error: jwtActor.error || 'unauthorized',
+    };
+  }
+
+  const cached = clerkEmailCache.get(jwtActor.userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      enforced: true,
+      authenticated: true,
+      userId: jwtActor.userId,
+      email: cached.email,
+      verifiedByJwt: true,
+    };
+  }
+
+  let resolvedEmail: string | null = null;
+  try {
+    const secretKey = (process.env.CLERK_SECRET_KEY || '').trim();
+    if (secretKey) {
+      const { createClerkClient } = await import('@clerk/backend');
+      const client = createClerkClient({ secretKey });
+      const user = await client.users.getUser(jwtActor.userId);
+      const primary =
+        user.emailAddresses?.find((e) => e.id === user.primaryEmailAddressId) ||
+        user.emailAddresses?.[0];
+      if (primary?.emailAddress) {
+        resolvedEmail = primary.emailAddress.toLowerCase().trim();
+      }
+    }
+  } catch {
+    resolvedEmail = null;
+  }
+
+  clerkEmailCache.set(jwtActor.userId, {
+    email: resolvedEmail,
+    expiresAt: Date.now() + 60_000,
+  });
+
+  return {
+    enforced: true,
+    authenticated: true,
+    userId: jwtActor.userId,
+    email: resolvedEmail,
+    verifiedByJwt: true,
+  };
+}
+

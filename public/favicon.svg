@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="88 88 1077 1077" width="512" height="512" role="img" aria-label="Iveo logo">
+  <defs>
+    <linearGradient id="iv-fold" x1="0.9" y1="0.1" x2="0.15" y2="0.95">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#6c6c6c"/>
+      <stop offset="1" stop-color="#e9e9e9"/>
+    </linearGradient>
+    <linearGradient id="iv-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2a2a"/>
+      <stop offset="0.35" stop-color="#050505"/>
+      <stop offset="1" stop-color="#000000"/>
+    </linearGradient>
+  </defs>
+  <rect x="88" y="88" width="1077" height="1077" rx="300" fill="url(#iv-sheen)"/>
+  <path fill="#ffffff" d="M718 436Q760 440 760 472L760 818Q760 848 736 866L548 1008Q530 1018 516 1000Q488 968 488 934L488 612Q488 582 520 554L690 446Q704 436 718 436Z"/>
+  <path fill="url(#iv-fold)" d="M760 652L760 818Q760 848 736 866L548 1008Q530 1018 516 1000Q488 968 488 934Q500 876 566 826L758 656Z"/>
+  <circle fill="#ffffff" cx="625" cy="316" r="112"/>
+</svg>

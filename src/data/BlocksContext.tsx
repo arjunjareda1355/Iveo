@@ -20,7 +20,7 @@ import {
 } from './types';
 import {
   listMyBlocks,
-  createBlock,
+  createBlockWithSync,
   updateBlock,
   deleteBlock as apiDeleteBlock,
   setBlockImage as apiSetBlockImage,
@@ -139,6 +139,16 @@ export const BlocksProvider: React.FC<{
     );
   }, []);
 
+  const applySyncedBlocks = useCallback(
+    (fallbackBlocks: Block[], serverBlocks?: Block[] | null) => {
+      const finalBlocks = Array.isArray(serverBlocks) ? serverBlocks : fallbackBlocks;
+      blocksRef.current = finalBlocks;
+      setBlocks(finalBlocks);
+      persistPublicBlocksCache(finalBlocks);
+    },
+    [persistPublicBlocksCache]
+  );
+
   const fetchBlocks = useCallback(async () => {
     if (!userId) return;
     setIsLoading(true);
@@ -173,7 +183,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -187,15 +197,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Link added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         if (err instanceof Error && err.message === 'pro_required') {
           openUpgrade('scheduling');
         } else {
@@ -209,7 +214,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -224,15 +229,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Embed added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         if (err instanceof Error && err.message === 'pro_required') {
           openUpgrade('embeds');
         } else {
@@ -246,7 +246,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -258,15 +258,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Signup form added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         if (err instanceof Error && err.message === 'pro_required') {
           openUpgrade('contact_forms');
         } else {
@@ -280,7 +275,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -292,15 +287,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Tip Jar added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add tip jar. Try again.");
         throw err;
       }
@@ -310,7 +300,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -322,15 +312,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('FAQ section added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add FAQ. Try again.");
         throw err;
       }
@@ -340,7 +325,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -352,15 +337,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Contact card added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add contact card. Try again.");
         throw err;
       }
@@ -370,27 +350,24 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
             kind: 'header',
             title,
+            url: null,
             position: 0,
           },
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Header added');
-      } catch {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+      } catch (err: unknown) {
+        applySyncedBlocks(prev);
         showToast("Couldn't add header. Try again.");
+        throw err;
       }
     });
 
@@ -398,27 +375,24 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
             kind: 'divider',
             title: '',
+            url: null,
             position: 0,
           },
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Divider added');
-      } catch {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+      } catch (err: unknown) {
+        applySyncedBlocks(prev);
         showToast("Couldn't add divider. Try again.");
+        throw err;
       }
     });
 
@@ -432,7 +406,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -448,15 +422,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Buy Me a Coffee block added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add coffee block. Try again.");
         throw err;
       }
@@ -466,7 +435,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -479,15 +448,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Instagram showcase added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add Instagram block. Try again.");
         throw err;
       }
@@ -502,7 +466,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -516,15 +480,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('YouTube showcase added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add YouTube block. Try again.");
         throw err;
       }
@@ -534,7 +493,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -547,15 +506,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Product card added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add product card. Try again.");
         throw err;
       }
@@ -565,7 +519,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -578,15 +532,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Booking card added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add booking card. Try again.");
         throw err;
       }
@@ -596,7 +545,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -609,15 +558,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Countdown added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add countdown. Try again.");
         throw err;
       }
@@ -627,7 +571,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -640,15 +584,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Promo code added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add promo code. Try again.");
         throw err;
       }
@@ -658,7 +597,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -671,15 +610,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Location card added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add location card. Try again.");
         throw err;
       }
@@ -689,7 +623,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -702,15 +636,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Download card added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add download card. Try again.");
         throw err;
       }
@@ -720,7 +649,7 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       try {
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -733,15 +662,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Bluesky block added');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't add Bluesky block. Try again.");
         throw err;
       }
@@ -751,16 +675,15 @@ export const BlocksProvider: React.FC<{
     enqueueMutation(async () => {
       const prev = [...blocksRef.current];
       const next = prev.map((item) => (item.id === id ? { ...item, ...patch } : item));
-      blocksRef.current = next;
-      setBlocks(next);
-      persistPublicBlocksCache(next);
+      applySyncedBlocks(next);
 
       try {
-        await updateBlock(token, userId, id, patch, authCtx, prev);
+        const serverBlocks = await updateBlock(token, userId, id, patch, authCtx, prev);
+        if (serverBlocks) {
+          applySyncedBlocks(next, serverBlocks);
+        }
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         if (err instanceof Error && err.message === 'pro_required') {
           if (patch.startAt || patch.endAt) openUpgrade('scheduling');
           else if (patch.embedProvider) openUpgrade('embeds');
@@ -788,12 +711,10 @@ export const BlocksProvider: React.FC<{
       const next = prev.map((item) =>
         item.id === id ? { ...item, thumbnailPath, thumbnailUrl: finalThumbUrl, layout } : item
       );
-      blocksRef.current = next;
-      setBlocks(next);
-      persistPublicBlocksCache(next);
+      applySyncedBlocks(next);
 
       try {
-        await apiSetBlockImage(
+        const serverBlocks = await apiSetBlockImage(
           token,
           userId,
           id,
@@ -805,10 +726,11 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
+        if (serverBlocks) {
+          applySyncedBlocks(next, serverBlocks);
+        }
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't save image. Try again.");
         throw err;
       }
@@ -819,17 +741,24 @@ export const BlocksProvider: React.FC<{
       const prev = [...blocksRef.current];
       const target = prev.find((b) => b.id === id);
       const next = prev.filter((item) => item.id !== id).map((item, idx) => ({ ...item, position: idx }));
-      blocksRef.current = next;
-      setBlocks(next);
-      persistPublicBlocksCache(next);
+      applySyncedBlocks(next);
 
       try {
-        await apiDeleteBlock(token, userId, id, authCtx, prev);
-        showToast(target?.kind === 'embed' ? 'Embed deleted' : 'Link deleted');
+        const serverBlocks = await apiDeleteBlock(token, userId, id, authCtx, prev);
+        if (serverBlocks) {
+          applySyncedBlocks(next, serverBlocks);
+        }
+        const deletedMsg =
+          target?.kind === 'header'
+            ? 'Header deleted'
+            : target?.kind === 'divider'
+              ? 'Divider deleted'
+              : target?.kind === 'embed'
+                ? 'Embed deleted'
+                : 'Link deleted';
+        showToast(deletedMsg);
       } catch {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't delete item. Try again.");
       }
     });
@@ -841,12 +770,13 @@ export const BlocksProvider: React.FC<{
       if (!target) return;
       const nextArchived = !target.isArchived;
       const next = prev.map((item) => (item.id === id ? { ...item, isArchived: nextArchived } : item));
-      blocksRef.current = next;
-      setBlocks(next);
-      persistPublicBlocksCache(next);
+      applySyncedBlocks(next);
 
       try {
-        await updateBlock(token, userId, id, { isArchived: nextArchived }, authCtx, prev);
+        const serverBlocks = await updateBlock(token, userId, id, { isArchived: nextArchived }, authCtx, prev);
+        if (serverBlocks) {
+          applySyncedBlocks(next, serverBlocks);
+        }
         const isEmbed = target.kind === 'embed';
         if (nextArchived) {
           showToast(isEmbed ? 'Embed archived' : 'Link archived');
@@ -854,9 +784,7 @@ export const BlocksProvider: React.FC<{
           showToast(isEmbed ? 'Embed restored' : 'Link restored');
         }
       } catch {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't update item. Try again.");
       }
     });
@@ -868,16 +796,15 @@ export const BlocksProvider: React.FC<{
       if (!target) return;
       const nextActive = !target.isActive;
       const next = prev.map((item) => (item.id === id ? { ...item, isActive: nextActive } : item));
-      blocksRef.current = next;
-      setBlocks(next);
-      persistPublicBlocksCache(next);
+      applySyncedBlocks(next);
 
       try {
-        await updateBlock(token, userId, id, { isActive: nextActive }, authCtx, prev);
+        const serverBlocks = await updateBlock(token, userId, id, { isActive: nextActive }, authCtx, prev);
+        if (serverBlocks) {
+          applySyncedBlocks(next, serverBlocks);
+        }
       } catch {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't update item. Try again.");
       }
     });
@@ -900,16 +827,15 @@ export const BlocksProvider: React.FC<{
         }
       });
 
-      blocksRef.current = reordered;
-      setBlocks(reordered);
-      persistPublicBlocksCache(reordered);
+      applySyncedBlocks(reordered);
 
       try {
-        await saveOrderedBlocks(token, userId, reordered, authCtx);
+        const serverBlocks = await saveOrderedBlocks(token, userId, reordered, authCtx);
+        if (serverBlocks) {
+          applySyncedBlocks(reordered, serverBlocks);
+        }
       } catch {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         showToast("Couldn't save order. Try again.");
       }
     });
@@ -924,7 +850,7 @@ export const BlocksProvider: React.FC<{
       const prev = [...blocksRef.current];
       try {
         const nextTitle = block.title ? `Copy of ${block.title}` : block.kind === 'divider' ? '' : 'Copy';
-        const newBlock = await createBlock(
+        const { block: newBlock, blocks: serverBlocks } = await createBlockWithSync(
           token,
           userId,
           {
@@ -955,15 +881,10 @@ export const BlocksProvider: React.FC<{
           authCtx,
           prev
         );
-        const next = prependNormalizedBlock(prev, newBlock);
-        blocksRef.current = next;
-        setBlocks(next);
-        persistPublicBlocksCache(next);
+        applySyncedBlocks(prependNormalizedBlock(prev, newBlock), serverBlocks);
         showToast('Item duplicated');
       } catch (err: unknown) {
-        blocksRef.current = prev;
-        setBlocks(prev);
-        persistPublicBlocksCache(prev);
+        applySyncedBlocks(prev);
         if (err instanceof Error && err.message === 'pro_required') {
           openUpgrade('embeds');
         } else {

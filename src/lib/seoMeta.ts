@@ -63,7 +63,11 @@ export function buildProfileSeoDescription(input: ProfileSeoMetaInput): string {
   const display =
     sanitizeSeoMetaText(input.displayName, 45) ||
     (cleanUsername ? `@${cleanUsername}` : 'this creator');
-  const handleSuffix = cleanUsername ? ` (@${cleanUsername})` : '';
+  const normalizedDisplay = display.replace(/^@+/, '').toLowerCase();
+  const handleSuffix =
+    cleanUsername && normalizedDisplay !== cleanUsername.toLowerCase()
+      ? ` (@${cleanUsername})`
+      : '';
   return truncateAtWord(
     `Discover ${display}${handleSuffix} on Iveo. Explore official links, projects, and social profiles.`,
     160

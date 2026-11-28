@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -46,27 +46,55 @@ import { LayoutControl } from '../links/LayoutControl';
 import { ScheduleSection } from '../links/ScheduleSection';
 import { ScheduleChip } from '../links/ScheduleChip';
 import { PasswordSection } from '../links/PasswordSection';
-import {
-  PlatformBlockEditor,
-  PlatformEditorSavePayload,
-} from '../links/PlatformBlockEditor';
+import type { PlatformEditorSavePayload } from '../links/PlatformBlockEditor';
 import { ProviderGlyph } from '../page/EmbedBlock';
 import { getProviderDefinition } from '../../lib/providers';
-import { SignupComposer } from '../links/SignupComposer';
-import { TipJarComposer } from '../links/TipJarComposer';
-import { FaqComposer } from '../links/FaqComposer';
-import { VCardComposer } from '../links/VCardComposer';
-import { CoffeeComposer } from '../links/CoffeeComposer';
-import { ProductCardComposer } from '../links/ProductCardComposer';
-import { BookingCardComposer } from '../links/BookingCardComposer';
-import { CountdownComposer } from '../links/CountdownComposer';
-import { PromoCodeComposer } from '../links/PromoCodeComposer';
-import { LocationCardComposer } from '../links/LocationCardComposer';
-import { DownloadCardComposer } from '../links/DownloadCardComposer';
-import { BlueskyComposer } from '../links/BlueskyComposer';
-import { AddBlockModal, FeatureType } from './AddBlockModal';
+import type { FeatureType } from './AddBlockModal';
 import { BlueskySocialIcon } from '../phone/SocialIcons';
 import { Loader } from '../ui/Loader';
+
+const PlatformBlockEditor = lazy(() =>
+  import('../links/PlatformBlockEditor').then((m) => ({ default: m.PlatformBlockEditor }))
+);
+const AddBlockModal = lazy(() =>
+  import('./AddBlockModal').then((m) => ({ default: m.AddBlockModal }))
+);
+const SignupComposer = lazy(() =>
+  import('../links/SignupComposer').then((m) => ({ default: m.SignupComposer }))
+);
+const TipJarComposer = lazy(() =>
+  import('../links/TipJarComposer').then((m) => ({ default: m.TipJarComposer }))
+);
+const FaqComposer = lazy(() =>
+  import('../links/FaqComposer').then((m) => ({ default: m.FaqComposer }))
+);
+const VCardComposer = lazy(() =>
+  import('../links/VCardComposer').then((m) => ({ default: m.VCardComposer }))
+);
+const CoffeeComposer = lazy(() =>
+  import('../links/CoffeeComposer').then((m) => ({ default: m.CoffeeComposer }))
+);
+const ProductCardComposer = lazy(() =>
+  import('../links/ProductCardComposer').then((m) => ({ default: m.ProductCardComposer }))
+);
+const BookingCardComposer = lazy(() =>
+  import('../links/BookingCardComposer').then((m) => ({ default: m.BookingCardComposer }))
+);
+const CountdownComposer = lazy(() =>
+  import('../links/CountdownComposer').then((m) => ({ default: m.CountdownComposer }))
+);
+const PromoCodeComposer = lazy(() =>
+  import('../links/PromoCodeComposer').then((m) => ({ default: m.PromoCodeComposer }))
+);
+const LocationCardComposer = lazy(() =>
+  import('../links/LocationCardComposer').then((m) => ({ default: m.LocationCardComposer }))
+);
+const DownloadCardComposer = lazy(() =>
+  import('../links/DownloadCardComposer').then((m) => ({ default: m.DownloadCardComposer }))
+);
+const BlueskyComposer = lazy(() =>
+  import('../links/BlueskyComposer').then((m) => ({ default: m.BlueskyComposer }))
+);
 import { AnimationControl } from '../links/AnimationControl';
 import {
   Block,
@@ -333,6 +361,7 @@ export const LinksTab: React.FC = () => {
   } | null>(null);
   const [isAddingLink, setIsAddingLink] = useState(false);
   const [newHeaderTitle, setNewHeaderTitle] = useState('');
+  const [isAddingHeader, setIsAddingHeader] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
 
   // Editing block id (non-platform blocks)
@@ -345,6 +374,7 @@ export const LinksTab: React.FC = () => {
   const [editStartAt, setEditStartAt] = useState<string | null>(null);
   const [editEndAt, setEditEndAt] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Delete confirm modal
   const [deletingBlock, setDeletingBlock] = useState<Block | null>(null);
@@ -566,16 +596,21 @@ export const LinksTab: React.FC = () => {
 
   const handleCreateHeader = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newHeaderTitle.trim()) {
+    const trimmed = newHeaderTitle.trim();
+    if (!trimmed) {
       setComposerError('Heading text is required.');
       return;
     }
 
+    setComposerError(null);
+    setIsAddingHeader(true);
     try {
-      await addHeader(newHeaderTitle.trim());
+      await addHeader(trimmed.slice(0, 40));
       handleCloseComposer();
     } catch {
       setComposerError("Couldn't add header. Try again.");
+    } finally {
+      setIsAddingHeader(false);
     }
   };
 
@@ -779,6 +814,7 @@ export const LinksTab: React.FC = () => {
         return;
       }
 
+      setIsSavingEdit(true);
       try {
         await updateBlock(block.id, {
           title: editTitle.trim(),
@@ -797,18 +833,24 @@ export const LinksTab: React.FC = () => {
         } else {
           setEditError("Couldn't save changes.");
         }
+      } finally {
+        setIsSavingEdit(false);
       }
     } else if (block.kind === 'header') {
-      if (!editTitle.trim()) {
+      const trimmed = editTitle.trim();
+      if (!trimmed) {
         setEditError('Heading text is required.');
         return;
       }
+      setIsSavingEdit(true);
       try {
-        await updateBlock(block.id, { title: editTitle.trim() });
+        await updateBlock(block.id, { title: trimmed.slice(0, 40), url: null });
         setEditingBlockId(null);
         showToast('Saved');
       } catch {
         setEditError("Couldn't save changes.");
+      } finally {
+        setIsSavingEdit(false);
       }
     }
   };
@@ -1100,167 +1142,174 @@ export const LinksTab: React.FC = () => {
         </Card>
       )}
 
-      {(activeComposer === 'signup') && (
-        <SignupComposer
-          ownerName={username || undefined}
-          onSave={async (cfg) => {
-            await addSignupForm(cfg);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+      <Suspense fallback={null}>
+        {(activeComposer === 'signup') && (
+          <SignupComposer
+            ownerName={username || undefined}
+            onSave={async (cfg) => {
+              await addSignupForm(cfg);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'header' && (
-        <Card className="border-ink/30">
-          <form onSubmit={handleCreateHeader} className="flex flex-col gap-3.5">
-            <h3 className="text-[16px] font-semibold text-ink">New section header</h3>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="new-header-title" className="text-[14px] font-medium text-ink">
-                Heading
-              </label>
-              <input
-                id="new-header-title"
-                type="text"
-                autoFocus
-                maxLength={40}
-                value={newHeaderTitle}
-                onChange={(e) => setNewHeaderTitle(e.target.value)}
-                placeholder="e.g. Featured work"
-                className="h-11 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
-              />
-            </div>
+        {activeComposer === 'header' && (
+          <Card className="border-ink/30">
+            <form onSubmit={handleCreateHeader} className="flex flex-col gap-3.5">
+              <h3 className="text-[16px] font-semibold text-ink">New section header</h3>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="new-header-title" className="text-[14px] font-medium text-ink">
+                    Heading
+                  </label>
+                  <span className="text-[11px] text-muted tabular-nums">
+                    {newHeaderTitle.length}/40
+                  </span>
+                </div>
+                <input
+                  id="new-header-title"
+                  type="text"
+                  autoFocus
+                  maxLength={40}
+                  value={newHeaderTitle}
+                  onChange={(e) => setNewHeaderTitle(e.target.value)}
+                  placeholder="e.g. Featured work"
+                  className="h-11 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                />
+              </div>
 
-            {composerError && (
-              <p className="text-[13px] text-[color:var(--error,#B3261E)]" role="alert">
-                {composerError}
-              </p>
-            )}
+              {composerError && (
+                <p className="text-[13px] text-[color:var(--error,#B3261E)]" role="alert">
+                  {composerError}
+                </p>
+              )}
 
-            <div className="flex items-center gap-2 pt-1">
-              <Button type="submit" variant="primary" size="md">
-                Add header
-              </Button>
-              <Button type="button" variant="ghost" size="md" onClick={handleCloseComposer}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+              <div className="flex items-center gap-2 pt-1">
+                <Button type="submit" variant="primary" size="md" loading={isAddingHeader}>
+                  Add header
+                </Button>
+                <Button type="button" variant="ghost" size="md" onClick={handleCloseComposer}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        )}
 
-      {activeComposer === 'tip_jar' && (
-        <TipJarComposer
-          onAdd={async (cfg, title) => {
-            await addTipJar(cfg, title);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'tip_jar' && (
+          <TipJarComposer
+            onAdd={async (cfg, title) => {
+              await addTipJar(cfg, title);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'faq' && (
-        <FaqComposer
-          onAdd={async (items, title) => {
-            await addFaq(items, title);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'faq' && (
+          <FaqComposer
+            onAdd={async (items, title) => {
+              await addFaq(items, title);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'vcard' && (
-        <VCardComposer
-          onSave={async (cfg, title) => {
-            await addVCard(cfg, title);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-          defaultFullName={displayName || username || ''}
-          defaultEmail={primaryEmail || ''}
-        />
-      )}
+        {activeComposer === 'vcard' && (
+          <VCardComposer
+            onSave={async (cfg, title) => {
+              await addVCard(cfg, title);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+            defaultFullName={displayName || username || ''}
+            defaultEmail={primaryEmail || ''}
+          />
+        )}
 
-      {activeComposer === 'coffee' && (
-        <CoffeeComposer
-          onAdd={async ({ title, url, badge, coffee }) => {
-            await addCoffee(title, url, badge, coffee || null);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'coffee' && (
+          <CoffeeComposer
+            onAdd={async ({ title, url, badge, coffee }) => {
+              await addCoffee(title, url, badge, coffee || null);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'product' && (
-        <ProductCardComposer
-          onAdd={async ({ title, url, product }) => {
-            await addProduct(title, url, product);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'product' && (
+          <ProductCardComposer
+            onAdd={async ({ title, url, product }) => {
+              await addProduct(title, url, product);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'booking' && (
-        <BookingCardComposer
-          onAdd={async ({ title, url, booking }) => {
-            await addBooking(title, url, booking);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'booking' && (
+          <BookingCardComposer
+            onAdd={async ({ title, url, booking }) => {
+              await addBooking(title, url, booking);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'countdown' && (
-        <CountdownComposer
-          onAdd={async ({ title, url, countdown }) => {
-            await addCountdown(title, url, countdown);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'countdown' && (
+          <CountdownComposer
+            onAdd={async ({ title, url, countdown }) => {
+              await addCountdown(title, url, countdown);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'promo' && (
-        <PromoCodeComposer
-          onAdd={async ({ title, url, promo }) => {
-            await addPromo(title, url, promo);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'promo' && (
+          <PromoCodeComposer
+            onAdd={async ({ title, url, promo }) => {
+              await addPromo(title, url, promo);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'location' && (
-        <LocationCardComposer
-          onAdd={async ({ title, url, location }) => {
-            await addLocation(title, url, location);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'location' && (
+          <LocationCardComposer
+            onAdd={async ({ title, url, location }) => {
+              await addLocation(title, url, location);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'download' && (
-        <DownloadCardComposer
-          onAdd={async ({ title, url, download }) => {
-            await addDownload(title, url, download);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'download' && (
+          <DownloadCardComposer
+            onAdd={async ({ title, url, download }) => {
+              await addDownload(title, url, download);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
 
-      {activeComposer === 'bluesky' && (
-        <BlueskyComposer
-          initialUrl={blueskyPrefillUrl}
-          onSave={async ({ title, url, bluesky }) => {
-            await addBluesky(title, url, bluesky);
-            handleCloseComposer();
-          }}
-          onCancel={handleCloseComposer}
-        />
-      )}
+        {activeComposer === 'bluesky' && (
+          <BlueskyComposer
+            initialUrl={blueskyPrefillUrl}
+            onSave={async ({ title, url, bluesky }) => {
+              await addBluesky(title, url, bluesky);
+              handleCloseComposer();
+            }}
+            onCancel={handleCloseComposer}
+          />
+        )}
+      </Suspense>
 
       {/* 4. Block List */}
       {isLoading ? (
@@ -1694,177 +1743,201 @@ export const LinksTab: React.FC = () => {
                     )}
                   </div>
                 ) : isSignup ? (
-                  <SignupComposer
-                    initialValues={block.signup || undefined}
-                    ownerName={username || undefined}
-                    isEditing
-                    onSave={async (config) => {
-                      await updateBlock(block.id, {
-                        title: config.heading || block.title,
-                        signup: config,
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <SignupComposer
+                      initialValues={block.signup || undefined}
+                      ownerName={username || undefined}
+                      isEditing
+                      onSave={async (config) => {
+                        await updateBlock(block.id, {
+                          title: config.heading || block.title,
+                          signup: config,
+                        });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isTipJar ? (
-                  <TipJarComposer
-                    initialValues={block.tipJar || undefined}
-                    initialTitle={block.title || undefined}
-                    isEditing
-                    onAdd={async (config, title) => {
-                      await updateBlock(block.id, {
-                        title,
-                        tipJar: config,
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <TipJarComposer
+                      initialValues={block.tipJar || undefined}
+                      initialTitle={block.title || undefined}
+                      isEditing
+                      onAdd={async (config, title) => {
+                        await updateBlock(block.id, {
+                          title,
+                          tipJar: config,
+                        });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isFaq ? (
-                  <FaqComposer
-                    initialItems={block.faq?.items || undefined}
-                    initialTitle={block.title || undefined}
-                    isEditing
-                    onAdd={async (items, title) => {
-                      await updateBlock(block.id, {
-                        title,
-                        faq: { items },
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <FaqComposer
+                      initialItems={block.faq?.items || undefined}
+                      initialTitle={block.title || undefined}
+                      isEditing
+                      onAdd={async (items, title) => {
+                        await updateBlock(block.id, {
+                          title,
+                          faq: { items },
+                        });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isVCard ? (
-                  <VCardComposer
-                    initialConfig={block.vcard || undefined}
-                    onSave={async (cfg, title) => {
-                      await updateBlock(block.id, {
-                        title: title || cfg.fullName,
-                        vcard: cfg,
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                    defaultFullName={displayName || username || ''}
-                    defaultEmail={primaryEmail || ''}
-                  />
+                  <Suspense fallback={null}>
+                    <VCardComposer
+                      initialConfig={block.vcard || undefined}
+                      onSave={async (cfg, title) => {
+                        await updateBlock(block.id, {
+                          title: title || cfg.fullName,
+                          vcard: cfg,
+                        });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                      defaultFullName={displayName || username || ''}
+                      defaultEmail={primaryEmail || ''}
+                    />
+                  </Suspense>
                 ) : isCoffee ? (
-                  <CoffeeComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      badge: block.badge || undefined,
-                      coffee: block.coffee || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, badge, coffee }) => {
-                      await updateBlock(block.id, {
-                        title,
-                        url,
-                        badge: badge || null,
-                        coffee: coffee || null,
-                      });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <CoffeeComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        badge: block.badge || undefined,
+                        coffee: block.coffee || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, badge, coffee }) => {
+                        await updateBlock(block.id, {
+                          title,
+                          url,
+                          badge: badge || null,
+                          coffee: coffee || null,
+                        });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isProduct ? (
-                  <ProductCardComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      product: block.product || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, product }) => {
-                      await updateBlock(block.id, { title, url, product });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <ProductCardComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        product: block.product || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, product }) => {
+                        await updateBlock(block.id, { title, url, product });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isBooking ? (
-                  <BookingCardComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      booking: block.booking || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, booking }) => {
-                      await updateBlock(block.id, { title, url, booking });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <BookingCardComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        booking: block.booking || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, booking }) => {
+                        await updateBlock(block.id, { title, url, booking });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isCountdown ? (
-                  <CountdownComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      countdown: block.countdown || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, countdown }) => {
-                      await updateBlock(block.id, { title, url, countdown });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <CountdownComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        countdown: block.countdown || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, countdown }) => {
+                        await updateBlock(block.id, { title, url, countdown });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isPromo ? (
-                  <PromoCodeComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      promo: block.promo || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, promo }) => {
-                      await updateBlock(block.id, { title, url, promo });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <PromoCodeComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        promo: block.promo || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, promo }) => {
+                        await updateBlock(block.id, { title, url, promo });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isLocation ? (
-                  <LocationCardComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      location: block.location || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, location }) => {
-                      await updateBlock(block.id, { title, url, location });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <LocationCardComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        location: block.location || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, location }) => {
+                        await updateBlock(block.id, { title, url, location });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isDownload ? (
-                  <DownloadCardComposer
-                    initialValues={{
-                      title: block.title,
-                      url: block.url || '',
-                      download: block.download || undefined,
-                    }}
-                    isEditing
-                    onAdd={async ({ title, url, download }) => {
-                      await updateBlock(block.id, { title, url, download });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <DownloadCardComposer
+                      initialValues={{
+                        title: block.title,
+                        url: block.url || '',
+                        download: block.download || undefined,
+                      }}
+                      isEditing
+                      onAdd={async ({ title, url, download }) => {
+                        await updateBlock(block.id, { title, url, download });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : isBluesky ? (
-                  <BlueskyComposer
-                    initialValues={block.bluesky || undefined}
-                    initialTitle={block.title || undefined}
-                    initialUrl={block.url}
-                    isEditing
-                    onSave={async ({ title, url, bluesky }) => {
-                      await updateBlock(block.id, { title, url, bluesky });
-                      setEditingBlockId(null);
-                    }}
-                    onCancel={() => setEditingBlockId(null)}
-                  />
+                  <Suspense fallback={null}>
+                    <BlueskyComposer
+                      initialValues={block.bluesky || undefined}
+                      initialTitle={block.title || undefined}
+                      initialUrl={block.url}
+                      isEditing
+                      onSave={async ({ title, url, bluesky }) => {
+                        await updateBlock(block.id, { title, url, bluesky });
+                        setEditingBlockId(null);
+                      }}
+                      onCancel={() => setEditingBlockId(null)}
+                    />
+                  </Suspense>
                 ) : (
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
@@ -1881,11 +1954,19 @@ export const LinksTab: React.FC = () => {
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[14px] font-medium text-ink">
-                        {isHeader ? 'Heading' : 'Title'}
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[14px] font-medium text-ink">
+                          {isHeader ? 'Heading' : 'Title'}
+                        </label>
+                        {isHeader && (
+                          <span className="text-[11px] text-muted tabular-nums">
+                            {editTitle.length}/40
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
+                        maxLength={isHeader ? 40 : 120}
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         className="h-11 px-3 bg-surface border border-border rounded-[10px] text-[14px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
@@ -1983,6 +2064,7 @@ export const LinksTab: React.FC = () => {
                       <Button
                         variant="primary"
                         size="md"
+                        loading={isSavingEdit}
                         onClick={() => handleSaveEdit(block)}
                       >
                         Save
@@ -2092,110 +2174,118 @@ export const LinksTab: React.FC = () => {
       )}
 
       {/* 8. Unified "+ Add" Picker BottomSheet */}
-      <AddBlockModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSmartAddProvider={(detected) => {
-          if (detected.provider === 'bluesky') {
-            setBlueskyPrefillUrl(detected.canonicalUrl);
-            handleOpenComposer('bluesky');
-            return;
-          }
-          const isProPlayer =
-            detected.defaultDisplayAs === 'player' &&
-            (detected.provider === 'youtube' ||
-              detected.provider === 'spotify' ||
-              detected.provider === 'soundcloud');
-          if (isProPlayer && !isPro) {
-            openUpgrade('embeds');
-            return;
-          }
-          setEditingBlockId(null);
-          setActiveComposer(null);
-          setPlatformEditorState({
-            isOpen: true,
-            provider: detected.provider as EmbedProvider,
-            initialUrl: detected.canonicalUrl,
-            block: null,
-          });
-        }}
-        onSmartAddGenericLink={(canonicalUrl) => {
-          handleOpenComposer('link');
-          handleNewLinkUrlChange(canonicalUrl);
-        }}
-        onSelectFeature={async (type: FeatureType) => {
-          if (type === 'coffee') {
-            const nextParams = new URLSearchParams(location.search);
-            nextParams.set('platform', 'coffee');
-            navigate(`/dashboard/profiles?${nextParams.toString()}`);
-          } else if (type === 'social') {
-            setSocialAddTrigger((n) => n + 1);
-            setTimeout(() => {
-              document
-                .getElementById('social-icons-card')
-                ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 60);
-          } else if (type === 'divider') {
-            await addDivider();
-          } else if (type === 'bluesky' || type === 'embed_bluesky') {
-            setBlueskyPrefillUrl(null);
-            handleOpenComposer('bluesky');
-          } else if (
-            type === 'embed' ||
-            type.startsWith('embed_') ||
-            type === 'youtube' ||
-            type === 'instagram'
-          ) {
-            const mappedProvider: EmbedProvider =
-              type === 'youtube'
-                ? 'youtube'
-                : type === 'instagram'
-                  ? 'instagram'
-                  : type === 'embed'
-                    ? 'generic'
-                    : (type.replace('embed_', '') as EmbedProvider);
-            const isProPlayer =
-              (type === 'embed_youtube' ||
-                type === 'embed_spotify' ||
-                type === 'embed_soundcloud') &&
-              !isPro;
-            if (isProPlayer) {
-              openUpgrade('embeds');
-              return;
-            }
-            setEditingBlockId(null);
-            setActiveComposer(null);
-            setPlatformEditorState({
-              isOpen: true,
-              provider: mappedProvider,
-              block: null,
-            });
-          } else {
-            handleOpenComposer(type as ComposerType);
-          }
-        }}
-        isPro={isPro}
-      />
+      {isAddModalOpen && (
+        <Suspense fallback={null}>
+          <AddBlockModal
+            isOpen={isAddModalOpen}
+            onClose={() => setIsAddModalOpen(false)}
+            onSmartAddProvider={(detected) => {
+              if (detected.provider === 'bluesky') {
+                setBlueskyPrefillUrl(detected.canonicalUrl);
+                handleOpenComposer('bluesky');
+                return;
+              }
+              const isProPlayer =
+                detected.defaultDisplayAs === 'player' &&
+                (detected.provider === 'youtube' ||
+                  detected.provider === 'spotify' ||
+                  detected.provider === 'soundcloud');
+              if (isProPlayer && !isPro) {
+                openUpgrade('embeds');
+                return;
+              }
+              setEditingBlockId(null);
+              setActiveComposer(null);
+              setPlatformEditorState({
+                isOpen: true,
+                provider: detected.provider as EmbedProvider,
+                initialUrl: detected.canonicalUrl,
+                block: null,
+              });
+            }}
+            onSmartAddGenericLink={(canonicalUrl) => {
+              handleOpenComposer('link');
+              handleNewLinkUrlChange(canonicalUrl);
+            }}
+            onSelectFeature={async (type: FeatureType) => {
+              if (type === 'coffee') {
+                const nextParams = new URLSearchParams(location.search);
+                nextParams.set('platform', 'coffee');
+                navigate(`/dashboard/profiles?${nextParams.toString()}`);
+              } else if (type === 'social') {
+                setSocialAddTrigger((n) => n + 1);
+                setTimeout(() => {
+                  document
+                    .getElementById('social-icons-card')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 60);
+              } else if (type === 'divider') {
+                await addDivider();
+              } else if (type === 'bluesky' || type === 'embed_bluesky') {
+                setBlueskyPrefillUrl(null);
+                handleOpenComposer('bluesky');
+              } else if (
+                type === 'embed' ||
+                type.startsWith('embed_') ||
+                type === 'youtube' ||
+                type === 'instagram'
+              ) {
+                const mappedProvider: EmbedProvider =
+                  type === 'youtube'
+                    ? 'youtube'
+                    : type === 'instagram'
+                      ? 'instagram'
+                      : type === 'embed'
+                        ? 'generic'
+                        : (type.replace('embed_', '') as EmbedProvider);
+                const isProPlayer =
+                  (type === 'embed_youtube' ||
+                    type === 'embed_spotify' ||
+                    type === 'embed_soundcloud') &&
+                  !isPro;
+                if (isProPlayer) {
+                  openUpgrade('embeds');
+                  return;
+                }
+                setEditingBlockId(null);
+                setActiveComposer(null);
+                setPlatformEditorState({
+                  isOpen: true,
+                  provider: mappedProvider,
+                  block: null,
+                });
+              } else {
+                handleOpenComposer(type as ComposerType);
+              }
+            }}
+            isPro={isPro}
+          />
+        </Suspense>
+      )}
 
       {/* 9. Unified Platform Card & Player Editor */}
-      <PlatformBlockEditor
-        isOpen={platformEditorState.isOpen}
-        onClose={() => setPlatformEditorState({ isOpen: false })}
-        initialProvider={platformEditorState.provider}
-        initialUrl={platformEditorState.initialUrl}
-        block={platformEditorState.block}
-        isPro={isPro}
-        onSave={handleSavePlatformEditor}
-        onClearScheduleImmediate={
-          platformEditorState.block
-            ? async () => {
-                if (platformEditorState.block) {
-                  await clearSchedule(platformEditorState.block.id);
-                }
-              }
-            : undefined
-        }
-      />
+      {platformEditorState.isOpen && (
+        <Suspense fallback={null}>
+          <PlatformBlockEditor
+            isOpen={platformEditorState.isOpen}
+            onClose={() => setPlatformEditorState({ isOpen: false })}
+            initialProvider={platformEditorState.provider}
+            initialUrl={platformEditorState.initialUrl}
+            block={platformEditorState.block}
+            isPro={isPro}
+            onSave={handleSavePlatformEditor}
+            onClearScheduleImmediate={
+              platformEditorState.block
+                ? async () => {
+                    if (platformEditorState.block) {
+                      await clearSchedule(platformEditorState.block.id);
+                    }
+                  }
+                : undefined
+            }
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

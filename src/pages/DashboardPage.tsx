@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Eye,
@@ -15,13 +15,8 @@ import { Container } from '../components/ui/Container';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { IvioUserButton } from '../auth/IvioUserButton';
 import { LinksTab } from '../components/dashboard/LinksTab';
-import { ProfilesTab } from '../components/dashboard/ProfilesTab';
-import { SettingsTab } from '../components/dashboard/SettingsTab';
-import { AnalyticsTab } from './AnalyticsTab';
-import { ContactsTab } from './ContactsTab';
 import { VibePhone } from '../components/phone/VibePhone';
 import { PhoneProfile } from '../components/phone/PhonePage';
-import { ShareDialog } from '../components/share/ShareDialog';
 import { BlocksProvider, useBlocks } from '../data/BlocksContext';
 import { useIvioSession } from '../auth/useIvioSession';
 import { useProtectedLinkIds } from '../data/hooks/useProtectedLinkIds';
@@ -34,15 +29,50 @@ import {
   AppearanceProvider,
   useAppearance,
 } from '../components/appearance/AppearanceContext';
-import { AppearanceHome } from '../components/appearance/AppearanceHome';
-import { VibeScreen } from '../components/appearance/VibeScreen';
-import { BackgroundScreen } from '../components/appearance/BackgroundScreen';
-import { ButtonsScreen } from '../components/appearance/ButtonsScreen';
-import { TypographyScreen } from '../components/appearance/TypographyScreen';
-import { LayoutScreen } from '../components/appearance/LayoutScreen';
 import { appearanceToLegacyMirror } from '../lib/appearance/migrate';
 import { resolveAnyVibeToV2Id } from '../lib/appearance/catalog/vibes';
 import { useToast } from '../components/ui/Toast';
+
+const loadProfilesTab = () =>
+  import('../components/dashboard/ProfilesTab').then((m) => ({ default: m.ProfilesTab }));
+const loadSettingsTab = () =>
+  import('../components/dashboard/SettingsTab').then((m) => ({ default: m.SettingsTab }));
+const loadAnalyticsTab = () =>
+  import('./AnalyticsTab').then((m) => ({ default: m.AnalyticsTab }));
+const loadContactsTab = () =>
+  import('./ContactsTab').then((m) => ({ default: m.ContactsTab }));
+const loadShareDialog = () =>
+  import('../components/share/ShareDialog').then((m) => ({ default: m.ShareDialog }));
+const loadAppearanceHome = () =>
+  import('../components/appearance/AppearanceHome').then((m) => ({ default: m.AppearanceHome }));
+const loadVibeScreen = () =>
+  import('../components/appearance/VibeScreen').then((m) => ({ default: m.VibeScreen }));
+const loadBackgroundScreen = () =>
+  import('../components/appearance/BackgroundScreen').then((m) => ({ default: m.BackgroundScreen }));
+const loadButtonsScreen = () =>
+  import('../components/appearance/ButtonsScreen').then((m) => ({ default: m.ButtonsScreen }));
+const loadTypographyScreen = () =>
+  import('../components/appearance/TypographyScreen').then((m) => ({ default: m.TypographyScreen }));
+const loadLayoutScreen = () =>
+  import('../components/appearance/LayoutScreen').then((m) => ({ default: m.LayoutScreen }));
+
+const ProfilesTab = lazy(loadProfilesTab);
+const SettingsTab = lazy(loadSettingsTab);
+const AnalyticsTab = lazy(loadAnalyticsTab);
+const ContactsTab = lazy(loadContactsTab);
+const ShareDialog = lazy(loadShareDialog);
+const AppearanceHome = lazy(loadAppearanceHome);
+const VibeScreen = lazy(loadVibeScreen);
+const BackgroundScreen = lazy(loadBackgroundScreen);
+const ButtonsScreen = lazy(loadButtonsScreen);
+const TypographyScreen = lazy(loadTypographyScreen);
+const LayoutScreen = lazy(loadLayoutScreen);
+
+const TabChunkFallback: React.FC = () => (
+  <div className="py-12 flex items-center justify-center" aria-busy="true">
+    <div className="h-5 w-5 rounded-full border-2 border-border border-t-ink animate-spin" />
+  </div>
+);
 
 const BUTTON_RADIUS_MAP: Record<ButtonShape, number> = {
   square: 0,
@@ -70,6 +100,7 @@ const DashboardContent: React.FC = () => {
 
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [shareMounted, setShareMounted] = useState(false);
 
   useEffect(() => {
     const notifyReactivated = () => {
@@ -188,6 +219,14 @@ const DashboardContent: React.FC = () => {
     ? appearanceCtx.hideFooterMark
     : Boolean(session.isPro && (session.hideIveoFooter || session.hideIvioFooter));
 
+  const prefetchTab = useCallback((path: string) => {
+    if (path.includes('/profiles')) loadProfilesTab().catch(() => {});
+    else if (path.includes('/appearance')) loadAppearanceHome().catch(() => {});
+    else if (path.includes('/contacts')) loadContactsTab().catch(() => {});
+    else if (path.includes('/analytics')) loadAnalyticsTab().catch(() => {});
+    else if (path.includes('/settings')) loadSettingsTab().catch(() => {});
+  }, []);
+
   const navItems = [
     { to: `/dashboard${demoSearch}`, label: copy.dashboard.tabs.links, end: true, icon: Link2 },
     { to: `/dashboard/profiles${demoSearch}`, label: copy.dashboard.tabs.profiles, end: false, icon: Plug },
@@ -222,7 +261,12 @@ const DashboardContent: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setIsShareOpen(true)}
+              onMouseEnter={() => { loadShareDialog().catch(() => {}); }}
+              onFocus={() => { loadShareDialog().catch(() => {}); }}
+              onClick={() => {
+                setShareMounted(true);
+                setIsShareOpen(true);
+              }}
               aria-label="Share your page"
               title="Share"
               className="w-11 h-11 min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-full text-ink hover:bg-surface-2 transition-colors focus-visible:outline-2 focus-visible:outline-ink cursor-pointer"
@@ -246,6 +290,9 @@ const DashboardContent: React.FC = () => {
               key={item.to}
               to={item.to}
               end={item.end}
+              onMouseEnter={() => prefetchTab(item.to)}
+              onFocus={() => prefetchTab(item.to)}
+              onTouchStart={() => prefetchTab(item.to)}
               className={({ isActive }) =>
                 `relative h-full flex items-center gap-2 text-[14px] font-medium transition-colors duration-120 select-none shrink-0 whitespace-nowrap ${
                   isActive ? 'text-ink font-semibold' : 'text-muted hover:text-ink'
@@ -276,24 +323,34 @@ const DashboardContent: React.FC = () => {
         <Container>
           {isAnalytics ? (
             <div className="w-full max-w-[880px] mx-auto">
-              <AnalyticsTab />
+              <Suspense fallback={<TabChunkFallback />}>
+                <AnalyticsTab />
+              </Suspense>
             </div>
           ) : isContacts ? (
             <div className="w-full max-w-[880px] mx-auto">
-              <ContactsTab />
+              <Suspense fallback={<TabChunkFallback />}>
+                <ContactsTab />
+              </Suspense>
             </div>
           ) : isSettings ? (
             <div className="w-full max-w-[960px] mx-auto">
-              <SettingsTab />
+              <Suspense fallback={<TabChunkFallback />}>
+                <SettingsTab />
+              </Suspense>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8 items-start">
               {/* Left Column: Centered 720px max */}
               <div className="w-full max-w-[720px] mx-auto lg:mx-0 min-w-0">
                 {isLinks && <LinksTab />}
-                {isProfiles && <ProfilesTab />}
+                {isProfiles && (
+                  <Suspense fallback={<TabChunkFallback />}>
+                    <ProfilesTab />
+                  </Suspense>
+                )}
                 {isAppearance && (
-                  <>
+                  <Suspense fallback={<TabChunkFallback />}>
                     {appearanceSubSection === 'home' && <AppearanceHome />}
                     {appearanceSubSection === 'vibe' && (
                       <VibeScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
@@ -310,7 +367,7 @@ const DashboardContent: React.FC = () => {
                     {appearanceSubSection === 'layout' && (
                       <LayoutScreen onOpenPreview={() => setMobilePreviewOpen(true)} />
                     )}
-                  </>
+                  </Suspense>
                 )}
               </div>
 
@@ -393,26 +450,28 @@ const DashboardContent: React.FC = () => {
         </div>
       </BottomSheet>
 
-      {/* Top Bar Share Sheet */}
-      {session.username && (
-        <ShareDialog
-          isOpen={isShareOpen}
-          onClose={() => setIsShareOpen(false)}
-          username={session.username}
-          displayName={session.displayName}
-          bio={session.bio}
-          avatarUrl={session.imageUrl}
-          vibeId={session.vibeId}
-          fontSettings={mirrored.fontSettings}
-          buttonColors={mirrored.buttonColors}
-          businessCard={session.businessCard}
-          socials={session.socials}
-          onSaveCardConfig={async (cfg) => {
-            await session.updatePreferences({ businessCard: cfg });
-          }}
-          isPro={session.isPro}
-          isPublished={true}
-        />
+      {/* Top Bar Share Sheet (lazy loaded only when opened or hovered) */}
+      {session.username && (shareMounted || isShareOpen) && (
+        <Suspense fallback={null}>
+          <ShareDialog
+            isOpen={isShareOpen}
+            onClose={() => setIsShareOpen(false)}
+            username={session.username}
+            displayName={session.displayName}
+            bio={session.bio}
+            avatarUrl={session.imageUrl}
+            vibeId={session.vibeId}
+            fontSettings={mirrored.fontSettings}
+            buttonColors={mirrored.buttonColors}
+            businessCard={session.businessCard}
+            socials={session.socials}
+            onSaveCardConfig={async (cfg) => {
+              await session.updatePreferences({ businessCard: cfg });
+            }}
+            isPro={session.isPro}
+            isPublished={true}
+          />
+        </Suspense>
       )}
     </div>
   );

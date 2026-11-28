@@ -391,12 +391,52 @@ export const ConnectedPlatformsSection: React.FC<{
   const handleReconnect = async (provider: EmbedProvider) => {
     if (offline) return;
     setReconnectingProvider(provider);
+
+    // Open popup synchronously inside click handler so popup blocker does not block after async fetch
+    const w = 520;
+    const h = 660;
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    let popup: Window | null = null;
+    let pollId: number | null = null;
+    const stopPoll = () => {
+      if (pollId !== null) {
+        window.clearInterval(pollId);
+        pollId = null;
+      }
+    };
+    try {
+      popup = window.open(
+        'about:blank',
+        `iveo_reconnect_${provider}`,
+        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
+      if (popup && !popup.closed) {
+        pollId = window.setInterval(() => {
+          if (!popup || popup.closed) {
+            stopPoll();
+            setReconnectingProvider((cur) => (cur === provider ? null : cur));
+          }
+        }, 400);
+      }
+    } catch {
+      popup = null;
+    }
+
+    const closePending = () => {
+      stopPoll();
+      try {
+        if (popup && !popup.closed) popup.close();
+      } catch {}
+    };
+
     try {
       const statusRes = await fetch('/api/oauth/status').catch(() => null);
       const statusJson = await statusRes?.json().catch(() => null);
       const isOAuthReady = Boolean(statusJson?.providers?.[provider]);
 
       if (!isOAuthReady) {
+        closePending();
         const synced = await syncProviderPublicMetadata(provider);
         setReconnectingProvider(null);
         showToast(synced ? `${getProviderDefinition(provider).name} profile synced` : 'Updated profile details from your link.');
@@ -417,6 +457,7 @@ export const ConnectedPlatformsSection: React.FC<{
       const res = await fetch(`${baseEndpoint}?${commonQs.toString()}`);
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok || !data?.url) {
+        closePending();
         if (data?.error === 'oauth_not_configured' || res.status === 503) {
           const synced = await syncProviderPublicMetadata(provider);
           showToast(synced ? `${getProviderDefinition(provider).name} profile synced` : 'Profile synced from public link.');
@@ -426,16 +467,13 @@ export const ConnectedPlatformsSection: React.FC<{
         setReconnectingProvider(null);
         return;
       }
-      const w = 520;
-      const h = 660;
-      const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
-      const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
-      const popup = window.open(
-        data.url,
-        `iveo_reconnect_${provider}`,
-        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
-      );
-      if (!popup) {
+
+      if (popup && !popup.closed) {
+        popup.location.href = data.url;
+        return;
+      }
+
+      if (window.self === window.top) {
         const redirectQs = new URLSearchParams(commonQs);
         redirectQs.set('mode', 'redirect');
         const redirectRes = await fetch(`${baseEndpoint}?${redirectQs.toString()}`).catch(() => null);
@@ -447,10 +485,11 @@ export const ConnectedPlatformsSection: React.FC<{
           window.location.assign(redirectData.url);
           return;
         }
-        showToast('Allow popups to reconnect this platform.');
-        setReconnectingProvider(null);
       }
+      showToast('Allow popups to reconnect this platform.');
+      setReconnectingProvider(null);
     } catch {
+      closePending();
       showToast("Couldn't start reconnection.");
       setReconnectingProvider(null);
     }
